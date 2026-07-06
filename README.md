@@ -44,6 +44,7 @@ docker compose up -d
 
 ### Development Guides
 - [Plugin Development Guide](./docs/en/development/plugin-development-guide.md) - Complete guide for developing XBoard plugins
+- [Node User Sync Reconciliation](./docs/en/development/node-user-sync.md) - Explains periodic node user-list reconciliation for expired users
 
 ### Deployment Guides
 - [Deploy with 1Panel](./docs/en/installation/1panel.md)

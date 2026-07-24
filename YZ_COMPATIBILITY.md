@@ -9,8 +9,9 @@
 | YZboard 面板版本 | `1.0.2` |
 | 面板兼容标识 | `xray-v26.7.11-yz.1` |
 | YZboard 代码 commit | `342ceb5305af5df557fd85264a3157de84d233c5` |
-| YZboard-Node 发布版本 | `v0.1.0-yz.1` |
-| YZboard-Node Tag 对应 commit | `a02dbce321cbe921ce04cf692d460f317f528ef5` |
+| YZboard-Node 发布版本 | `v1.13-yz.1` |
+| YZboard-Node 上游基线 | `v1.13` / `0a29338e1f102a462363ce3527417029f89bab28` |
+| YZboard-Node Tag 对应 commit | `6fb176456c305f7aaad47c19f6acd7d1bca66d0b` |
 | Xray 官方预发布 Tag | `v26.7.11` |
 | Xray 上游 Tag commit | `50231eaff98ccc31b5cbd247a721c16e97fe5ec1` |
 | YZ-Xray-core fork 版本 | `v26.7.11-yz.1` |
@@ -34,7 +35,7 @@
 发布前应同时确认：
 
 1. 面板源代码的 `config/app.php` 和 `CHANGELOG.md` 保持 `1.0.2`，并将 `342ceb5305af5df557fd85264a3157de84d233c5` 作为源代码回滚边界；Docker 工作流运行时可能按日期和短 SHA 写入镜像内版本，不能把该运行时值误记为面板源版本；
-2. Node Release 使用独立的 `v0.1.0-yz.1` Tag，并在二进制 `-v/version` 输出中显示 Xray 上游与 fork 信息；Tag 对应提交必须为 `a02dbce321cbe921ce04cf692d460f317f528ef5`；
+2. Node Release 使用延续上游版本线的 `v1.13-yz.1` Tag，并在二进制 `-v/version` 输出中显示 Xray 上游与 fork 信息；Tag 对应提交必须为 `6fb176456c305f7aaad47c19f6acd7d1bca66d0b`；先前的 `v0.1.0-yz.1` 仅保留审计，不用于部署；
 3. Node `go list -m -json github.com/xtls/xray-core` 的 replacement 路径和 pseudo-version 指向 `620bee93867095f73880056cdfb08bc54a15f69e`；
 4. Xray fork 的 `v26.7.11-yz.1` Tag 指向同一 fork commit；
 5. sing-box 请求版本和实际 replacement 版本与上表一致。

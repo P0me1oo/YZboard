@@ -3,6 +3,8 @@
 namespace Tests\Feature\Server;
 
 use App\Jobs\TrafficFetchJob;
+use App\Jobs\StatServerJob;
+use App\Jobs\StatUserJob;
 use App\Models\Server;
 use App\Models\ServerMachine;
 use App\Models\User;
@@ -165,6 +167,55 @@ class ServerHandshakeTest extends TestCase
         $this->assertNotNull($server->last_check_at);
         $this->assertNotNull($server->last_push_at);
         $this->assertSame(1, $server->online);
+        $this->assertSame(
+            1,
+            Cache::get(CacheKey::get(
+                'USER_ONLINE_CONN_' . Server::TYPE_HYSTERIA . '_' . $server->id,
+                $user->id
+            ))
+        );
+    }
+
+    public function test_v2_report_does_not_dispatch_duplicate_traffic_for_same_batch(): void
+    {
+        Bus::fake();
+
+        $server = $this->makeServer(Server::TYPE_HYSTERIA);
+        $user = User::create([
+            'email' => 'hysteria-idempotent@example.invalid',
+            'password' => 'unused',
+            'uuid' => '22222222-2222-2222-2222-222222222222',
+            'token' => str_repeat('b', 32),
+            'group_id' => 1,
+            'transfer_enable' => 1024 * 1024 * 1024,
+            'expired_at' => time() + 3600,
+        ]);
+
+        $payload = [
+            'token' => 'server-token',
+            'node_id' => $server->id,
+            'report_id' => 'test-boot-1-1',
+            'traffic' => [(string) $user->id => [100, 200]],
+            'online' => [(string) $user->id => 1],
+        ];
+
+        $this->postJson('/api/v2/server/report', $payload)->assertOk();
+        $this->postJson('/api/v2/server/report', $payload)->assertOk();
+
+        Bus::assertDispatchedTimes(TrafficFetchJob::class, 1);
+        Bus::assertDispatchedTimes(StatUserJob::class, 1);
+        Bus::assertDispatchedTimes(StatServerJob::class, 1);
+
+        // 不同批次仍应正常接受并派发。
+        $payload['report_id'] = 'test-boot-1-2';
+        $this->postJson('/api/v2/server/report', $payload)->assertOk();
+        Bus::assertDispatchedTimes(TrafficFetchJob::class, 2);
+        Bus::assertDispatchedTimes(StatUserJob::class, 2);
+        Bus::assertDispatchedTimes(StatServerJob::class, 2);
+
+        $server->refresh();
+        $this->assertNotNull($server->last_check_at);
+        $this->assertNotNull($server->last_push_at);
         $this->assertSame(
             1,
             Cache::get(CacheKey::get(

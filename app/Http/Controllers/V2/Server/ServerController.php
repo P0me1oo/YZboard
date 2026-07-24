@@ -49,8 +49,18 @@ class ServerController extends Controller
         ServerService::touchNode($node);
 
         $traffic = $request->input('traffic');
+        $reportAccepted = ServerService::claimReport(
+            $node->type,
+            (int) $node->id,
+            $request->input('report_id')
+        );
         if (is_array($traffic) && !empty($traffic)) {
-            ServerService::processTraffic($node, $traffic);
+            if ($reportAccepted) {
+                ServerService::processTraffic($node, $traffic);
+            } else {
+                // 重复批次仍代表 Node 正常完成了一次推送，不应把节点标成未推送。
+                ServerService::touchPush($node);
+            }
         }
 
         $alive = $request->input('alive');

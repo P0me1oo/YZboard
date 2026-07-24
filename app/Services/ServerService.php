@@ -136,9 +136,45 @@ class ServerService
         $nodeId = $node->id;
 
         Cache::put(CacheKey::get("SERVER_{$nodeType}_ONLINE_USER", $nodeId), count($data), 3600);
-        Cache::put(CacheKey::get("SERVER_{$nodeType}_LAST_PUSH_AT", $nodeId), time(), 3600);
+        self::touchPush($node);
 
         (new UserService())->trafficFetch($node, $node->type, $data);
+    }
+
+    /** 更新节点最近一次有效流量推送时间。 */
+    public static function touchPush(Server $node): void
+    {
+        $nodeType = strtoupper($node->type);
+        Cache::put(
+            CacheKey::get("SERVER_{$nodeType}_LAST_PUSH_AT", $node->id),
+            time(),
+            3600
+        );
+    }
+
+    /**
+     * 为流量处理认领一次 Node 报告批次。
+     *
+     * HTTP 响应丢失时 Node 会重试同一批次。支持的缓存驱动会原子执行
+     * Cache::add，因此只有第一次请求派发流量累计任务；心跳、在线状态和指标
+     * 在重试时仍可安全刷新。
+     */
+    public static function claimReport(string $nodeType, int $nodeId, ?string $reportId): bool
+    {
+        $reportId = trim((string) $reportId);
+        if ($reportId === '') {
+            return true;
+        }
+
+        $reportId = substr((string) preg_replace('/[^A-Za-z0-9_.:-]/', '_', $reportId), 0, 128);
+        if ($reportId === '') {
+            return true;
+        }
+
+        $type = strtoupper((string) $nodeType);
+        $key = CacheKey::get("SERVER_{$type}_REPORT_ID", "{$nodeId}_{$reportId}");
+        // 保留时间应覆盖 Node 的重试和退避窗口，同时允许旧的进程报告标识过期。
+        return Cache::add($key, true, 86400);
     }
 
     /**

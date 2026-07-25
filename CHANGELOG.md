@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.3 - 2026-07-25
+
+- 服务器管理生成的机器安装命令固定使用 `P0me1oo/YZboard-Node` 的 `v1.13-yz.2` 安装器和 Release。
+- 安装命令显式传入 Node 版本，避免后续 `latest` 变化导致面板与 Node 兼容关系漂移。
+- Node 安装和升级资产增加 `SHA256SUMS` 完整性校验。
+
 ## 1.0.2 - 2026-07-25
 
 - 增加 `xray-v26.7.11-yz.1` YZ-Xray-core fork 兼容标识。

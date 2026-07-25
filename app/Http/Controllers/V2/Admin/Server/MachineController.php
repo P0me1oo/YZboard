@@ -12,6 +12,9 @@ use Illuminate\Http\Request;
 
 class MachineController extends Controller
 {
+    private const NODE_RELEASE = 'v1.13-yz.2';
+    private const NODE_INSTALLER_URL = 'https://raw.githubusercontent.com/P0me1oo/YZboard-Node/v1.13-yz.2/install.sh';
+
     /**
      * 获取机器列表（附带关联节点数）
      */
@@ -202,14 +205,14 @@ class MachineController extends Controller
     private function buildInstallCommand(Request $request, ServerMachine $machine): string
     {
         $panelUrl = rtrim((string) (admin_setting('app_url') ?: $request->getSchemeAndHttpHost()), '/');
-        $installerUrl = 'https://raw.githubusercontent.com/cedar2025/xboard-node/dev/install.sh';
 
         return sprintf(
-            'curl -fsSL %s | sudo bash -s -- --mode machine --panel %s --token %s --machine-id %d',
-            $installerUrl,
+            'curl -fsSL %s | sudo bash -s -- --mode machine --panel %s --token %s --machine-id %d --version %s',
+            self::NODE_INSTALLER_URL,
             escapeshellarg($panelUrl),
             escapeshellarg($machine->token),
-            $machine->id
+            $machine->id,
+            self::NODE_RELEASE
         );
     }
 }

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.4 - 2026-07-26
+
+- YZboard Docker 发布改为从固定 Tag 或完整 commit 构建，不再在镜像内跟随移动分支。
+- GitHub Actions 发布 `linux/amd64`、`linux/arm64` 到 `ghcr.io/p0me1oo/yzboard`，并生成“面板版本 + 短 commit”的不可变镜像标签。
+- 工作流保留可选的面板版本别名和 `latest`，生产部署要求使用不可变标签并校验多架构 manifest。
+- 镜像内版本保持 `config/app.php` 的语义版本，不再在构建期间临时改写成日期和短 SHA。
+
 ## 1.0.3 - 2026-07-25
 
 - 服务器管理生成的机器安装命令固定使用 `P0me1oo/YZboard-Node` 的 `v1.13-yz.2` 安装器和 Release。

@@ -8,9 +8,12 @@
 | --- | --- |
 | YZboard 面板版本 | `1.0.4` |
 | 面板兼容标识 | `xray-v26.7.11-yz.1` |
-| YZboard 代码 commit | `1.0.4` Docker 发布提交；发布后补充完整 SHA |
-| YZboard Docker 镜像 | 发布后补充不可变 GHCR 标签 |
-| YZboard Docker manifest | 发布后补充 digest |
+| YZboard 发布 Tag | `v1.0.4` |
+| YZboard Tag / 镜像源码 commit | `02ea1a410f633a06f4647136f8ac176052829b6c` |
+| YZboard Docker 镜像 | `ghcr.io/p0me1oo/yzboard:1.0.4-02ea1a4` |
+| YZboard Docker manifest | `sha256:ce089332b1b7d4d44457dbdaeced51591227dac03412176e2d0236c7de36a192` |
+| YZboard Docker 架构 | `linux/amd64`、`linux/arm64` |
+| YZboard Docker 构建 | GitHub Actions run `30168279712`；工作流 commit `ef5cf0bffb2ad541a1e0553d9bd9c1de7c558e91` |
 | YZboard-Node 发布版本 | `v1.13-yz.2` |
 | YZboard-Node 上游基线 | `v1.13` / `0a29338e1f102a462363ce3527417029f89bab28` |
 | YZboard-Node Tag 对应 commit | `28161f734f034f4385971aeeade1a523732a9d8d` |
@@ -36,7 +39,7 @@
 
 发布前应同时确认：
 
-1. 面板源代码的 `config/app.php` 和 `CHANGELOG.md` 保持 `1.0.4`，Docker 镜像内使用相同语义版本，并将兼容矩阵记录的完整代码 commit 和 manifest digest 作为回滚边界；
+1. 面板源代码的 `config/app.php` 和 `CHANGELOG.md` 保持 `1.0.4`，`v1.0.4` Tag 与 Docker 镜像都固定到 `02ea1a410f633a06f4647136f8ac176052829b6c`，并将不可变镜像标签和 manifest digest 作为回滚边界；
 2. Node Release 使用延续上游版本线的 `v1.13-yz.2` Tag，并在二进制 `-v/version` 输出中显示 Xray 上游与 fork 信息；安装器和 `xbctl` 必须从 `P0me1oo/YZboard-Node` 下载并通过 `SHA256SUMS` 校验；先前的 `v0.1.0-yz.1` 仅保留审计，不用于部署；
 3. Node `go list -m -json github.com/xtls/xray-core` 的 replacement 路径和 pseudo-version 指向 `620bee93867095f73880056cdfb08bc54a15f69e`；
 4. Xray fork 的 `v26.7.11-yz.1` Tag 指向同一 fork commit；

@@ -1,42 +1,101 @@
-name: Docker Build and Publish
+name: Build and publish YZboard image
 
 on:
   push:
-    branches: ["master", "new-dev"]
+    tags:
+      - "v*"
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "固定来源：完整 commit SHA 或 Git Tag，禁止填写分支名"
+        required: true
+        type: string
+      publish_version_alias:
+        description: "同时更新面板版本别名，例如 1.0.4"
+        required: true
+        default: true
+        type: boolean
+      publish_latest:
+        description: "同时更新 latest；生产部署仍应使用版本加短 SHA 的不可变标签"
+        required: true
+        default: false
+        type: boolean
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+
+concurrency:
+  group: yzboard-image-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
+    name: Build linux/amd64 and linux/arm64
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-      id-token: write
 
     steps:
-      - name: Checkout code
+      - name: 检出固定来源
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1 
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.source_ref || github.ref }}
+          fetch-depth: 0
+          submodules: recursive
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: 'arm64,amd64'
+      - name: 校验来源并生成镜像标识
+        id: release
+        shell: bash
+        env:
+          REQUESTED_REF: ${{ inputs.source_ref }}
+        run: |
+          set -euo pipefail
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          platforms: linux/amd64,linux/arm64
-          driver-opts: |
-            image=moby/buildkit:v0.20.0
-            network=host
+          source_sha=$(git rev-parse HEAD)
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ "$REQUESTED_REF" =~ ^[0-9a-fA-F]{40}$ ]]; then
+              expected_sha=$(git rev-parse "$REQUESTED_REF^{commit}")
+            elif [[ "$REQUESTED_REF" == refs/tags/* || "$REQUESTED_REF" == v* ]]; then
+              tag_name=${REQUESTED_REF#refs/tags/}
+              expected_sha=$(git rev-parse "refs/tags/${tag_name}^{commit}")
+            else
+              echo "source_ref 必须是完整 commit SHA 或固定 Git Tag，不能使用分支名" >&2
+              exit 1
+            fi
+            if [[ "$source_sha" != "$expected_sha" ]]; then
+              echo "检出 commit 与请求来源不一致" >&2
+              exit 1
+            fi
+          fi
 
-      - name: Free Disk Space
+          app_version=$(sed -n "s/^[[:space:]]*'version'[[:space:]]*=>[[:space:]]*'\([^']*\)'.*/\1/p" config/app.php | tail -1)
+          if [[ ! "$app_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "config/app.php 中的版本不是有效语义版本：${app_version}" >&2
+            exit 1
+          fi
+
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            tag_version=${GITHUB_REF_NAME#v}
+            if [[ "$tag_version" != "$app_version" ]]; then
+              echo "Git Tag ${GITHUB_REF_NAME} 与面板版本 ${app_version} 不一致" >&2
+              exit 1
+            fi
+          fi
+
+          short_sha=${source_sha:0:7}
+          image_name=${GITHUB_REPOSITORY,,}
+          immutable_tag=${app_version}-${short_sha}
+
+          {
+            echo "source_sha=$source_sha"
+            echo "short_sha=$short_sha"
+            echo "app_version=$app_version"
+            echo "image_name=$image_name"
+            echo "immutable_tag=$immutable_tag"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: 释放构建磁盘空间
         run: |
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android
@@ -44,41 +103,44 @@ jobs:
           sudo rm -rf /opt/hostedtoolcache/CodeQL
           sudo docker image prune -af
 
-      - name: Login to registry
+      - name: 配置 QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: amd64,arm64
+
+      - name: 配置 Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:v0.20.0
+            network=host
+
+      - name: 登录 GHCR
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
+      - name: 生成镜像标签和 OCI 元数据
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ steps.release.outputs.image_name }}
+          flavor: latest=false
           tags: |
-            type=ref,event=branch
-            type=sha,format=short,prefix=,enable=true
-            type=raw,value=new,enable=${{ github.ref == 'refs/heads/master' }}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
-            type=raw,value=${{ steps.get_version.outputs.version }}
+            type=raw,value=${{ steps.release.outputs.immutable_tag }}
+            type=raw,value=${{ steps.release.outputs.app_version }},enable=${{ github.event_name == 'push' || inputs.publish_version_alias }}
+            type=raw,value=latest,enable=${{ github.event_name == 'push' || inputs.publish_latest }}
           labels: |
+            org.opencontainers.image.title=YZboard
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ steps.release.outputs.source_sha }}
+            org.opencontainers.image.version=${{ steps.release.outputs.immutable_tag }}
 
-      - name: Get version
-        id: get_version
-        run: echo "version=$(git describe --tags --always)" >> $GITHUB_OUTPUT
-
-      - name: Update version in app.php
-        run: |
-          VERSION=$(date '+%Y%m%d')-$(git rev-parse --short HEAD)
-          sed -i "s/'version' => '.*'/'version' => '$VERSION'/g" config/app.php
-          echo "Updated version to: $VERSION"
-
-      - name: Build and push
+      - name: 构建并推送多架构镜像
         id: build-and-push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true
@@ -89,12 +151,31 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             BUILDKIT_INLINE_CACHE=1
-            BUILDKIT_MULTI_PLATFORM=1
-            CACHEBUST=${{ github.sha }}
-            REPO_URL=https://github.com/${{ github.repository }}
-            BRANCH_NAME=${{ github.ref_name }}
+            CACHEBUST=${{ steps.release.outputs.source_sha }}
+            REPO_URL=${{ github.server_url }}/${{ github.repository }}.git
+            SOURCE_COMMIT=${{ steps.release.outputs.source_sha }}
           provenance: false
-          outputs: type=registry,push=true
-          allow: |
-            network.host
+          allow: network.host
 
+      - name: 验证多架构清单
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_ref="${{ env.REGISTRY }}/${{ steps.release.outputs.image_name }}:${{ steps.release.outputs.immutable_tag }}"
+          manifest=$(docker buildx imagetools inspect "$image_ref" --raw)
+          echo "$manifest" | jq -e '
+            ([.manifests[].platform.architecture] | index("amd64")) != null and
+            ([.manifests[].platform.architecture] | index("arm64")) != null
+          ' >/dev/null
+
+      - name: 写入发布摘要
+        shell: bash
+        run: |
+          {
+            echo "## YZboard Docker image"
+            echo
+            echo "- Image: \`${{ env.REGISTRY }}/${{ steps.release.outputs.image_name }}:${{ steps.release.outputs.immutable_tag }}\`"
+            echo "- Source commit: \`${{ steps.release.outputs.source_sha }}\`"
+            echo "- Manifest digest: \`${{ steps.build-and-push.outputs.digest }}\`"
+            echo "- Platforms: \`linux/amd64\`, \`linux/arm64\`"
+          } >> "$GITHUB_STEP_SUMMARY"

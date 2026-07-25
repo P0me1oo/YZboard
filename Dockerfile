@@ -2,7 +2,7 @@ FROM phpswoole/swoole:php8.2-alpine
 
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
 
-# Install PHP extensions one by one with lower optimization level for ARM64 compatibility
+# 逐个安装 PHP 扩展，并降低部分扩展的优化级别以兼容 ARM64 构建。
 RUN CFLAGS="-O0" install-php-extensions pcntl && \
     CFLAGS="-O0 -g0" install-php-extensions bcmath && \
     install-php-extensions zip && \
@@ -16,16 +16,20 @@ WORKDIR /www
 
 COPY .docker /
 
-# Add build arguments
+# 发布构建必须传入完整 commit，禁止在镜像内跟随移动分支。
 ARG CACHEBUST=1
-ARG REPO_URL=https://github.com/cedar2025/Xboard
-ARG BRANCH_NAME=master
+ARG REPO_URL=https://github.com/P0me1oo/YZboard.git
+ARG SOURCE_COMMIT=""
 
-RUN echo "Attempting to clone branch: ${BRANCH_NAME} from ${REPO_URL} with CACHEBUST: ${CACHEBUST}" && \
-    rm -rf ./* && \
-    rm -rf .git && \
+RUN test -n "${SOURCE_COMMIT}" && \
+    echo "Fetching commit ${SOURCE_COMMIT} from ${REPO_URL} with CACHEBUST=${CACHEBUST}" && \
+    find /www -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + && \
     git config --global --add safe.directory /www && \
-    git clone --depth 1 --branch ${BRANCH_NAME} ${REPO_URL} . && \
+    git init . && \
+    git remote add origin "${REPO_URL}" && \
+    git fetch --depth 1 origin "${SOURCE_COMMIT}" && \
+    git checkout --detach FETCH_HEAD && \
+    test "$(git rev-parse HEAD)" = "${SOURCE_COMMIT}" && \
     git submodule update --init --recursive --force
 
 COPY .docker/supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf

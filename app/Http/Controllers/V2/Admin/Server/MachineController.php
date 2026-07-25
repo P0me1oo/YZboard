@@ -12,8 +12,7 @@ use Illuminate\Http\Request;
 
 class MachineController extends Controller
 {
-    private const NODE_RELEASE = 'v1.13-yz.2';
-    private const NODE_INSTALLER_URL = 'https://raw.githubusercontent.com/P0me1oo/YZboard-Node/v1.13-yz.2/install.sh';
+    private const NODE_INSTALLER_URL = 'https://github.com/P0me1oo/YZboard-Node/releases/latest/download/install.sh';
 
     /**
      * 获取机器列表（附带关联节点数）
@@ -207,12 +206,11 @@ class MachineController extends Controller
         $panelUrl = rtrim((string) (admin_setting('app_url') ?: $request->getSchemeAndHttpHost()), '/');
 
         return sprintf(
-            'curl -fsSL %s | sudo bash -s -- --mode machine --panel %s --token %s --machine-id %d --version %s',
+            'curl -fsSL %s | sudo bash -s -- --mode machine --panel %s --token %s --machine-id %d --kernel xray --version latest',
             self::NODE_INSTALLER_URL,
             escapeshellarg($panelUrl),
             escapeshellarg($machine->token),
-            $machine->id,
-            self::NODE_RELEASE
+            $machine->id
         );
     }
 }

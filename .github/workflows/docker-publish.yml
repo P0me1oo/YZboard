@@ -16,7 +16,7 @@ on:
         default: true
         type: boolean
       publish_latest:
-        description: "同时更新 latest；生产部署仍应使用版本加短 SHA 的不可变标签"
+        description: "手动发布时同时更新生产 Compose 使用的 latest"
         required: true
         default: false
         type: boolean

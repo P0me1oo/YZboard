@@ -12,7 +12,7 @@ use Tests\TestCase;
 
 class MachineInstallCommandTest extends TestCase
 {
-    public function test_machine_install_command_uses_fixed_yzboard_node_release(): void
+    public function test_machine_install_command_uses_latest_release_installer_and_xray(): void
     {
         $this->mock(Setting::class, function (MockInterface $mock): void {
             $mock->shouldReceive('get')
@@ -20,7 +20,8 @@ class MachineInstallCommandTest extends TestCase
                 ->andReturn('https://panel.example.com/');
         });
 
-        $machine = new ServerMachine([
+        $machine = new ServerMachine();
+        $machine->setRawAttributes([
             'name' => 'test-machine',
             'token' => 'test-machine-token',
         ]);
@@ -34,7 +35,7 @@ class MachineInstallCommandTest extends TestCase
         );
 
         $expected = sprintf(
-            'curl -fsSL https://raw.githubusercontent.com/P0me1oo/YZboard-Node/v1.13-yz.2/install.sh | sudo bash -s -- --mode machine --panel %s --token %s --machine-id 42 --version v1.13-yz.2',
+            'curl -fsSL https://github.com/P0me1oo/YZboard-Node/releases/latest/download/install.sh | sudo bash -s -- --mode machine --panel %s --token %s --machine-id 42 --kernel xray --version latest',
             escapeshellarg('https://panel.example.com'),
             escapeshellarg('test-machine-token')
         );

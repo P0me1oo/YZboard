@@ -84,6 +84,34 @@ abstract class AbstractProtocol
     abstract public function handle();
 
     /**
+     * 生成客户端通用的订阅流量信息。
+     *
+     * 流量响应头以字节为单位，必须输出整数；这里只规范响应格式，
+     * 不修改数据库中的原始统计值和计费结果。
+     */
+    protected function buildSubscriptionUserInfo(): string
+    {
+        $upload = $this->normalizeSubscriptionInteger($this->user['u'] ?? 0);
+        $download = $this->normalizeSubscriptionInteger($this->user['d'] ?? 0);
+        $total = $this->normalizeSubscriptionInteger($this->user['transfer_enable'] ?? 0);
+        $expire = $this->normalizeSubscriptionInteger($this->user['expired_at'] ?? 0);
+
+        return "upload={$upload}; download={$download}; total={$total}; expire={$expire}";
+    }
+
+    /**
+     * 将响应头字段规范为非负整数，避免严格客户端拒绝小数字节数。
+     */
+    private function normalizeSubscriptionInteger(mixed $value): int
+    {
+        if (!is_numeric($value)) {
+            return 0;
+        }
+
+        return max(0, (int) round((float) $value));
+    }
+
+    /**
      * 根据客户端版本过滤不兼容的服务器
      *
      * @return array

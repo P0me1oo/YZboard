@@ -54,7 +54,7 @@ class Loon extends AbstractProtocol
         }
         return response($uri)
             ->header('content-type', 'text/plain')
-            ->header('Subscription-Userinfo', "upload={$user['u']}; download={$user['d']}; total={$user['transfer_enable']}; expire={$user['expired_at']}");
+            ->header('Subscription-Userinfo', $this->buildSubscriptionUserInfo());
     }
 
 

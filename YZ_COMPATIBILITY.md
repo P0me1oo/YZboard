@@ -11,11 +11,11 @@
 | YZboard 上游仓库 | `https://github.com/cedar2025/Xboard.git` |
 | YZboard 上游基线 | `master` 固定快照 / `8ecb762d77ef16491fe919b7092aea66b834deed` |
 | YZboard 发布 Tag | `v1.0.6` |
-| YZboard Tag / 镜像源码 commit | 发布后回填 |
-| YZboard Docker 镜像 | `ghcr.io/p0me1oo/yzboard:latest`；不可变标签发布后回填 |
-| YZboard Docker manifest | 发布后回填 |
+| YZboard Tag / 镜像源码 commit | `c142d06be7b76bfd4579189674dbcf81e53756d9` |
+| YZboard Docker 镜像 | `ghcr.io/p0me1oo/yzboard:latest`；不可变标签 `ghcr.io/p0me1oo/yzboard:1.0.6-c142d06` |
+| YZboard Docker manifest | `sha256:bc51d15ac166020ecc15a8df0c294439b8c59220fe52ad42b5fe88fa0da90a58` |
 | YZboard Docker 架构 | `linux/amd64`、`linux/arm64` |
-| YZboard Docker 构建 | 固定来源 `v1.0.6`；Actions run 发布后回填 |
+| YZboard Docker 构建 | 固定来源 `v1.0.6`；GitHub Actions run `30173517877` |
 | YZboard-Node 发布版本 | `v1.13-yz.3` |
 | YZboard-Node 上游基线 | `v1.13` / `0a29338e1f102a462363ce3527417029f89bab28` |
 | YZboard-Node Tag 对应 commit | `5008b1763d8c1e79bcb57203b3a66b6deca85358` |

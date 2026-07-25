@@ -89,7 +89,6 @@ class Stash extends AbstractProtocol
     public function handle()
     {
         $servers = $this->servers;
-        $user = $this->user;
         $appName = admin_setting('app_name', 'XBoard');
 
         $template = subscribe_template('stash');
@@ -173,7 +172,7 @@ class Stash extends AbstractProtocol
         $yaml = str_replace('$app_name', admin_setting('app_name', 'XBoard'), $yaml);
         return response($yaml)
             ->header('content-type', 'text/yaml')
-            ->header('subscription-userinfo', "upload={$user['u']}; download={$user['d']}; total={$user['transfer_enable']}; expire={$user['expired_at']}")
+            ->header('subscription-userinfo', $this->buildSubscriptionUserInfo())
             ->header('profile-update-interval', '24')
             ->header('content-disposition', 'attachment;filename*=UTF-8\'\'' . rawurlencode($appName));
     }

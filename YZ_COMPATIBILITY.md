@@ -8,7 +8,7 @@
 | --- | --- |
 | YZboard 面板版本 | `1.0.3` |
 | 面板兼容标识 | `xray-v26.7.11-yz.1` |
-| YZboard 代码 commit | 面板 `1.0.3` 安装链提交；发布后补充完整 SHA |
+| YZboard 代码 commit | `fc66b802a2d57791a65fc57051e7be8d6d26a579` |
 | YZboard-Node 发布版本 | `v1.13-yz.2` |
 | YZboard-Node 上游基线 | `v1.13` / `0a29338e1f102a462363ce3527417029f89bab28` |
 | YZboard-Node Tag 对应 commit | `28161f734f034f4385971aeeade1a523732a9d8d` |

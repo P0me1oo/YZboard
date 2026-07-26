@@ -11,14 +11,14 @@
 | YZboard 上游仓库 | `https://github.com/cedar2025/Xboard.git` |
 | YZboard 上游基线 | `master` 固定快照 / `8ecb762d77ef16491fe919b7092aea66b834deed` |
 | YZboard 发布 Tag | `v1.1.0` |
-| YZboard Tag / 镜像源码 commit | 发布后回填 |
+| YZboard Tag / 镜像源码 commit | `e83551fb128149b593766c66d4022eb9ed3275c6` |
 | YZboard Docker 镜像 | 发布后回填 |
 | YZboard Docker manifest | 发布后回填 |
 | YZboard Docker 架构 | `linux/amd64`、`linux/arm64` |
 | YZboard Docker 构建 | 发布后回填 |
 | YZboard-Node 发布版本 | `v1.13-yz.5` |
 | YZboard-Node 上游基线 | `v1.13` / `0a29338e1f102a462363ce3527417029f89bab28` |
-| YZboard-Node Tag 对应 commit | 发布后回填 |
+| YZboard-Node Tag 对应 commit | `2aacb4c30007c11406cd61095f45ac84f835f80e` |
 | Xray 官方预发布 Tag | `v26.7.11` |
 | Xray 上游 Tag commit | `50231eaff98ccc31b5cbd247a721c16e97fe5ec1` |
 | YZ-Xray-core fork 版本 | `v26.7.11-yz.1` |

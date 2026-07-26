@@ -11,11 +11,11 @@
 | YZboard 上游仓库 | `https://github.com/cedar2025/Xboard.git` |
 | YZboard 上游基线 | `master` 固定快照 / `8ecb762d77ef16491fe919b7092aea66b834deed` |
 | YZboard 发布 Tag | `v1.2.0` |
-| YZboard Tag / 镜像源码 commit | 发布后回填 |
-| YZboard Docker 镜像 | 发布后回填 |
-| YZboard Docker manifest | 发布后回填 |
+| YZboard Tag / 镜像源码 commit | `90c11685eab03a68e167a3c0c969bd774a89e362` |
+| YZboard Docker 镜像 | `ghcr.io/p0me1oo/yzboard:latest`；不可变标签 `ghcr.io/p0me1oo/yzboard:1.2.0-90c1168` |
+| YZboard Docker manifest | `sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0` |
 | YZboard Docker 架构 | `linux/amd64`、`linux/arm64` |
-| YZboard Docker 构建 | 发布后回填 |
+| YZboard Docker 构建 | 固定来源 `v1.2.0`；GitHub Actions run `30217802380`；镜像 OCI revision `90c11685eab03a68e167a3c0c969bd774a89e362`；构建日志确认两个架构都执行了管理端补丁 |
 | YZboard-Node 发布版本 | `v1.13-yz.6` |
 | YZboard-Node 上游基线 | `v1.13` / `0a29338e1f102a462363ce3527417029f89bab28` |
 | YZboard-Node Tag 对应 commit | `724d2dfd7dea532fa4596e76a0c87a4d16da1ee0` |

@@ -12,6 +12,30 @@ class Helper
         return base64_encode(substr($uuid, 0, $length));
     }
 
+    /**
+     * 把 VLESS 路由编号写入 UUID 的第 7、8 字节（0 基下标 6、7），即标准写法的第三段。
+     *
+     * Xray 在校验 VLESS 用户前会把这两个字节清零，因此写入编号不会影响用户身份匹配；
+     * 认证通过后内核再按原始字节还原编号供路由规则使用。编号非法或 UUID 格式不符时原样返回。
+     */
+    public static function applyVlessRoute(string $uuid, $route): string
+    {
+        if ($route === null || $route === '' || !is_numeric($route)) {
+            return $uuid;
+        }
+
+        $value = (int) $route;
+        if ($value < 0 || $value > 65535) {
+            return $uuid;
+        }
+
+        if (!preg_match('/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/', $uuid)) {
+            return $uuid;
+        }
+
+        return substr($uuid, 0, 14) . sprintf('%04x', $value) . substr($uuid, 18);
+    }
+
     public static function getServerKey($timestamp, $length)
     {
         return base64_encode(substr(md5($timestamp), 0, $length));

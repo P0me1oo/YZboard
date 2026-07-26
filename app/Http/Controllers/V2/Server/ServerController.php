@@ -63,6 +63,12 @@ class ServerController extends Controller
             }
         }
 
+        // 入口节点上各逻辑节点的 Shadowsocks 出站流量，只计入落地节点的运营统计。
+        $relayTraffic = $request->input('relay_traffic');
+        if (is_array($relayTraffic) && !empty($relayTraffic) && $reportAccepted) {
+            ServerService::processRelayTraffic($node, $relayTraffic);
+        }
+
         $alive = $request->input('alive');
         if (is_array($alive) && !empty($alive)) {
             ServerService::processAlive($node->id, $alive);

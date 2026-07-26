@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\RelayNodeTrafficJob;
 use App\Models\Server;
 use App\Models\ServerMachine;
 use App\Models\ServerRoute;
@@ -66,6 +67,15 @@ class ServerService
             ->append(['last_check_at', 'last_push_at', 'online', 'is_online', 'available_status', 'cache_key', 'server_key']);
 
         $servers = collect($servers)->map(function ($server) use ($user) {
+            if ($server->isRelayChild()) {
+                $entry = ServerRelayService::entryFor($server);
+                // 拓扑不完整或节点被禁用时直接丢弃，绝不把落地服务器的内部连接信息下发给客户端。
+                if (!$entry || $server->enabled === false) {
+                    return null;
+                }
+                return self::projectRelayChild($server, $entry, $user);
+            }
+
             // 判断动态端口
             if (str_contains($server->port, '-')) {
                 $port = $server->port;
@@ -75,20 +85,70 @@ class ServerService
                 $server->port = (int) $server->port;
             }
             $server->password = $server->generateServerPassword($user);
+            if ($server->type === ServerRelayService::ENTRY_TYPE && ServerRelayService::hasRelayChildren($server)) {
+                // 入口节点自身也需要一个路由编号，用于在入口上显式选择直接出站。
+                $server->password = Helper::applyVlessRoute(
+                    $server->password,
+                    ServerRelayService::ensureRouteId($server)
+                );
+            }
             $server->rate = $server->getCurrentRate();
             return $server;
-        })->toArray();
+        })->filter()->values()->toArray();
 
         return $servers;
     }
 
     /**
-     * 根据权限组获取可用的用户列表
-     * @param array $groupIds
+     * 把中转逻辑节点投影成入口节点的客户端配置。
+     *
+     * 客户端看到的是一个普通节点：地址、端口和全部 Reality 参数来自入口节点，
+     * 名称、排序、标签、权限和显示状态仍属于逻辑节点自身；用户身份使用原始 UUID，
+     * 只在路由字节写入逻辑节点的编号。落地服务器的内部连接信息不会出现在结果中。
+     */
+    private static function projectRelayChild(Server $child, Server $entry, User $user): Server
+    {
+        $routeId = ServerRelayService::ensureRouteId($child);
+
+        $child->type = $entry->type;
+        $child->host = $entry->host;
+        $child->protocol_settings = $entry->protocol_settings;
+        // 服务端口属于落地服务器的内部监听端口，必须一并换成入口的值，
+        // 否则用户侧节点列表仍能看到内部端口。
+        $child->server_port = $entry->server_port;
+
+        if (str_contains((string) $entry->port, '-')) {
+            $child->port = (int) Helper::randomPort($entry->port);
+            $child->ports = $entry->port;
+        } else {
+            $child->port = (int) $entry->port;
+            $child->ports = null;
+        }
+
+        $child->password = Helper::applyVlessRoute($user->uuid, $routeId);
+        // 逻辑节点强制继承入口的基础倍率和动态时段倍率。
+        $child->rate = $entry->getCurrentRate();
+
+        // 拓扑判定过程中加载的父节点关联会被一并序列化，其中包含 Reality 私钥等
+        // 服务端配置，必须在返回前解除。
+        $child->unsetRelation('parent');
+
+        return $child;
+    }
+
+    /**
+     * 根据节点权限组获取可用的用户列表
+     * @param Server $node
      * @return Collection
      */
     public static function getAvailableUsers(Server $node)
     {
+        // 中转逻辑节点的落地入站只接受入口服务器的内部凭据，不下发面板用户，
+        // 也因此不会在落地端重复统计用户流量。
+        if ($node->isRelayChild()) {
+            return collect();
+        }
+
         $groupIds = $node->group_ids ?? [];
         if (empty($groupIds)) {
             return collect();
@@ -405,6 +465,10 @@ class ServerService
             default => [],
         };
 
+        if ($relay = self::buildRelayConfig($node)) {
+            $response['relay'] = $relay;
+        }
+
         if (!empty($node['route_ids'])) {
             $response['routes'] = self::getRoutes($node['route_ids']);
         }
@@ -430,6 +494,99 @@ class ServerService
         }
 
         return $response;
+    }
+
+    /**
+     * 生成节点的中转配置段。
+     *
+     * 入口节点得到全部逻辑节点的内部出站参数和路由编号映射；落地节点只得到自己那条
+     * 内部入站的监听参数。普通节点返回 null，配置结构保持不变。
+     */
+    private static function buildRelayConfig(Server $node): ?array
+    {
+        if ($node->isRelayChild()) {
+            $credential = ServerRelayService::transitCredential($node);
+
+            return [
+                'mode' => 'landing',
+                'protocol' => Server::TYPE_SHADOWSOCKS,
+                'listen_port' => (int) $node->server_port,
+                'cipher' => $credential['cipher'],
+                'password' => $credential['password'],
+                'entry_node_id' => (int) $node->relayParentId(),
+            ];
+        }
+
+        if ($node->relayParentId() !== null || $node->type !== ServerRelayService::ENTRY_TYPE) {
+            return null;
+        }
+
+        $children = ServerRelayService::childrenOf($node);
+        if ($children->isEmpty()) {
+            return null;
+        }
+
+        $outbounds = $children->map(function (Server $child) {
+            $credential = ServerRelayService::transitCredential($child);
+
+            return [
+                'node_id' => (int) $child->id,
+                'tag' => ServerRelayService::outboundTag((int) $child->id),
+                'route_id' => ServerRelayService::ensureRouteId($child),
+                'protocol' => Server::TYPE_SHADOWSOCKS,
+                'address' => $child->host,
+                'port' => (int) $child->port,
+                'cipher' => $credential['cipher'],
+                'password' => $credential['password'],
+            ];
+        })->values()->all();
+
+        return [
+            'mode' => 'entry',
+            'route_id' => ServerRelayService::ensureRouteId($node),
+            'children' => $outbounds,
+        ];
+    }
+
+    /**
+     * 记录中转逻辑节点的落地线路流量。
+     *
+     * 该流量来自入口服务器上对应的独立 Shadowsocks 出站，只作为节点运营统计，
+     * 不参与用户套餐扣费，也不叠加倍率。
+     *
+     * @param array<string|int, mixed> $relayTraffic 出站标签或逻辑节点 ID => [上行, 下行]
+     */
+    public static function processRelayTraffic(Server $entry, array $relayTraffic): void
+    {
+        foreach ($relayTraffic as $key => $value) {
+            // 数据来自 Node 上报的 JSON，形状不可信，逐项校验后才使用。
+            if (!is_array($value) || count($value) !== 2) {
+                continue;
+            }
+            if (!isset($value[0], $value[1]) || !is_numeric($value[0]) || !is_numeric($value[1])) {
+                continue;
+            }
+
+            $nodeId = is_numeric($key)
+                ? (int) $key
+                : ServerRelayService::nodeIdFromOutboundTag((string) $key);
+            if (!$nodeId) {
+                continue;
+            }
+
+            $u = (int) $value[0];
+            $d = (int) $value[1];
+            if ($u <= 0 && $d <= 0) {
+                continue;
+            }
+
+            $child = Server::find($nodeId);
+            if (!$child || (int) $child->parent_id !== (int) $entry->id) {
+                continue;
+            }
+
+            RelayNodeTrafficJob::dispatch((int) $child->id, $child->type, $u, $d);
+        }
     }
 
     /**

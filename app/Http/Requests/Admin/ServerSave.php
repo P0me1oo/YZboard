@@ -4,6 +4,8 @@
 namespace App\Http\Requests\Admin;
 
 use App\Models\Server;
+use App\Services\ServerRelayService;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ServerSave extends FormRequest
@@ -237,6 +239,31 @@ class ServerSave extends FormRequest
         }
 
         return $rules;
+    }
+
+    /**
+     * 校验中转拓扑：禁止自引用、多层中转、入口套入口，并限制第一版支持的中转协议。
+     */
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator) {
+            // 0、空串和 null 都表示“没有父级节点”，历史数据用 0 填充。
+            $parentId = (int) $this->input('parent_id');
+            if ($parentId <= 0) {
+                return;
+            }
+
+            $error = ServerRelayService::validateParent(
+                $this->input('id') !== null ? (int) $this->input('id') : null,
+                $parentId,
+                $this->input('type'),
+                $this->input('protocol_settings.cipher'),
+            );
+
+            if ($error !== null) {
+                $validator->errors()->add('parent_id', $error);
+            }
+        });
     }
 
     public function attributes(): array

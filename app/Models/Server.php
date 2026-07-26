@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Cache;
+use App\Services\ServerRelayService;
 use App\Utils\CacheKey;
 use App\Utils\Helper;
 use App\Models\User;
@@ -26,7 +27,8 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
  * @property boolean $show 是否显示
  * @property string|null $allow_insecure 是否允许不安全
  * @property string|null $network 网络类型
- * @property int|null $parent_id 父节点ID
+ * @property int|null $parent_id 父节点ID（非空表示本节点是中转逻辑节点，父节点为客户端真实入口）
+ * @property int|null $vless_route VLESS路由编号（写入客户端UUID第7、8字节）
  * @property float|null $rate 倍率
  * @property boolean $rate_time_enable 是否启用时间范围功能
  * @property array|null $rate_time_ranges 倍率时间范围
@@ -75,6 +77,18 @@ class Server extends Model
     public const STATUS_ONLINE = 2;
 
     public const CHECK_INTERVAL = 300; // 5 minutes in seconds
+
+    /** VLESS 路由编号分配游标的设置项名称。删除节点不会回退该游标，避免立即复用编号。 */
+    public const ROUTE_CURSOR_SETTING = 'vless_route_cursor';
+
+    /** 路由编号占用 UUID 的两个字节。Xray 端口列表解析会丢弃数字 0，因此从 1 开始。 */
+    public const ROUTE_ID_MIN = 1;
+    public const ROUTE_ID_MAX = 65535;
+
+    /** 第一版只支持 Shadowsocks 作为入口到落地之间的中转协议。 */
+    public const RELAY_TRANSIT_TYPES = [
+        self::TYPE_SHADOWSOCKS,
+    ];
 
     private const CIPHER_CONFIGURATIONS = [
         '2022-blake3-aes-128-gcm' => [
@@ -133,6 +147,7 @@ class Server extends Model
         'u' => 'integer',
         'd' => 'integer',
         'machine_id' => 'integer',
+        'vless_route' => 'integer',
     ];
 
     private const MULTIPLEX_CONFIGURATION = [
@@ -323,6 +338,14 @@ class Server extends Model
         ]
     ];
 
+    protected static function booted(): void
+    {
+        // 路由编号由面板自动分配，管理端无需填写；新建节点（含复制）始终获得独立编号。
+        static::creating(function (self $server) {
+            $server->vless_route = ServerRelayService::allocateRouteId();
+        });
+    }
+
     private function castValueWithConfig($value, array $config)
     {
         if ($value === null && $config['type'] !== 'object') {
@@ -383,8 +406,10 @@ class Server extends Model
         }
 
         $config = self::CIPHER_CONFIGURATIONS[$cipher];
-        // Use parent's created_at if this is a child node
-        $serverCreatedAt = $this->parent_id ? $this->parent->created_at : $this->created_at;
+        // 旧语义的子节点与父节点共用 SS2022 服务端密钥；中转逻辑节点不向用户下发 SS 凭据，使用自身时间戳。
+        $serverCreatedAt = ($this->parent_id && !$this->isRelayChild())
+            ? $this->parent->created_at
+            : $this->created_at;
         $serverKey = Helper::getServerKey($serverCreatedAt, $config['serverKeySize']);
         $userKey = Helper::uuidToBase64($user->uuid, $config['userKeySize']);
         return "{$serverKey}:{$userKey}";
@@ -417,6 +442,65 @@ class Server extends Model
         return $this->belongsTo(self::class, 'parent_id', 'id');
     }
 
+    /**
+     * 以本节点为入口的中转逻辑节点。
+     */
+    public function children(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_id', 'id');
+    }
+
+    /**
+     * 规范化后的父级节点 ID。
+     *
+     * 历史数据用 0 表示“没有父节点”（v2board 迁移遗留），自增主键也不会是 0，
+     * 因此 0 和 null 一律视为未设置。所有中转判定都必须经过这里，不能直接比较 null。
+     */
+    public function relayParentId(): ?int
+    {
+        $parentId = (int) $this->parent_id;
+        return $parentId > 0 ? $parentId : null;
+    }
+
+    /**
+     * 是否为中转逻辑节点。
+     *
+     * 父级节点已设置且协议属于支持的中转协议时成立。协议不在支持范围内的历史数据
+     * 仍按旧的“共享父节点运行状态”语义处理，避免升级后破坏既有节点。
+     */
+    public function isRelayChild(): bool
+    {
+        return $this->relayParentId() !== null
+            && in_array($this->type, self::RELAY_TRANSIT_TYPES, true);
+    }
+
+    /**
+     * 状态缓存所属的节点 ID。
+     *
+     * 中转逻辑节点在落地服务器上有自己的 Node 实例，心跳、在线数和负载都应使用自身
+     * 数据；只有旧语义的子节点才继续读取父节点缓存。
+     */
+    protected function statusOwnerId(): int
+    {
+        if ($this->isRelayChild()) {
+            return (int) $this->id;
+        }
+        return (int) ($this->parent_id ?: $this->id);
+    }
+
+    /**
+     * 实际参与用户扣费的倍率。
+     *
+     * 中转逻辑节点强制继承入口节点的基础倍率和动态时段倍率，自身填写的倍率不生效。
+     */
+    public function getEffectiveRate(): float
+    {
+        if ($this->isRelayChild() && $this->parent) {
+            return $this->parent->getCurrentRate();
+        }
+        return $this->getCurrentRate();
+    }
+
     public function stats(): HasMany
     {
         return $this->hasMany(StatServer::class, 'server_id', 'id');
@@ -445,7 +529,7 @@ class Server extends Model
         return Attribute::make(
             get: function () {
                 $type = strtoupper($this->type);
-                $serverId = $this->parent_id ?: $this->id;
+                $serverId = $this->statusOwnerId();
                 return Cache::get(CacheKey::get("SERVER_{$type}_LAST_CHECK_AT", $serverId));
             }
         );
@@ -459,7 +543,7 @@ class Server extends Model
         return Attribute::make(
             get: function () {
                 $type = strtoupper($this->type);
-                $serverId = $this->parent_id ?: $this->id;
+                $serverId = $this->statusOwnerId();
                 return Cache::get(CacheKey::get("SERVER_{$type}_LAST_PUSH_AT", $serverId));
             }
         );
@@ -473,7 +557,7 @@ class Server extends Model
         return Attribute::make(
             get: function () {
                 $type = strtoupper($this->type);
-                $serverId = $this->parent_id ?: $this->id;
+                $serverId = $this->statusOwnerId();
                 return Cache::get(CacheKey::get("SERVER_{$type}_ONLINE_USER", $serverId)) ?? 0;
             }
         );
@@ -526,7 +610,7 @@ class Server extends Model
         return Attribute::make(
             get: function () {
                 $type = strtoupper($this->type);
-                $serverId = $this->parent_id ?: $this->id;
+                $serverId = $this->statusOwnerId();
                 return Cache::get(CacheKey::get("SERVER_{$type}_METRICS", $serverId));
             }
         );
@@ -552,7 +636,7 @@ class Server extends Model
         return Attribute::make(
             get: function () {
                 $type = strtoupper($this->type);
-                $serverId = $this->parent_id ?: $this->id;
+                $serverId = $this->statusOwnerId();
                 return Cache::get(CacheKey::get("SERVER_{$type}_LOAD_STATUS", $serverId));
             }
         );

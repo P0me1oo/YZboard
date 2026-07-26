@@ -32,6 +32,11 @@ RUN test -n "${SOURCE_COMMIT}" && \
     test "$(git rev-parse HEAD)" = "${SOURCE_COMMIT}" && \
     git submodule update --init --recursive --force
 
+# 管理端是构建产物，节点编辑表单的「父级节点」下拉按同协议过滤，选不到跨协议的
+# VLESS 中转入口。这里定点注入一个独立的中转入口选择框；锚点匹配不到会直接失败，
+# 避免静默产出缺少该字段的管理端。
+RUN php /www/.docker/patch-admin-relay.php /www/public/assets/admin/assets
+
 COPY .docker/supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY .docker/caddy/Caddyfile /etc/caddy/Caddyfile
 COPY .docker/php/zz-xboard.ini /usr/local/etc/php/conf.d/zz-xboard.ini

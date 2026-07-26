@@ -122,6 +122,7 @@ class ServerSave extends FormRequest
             'group_ids' => 'nullable|array',
             'route_ids' => 'nullable|array',
             'parent_id' => 'nullable|integer',
+            'relay_entry_id' => 'nullable|integer',
             'machine_id' => 'nullable|integer',
             'enabled' => 'nullable|boolean',
             'host' => 'required',
@@ -247,21 +248,21 @@ class ServerSave extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator) {
-            // 0、空串和 null 都表示“没有父级节点”，历史数据用 0 填充。
-            $parentId = (int) $this->input('parent_id');
-            if ($parentId <= 0) {
+            // 0、空串和 null 都表示“不使用中转”，管理端会把“无”提交为 0。
+            $entryId = (int) $this->input('relay_entry_id');
+            if ($entryId <= 0) {
                 return;
             }
 
-            $error = ServerRelayService::validateParent(
+            $error = ServerRelayService::validateEntry(
                 $this->input('id') !== null ? (int) $this->input('id') : null,
-                $parentId,
+                $entryId,
                 $this->input('type'),
                 $this->input('protocol_settings.cipher'),
             );
 
             if ($error !== null) {
-                $validator->errors()->add('parent_id', $error);
+                $validator->errors()->add('relay_entry_id', $error);
             }
         });
     }
@@ -309,6 +310,7 @@ class ServerSave extends FormRequest
             'group_ids.array' => '权限组格式不正确',
             'route_ids.array' => '路由组格式不正确',
             'parent_id.integer' => '父ID格式不正确',
+            'relay_entry_id.integer' => '中转入口ID格式不正确',
             'host.required' => '节点地址不能为空',
             'port.required' => '连接端口不能为空',
             'server_port.required' => '后端服务端口不能为空',

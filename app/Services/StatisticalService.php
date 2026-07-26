@@ -299,10 +299,7 @@ class StatisticalService
             ->get()
             ->map(function ($item) {
                 return [
-                    // 中转逻辑节点的落地流量独立统计，使用自身名称。
-                    'server_name' => $item->isRelayChild()
-                        ? $item->name
-                        : (optional($item->parent)->name ?? $item->name),
+                    'server_name' => optional($item->parent)->name ?? $item->name,
                     'server_id' => $item->id,
                     'server_type' => $item->type,
                     'u' => (int) $item->u,

@@ -13,7 +13,7 @@ class ServerObserver
      * 影响入口节点出站与路由规则的字段。逻辑节点的这些字段变化时，入口必须重新下发配置。
      */
     private const RELAY_ENTRY_FIELDS = [
-        'parent_id',
+        'relay_entry_id',
         'type',
         'host',
         'port',
@@ -26,7 +26,7 @@ class ServerObserver
     public function created(Server $server): void
     {
         $this->notifyMachineNodesChanged($server->machine_id);
-        $this->notifyRelayEntry($server->parent_id);
+        $this->notifyRelayEntry($server->relay_entry_id);
     }
 
     public function updated(Server $server): void
@@ -37,7 +37,7 @@ class ServerObserver
             'server_port',
             'protocol_settings',
             'type',
-            'parent_id',
+            'relay_entry_id',
             'route_ids',
             'custom_outbounds',
             'custom_routes',
@@ -54,15 +54,15 @@ class ServerObserver
         }
 
         if ($server->wasChanged(self::RELAY_ENTRY_FIELDS)) {
-            $this->notifyRelayEntry($server->parent_id);
-            $this->notifyRelayEntry($server->getOriginal('parent_id'));
+            $this->notifyRelayEntry($server->relay_entry_id);
+            $this->notifyRelayEntry($server->getOriginal('relay_entry_id'));
         }
     }
 
     public function deleted(Server $server): void
     {
         $this->notifyMachineChange(null, $server->getOriginal('machine_id') ?: $server->machine_id);
-        $this->notifyRelayEntry($server->getOriginal('parent_id') ?: $server->parent_id);
+        $this->notifyRelayEntry($server->getOriginal('relay_entry_id') ?: $server->relay_entry_id);
     }
 
     /**

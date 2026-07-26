@@ -76,7 +76,7 @@ class ServerRelayTest extends TestCase
         return Server::create(array_merge([
             'type' => Server::TYPE_SHADOWSOCKS,
             'name' => '落地 B',
-            'parent_id' => $entry->id,
+            'relay_entry_id' => $entry->id,
             'host' => '203.0.113.7',
             'port' => '28388',
             'server_port' => 28388,
@@ -105,69 +105,89 @@ class ServerRelayTest extends TestCase
     }
 
     /**
-     * 历史数据用 parent_id = 0 表示“没有父节点”（v2board 迁移遗留）。
-     * 这类节点必须继续按普通节点处理，否则升级会让存量 Shadowsocks 节点
-     * 停止下发用户并从订阅中消失。
+     * parent_id 保持上游语义，与中转完全无关。
+     *
+     * 存量库里大量节点带 parent_id（v2board 迁移会填 0，也可能指向真实父节点），
+     * 这些节点必须继续按普通节点处理：照常下发用户、照常出现在订阅里、
+     * 节点配置里不出现 relay 段。
      */
-    public function test_zero_parent_id_is_treated_as_no_parent(): void
+    public function test_parent_id_does_not_make_a_node_a_relay_child(): void
     {
-        $plainSs = Server::create([
+        $user = $this->makeUser();
+
+        $makePlainSs = fn(string $name, $parentId, int $port) => Server::create([
             'type' => Server::TYPE_SHADOWSOCKS,
-            'name' => '美国-03｜禁止直连',
-            'parent_id' => 0,
+            'name' => $name,
+            'parent_id' => $parentId,
             'host' => '198.51.100.9',
-            'port' => '12345',
-            'server_port' => 12345,
+            'port' => (string) $port,
+            'server_port' => $port,
             'rate' => 1,
             'show' => true,
             'group_ids' => ['1'],
             'sort' => 5,
             'protocol_settings' => ['cipher' => 'aes-128-gcm'],
         ]);
-        $user = $this->makeUser();
 
-        $this->assertSame(0, (int) $plainSs->parent_id);
-        $this->assertNull($plainSs->relayParentId());
-        $this->assertFalse($plainSs->isRelayChild());
+        $zeroParent = $makePlainSs('美国-03｜禁止直连', 0, 12345);
+        $realParent = $makePlainSs('美国-04｜禁止直连', $zeroParent->id, 12346);
 
-        // 仍然正常下发用户。
-        $this->assertNotEmpty(ServerService::getAvailableUsers($plainSs->fresh()));
+        foreach ([$zeroParent, $realParent] as $node) {
+            $this->assertFalse($node->isRelayChild(), "{$node->name} 不应被当作中转逻辑节点");
+            $this->assertNull($node->relayEntryId());
+            $this->assertNotEmpty(ServerService::getAvailableUsers($node->fresh()));
+            $this->assertArrayNotHasKey('relay', ServerService::buildNodeConfig($node->fresh()));
+        }
 
         // 仍然以 Shadowsocks 节点出现在订阅中，参数不变。
         $servers = collect(ServerService::getAvailableServers($user))->keyBy('id');
-        $this->assertArrayHasKey($plainSs->id, $servers->all());
-        $this->assertSame(Server::TYPE_SHADOWSOCKS, $servers[$plainSs->id]['type']);
-        $this->assertSame('198.51.100.9', $servers[$plainSs->id]['host']);
-        $this->assertSame(12345, $servers[$plainSs->id]['port']);
-
-        // 节点配置里不会出现 relay 段。
-        $this->assertArrayNotHasKey('relay', ServerService::buildNodeConfig($plainSs->fresh()));
-
-        // 保存校验也不能因为 parent_id = 0 就报错。
-        $this->assertNull(
-            ServerRelayService::validateParent(null, 0, Server::TYPE_SHADOWSOCKS, 'aes-128-gcm')
-        );
+        foreach ([$zeroParent, $realParent] as $node) {
+            $this->assertArrayHasKey($node->id, $servers->all());
+            $this->assertSame(Server::TYPE_SHADOWSOCKS, $servers[$node->id]['type']);
+            $this->assertSame('198.51.100.9', $servers[$node->id]['host']);
+        }
     }
 
     /**
-     * parent_id = 0 的 VLESS 节点仍然是合法的入口候选。
+     * 一个节点可以同时带 parent_id（沿用上游的状态共享）和 relay_entry_id（参与中转），
+     * 两者互不干扰。
      */
-    public function test_zero_parent_id_entry_can_still_host_children(): void
+    public function test_parent_id_and_relay_entry_id_are_independent(): void
     {
-        $entry = $this->makeEntry(['parent_id' => 0]);
-        $child = $this->makeChild($entry);
-        $user = $this->makeUser();
+        $entry = $this->makeEntry();
+        $other = $this->makeEntry(['name' => '另一个入口', 'port' => '25443', 'server_port' => 25443]);
+        $child = $this->makeChild($entry, ['parent_id' => $other->id]);
 
-        $this->assertNull($entry->relayParentId());
-        $this->assertSame($entry->id, ServerRelayService::entryFor($child->fresh())?->id);
+        $child = $child->fresh();
+
+        // 中转关系只看 relay_entry_id。
+        $this->assertTrue($child->isRelayChild());
+        $this->assertSame($entry->id, $child->relayEntryId());
+        $this->assertSame($entry->id, ServerRelayService::entryFor($child)?->id);
         $this->assertCount(1, ServerRelayService::childrenOf($entry->fresh()));
 
-        $names = collect(ServerService::getAvailableServers($user))->pluck('name')->all();
-        $this->assertContains('入口 A', $names);
-        $this->assertContains('落地 B', $names);
+        // parent_id 指向的节点不会因此变成中转入口。
+        $this->assertCount(0, ServerRelayService::childrenOf($other->fresh()));
+        $this->assertNull(data_get(ServerService::buildNodeConfig($other->fresh()), 'relay'));
 
-        $entryConfig = ServerService::buildNodeConfig($entry->fresh());
-        $this->assertSame('entry', data_get($entryConfig, 'relay.mode'));
+        // parent_id 原有的关联仍然可用。
+        $this->assertSame($other->id, $child->parent->id);
+    }
+
+    /**
+     * relay_entry_id 为 0 或 null 都表示不使用中转。
+     */
+    public function test_zero_relay_entry_id_means_no_relay(): void
+    {
+        $entry = $this->makeEntry();
+        $child = $this->makeChild($entry, ['relay_entry_id' => 0]);
+
+        $this->assertNull($child->relayEntryId());
+        $this->assertFalse($child->isRelayChild());
+        $this->assertCount(0, ServerRelayService::childrenOf($entry->fresh()));
+        $this->assertNull(
+            ServerRelayService::validateEntry(null, 0, Server::TYPE_SHADOWSOCKS, 'aes-128-gcm')
+        );
     }
 
     public function test_route_ids_are_unique_stable_and_in_range(): void
@@ -299,7 +319,7 @@ class ServerRelayTest extends TestCase
     {
         $entry = $this->makeEntry();
         $disabled = $this->makeChild($entry, ['name' => '落地 禁用', 'enabled' => false]);
-        $orphan = $this->makeChild($entry, ['name' => '落地 孤儿', 'parent_id' => 999999]);
+        $orphan = $this->makeChild($entry, ['name' => '落地 孤儿', 'relay_entry_id' => 999999]);
         $user = $this->makeUser();
 
         $names = collect(ServerService::getAvailableServers($user))->pluck('name')->all();
@@ -448,45 +468,45 @@ class ServerRelayTest extends TestCase
         $this->assertSame('not-a-uuid', Helper::applyVlessRoute('not-a-uuid', 443));
     }
 
-    public function test_parent_validation_rejects_invalid_topologies(): void
+    public function test_entry_validation_rejects_invalid_topologies(): void
     {
         $entry = $this->makeEntry();
         $child = $this->makeChild($entry);
         $cipher = '2022-blake3-aes-128-gcm';
 
         $this->assertNull(
-            ServerRelayService::validateParent($child->id, $entry->id, Server::TYPE_SHADOWSOCKS, $cipher)
+            ServerRelayService::validateEntry($child->id, $entry->id, Server::TYPE_SHADOWSOCKS, $cipher)
         );
-        $this->assertNull(ServerRelayService::validateParent(null, null, Server::TYPE_VLESS, null));
+        $this->assertNull(ServerRelayService::validateEntry(null, null, Server::TYPE_VLESS, null));
 
         // 自引用
         $this->assertNotNull(
-            ServerRelayService::validateParent($child->id, $child->id, Server::TYPE_SHADOWSOCKS, $cipher)
+            ServerRelayService::validateEntry($child->id, $child->id, Server::TYPE_SHADOWSOCKS, $cipher)
         );
         // 非 Shadowsocks 中转协议
         $this->assertNotNull(
-            ServerRelayService::validateParent(null, $entry->id, Server::TYPE_TROJAN, $cipher)
+            ServerRelayService::validateEntry(null, $entry->id, Server::TYPE_TROJAN, $cipher)
         );
         // 不支持的加密算法
         $this->assertNotNull(
-            ServerRelayService::validateParent(null, $entry->id, Server::TYPE_SHADOWSOCKS, 'rc4-md5')
+            ServerRelayService::validateEntry(null, $entry->id, Server::TYPE_SHADOWSOCKS, 'rc4-md5')
         );
         // 父级不是 VLESS 入口
         $this->assertNotNull(
-            ServerRelayService::validateParent(null, $child->id, Server::TYPE_SHADOWSOCKS, $cipher)
+            ServerRelayService::validateEntry(null, $child->id, Server::TYPE_SHADOWSOCKS, $cipher)
         );
         // 父级不存在
         $this->assertNotNull(
-            ServerRelayService::validateParent(null, 999999, Server::TYPE_SHADOWSOCKS, $cipher)
+            ServerRelayService::validateEntry(null, 999999, Server::TYPE_SHADOWSOCKS, $cipher)
         );
         // 多层中转：入口自身已有父级
-        $nested = $this->makeEntry(['name' => '二级入口', 'parent_id' => $entry->id, 'port' => '26443', 'server_port' => 26443]);
+        $nested = $this->makeEntry(['name' => '二级入口', 'relay_entry_id' => $entry->id, 'port' => '26443', 'server_port' => 26443]);
         $this->assertNotNull(
-            ServerRelayService::validateParent(null, $nested->id, Server::TYPE_SHADOWSOCKS, $cipher)
+            ServerRelayService::validateEntry(null, $nested->id, Server::TYPE_SHADOWSOCKS, $cipher)
         );
         // 已经是别人的父级入口
         $this->assertNotNull(
-            ServerRelayService::validateParent($entry->id, $nested->id, Server::TYPE_SHADOWSOCKS, $cipher)
+            ServerRelayService::validateEntry($entry->id, $nested->id, Server::TYPE_SHADOWSOCKS, $cipher)
         );
     }
 
@@ -501,7 +521,7 @@ class ServerRelayTest extends TestCase
         $payload = [
             'type' => Server::TYPE_SHADOWSOCKS,
             'name' => '非法多层',
-            'parent_id' => $child->id,
+            'relay_entry_id' => $child->id,
             'host' => '203.0.113.9',
             'port' => '28389',
             'server_port' => 28389,
@@ -511,14 +531,14 @@ class ServerRelayTest extends TestCase
         ];
 
         $errors = $this->validateServerSave($payload);
-        $this->assertArrayHasKey('parent_id', $errors);
+        $this->assertArrayHasKey('relay_entry_id', $errors);
 
-        $payload['parent_id'] = $entry->id;
-        $this->assertArrayNotHasKey('parent_id', $this->validateServerSave($payload));
+        $payload['relay_entry_id'] = $entry->id;
+        $this->assertArrayNotHasKey('relay_entry_id', $this->validateServerSave($payload));
 
         // 中转逻辑节点当前只支持 Shadowsocks。
         $payload['type'] = Server::TYPE_TROJAN;
-        $this->assertArrayHasKey('parent_id', $this->validateServerSave($payload));
+        $this->assertArrayHasKey('relay_entry_id', $this->validateServerSave($payload));
     }
 
     /**

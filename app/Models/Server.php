@@ -27,7 +27,8 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
  * @property boolean $show 是否显示
  * @property string|null $allow_insecure 是否允许不安全
  * @property string|null $network 网络类型
- * @property int|null $parent_id 父节点ID（非空表示本节点是中转逻辑节点，父节点为客户端真实入口）
+ * @property int|null $parent_id 父节点ID（共享运行状态与SS2022服务端密钥，语义同上游）
+ * @property int|null $relay_entry_id 中转入口节点ID（非空表示本节点是中转逻辑节点）
  * @property int|null $vless_route VLESS路由编号（写入客户端UUID第7、8字节）
  * @property float|null $rate 倍率
  * @property boolean $rate_time_enable 是否启用时间范围功能
@@ -38,6 +39,8 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
  * @property int $updated_at
  * 
  * @property-read Server|null $parent 父节点
+ * @property-read Server|null $relayEntry 中转入口节点
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, Server> $relayChildren 以本节点为入口的中转逻辑节点
  * @property-read \Illuminate\Database\Eloquent\Collection<int, StatServer> $stats 节点统计
  * 
  * @property-read int|null $last_check_at 最后检查时间（Unix时间戳）
@@ -147,6 +150,7 @@ class Server extends Model
         'u' => 'integer',
         'd' => 'integer',
         'machine_id' => 'integer',
+        'relay_entry_id' => 'integer',
         'vless_route' => 'integer',
     ];
 
@@ -406,10 +410,8 @@ class Server extends Model
         }
 
         $config = self::CIPHER_CONFIGURATIONS[$cipher];
-        // 旧语义的子节点与父节点共用 SS2022 服务端密钥；中转逻辑节点不向用户下发 SS 凭据，使用自身时间戳。
-        $serverCreatedAt = ($this->parent_id && !$this->isRelayChild())
-            ? $this->parent->created_at
-            : $this->created_at;
+        // Use parent's created_at if this is a child node
+        $serverCreatedAt = $this->parent_id ? $this->parent->created_at : $this->created_at;
         $serverKey = Helper::getServerKey($serverCreatedAt, $config['serverKeySize']);
         $userKey = Helper::uuidToBase64($user->uuid, $config['userKeySize']);
         return "{$serverKey}:{$userKey}";
@@ -443,49 +445,43 @@ class Server extends Model
     }
 
     /**
-     * 以本节点为入口的中转逻辑节点。
+     * 客户端实际连接的中转入口节点。
+     *
+     * 与 parent_id 完全独立：parent_id 保持上游语义（共享运行状态和 SS2022 服务端密钥），
+     * relay_entry_id 才表示“本节点是中转逻辑节点，流量先进入口再由本节点出网”。
      */
-    public function children(): HasMany
+    public function relayEntry(): BelongsTo
     {
-        return $this->hasMany(self::class, 'parent_id', 'id');
+        return $this->belongsTo(self::class, 'relay_entry_id', 'id');
     }
 
     /**
-     * 规范化后的父级节点 ID。
-     *
-     * 历史数据用 0 表示“没有父节点”（v2board 迁移遗留），自增主键也不会是 0，
-     * 因此 0 和 null 一律视为未设置。所有中转判定都必须经过这里，不能直接比较 null。
+     * 以本节点为入口的中转逻辑节点。
      */
-    public function relayParentId(): ?int
+    public function relayChildren(): HasMany
     {
-        $parentId = (int) $this->parent_id;
-        return $parentId > 0 ? $parentId : null;
+        return $this->hasMany(self::class, 'relay_entry_id', 'id');
+    }
+
+    /**
+     * 规范化后的中转入口节点 ID。
+     *
+     * 管理端会把“无”提交为 0，自增主键不会是 0，因此 0 和 null 一律视为未设置。
+     * 所有中转判定都必须经过这里，不能直接比较 null。
+     */
+    public function relayEntryId(): ?int
+    {
+        $entryId = (int) $this->relay_entry_id;
+        return $entryId > 0 ? $entryId : null;
     }
 
     /**
      * 是否为中转逻辑节点。
-     *
-     * 父级节点已设置且协议属于支持的中转协议时成立。协议不在支持范围内的历史数据
-     * 仍按旧的“共享父节点运行状态”语义处理，避免升级后破坏既有节点。
      */
     public function isRelayChild(): bool
     {
-        return $this->relayParentId() !== null
+        return $this->relayEntryId() !== null
             && in_array($this->type, self::RELAY_TRANSIT_TYPES, true);
-    }
-
-    /**
-     * 状态缓存所属的节点 ID。
-     *
-     * 中转逻辑节点在落地服务器上有自己的 Node 实例，心跳、在线数和负载都应使用自身
-     * 数据；只有旧语义的子节点才继续读取父节点缓存。
-     */
-    protected function statusOwnerId(): int
-    {
-        if ($this->isRelayChild()) {
-            return (int) $this->id;
-        }
-        return (int) ($this->parent_id ?: $this->id);
     }
 
     /**
@@ -495,8 +491,8 @@ class Server extends Model
      */
     public function getEffectiveRate(): float
     {
-        if ($this->isRelayChild() && $this->parent) {
-            return $this->parent->getCurrentRate();
+        if ($this->isRelayChild() && $this->relayEntry) {
+            return $this->relayEntry->getCurrentRate();
         }
         return $this->getCurrentRate();
     }
@@ -529,7 +525,7 @@ class Server extends Model
         return Attribute::make(
             get: function () {
                 $type = strtoupper($this->type);
-                $serverId = $this->statusOwnerId();
+                $serverId = $this->parent_id ?: $this->id;
                 return Cache::get(CacheKey::get("SERVER_{$type}_LAST_CHECK_AT", $serverId));
             }
         );
@@ -543,7 +539,7 @@ class Server extends Model
         return Attribute::make(
             get: function () {
                 $type = strtoupper($this->type);
-                $serverId = $this->statusOwnerId();
+                $serverId = $this->parent_id ?: $this->id;
                 return Cache::get(CacheKey::get("SERVER_{$type}_LAST_PUSH_AT", $serverId));
             }
         );
@@ -557,7 +553,7 @@ class Server extends Model
         return Attribute::make(
             get: function () {
                 $type = strtoupper($this->type);
-                $serverId = $this->statusOwnerId();
+                $serverId = $this->parent_id ?: $this->id;
                 return Cache::get(CacheKey::get("SERVER_{$type}_ONLINE_USER", $serverId)) ?? 0;
             }
         );
@@ -610,7 +606,7 @@ class Server extends Model
         return Attribute::make(
             get: function () {
                 $type = strtoupper($this->type);
-                $serverId = $this->statusOwnerId();
+                $serverId = $this->parent_id ?: $this->id;
                 return Cache::get(CacheKey::get("SERVER_{$type}_METRICS", $serverId));
             }
         );
@@ -636,7 +632,7 @@ class Server extends Model
         return Attribute::make(
             get: function () {
                 $type = strtoupper($this->type);
-                $serverId = $this->statusOwnerId();
+                $serverId = $this->parent_id ?: $this->id;
                 return Cache::get(CacheKey::get("SERVER_{$type}_LOAD_STATUS", $serverId));
             }
         );

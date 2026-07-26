@@ -48,9 +48,7 @@ class CheckServer extends Command
     {
         $servers = ServerService::getAllServers();
         foreach ($servers as $server) {
-            // 中转逻辑节点在落地服务器上有独立的 Node 实例，需要单独告警；
-            // 旧语义下共享父节点状态的子节点仍然跳过。
-            if ($server['parent_id'] && !$server->isRelayChild()) continue;
+            if ($server['parent_id']) continue;
             if ($server['last_check_at'] && (time() - $server['last_check_at']) > 1800) {
                 $telegramService = new TelegramService();
                 $message = sprintf(

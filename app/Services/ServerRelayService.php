@@ -142,13 +142,13 @@ class ServerRelayService
             return null;
         }
 
-        $entry = $child->parent;
+        $entry = $child->relayEntry;
         if (!$entry || $entry->id === $child->id) {
             return null;
         }
 
-        // 只支持一层中转：入口自身不能再挂在别的节点下面。
-        if ($entry->relayParentId() !== null) {
+        // 只支持一层中转：入口自身不能再挂在别的入口下面。
+        if ($entry->relayEntryId() !== null) {
             return null;
         }
 
@@ -164,11 +164,11 @@ class ServerRelayService
      */
     public static function childrenOf(Server $entry): Collection
     {
-        if ($entry->relayParentId() !== null || $entry->type !== self::ENTRY_TYPE) {
+        if ($entry->relayEntryId() !== null || $entry->type !== self::ENTRY_TYPE) {
             return collect();
         }
 
-        return Server::where('parent_id', $entry->id)
+        return Server::where('relay_entry_id', $entry->id)
             ->whereIn('type', Server::RELAY_TRANSIT_TYPES)
             ->where(function ($query) {
                 $query->where('enabled', true)->orWhereNull('enabled');
@@ -203,7 +203,7 @@ class ServerRelayService
             implode('|', [
                 'xboard-relay-shadowsocks',
                 (string) $child->id,
-                (string) $child->parent_id,
+                (string) $child->relay_entry_id,
                 (string) $child->getRawOriginal('created_at'),
             ]),
             (string) config('app.key'),
@@ -222,19 +222,19 @@ class ServerRelayService
     }
 
     /**
-     * 校验父级节点设置。返回错误信息，合法时返回 null。
+     * 校验中转入口设置。返回错误信息，合法时返回 null。
      *
      * @param int|null $selfId 正在保存的节点 ID，新建时为 null
      */
-    public static function validateParent(?int $selfId, ?int $parentId, ?string $type, ?string $cipher): ?string
+    public static function validateEntry(?int $selfId, ?int $entryId, ?string $type, ?string $cipher): ?string
     {
-        // 0 与 null 都表示“没有父级节点”，历史数据用 0 填充。
-        if (!$parentId) {
+        // 0 与 null 都表示“不使用中转”，管理端会把“无”提交为 0。
+        if (!$entryId) {
             return null;
         }
 
-        if ($selfId !== null && $selfId === $parentId) {
-            return '父级节点不能是节点自身';
+        if ($selfId !== null && $selfId === $entryId) {
+            return '中转入口不能是节点自身';
         }
 
         $normalizedType = Server::normalizeType($type);
@@ -246,21 +246,21 @@ class ServerRelayService
             return '中转逻辑节点的加密算法不受支持，可选：' . implode('、', self::supportedTransitCiphers());
         }
 
-        $parent = Server::find($parentId);
-        if (!$parent) {
-            return '父级节点不存在';
+        $entry = Server::find($entryId);
+        if (!$entry) {
+            return '中转入口节点不存在';
         }
 
-        if ($parent->type !== self::ENTRY_TYPE) {
-            return '父级节点必须是 VLESS 入口节点';
+        if ($entry->type !== self::ENTRY_TYPE) {
+            return '中转入口必须是 VLESS 节点';
         }
 
-        if ($parent->relayParentId() !== null) {
-            return '不支持多层中转，父级节点自身不能再设置父级节点';
+        if ($entry->relayEntryId() !== null) {
+            return '不支持多层中转，入口节点自身不能再设置中转入口';
         }
 
-        if ($selfId !== null && Server::where('parent_id', $selfId)->exists()) {
-            return '该节点已经是其它节点的父级入口，不能再设置父级节点';
+        if ($selfId !== null && Server::where('relay_entry_id', $selfId)->exists()) {
+            return '该节点已经是其它节点的中转入口，不能再设置中转入口';
         }
 
         return null;

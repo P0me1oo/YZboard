@@ -129,9 +129,9 @@ class ServerService
         // 逻辑节点强制继承入口的基础倍率和动态时段倍率。
         $child->rate = $entry->getCurrentRate();
 
-        // 拓扑判定过程中加载的父节点关联会被一并序列化，其中包含 Reality 私钥等
+        // 拓扑判定过程中加载的入口节点关联会被一并序列化，其中包含 Reality 私钥等
         // 服务端配置，必须在返回前解除。
-        $child->unsetRelation('parent');
+        $child->unsetRelation('relayEntry');
 
         return $child;
     }
@@ -513,11 +513,11 @@ class ServerService
                 'listen_port' => (int) $node->server_port,
                 'cipher' => $credential['cipher'],
                 'password' => $credential['password'],
-                'entry_node_id' => (int) $node->relayParentId(),
+                'entry_node_id' => (int) $node->relayEntryId(),
             ];
         }
 
-        if ($node->relayParentId() !== null || $node->type !== ServerRelayService::ENTRY_TYPE) {
+        if ($node->relayEntryId() !== null || $node->type !== ServerRelayService::ENTRY_TYPE) {
             return null;
         }
 
@@ -581,7 +581,7 @@ class ServerService
             }
 
             $child = Server::find($nodeId);
-            if (!$child || (int) $child->parent_id !== (int) $entry->id) {
+            if (!$child || (int) $child->relayEntryId() !== (int) $entry->id) {
                 continue;
             }
 

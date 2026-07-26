@@ -6,19 +6,19 @@
 
 | 项目 | 标识 |
 | --- | --- |
-| YZboard 面板版本 | `1.1.0` |
+| YZboard 面板版本 | `1.2.0` |
 | 面板兼容标识 | `xray-v26.7.11-yz.1` |
 | YZboard 上游仓库 | `https://github.com/cedar2025/Xboard.git` |
 | YZboard 上游基线 | `master` 固定快照 / `8ecb762d77ef16491fe919b7092aea66b834deed` |
-| YZboard 发布 Tag | `v1.1.0` |
-| YZboard Tag / 镜像源码 commit | `e83551fb128149b593766c66d4022eb9ed3275c6` |
-| YZboard Docker 镜像 | `ghcr.io/p0me1oo/yzboard:latest`；不可变标签 `ghcr.io/p0me1oo/yzboard:1.1.0-e83551f` |
-| YZboard Docker manifest | `sha256:6667e7fdddcad91c48852933ed3fa47954f881b8a9020de3769fea36b9672635` |
+| YZboard 发布 Tag | `v1.2.0` |
+| YZboard Tag / 镜像源码 commit | 发布后回填 |
+| YZboard Docker 镜像 | 发布后回填 |
+| YZboard Docker manifest | 发布后回填 |
 | YZboard Docker 架构 | `linux/amd64`、`linux/arm64` |
-| YZboard Docker 构建 | 固定来源 `v1.1.0`；GitHub Actions run `30213635711`；镜像 OCI revision `e83551fb128149b593766c66d4022eb9ed3275c6` |
-| YZboard-Node 发布版本 | `v1.13-yz.5` |
+| YZboard Docker 构建 | 发布后回填 |
+| YZboard-Node 发布版本 | `v1.13-yz.6` |
 | YZboard-Node 上游基线 | `v1.13` / `0a29338e1f102a462363ce3527417029f89bab28` |
-| YZboard-Node Tag 对应 commit | `2aacb4c30007c11406cd61095f45ac84f835f80e` |
+| YZboard-Node Tag 对应 commit | `724d2dfd7dea532fa4596e76a0c87a4d16da1ee0` |
 | Xray 官方预发布 Tag | `v26.7.11` |
 | Xray 上游 Tag commit | `50231eaff98ccc31b5cbd247a721c16e97fe5ec1` |
 | YZ-Xray-core fork 版本 | `v26.7.11-yz.1` |
@@ -44,13 +44,15 @@
 - 中转依赖 Xray 的 VLESS 路由值能力（认证前清零 UUID 第 7、8 字节，认证后还原并由 `vlessRoute` 规则匹配），入口和落地节点都必须使用 xray 内核。
 - `relay_traffic` 只累计到逻辑节点的节点流量，不进入用户套餐扣费，也不套用倍率；用户流量仍只在入口按真实用户身份统计一次。
 - 节点表新增 `vless_route` 列，迁移会按 id 顺序回填存量节点并记录分配游标。回滚该迁移会删除列和索引，但不会回收已写入订阅的编号。
+- 面板 `1.2.0` 起中转关系存放在新增的 `relay_entry_id` 列，不再借用 `parent_id`；`parent_id` 的行为与上游完全一致。升级后该列对存量节点为空，不会有节点被识别成中转逻辑节点。节点端接口未变，`v1.13-yz.5` 及以上均兼容。
+- 管理端的「中转入口」下拉由构建阶段补丁 `.docker/patch-admin-relay.php` 注入到 `xboard-admin-dist` 产物。上游管理端产物结构变化会导致补丁锚点失配并使镜像构建失败，此时需要同步更新补丁而不是跳过。
 
 ## 发布与回滚
 
 发布前应同时确认：
 
-1. 面板源代码的 `config/app.php` 和 `CHANGELOG.md` 保持 `1.1.0`，`v1.1.0` Tag 固定 Docker 构建源码；生产使用 `latest`，同时保留不可变镜像标签和 manifest digest 作为审计与回滚边界；
-2. Node Release 使用延续上游版本线的 `v1.13-yz.5` Tag，并在二进制 `-v/version` 输出中显示 Xray 上游与 fork 信息；面板从最新正式 Release 获取 `install.sh`，安装器和 `xbctl` 通过同一 Release 的 `SHA256SUMS` 校验二进制；先前的 `v0.1.0-yz.1` 仅保留审计，不用于部署；
+1. 面板源代码的 `config/app.php` 和 `CHANGELOG.md` 保持 `1.2.0`，`v1.2.0` Tag 固定 Docker 构建源码；生产使用 `latest`，同时保留不可变镜像标签和 manifest digest 作为审计与回滚边界；
+2. Node Release 使用延续上游版本线的 `v1.13-yz.6` Tag，并在二进制 `-v/version` 输出中显示 Xray 上游与 fork 信息；面板从最新正式 Release 获取 `install.sh`，安装器和 `xbctl` 通过同一 Release 的 `SHA256SUMS` 校验二进制；先前的 `v0.1.0-yz.1` 仅保留审计，不用于部署；
 3. Node `go list -m -json github.com/xtls/xray-core` 的 replacement 路径和 pseudo-version 指向 `620bee93867095f73880056cdfb08bc54a15f69e`；
 4. Xray fork 的 `v26.7.11-yz.1` Tag 指向同一 fork commit；
 5. sing-box 请求版本和实际 replacement 版本与上表一致。

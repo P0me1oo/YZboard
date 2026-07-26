@@ -12,10 +12,10 @@
 | YZboard 上游基线 | `master` 固定快照 / `8ecb762d77ef16491fe919b7092aea66b834deed` |
 | YZboard 发布 Tag | `v1.1.0` |
 | YZboard Tag / 镜像源码 commit | `e83551fb128149b593766c66d4022eb9ed3275c6` |
-| YZboard Docker 镜像 | 发布后回填 |
-| YZboard Docker manifest | 发布后回填 |
+| YZboard Docker 镜像 | `ghcr.io/p0me1oo/yzboard:latest`；不可变标签 `ghcr.io/p0me1oo/yzboard:1.1.0-e83551f` |
+| YZboard Docker manifest | `sha256:6667e7fdddcad91c48852933ed3fa47954f881b8a9020de3769fea36b9672635` |
 | YZboard Docker 架构 | `linux/amd64`、`linux/arm64` |
-| YZboard Docker 构建 | 发布后回填 |
+| YZboard Docker 构建 | 固定来源 `v1.1.0`；GitHub Actions run `30213635711`；镜像 OCI revision `e83551fb128149b593766c66d4022eb9ed3275c6` |
 | YZboard-Node 发布版本 | `v1.13-yz.5` |
 | YZboard-Node 上游基线 | `v1.13` / `0a29338e1f102a462363ce3527417029f89bab28` |
 | YZboard-Node Tag 对应 commit | `2aacb4c30007c11406cd61095f45ac84f835f80e` |

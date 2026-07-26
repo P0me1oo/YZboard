@@ -55,7 +55,11 @@ foreach ($targets as $file) {
         fwrite(STDERR, "patch-admin-relay: 写入失败 {$file}\n");
         exit(1);
     }
-    fwrite(STDOUT, "patch-admin-relay: 已注入 relay_entry_id -> " . basename($file) . "\n");
+
+    // 文件名里的 hash 是构建时算的，改内容不改名会让浏览器继续用缓存里的旧产物。
+    // 按补丁后的内容重新命名，并同步更新引用，才能真正让客户端取到新版本。
+    $newBase = renameWithNewHash($file, $src, $root);
+    fwrite(STDOUT, "patch-admin-relay: 已注入 relay_entry_id -> {$newBase}\n");
     $patched++;
 }
 
@@ -64,6 +68,51 @@ if ($patched === 0) {
     exit(1);
 }
 exit(0);
+
+/**
+ * 用补丁后的内容重新计算文件名，并更新 manifest.json、index.html 等处的引用。
+ *
+ * 返回新的文件名。找不到任何引用时视为产物结构异常，直接失败。
+ */
+function renameWithNewHash(string $file, string $content, string $assetsDir): string
+{
+    $oldBase = basename($file);
+    // 与 Vite 的 hash 无关，只要求随内容变化且可重复推导，便于重复构建产出相同结果。
+    $newBase = 'index-' . substr(sha1($content), 0, 8) . '.js';
+    if ($newBase === $oldBase) {
+        return $oldBase;
+    }
+
+    if (!rename($file, dirname($file) . '/' . $newBase)) {
+        fwrite(STDERR, "patch-admin-relay: 重命名失败 {$oldBase}\n");
+        exit(1);
+    }
+
+    // 引用出现在 admin 根目录（manifest.json、index.html），assets 的上一级。
+    $adminRoot = dirname(rtrim($assetsDir, '/\\'));
+    $updated = 0;
+    foreach (['json', 'html', 'js'] as $ext) {
+        foreach (glob($adminRoot . '/*.' . $ext) ?: [] as $ref) {
+            $body = file_get_contents($ref);
+            if ($body === false || !str_contains($body, $oldBase)) {
+                continue;
+            }
+            if (file_put_contents($ref, str_replace($oldBase, $newBase, $body)) === false) {
+                fwrite(STDERR, "patch-admin-relay: 更新引用失败 {$ref}\n");
+                exit(1);
+            }
+            fwrite(STDOUT, "patch-admin-relay: 更新引用 " . basename($ref) . "\n");
+            $updated++;
+        }
+    }
+
+    if ($updated === 0) {
+        fwrite(STDERR, "patch-admin-relay: 未找到任何指向 {$oldBase} 的引用，产物结构异常\n");
+        exit(1);
+    }
+
+    return $newBase;
+}
 
 function fail(string $what, string $file): never
 {

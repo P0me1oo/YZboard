@@ -6,16 +6,16 @@
 
 | 项目 | 标识 |
 | --- | --- |
-| YZboard 面板版本 | `1.2.0` |
+| YZboard 面板版本 | `1.2.1` |
 | 面板兼容标识 | `xray-v26.7.11-yz.1` |
 | YZboard 上游仓库 | `https://github.com/cedar2025/Xboard.git` |
 | YZboard 上游基线 | `master` 固定快照 / `8ecb762d77ef16491fe919b7092aea66b834deed` |
-| YZboard 发布 Tag | `v1.2.0` |
-| YZboard Tag / 镜像源码 commit | `90c11685eab03a68e167a3c0c969bd774a89e362` |
-| YZboard Docker 镜像 | `ghcr.io/p0me1oo/yzboard:latest`；不可变标签 `ghcr.io/p0me1oo/yzboard:1.2.0-90c1168` |
-| YZboard Docker manifest | `sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0` |
+| YZboard 发布 Tag | `v1.2.1` |
+| YZboard Tag / 镜像源码 commit | 发布后回填 |
+| YZboard Docker 镜像 | 发布后回填 |
+| YZboard Docker manifest | 发布后回填 |
 | YZboard Docker 架构 | `linux/amd64`、`linux/arm64` |
-| YZboard Docker 构建 | 固定来源 `v1.2.0`；GitHub Actions run `30217802380`；镜像 OCI revision `90c11685eab03a68e167a3c0c969bd774a89e362`；构建日志确认两个架构都执行了管理端补丁 |
+| YZboard Docker 构建 | 发布后回填 |
 | YZboard-Node 发布版本 | `v1.13-yz.6` |
 | YZboard-Node 上游基线 | `v1.13` / `0a29338e1f102a462363ce3527417029f89bab28` |
 | YZboard-Node Tag 对应 commit | `724d2dfd7dea532fa4596e76a0c87a4d16da1ee0` |
@@ -51,7 +51,7 @@
 
 发布前应同时确认：
 
-1. 面板源代码的 `config/app.php` 和 `CHANGELOG.md` 保持 `1.2.0`，`v1.2.0` Tag 固定 Docker 构建源码；生产使用 `latest`，同时保留不可变镜像标签和 manifest digest 作为审计与回滚边界；
+1. 面板源代码的 `config/app.php` 和 `CHANGELOG.md` 保持 `1.2.1`，`v1.2.1` Tag 固定 Docker 构建源码；生产使用 `latest`，同时保留不可变镜像标签和 manifest digest 作为审计与回滚边界；
 2. Node Release 使用延续上游版本线的 `v1.13-yz.6` Tag，并在二进制 `-v/version` 输出中显示 Xray 上游与 fork 信息；面板从最新正式 Release 获取 `install.sh`，安装器和 `xbctl` 通过同一 Release 的 `SHA256SUMS` 校验二进制；先前的 `v0.1.0-yz.1` 仅保留审计，不用于部署；
 3. Node `go list -m -json github.com/xtls/xray-core` 的 replacement 路径和 pseudo-version 指向 `620bee93867095f73880056cdfb08bc54a15f69e`；
 4. Xray fork 的 `v26.7.11-yz.1` Tag 指向同一 fork commit；

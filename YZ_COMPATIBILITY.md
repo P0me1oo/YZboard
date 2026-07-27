@@ -6,16 +6,16 @@
 
 | 项目 | 标识 |
 | --- | --- |
-| YZboard 面板版本 | `1.2.1` |
+| YZboard 面板版本 | `1.3.0` |
 | 面板兼容标识 | `xray-v26.7.11-yz.1` |
 | YZboard 上游仓库 | `https://github.com/cedar2025/Xboard.git` |
 | YZboard 上游基线 | `master` 固定快照 / `8ecb762d77ef16491fe919b7092aea66b834deed` |
-| YZboard 发布 Tag | `v1.2.1` |
-| YZboard Tag / 镜像源码 commit | 发布后回填 |
-| YZboard Docker 镜像 | 发布后回填 |
-| YZboard Docker manifest | 发布后回填 |
+| YZboard 发布 Tag | `v1.3.0` |
+| YZboard Tag / 镜像源码 commit | `fac0d8d646d914c4cd50cd1dd2bbaf8d8b6716d0` |
+| YZboard Docker 镜像 | `ghcr.io/p0me1oo/yzboard:latest`；不可变标签 `ghcr.io/p0me1oo/yzboard:1.3.0-fac0d8d` |
+| YZboard Docker manifest | `sha256:ef528b483cd91b69b11f01aff7e09adba97ff0b81c6656ba7f28c1ab69ee38aa` |
 | YZboard Docker 架构 | `linux/amd64`、`linux/arm64` |
-| YZboard Docker 构建 | 发布后回填 |
+| YZboard Docker 构建 | 固定来源 `v1.3.0`；GitHub Actions run `30256917384`；镜像 OCI revision `fac0d8d646d914c4cd50cd1dd2bbaf8d8b6716d0`；构建执行了管理端补丁，锚点失配会直接使构建失败 |
 | YZboard-Node 发布版本 | `v1.13-yz.6` |
 | YZboard-Node 上游基线 | `v1.13` / `0a29338e1f102a462363ce3527417029f89bab28` |
 | YZboard-Node Tag 对应 commit | `724d2dfd7dea532fa4596e76a0c87a4d16da1ee0` |

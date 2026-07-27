@@ -6,16 +6,16 @@
 
 | 项目 | 标识 |
 | --- | --- |
-| YZboard 面板版本 | `1.3.0` |
+| YZboard 面板版本 | `1.3.1` |
 | 面板兼容标识 | `xray-v26.7.11-yz.1` |
 | YZboard 上游仓库 | `https://github.com/cedar2025/Xboard.git` |
 | YZboard 上游基线 | `master` 固定快照 / `8ecb762d77ef16491fe919b7092aea66b834deed` |
-| YZboard 发布 Tag | `v1.3.0` |
-| YZboard Tag / 镜像源码 commit | `fac0d8d646d914c4cd50cd1dd2bbaf8d8b6716d0` |
-| YZboard Docker 镜像 | `ghcr.io/p0me1oo/yzboard:latest`；不可变标签 `ghcr.io/p0me1oo/yzboard:1.3.0-fac0d8d` |
-| YZboard Docker manifest | `sha256:ef528b483cd91b69b11f01aff7e09adba97ff0b81c6656ba7f28c1ab69ee38aa` |
+| YZboard 发布 Tag | `v1.3.1` |
+| YZboard Tag / 镜像源码 commit | `aa7de174aae964315be24ba97dcba723503bd787` |
+| YZboard Docker 镜像 | `ghcr.io/p0me1oo/yzboard:latest`；不可变标签 `ghcr.io/p0me1oo/yzboard:1.3.1-aa7de17` |
+| YZboard Docker manifest | `sha256:a8d1654d0bb8585bbf7909e7cfde30c830bc9e54baa4fcf642f3791aac89d983` |
 | YZboard Docker 架构 | `linux/amd64`、`linux/arm64` |
-| YZboard Docker 构建 | 固定来源 `v1.3.0`；GitHub Actions run `30256917384`；镜像 OCI revision `fac0d8d646d914c4cd50cd1dd2bbaf8d8b6716d0`；构建执行了管理端补丁，锚点失配会直接使构建失败 |
+| YZboard Docker 构建 | 固定来源 `v1.3.1`；GitHub Actions run `30268078927`；上一版 `1.3.0-fac0d8d` 的 manifest 为 `sha256:ef528b483cd91b69b11f01aff7e09adba97ff0b81c6656ba7f28c1ab69ee38aa`，可用于回退 |
 | YZboard-Node 发布版本 | `v1.13-yz.6` |
 | YZboard-Node 上游基线 | `v1.13` / `0a29338e1f102a462363ce3527417029f89bab28` |
 | YZboard-Node Tag 对应 commit | `724d2dfd7dea532fa4596e76a0c87a4d16da1ee0` |
@@ -52,12 +52,12 @@
 
 发布前应同时确认：
 
-1. 面板源代码的 `config/app.php` 和 `CHANGELOG.md` 保持 `1.3.0`，`v1.3.0` Tag 固定 Docker 构建源码；生产使用 `latest`，同时保留不可变镜像标签和 manifest digest 作为审计与回滚边界；
+1. 面板源代码的 `config/app.php` 和 `CHANGELOG.md` 保持 `1.3.1`，`v1.3.1` Tag 固定 Docker 构建源码；生产使用 `latest`，同时保留不可变镜像标签和 manifest digest 作为审计与回滚边界；
 2. Node Release 使用延续上游版本线的 `v1.13-yz.6` Tag，并在二进制 `-v/version` 输出中显示 Xray 上游与 fork 信息；面板从最新正式 Release 获取 `install.sh`，安装器和 `xbctl` 通过同一 Release 的 `SHA256SUMS` 校验二进制；先前的 `v0.1.0-yz.1` 仅保留审计，不用于部署；
 3. Node `go list -m -json github.com/xtls/xray-core` 的 replacement 路径和 pseudo-version 指向 `620bee93867095f73880056cdfb08bc54a15f69e`；
 4. Xray fork 的 `v26.7.11-yz.1` Tag 指向同一 fork commit；
 5. sing-box 请求版本和实际 replacement 版本与上表一致。
 
-YZboard Docker 工作流支持由语义版本 Tag 触发，也支持手动输入固定 Tag 或完整 commit。正式 Tag 发布会同时更新“面板版本 + 短 commit”的不可变标签、面板版本别名和 `latest`。生产 Compose 长期使用 `latest` 拉取更新，不可变标签和 digest 用于确认实际版本与回滚。
+YZboard Docker 工作流虽然声明了语义版本 Tag 触发，但本仓库是 `cedar2025/Xboard` 的 fork，GitHub 默认禁用 fork 上由事件触发的工作流，因此推送 Tag 不会产生构建。实际发布一律用手动 dispatch 并传入固定 Tag 或完整 commit，`publish_latest` 需显式勾选。正式发布会同时更新“面板版本 + 短 commit”的不可变标签、面板版本别名和 `latest`。生产 Compose 长期使用 `latest` 拉取更新，不可变标签和 digest 用于确认实际版本与回滚。
 
 回滚时，面板镜像、Node Release 和 Node 的 Xray replace 应成套退回上一条兼容矩阵记录，不要只修改其中一个版本字段。

@@ -22,6 +22,19 @@ const COLUMN_TITLE = '前置入口';
 const COLUMN_TOOLTIP = '客户端实际连接的入口节点，未设置表示该节点直接对外提供服务';
 const COLUMN_EMPTY = '--';
 
+/**
+ * 徽标样式，与权限组列保持一致：淡底、浅描边、悬停加深。
+ *
+ * 类名抄自权限组列，只是拼成一个字符串而不再调用产物里的类名合并函数——
+ * 这些类之间没有需要仲裁的冲突，结果相同，还少一个会随上游变动的锚点。
+ * 不跟倍率列的实心底色，是因为单值列用实心块在整行里显得过重。
+ *
+ * 权限组那边还带 `flex items-center gap-1.5`，这里不要：它的徽标装在一个
+ * flex 容器里，而这一列的徽标是单元格的直接子元素，加 flex 会把徽标从
+ * inline-flex 变成块级并撑满整列宽度。
+ */
+const BADGE_CLASS = 'px-2 py-0.5 font-medium bg-secondary/50 hover:bg-secondary/70 border border-border/50 transition-all duration-200 cursor-default select-none';
+
 /** 表单字段与列表列各自的注入标记，用于判断产物已经打过哪一部分补丁。 */
 const FIELD_MARKER = 'relay_entry_id';
 const COLUMN_MARKER = 'relay_entry_name';
@@ -234,7 +247,7 @@ function patchListColumn(string $src, string $file): string
     $jsx = $m[2];
     $headerComp = $m[3];
 
-    // 徽标组件取自倍率列，与权限组、倍率的视觉保持一致。
+    // 徽标组件取自倍率列。样式不跟倍率，改用权限组那一套（淡底、描边、悬停），见 BADGE_CLASS。
     $badgePattern = '/cell:\(\{row:(\w+)\}\)=>\w+\.jsxs\((\w+),\{variant:"secondary",className:"font-medium",children:\[\1\.getValue\("rate"\)," x"\]\}\)/';
     if (!preg_match($badgePattern, $src, $bm)) {
         fail('rate column badge', $file);
@@ -244,12 +257,13 @@ function patchListColumn(string $src, string $file): string
     $title = jsString(COLUMN_TITLE);
     $tooltip = jsString(COLUMN_TOOLTIP);
     $empty = jsString(COLUMN_EMPTY);
+    $badgeClass = jsString(BADGE_CLASS);
 
     // 参数一律加前缀，避免与压缩产物里的同名变量相互遮蔽。
     $column = '{id:"relay_entry",accessorFn:__reRow=>__reRow.' . COLUMN_MARKER . '||"",'
         . 'header:({column:__reCol})=>' . $jsx . '.jsx(' . $headerComp . ',{column:__reCol,title:' . $title . ',tooltip:' . $tooltip . '}),'
         . 'cell:({row:__reRow})=>{const __reName=__reRow.original.' . COLUMN_MARKER . ';'
-        . 'return __reName?' . $jsx . '.jsx(' . $badgeComp . ',{variant:"secondary",className:"font-medium",children:__reName})'
+        . 'return __reName?' . $jsx . '.jsx(' . $badgeComp . ',{variant:"secondary",className:' . $badgeClass . ',children:__reName})'
         . ':' . $jsx . '.jsx("span",{className:"text-sm text-muted-foreground",children:' . $empty . '})},'
         . 'enableSorting:!1,enableHiding:!0,size:140},';
 

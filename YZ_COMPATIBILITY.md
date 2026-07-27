@@ -15,7 +15,7 @@
 | YZboard Docker 镜像 | `ghcr.io/p0me1oo/yzboard:latest`；不可变标签 `ghcr.io/p0me1oo/yzboard:1.3.1-aa7de17` |
 | YZboard Docker manifest | `sha256:a8d1654d0bb8585bbf7909e7cfde30c830bc9e54baa4fcf642f3791aac89d983` |
 | YZboard Docker 架构 | `linux/amd64`、`linux/arm64` |
-| YZboard Docker 构建 | 固定来源 `v1.3.1`；GitHub Actions run `30268078927`；上一版 `1.3.0-fac0d8d` 的 manifest 为 `sha256:ef528b483cd91b69b11f01aff7e09adba97ff0b81c6656ba7f28c1ab69ee38aa`，可用于回退 |
+| YZboard Docker 构建 | 固定来源 `v1.3.1`；Tag 推送触发 GitHub Actions run `30268004983`，随后又手动触发了一次 `30268078927`，同一 commit 产出相同 digest；上一版 `1.3.0-fac0d8d` 的 manifest 为 `sha256:ef528b483cd91b69b11f01aff7e09adba97ff0b81c6656ba7f28c1ab69ee38aa`，可用于回退 |
 | YZboard-Node 发布版本 | `v1.13-yz.6` |
 | YZboard-Node 上游基线 | `v1.13` / `0a29338e1f102a462363ce3527417029f89bab28` |
 | YZboard-Node Tag 对应 commit | `724d2dfd7dea532fa4596e76a0c87a4d16da1ee0` |
@@ -58,6 +58,8 @@
 4. Xray fork 的 `v26.7.11-yz.1` Tag 指向同一 fork commit；
 5. sing-box 请求版本和实际 replacement 版本与上表一致。
 
-YZboard Docker 工作流虽然声明了语义版本 Tag 触发，但本仓库是 `cedar2025/Xboard` 的 fork，GitHub 默认禁用 fork 上由事件触发的工作流，因此推送 Tag 不会产生构建。实际发布一律用手动 dispatch 并传入固定 Tag 或完整 commit，`publish_latest` 需显式勾选。正式发布会同时更新“面板版本 + 短 commit”的不可变标签、面板版本别名和 `latest`。生产 Compose 长期使用 `latest` 拉取更新，不可变标签和 digest 用于确认实际版本与回滚。
+推送语义版本 Tag 会自动触发构建，并同时更新“面板版本 + 短 commit”的不可变标签、面板版本别名和 `latest`，中间没有确认环节。**推 `v*` Tag 等同于发布生产**，不要用它做试探性标记。手动 dispatch 仍然可用，适合对固定 Tag 或完整 commit 重新构建，那条路径的 `publish_latest` 默认关闭，需要显式勾选。生产 Compose 长期使用 `latest` 拉取更新，不可变标签和 digest 用于确认实际版本与回滚。
+
+本仓库是 `cedar2025/Xboard` 的 fork，GitHub 对 fork 默认禁用事件触发的工作流，所以 `v1.0.6` 到 `v1.3.0` 五个 Tag 都没有触发构建，那几版实际都由手动 dispatch 发布。该限制已于 2026-07-27 在仓库 Actions 页面解除，`v1.3.1` 是第一个由 Tag 推送自动构建的版本。
 
 回滚时，面板镜像、Node Release 和 Node 的 Xray replace 应成套退回上一条兼容矩阵记录，不要只修改其中一个版本字段。

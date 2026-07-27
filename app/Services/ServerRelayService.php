@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * 中转拓扑服务。
  *
- * 约定：节点的父级节点非空时，该节点是“中转逻辑节点”，父级节点是客户端真实连接的入口。
+ * 约定：节点的前置入口非空时，该节点是“中转逻辑节点”，前置入口是客户端真实连接的入口。
  * 逻辑节点自身的协议、地址、端口描述的是入口到落地服务器之间的内部链路，不会出现在用户订阅中。
  * 第一版只支持“一个真实入口 + 一层落地”，且入口到落地固定使用 Shadowsocks。
  */
@@ -222,7 +222,7 @@ class ServerRelayService
     }
 
     /**
-     * 校验中转入口设置。返回错误信息，合法时返回 null。
+     * 校验前置入口设置。返回错误信息，合法时返回 null。
      *
      * @param int|null $selfId 正在保存的节点 ID，新建时为 null
      */
@@ -234,7 +234,7 @@ class ServerRelayService
         }
 
         if ($selfId !== null && $selfId === $entryId) {
-            return '中转入口不能是节点自身';
+            return '前置入口不能是节点自身';
         }
 
         $normalizedType = Server::normalizeType($type);
@@ -248,19 +248,19 @@ class ServerRelayService
 
         $entry = Server::find($entryId);
         if (!$entry) {
-            return '中转入口节点不存在';
+            return '前置入口节点不存在';
         }
 
         if ($entry->type !== self::ENTRY_TYPE) {
-            return '中转入口必须是 VLESS 节点';
+            return '前置入口必须是 VLESS 节点';
         }
 
         if ($entry->relayEntryId() !== null) {
-            return '不支持多层中转，入口节点自身不能再设置中转入口';
+            return '不支持多层中转，入口节点自身不能再设置前置入口';
         }
 
         if ($selfId !== null && Server::where('relay_entry_id', $selfId)->exists()) {
-            return '该节点已经是其它节点的中转入口，不能再设置中转入口';
+            return '该节点已经是其它节点的前置入口，不能再设置前置入口';
         }
 
         return null;

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Server;
 
+use App\Http\Controllers\V2\Admin\Server\ManageController;
 use App\Http\Requests\Admin\ServerSave;
 use App\Jobs\RelayNodeTrafficJob;
 use App\Jobs\TrafficFetchJob;
@@ -13,6 +14,7 @@ use App\Services\ServerService;
 use App\Support\Setting;
 use App\Utils\Helper;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Bus;
 use Mockery\MockInterface;
 use Tests\TestCase;
@@ -166,7 +168,7 @@ class ServerRelayTest extends TestCase
         $this->assertSame($entry->id, ServerRelayService::entryFor($child)?->id);
         $this->assertCount(1, ServerRelayService::childrenOf($entry->fresh()));
 
-        // parent_id 指向的节点不会因此变成中转入口。
+        // parent_id 指向的节点不会因此变成前置入口。
         $this->assertCount(0, ServerRelayService::childrenOf($other->fresh()));
         $this->assertNull(data_get(ServerService::buildNodeConfig($other->fresh()), 'relay'));
 
@@ -188,6 +190,35 @@ class ServerRelayTest extends TestCase
         $this->assertNull(
             ServerRelayService::validateEntry(null, 0, Server::TYPE_SHADOWSOCKS, 'aes-128-gcm')
         );
+    }
+
+    /**
+     * 管理端节点列表下发 relay_entry_name，供表头的「前置入口」列直接展示。
+     *
+     * 入口已被删除时该字段为 null，与未设置前置入口的普通节点显示一致，
+     * 不能因为解析不到名称就让整个列表报错。
+     */
+    public function test_admin_node_list_exposes_relay_entry_name(): void
+    {
+        $entry = $this->makeEntry();
+        $child = $this->makeChild($entry);
+        $orphan = $this->makeChild($entry, [
+            'name' => '落地 孤儿',
+            'relay_entry_id' => 999999,
+            'port' => '28389',
+            'server_port' => 28389,
+        ]);
+
+        $nodes = collect(
+            json_decode(
+                (new ManageController())->getNodes(new Request())->getContent(),
+                true
+            )['data']
+        )->keyBy('id');
+
+        $this->assertSame($entry->name, $nodes[$child->id]['relay_entry_name']);
+        $this->assertNull($nodes[$entry->id]['relay_entry_name']);
+        $this->assertNull($nodes[$orphan->id]['relay_entry_name']);
     }
 
     public function test_route_ids_are_unique_stable_and_in_range(): void

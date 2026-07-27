@@ -16,11 +16,20 @@ class ManageController extends Controller
 {
     public function getNodes(Request $request)
     {
-        $servers = ServerService::getAllServers()->map(function ($item) {
+        $servers = ServerService::getAllServers();
+
+        // 前置入口一定也在这份全量列表里，用内存映射解析名称，避免逐行再查一次库。
+        $nameById = $servers->pluck('name', 'id');
+
+        $servers = $servers->map(function ($item) use ($nameById) {
             $item['groups'] = ServerGroup::whereIn('id', $item['group_ids'] ?? [])->get(['name', 'id']);
             $item['parent'] = $item->parent;
+            // 供节点列表的「前置入口」列直接展示；入口已被删除时为 null，与未设置的显示一致。
+            $entryId = $item->relayEntryId();
+            $item['relay_entry_name'] = $entryId === null ? null : $nameById->get($entryId);
             return $item;
         });
+
         return $this->success($servers);
     }
 

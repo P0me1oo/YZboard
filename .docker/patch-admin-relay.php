@@ -1,19 +1,30 @@
 <?php
 /**
- * 给管理端构建产物注入「中转入口」选择框。
+ * 给管理端构建产物注入「前置入口」相关界面。
  *
  * 管理端源码不在本仓库（public/assets/admin 是 cedar2025/xboard-admin-dist 的构建产物），
- * 而节点编辑表单里的「父级节点」下拉写死了同协议过滤，选不到跨协议的 VLESS 入口。
- * 这里在构建阶段对压缩产物做定点补丁，新增一个独立的 relay_entry_id 选择框，
- * 候选为「没有中转入口的 VLESS 节点」，不改动原有的父级节点字段。
+ * 需要在构建阶段对压缩产物做定点补丁，补上两处上游没有的界面：
  *
- * 任一锚点匹配不到就直接失败退出，让构建显式报错，而不是静默产出一个缺少该字段的管理端。
+ * 1. 节点编辑表单里的前置入口下拉。原有的「父级节点」下拉写死了同协议过滤，
+ *    选不到跨协议的 VLESS 入口，因此新增一个独立的 relay_entry_id 字段，
+ *    候选为「没有前置入口的 VLESS 节点」，不改动原有的父级节点字段。
+ * 2. 节点列表表头的「前置入口」列，显示每个节点走哪个入口，未设置时显示占位符。
+ *    列的显隐跟随排序模式，与地址、部署方式等数据列保持一致。
+ *
+ * 任一锚点匹配不到就直接失败退出，让构建显式报错，而不是静默产出一个缺少这些界面的管理端。
  * 重复执行是幂等的。
  */
 
-const LABEL = '中转入口';
-const PLACEHOLDER = '选择中转入口节点';
+const LABEL = '前置入口';
+const PLACEHOLDER = '选择前置入口节点';
 const NONE = '无';
+const COLUMN_TITLE = '前置入口';
+const COLUMN_TOOLTIP = '客户端实际连接的入口节点，未设置表示该节点直接对外提供服务';
+const COLUMN_EMPTY = '--';
+
+/** 表单字段与列表列各自的注入标记，用于判断产物已经打过哪一部分补丁。 */
+const FIELD_MARKER = 'relay_entry_id';
+const COLUMN_MARKER = 'relay_entry_name';
 
 $root = $argv[1] ?? '/www/public/assets/admin/assets';
 if (!is_dir($root)) {
@@ -35,10 +46,20 @@ foreach ($targets as $file) {
         exit(1);
     }
 
-    if (str_contains($src, 'relay_entry_id')) {
-        fwrite(STDOUT, "patch-admin-relay: 已包含 relay_entry_id，跳过 " . basename($file) . "\n");
+    $hasField = str_contains($src, FIELD_MARKER);
+    $hasColumn = str_contains($src, COLUMN_MARKER);
+
+    if ($hasField && $hasColumn) {
+        fwrite(STDOUT, "patch-admin-relay: 已完整打过补丁，跳过 " . basename($file) . "\n");
         $patched++;
         continue;
+    }
+
+    // 只有一半标记说明产物被旧版补丁改过。继续执行会把表单字段注入第二遍，
+    // 因此直接失败，要求先取回干净的构建产物。
+    if ($hasField !== $hasColumn) {
+        fwrite(STDERR, "patch-admin-relay: " . basename($file) . " 只包含部分补丁标记，需先还原干净的管理端产物\n");
+        exit(1);
     }
 
     // 只处理确实含有节点编辑表单的产物，其余 chunk 直接跳过。
@@ -50,6 +71,8 @@ foreach ($targets as $file) {
     $src = patchDefaults($src, $file);
     $src = patchCandidates($src, $file);
     $src = patchField($src, $file);
+    $src = patchListColumn($src, $file);
+    $src = patchListVisibility($src, $file);
 
     if (file_put_contents($file, $src) === false) {
         fwrite(STDERR, "patch-admin-relay: 写入失败 {$file}\n");
@@ -59,7 +82,7 @@ foreach ($targets as $file) {
     // 文件名里的 hash 是构建时算的，改内容不改名会让浏览器继续用缓存里的旧产物。
     // 按补丁后的内容重新命名，并同步更新引用，才能真正让客户端取到新版本。
     $newBase = renameWithNewHash($file, $src, $root);
-    fwrite(STDOUT, "patch-admin-relay: 已注入 relay_entry_id -> {$newBase}\n");
+    fwrite(STDOUT, "patch-admin-relay: 已注入前置入口字段与列表列 -> {$newBase}\n");
     $patched++;
 }
 
@@ -144,7 +167,7 @@ function patchDefaults(string $src, string $file): string
 }
 
 /**
- * 新增候选列表：没有中转入口的 VLESS 节点，且不是自己。
+ * 新增候选列表：没有前置入口的 VLESS 节点，且不是自己。
  * 与原有的父级节点候选（同协议过滤）并列声明，互不影响。
  */
 function patchCandidates(string $src, string $file): string
@@ -164,7 +187,7 @@ function patchCandidates(string $src, string $file): string
     return str_replace($whole, $added, $src);
 }
 
-/** 在父级节点字段之后插入一个结构相同的中转入口字段。 */
+/** 在父级节点字段之后插入一个结构相同的前置入口字段。 */
 function patchField(string $src, string $file): string
 {
     $start = strpos($src, 'Q.jsx($y,{control:x.control,name:"parent_id",render:');
@@ -192,6 +215,63 @@ function patchField(string $src, string $file): string
         . ']})]}),Q.jsx(Qy,{})]})}),';
 
     return substr($src, 0, $end) . $field . substr($src, $end);
+}
+
+/**
+ * 在节点列表的「地址」列之前插入「前置入口」列。
+ *
+ * 入口名称由面板接口以 relay_entry_name 下发，前端不再自己回查节点列表，
+ * 因此入口节点被搜索或筛选排除时，逻辑节点这一列仍然显示得出来。
+ */
+function patchListColumn(string $src, string $file): string
+{
+    // 从地址列的定义里取出 JSX 命名空间与表头组件，避免把压缩后的变量名写死在补丁里。
+    $addressPattern = '/\{accessorKey:"host",header:\(\{column:(\w+)\}\)=>(\w+)\.jsx\((\w+),\{column:\1,title:\w+\("columns\.address"\)\}\),/';
+    if (!preg_match($addressPattern, $src, $m)) {
+        fail('address column', $file);
+    }
+    $anchor = $m[0];
+    $jsx = $m[2];
+    $headerComp = $m[3];
+
+    // 徽标组件取自倍率列，与权限组、倍率的视觉保持一致。
+    $badgePattern = '/cell:\(\{row:(\w+)\}\)=>\w+\.jsxs\((\w+),\{variant:"secondary",className:"font-medium",children:\[\1\.getValue\("rate"\)," x"\]\}\)/';
+    if (!preg_match($badgePattern, $src, $bm)) {
+        fail('rate column badge', $file);
+    }
+    $badgeComp = $bm[2];
+
+    $title = jsString(COLUMN_TITLE);
+    $tooltip = jsString(COLUMN_TOOLTIP);
+    $empty = jsString(COLUMN_EMPTY);
+
+    // 参数一律加前缀，避免与压缩产物里的同名变量相互遮蔽。
+    $column = '{id:"relay_entry",accessorFn:__reRow=>__reRow.' . COLUMN_MARKER . '||"",'
+        . 'header:({column:__reCol})=>' . $jsx . '.jsx(' . $headerComp . ',{column:__reCol,title:' . $title . ',tooltip:' . $tooltip . '}),'
+        . 'cell:({row:__reRow})=>{const __reName=__reRow.original.' . COLUMN_MARKER . ';'
+        . 'return __reName?' . $jsx . '.jsx(' . $badgeComp . ',{variant:"secondary",className:"font-medium",children:__reName})'
+        . ':' . $jsx . '.jsx("span",{className:"text-sm text-muted-foreground",children:' . $empty . '})},'
+        . 'enableSorting:!1,enableHiding:!0,size:140},';
+
+    return str_replace($anchor, $column . $anchor, $src);
+}
+
+/**
+ * 让新列跟随排序模式显隐。
+ *
+ * 列表进入拖拽排序模式时会显式隐藏所有数据列，只留节点名和拖拽手柄。
+ * 该可见性映射没有列出的列默认可见，不同步登记新列就会在排序模式下孤零零地留在表格里。
+ */
+function patchListVisibility(string $src, string $file): string
+{
+    $pattern = '/\w+\(\{"drag-handle":(\w+),show:!\1,host:!\1,machine:!\1,/';
+    if (!preg_match($pattern, $src, $m)) {
+        fail('column visibility map', $file);
+    }
+    $flagVar = $m[1];
+    $replacement = $m[0] . "relay_entry:!{$flagVar},";
+
+    return str_replace($m[0], $replacement, $src);
 }
 
 /** 输出为 \u 转义的 JS 字符串字面量，避免产物编码问题。 */

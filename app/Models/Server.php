@@ -28,7 +28,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
  * @property string|null $allow_insecure 是否允许不安全
  * @property string|null $network 网络类型
  * @property int|null $parent_id 父节点ID（共享运行状态与SS2022服务端密钥，语义同上游）
- * @property int|null $relay_entry_id 中转入口节点ID（非空表示本节点是中转逻辑节点）
+ * @property int|null $relay_entry_id 前置入口节点ID（非空表示本节点是中转逻辑节点）
  * @property int|null $vless_route VLESS路由编号（写入客户端UUID第7、8字节）
  * @property float|null $rate 倍率
  * @property boolean $rate_time_enable 是否启用时间范围功能
@@ -39,7 +39,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
  * @property int $updated_at
  * 
  * @property-read Server|null $parent 父节点
- * @property-read Server|null $relayEntry 中转入口节点
+ * @property-read Server|null $relayEntry 前置入口节点
  * @property-read \Illuminate\Database\Eloquent\Collection<int, Server> $relayChildren 以本节点为入口的中转逻辑节点
  * @property-read \Illuminate\Database\Eloquent\Collection<int, StatServer> $stats 节点统计
  * 
@@ -445,7 +445,7 @@ class Server extends Model
     }
 
     /**
-     * 客户端实际连接的中转入口节点。
+     * 客户端实际连接的前置入口节点。
      *
      * 与 parent_id 完全独立：parent_id 保持上游语义（共享运行状态和 SS2022 服务端密钥），
      * relay_entry_id 才表示“本节点是中转逻辑节点，流量先进入口再由本节点出网”。
@@ -464,7 +464,7 @@ class Server extends Model
     }
 
     /**
-     * 规范化后的中转入口节点 ID。
+     * 规范化后的前置入口节点 ID。
      *
      * 管理端会把“无”提交为 0，自增主键不会是 0，因此 0 和 null 一律视为未设置。
      * 所有中转判定都必须经过这里，不能直接比较 null。

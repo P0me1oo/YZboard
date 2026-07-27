@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration {
     /**
-     * 中转入口节点 ID。
+     * 前置入口节点 ID。
      *
      * 与 parent_id 完全独立：parent_id 保持上游语义（共享运行状态与 SS2022 服务端密钥），
      * relay_entry_id 才表示“本节点是中转逻辑节点，客户端连接的是入口节点”。

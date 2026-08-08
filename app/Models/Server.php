@@ -88,9 +88,10 @@ class Server extends Model
     public const ROUTE_ID_MIN = 1;
     public const ROUTE_ID_MAX = 65535;
 
-    /** 第一版只支持 Shadowsocks 作为入口到落地之间的中转协议。 */
+    /** 入口到落地之间可使用的内部中转协议。 */
     public const RELAY_TRANSIT_TYPES = [
         self::TYPE_SHADOWSOCKS,
+        self::TYPE_VLESS,
     ];
 
     private const CIPHER_CONFIGURATIONS = [

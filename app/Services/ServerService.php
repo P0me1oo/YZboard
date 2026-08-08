@@ -102,9 +102,9 @@ class ServerService
     /**
      * 把中转逻辑节点投影成入口节点的客户端配置。
      *
-     * 客户端看到的是一个普通节点：地址、端口和全部 Reality 参数来自入口节点，
-     * 名称、排序、标签、权限和显示状态仍属于逻辑节点自身；用户身份使用原始 UUID，
-     * 只在路由字节写入逻辑节点的编号。落地服务器的内部连接信息不会出现在结果中。
+     * 客户端看到的是一个普通节点：协议、传输方式、地址、端口和传输安全参数来自入口节点，
+     * 名称、排序、标签、权限和显示状态仍属于逻辑节点自身；用户身份使用原始 UUID，只在
+     * 路由字节写入逻辑节点的编号。落地服务器的内部连接信息不会出现在结果中。
      */
     private static function projectRelayChild(Server $child, Server $entry, User $user): Server
     {
@@ -505,16 +505,28 @@ class ServerService
     private static function buildRelayConfig(Server $node): ?array
     {
         if ($node->isRelayChild()) {
-            $credential = ServerRelayService::transitCredential($node);
-
-            return [
+            $relay = [
                 'mode' => 'landing',
-                'protocol' => Server::TYPE_SHADOWSOCKS,
+                'protocol' => $node->type,
                 'listen_port' => (int) $node->server_port,
-                'cipher' => $credential['cipher'],
-                'password' => $credential['password'],
                 'entry_node_id' => (int) $node->relayEntryId(),
             ];
+
+            if ($node->type === Server::TYPE_SHADOWSOCKS) {
+                $credential = ServerRelayService::transitCredential($node);
+                $relay['cipher'] = $credential['cipher'];
+                $relay['password'] = $credential['password'];
+            } else {
+                $credential = ServerRelayService::vlessTransitCredential($node);
+                $relay['vless'] = [
+                    'id' => $credential['id'],
+                    'transport_auth' => ServerRelayService::normalizeVlessNetwork(
+                        data_get($node->protocol_settings, 'network')
+                    ) === 'hysteria' ? $credential['transport_auth'] : null,
+                ];
+            }
+
+            return $relay;
         }
 
         if ($node->relayEntryId() !== null || $node->type !== ServerRelayService::ENTRY_TYPE) {
@@ -527,18 +539,24 @@ class ServerService
         }
 
         $outbounds = $children->map(function (Server $child) {
-            $credential = ServerRelayService::transitCredential($child);
-
-            return [
+            $outbound = [
                 'node_id' => (int) $child->id,
                 'tag' => ServerRelayService::outboundTag((int) $child->id),
                 'route_id' => ServerRelayService::ensureRouteId($child),
-                'protocol' => Server::TYPE_SHADOWSOCKS,
+                'protocol' => $child->type,
                 'address' => $child->host,
                 'port' => (int) $child->port,
-                'cipher' => $credential['cipher'],
-                'password' => $credential['password'],
             ];
+
+            if ($child->type === Server::TYPE_SHADOWSOCKS) {
+                $credential = ServerRelayService::transitCredential($child);
+                $outbound['cipher'] = $credential['cipher'];
+                $outbound['password'] = $credential['password'];
+            } else {
+                $outbound['vless'] = ServerRelayService::vlessClientConfig($child);
+            }
+
+            return $outbound;
         })->values()->all();
 
         return [
@@ -551,7 +569,7 @@ class ServerService
     /**
      * 记录中转逻辑节点的落地线路流量。
      *
-     * 该流量来自入口服务器上对应的独立 Shadowsocks 出站，只作为节点运营统计，
+     * 该流量来自入口服务器上对应的独立内部出站，只作为节点运营统计，
      * 不参与用户套餐扣费，也不叠加倍率。
      *
      * @param array<string|int, mixed> $relayTraffic 出站标签或逻辑节点 ID => [上行, 下行]

@@ -33,8 +33,8 @@ RUN test -n "${SOURCE_COMMIT}" && \
     git submodule update --init --recursive --force
 
 # 管理端是构建产物，节点编辑表单的「父级节点」下拉按同协议过滤，选不到跨协议的
-# VLESS 前置入口。这里定点注入独立的前置入口选择框和节点列表的前置入口列；
-# 锚点匹配不到会直接失败，避免静默产出缺少这些界面的管理端。
+# VLESS 前置入口。这里定点注入独立的前置入口选择框、节点列表的前置入口列，
+# 并同步当前 Xray 有效的 VLESS 中转传输矩阵；锚点匹配不到会直接失败。
 RUN php /www/.docker/patch-admin-relay.php /www/public/assets/admin/assets
 
 COPY .docker/supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf

@@ -28,6 +28,7 @@ class ServerRelayTest extends TestCase
 
     private const REALITY_PUBLIC_KEY = 'TESTonlyPUBLICkeyNOTaREALsecret0123456789ab';
     private const REALITY_PRIVATE_KEY = 'TESTonlyPRIVATEkeyNOTaREALsecret0123456789';
+    private const LANDING_REALITY_PRIVATE_KEY = 'bBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789abcdef0';
 
     protected function setUp(): void
     {
@@ -87,6 +88,36 @@ class ServerRelayTest extends TestCase
             'group_ids' => ['1'],
             'sort' => 2,
             'protocol_settings' => ['cipher' => '2022-blake3-aes-128-gcm'],
+        ], $overrides));
+    }
+
+    private function makeVlessChild(Server $entry, array $overrides = []): Server
+    {
+        return Server::create(array_merge([
+            'type' => Server::TYPE_VLESS,
+            'name' => 'VLESS 落地 C',
+            'relay_entry_id' => $entry->id,
+            'host' => '10.0.0.7',
+            'port' => '29388',
+            'server_port' => 29388,
+            'rate' => 9,
+            'show' => true,
+            'group_ids' => ['1'],
+            'sort' => 3,
+            'protocol_settings' => [
+                'tls' => 2,
+                'flow' => 'xtls-rprx-vision',
+                'network' => 'tcp',
+                'network_settings' => [],
+                'reality_settings' => [
+                    'server_name' => 'landing.example.com',
+                    'public_key' => self::REALITY_PUBLIC_KEY,
+                    'private_key' => self::LANDING_REALITY_PRIVATE_KEY,
+                    'short_id' => '89abcdef',
+                ],
+                'utls' => ['enabled' => true, 'fingerprint' => 'chrome'],
+                'encryption' => ['enabled' => false],
+            ],
         ], $overrides));
     }
 
@@ -188,7 +219,7 @@ class ServerRelayTest extends TestCase
         $this->assertFalse($child->isRelayChild());
         $this->assertCount(0, ServerRelayService::childrenOf($entry->fresh()));
         $this->assertNull(
-            ServerRelayService::validateEntry(null, 0, Server::TYPE_SHADOWSOCKS, 'aes-128-gcm')
+            ServerRelayService::validateEntry(null, 0, Server::TYPE_SHADOWSOCKS, ['cipher' => 'aes-128-gcm'])
         );
     }
 
@@ -263,7 +294,7 @@ class ServerRelayTest extends TestCase
         $entryOut = $servers[$entry->id];
         $childOut = $servers[$child->id];
 
-        // 同一入口：地址、端口、协议和全部 Reality 参数一致。
+        // 同一入口：地址、端口和完整客户端协议参数一致；本用例使用 Reality 入口。
         $this->assertSame($entryOut['type'], $childOut['type']);
         $this->assertSame($entryOut['host'], $childOut['host']);
         $this->assertSame($entryOut['port'], $childOut['port']);
@@ -396,6 +427,137 @@ class ServerRelayTest extends TestCase
         $this->assertArrayNotHasKey('relay', ServerService::buildNodeConfig($plain));
     }
 
+    public function test_vless_relay_config_splits_client_and_server_secrets(): void
+    {
+        $entry = $this->makeEntry();
+        $encryption = 'mlkem768x25519plus.native.0rtt.' . str_repeat('A', 43);
+        $decryption = 'mlkem768x25519plus.native.600s.' . str_repeat('A', 43);
+        $child = $this->makeVlessChild($entry, [
+            'protocol_settings' => [
+                'tls' => 2,
+                'flow' => 'xtls-rprx-vision',
+                'network' => 'xhttp',
+                'network_settings' => [
+                    'path' => '/relay',
+                    'extra' => [
+                        'downloadSettings' => [
+                            'realitySettings' => ['privateKey' => 'nested-server-secret'],
+                            'tlsSettings' => ['certificates' => [['key' => 'nested-cert-secret']]],
+                        ],
+                    ],
+                ],
+                'reality_settings' => [
+                    'server_name' => 'landing.example.com',
+                    'public_key' => self::REALITY_PUBLIC_KEY,
+                    'private_key' => self::LANDING_REALITY_PRIVATE_KEY,
+                    'short_id' => '89abcdef',
+                ],
+                'utls' => ['enabled' => true, 'fingerprint' => 'chrome'],
+                'encryption' => [
+                    'enabled' => true,
+                    'encryption' => $encryption,
+                    'decryption' => $decryption,
+                ],
+            ],
+        ]);
+
+        $entryConfig = ServerService::buildNodeConfig($entry->fresh());
+        $outbound = collect(data_get($entryConfig, 'relay.children'))->firstWhere('node_id', $child->id);
+        $client = $outbound['vless'];
+
+        $this->assertSame(Server::TYPE_VLESS, $outbound['protocol']);
+        $this->assertSame('xhttp', $client['network']);
+        $this->assertSame('/relay', data_get($client, 'network_settings.path'));
+        $this->assertStringNotContainsString('nested-server-secret', json_encode($client));
+        $this->assertStringNotContainsString('nested-cert-secret', json_encode($client));
+        $this->assertSame($encryption, $client['encryption']);
+        $this->assertSame(self::REALITY_PUBLIC_KEY, data_get($client, 'reality_settings.public_key'));
+        $this->assertArrayNotHasKey('private_key', $client['reality_settings']);
+        $this->assertArrayNotHasKey('decryption', $client);
+
+        $landingConfig = ServerService::buildNodeConfig($child->fresh());
+        $this->assertSame(Server::TYPE_VLESS, data_get($landingConfig, 'relay.protocol'));
+        $this->assertSame($client['id'], data_get($landingConfig, 'relay.vless.id'));
+        $this->assertSame($decryption, $landingConfig['decryption']);
+        $this->assertSame(self::LANDING_REALITY_PRIVATE_KEY, data_get($landingConfig, 'tls_settings.private_key'));
+
+        // 内部 UUID 和两端私密配置都不能进入用户订阅。
+        $subscription = json_encode(ServerService::getAvailableServers($this->makeUser()));
+        $this->assertStringNotContainsString($client['id'], $subscription);
+        $this->assertStringNotContainsString($decryption, $subscription);
+        $this->assertStringNotContainsString(self::LANDING_REALITY_PRIVATE_KEY, $subscription);
+    }
+
+    public function test_vless_relay_transport_security_matrix(): void
+    {
+        $base = [
+            'flow' => '',
+            'network_settings' => [],
+            'encryption' => ['enabled' => false],
+            'tls_settings' => ['server_name' => 'landing.example.com'],
+            'reality_settings' => [
+                'server_name' => 'landing.example.com',
+                'public_key' => self::REALITY_PUBLIC_KEY,
+                'private_key' => self::LANDING_REALITY_PRIVATE_KEY,
+                'short_id' => '89abcdef',
+            ],
+            'utls' => ['enabled' => true, 'fingerprint' => 'chrome'],
+        ];
+
+        $valid = [
+            ['tcp', 0], ['tcp', 1], ['tcp', 2],
+            ['ws', 0], ['ws', 1],
+            ['grpc', 0], ['grpc', 1], ['grpc', 2],
+            ['xhttp', 0], ['xhttp', 1], ['xhttp', 2],
+            ['httpupgrade', 0], ['httpupgrade', 1],
+            ['kcp', 0], ['kcp', 1],
+            ['hysteria', 1],
+        ];
+        foreach ($valid as [$network, $tls]) {
+            $settings = array_merge($base, ['network' => $network, 'tls' => $tls]);
+            $this->assertNull(
+                ServerRelayService::validateTransitSettings(Server::TYPE_VLESS, $settings, '10.0.0.7'),
+                "{$network} + tls={$tls} 应为有效组合",
+            );
+        }
+
+        $defaultNetwork = array_merge($base, ['network' => '', 'tls' => 0]);
+        $this->assertNull(
+            ServerRelayService::validateTransitSettings(Server::TYPE_VLESS, $defaultNetwork, '10.0.0.7'),
+            '旧配置未保存 network 时应按 RAW/TCP 处理',
+        );
+
+        foreach ([['ws', 2], ['httpupgrade', 2], ['kcp', 2], ['hysteria', 0], ['hysteria', 2], ['h2', 1]] as [$network, $tls]) {
+            $settings = array_merge($base, ['network' => $network, 'tls' => $tls]);
+            $this->assertNotNull(
+                ServerRelayService::validateTransitSettings(Server::TYPE_VLESS, $settings, '10.0.0.7'),
+                "{$network} + tls={$tls} 应被拒绝",
+            );
+        }
+
+        $publicPlain = array_merge($base, ['network' => 'tcp', 'tls' => 0]);
+        $this->assertNotNull(ServerRelayService::validateTransitSettings(
+            Server::TYPE_VLESS,
+            $publicPlain,
+            '8.8.8.8',
+        ));
+
+        $invalidEncryption = array_merge($base, [
+            'network' => 'tcp',
+            'tls' => 0,
+            'encryption' => [
+                'enabled' => true,
+                'encryption' => 'mlkem768x25519plus.native.0rtt.' . str_repeat('A', 42),
+                'decryption' => 'mlkem768x25519plus.native.600s.' . str_repeat('A', 42),
+            ],
+        ]);
+        $this->assertNotNull(ServerRelayService::validateTransitSettings(
+            Server::TYPE_VLESS,
+            $invalidEncryption,
+            '10.0.0.7',
+        ));
+    }
+
     public function test_node_config_is_idempotent_across_repeated_calls(): void
     {
         $entry = $this->makeEntry();
@@ -503,41 +665,58 @@ class ServerRelayTest extends TestCase
     {
         $entry = $this->makeEntry();
         $child = $this->makeChild($entry);
-        $cipher = '2022-blake3-aes-128-gcm';
+        $ssSettings = ['cipher' => '2022-blake3-aes-128-gcm'];
 
         $this->assertNull(
-            ServerRelayService::validateEntry($child->id, $entry->id, Server::TYPE_SHADOWSOCKS, $cipher)
+            ServerRelayService::validateEntry($child->id, $entry->id, Server::TYPE_SHADOWSOCKS, $ssSettings)
         );
-        $this->assertNull(ServerRelayService::validateEntry(null, null, Server::TYPE_VLESS, null));
+        $this->assertNull(ServerRelayService::validateEntry(null, null, Server::TYPE_VLESS));
+
+        // 已被引用的入口不能在编辑时改成其它协议或无效的 VLESS 组合。
+        $this->assertNotNull(ServerRelayService::validateEntry(
+            $entry->id,
+            null,
+            Server::TYPE_TROJAN,
+        ));
+        $invalidEntrySettings = (array) $entry->protocol_settings;
+        $invalidEntrySettings['network'] = 'ws';
+        $invalidEntrySettings['tls'] = 2;
+        $this->assertNotNull(ServerRelayService::validateEntry(
+            $entry->id,
+            null,
+            Server::TYPE_VLESS,
+            $invalidEntrySettings,
+            $entry->host,
+        ));
 
         // 自引用
         $this->assertNotNull(
-            ServerRelayService::validateEntry($child->id, $child->id, Server::TYPE_SHADOWSOCKS, $cipher)
+            ServerRelayService::validateEntry($child->id, $child->id, Server::TYPE_SHADOWSOCKS, $ssSettings)
         );
         // 非 Shadowsocks 中转协议
         $this->assertNotNull(
-            ServerRelayService::validateEntry(null, $entry->id, Server::TYPE_TROJAN, $cipher)
+            ServerRelayService::validateEntry(null, $entry->id, Server::TYPE_TROJAN, $ssSettings)
         );
         // 不支持的加密算法
         $this->assertNotNull(
-            ServerRelayService::validateEntry(null, $entry->id, Server::TYPE_SHADOWSOCKS, 'rc4-md5')
+            ServerRelayService::validateEntry(null, $entry->id, Server::TYPE_SHADOWSOCKS, ['cipher' => 'rc4-md5'])
         );
         // 父级不是 VLESS 入口
         $this->assertNotNull(
-            ServerRelayService::validateEntry(null, $child->id, Server::TYPE_SHADOWSOCKS, $cipher)
+            ServerRelayService::validateEntry(null, $child->id, Server::TYPE_SHADOWSOCKS, $ssSettings)
         );
         // 父级不存在
         $this->assertNotNull(
-            ServerRelayService::validateEntry(null, 999999, Server::TYPE_SHADOWSOCKS, $cipher)
+            ServerRelayService::validateEntry(null, 999999, Server::TYPE_SHADOWSOCKS, $ssSettings)
         );
         // 多层中转：入口自身已有父级
         $nested = $this->makeEntry(['name' => '二级入口', 'relay_entry_id' => $entry->id, 'port' => '26443', 'server_port' => 26443]);
         $this->assertNotNull(
-            ServerRelayService::validateEntry(null, $nested->id, Server::TYPE_SHADOWSOCKS, $cipher)
+            ServerRelayService::validateEntry(null, $nested->id, Server::TYPE_SHADOWSOCKS, $ssSettings)
         );
         // 已经是别人的父级入口
         $this->assertNotNull(
-            ServerRelayService::validateEntry($entry->id, $nested->id, Server::TYPE_SHADOWSOCKS, $cipher)
+            ServerRelayService::validateEntry($entry->id, $nested->id, Server::TYPE_SHADOWSOCKS, $ssSettings)
         );
     }
 
@@ -567,9 +746,27 @@ class ServerRelayTest extends TestCase
         $payload['relay_entry_id'] = $entry->id;
         $this->assertArrayNotHasKey('relay_entry_id', $this->validateServerSave($payload));
 
-        // 中转逻辑节点当前只支持 Shadowsocks。
+        // 其它协议仍然不能作为中转落地。
         $payload['type'] = Server::TYPE_TROJAN;
         $this->assertArrayHasKey('relay_entry_id', $this->validateServerSave($payload));
+
+        // 编辑现有入口时，即使表单里的前置入口为空，也不能破坏正在使用的入口配置。
+        $entryPayload = [
+            'id' => $entry->id,
+            'type' => Server::TYPE_VLESS,
+            'name' => $entry->name,
+            'relay_entry_id' => 0,
+            'host' => $entry->host,
+            'port' => (string) $entry->port,
+            'server_port' => $entry->server_port,
+            'rate' => 1,
+            'group_ids' => ['1'],
+            'protocol_settings' => array_merge((array) $entry->protocol_settings, [
+                'network' => 'ws',
+                'tls' => 2,
+            ]),
+        ];
+        $this->assertArrayHasKey('relay_entry_id', $this->validateServerSave($entryPayload));
     }
 
     /**

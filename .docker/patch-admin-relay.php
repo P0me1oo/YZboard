@@ -10,6 +10,10 @@
  *    候选为「没有前置入口的 VLESS 节点」，不改动原有的父级节点字段。
  * 2. 节点列表表头的「前置入口」列，显示每个节点走哪个入口，未设置时显示占位符。
  *    列的显隐跟随排序模式，与地址、部署方式等数据列保持一致。
+ * 3. VLESS 落地表单按当前 YZ-Xray-core 能力修正传输和 Flow，并在切换传输时
+ *    自动纠正不合法的 Reality/Hysteria 组合。H2 不再展示，新增 Hysteria 传输。
+ * 4. 在 VLESS Encryption 的 decryption 输入框加入与 Reality 私钥一致的钥匙按钮，
+ *    复用产物现有的 X25519 生成器，一次填入配对的 decryption/encryption。
  *
  * 任一锚点匹配不到就直接失败退出，让构建显式报错，而不是静默产出一个缺少这些界面的管理端。
  * 重复执行是幂等的。
@@ -38,6 +42,8 @@ const BADGE_CLASS = 'px-2 py-0.5 font-medium bg-secondary/50 hover:bg-secondary/
 /** 表单字段与列表列各自的注入标记，用于判断产物已经打过哪一部分补丁。 */
 const FIELD_MARKER = 'relay_entry_id';
 const COLUMN_MARKER = 'relay_entry_name';
+const VLESS_MATRIX_MARKER = 'relay_vless_matrix';
+const VLESS_KEYGEN_MARKER = 'relay_vless_keygen';
 
 $root = $argv[1] ?? '/www/public/assets/admin/assets';
 if (!is_dir($root)) {
@@ -61,8 +67,10 @@ foreach ($targets as $file) {
 
     $hasField = str_contains($src, FIELD_MARKER);
     $hasColumn = str_contains($src, COLUMN_MARKER);
+    $hasVlessMatrix = str_contains($src, VLESS_MATRIX_MARKER);
+    $hasVlessKeygen = str_contains($src, VLESS_KEYGEN_MARKER);
 
-    if ($hasField && $hasColumn) {
+    if ($hasField && $hasColumn && $hasVlessMatrix && $hasVlessKeygen) {
         fwrite(STDOUT, "patch-admin-relay: 已完整打过补丁，跳过 " . basename($file) . "\n");
         $patched++;
         continue;
@@ -70,7 +78,9 @@ foreach ($targets as $file) {
 
     // 只有一半标记说明产物被旧版补丁改过。继续执行会把表单字段注入第二遍，
     // 因此直接失败，要求先取回干净的构建产物。
-    if ($hasField !== $hasColumn) {
+    if ($hasField !== $hasColumn
+        || (($hasVlessMatrix || $hasVlessKeygen) && !$hasField)
+        || ($hasVlessKeygen && !$hasVlessMatrix)) {
         fwrite(STDERR, "patch-admin-relay: " . basename($file) . " 只包含部分补丁标记，需先还原干净的管理端产物\n");
         exit(1);
     }
@@ -80,12 +90,20 @@ foreach ($targets as $file) {
         continue;
     }
 
-    $src = patchSchema($src, $file);
-    $src = patchDefaults($src, $file);
-    $src = patchCandidates($src, $file);
-    $src = patchField($src, $file);
-    $src = patchListColumn($src, $file);
-    $src = patchListVisibility($src, $file);
+    if (!$hasField) {
+        $src = patchSchema($src, $file);
+        $src = patchDefaults($src, $file);
+        $src = patchCandidates($src, $file);
+        $src = patchField($src, $file);
+        $src = patchListColumn($src, $file);
+        $src = patchListVisibility($src, $file);
+    }
+    if (!$hasVlessMatrix) {
+        $src = patchVlessMatrix($src, $file);
+    }
+    if (!$hasVlessKeygen) {
+        $src = patchVlessEncryptionKeygen($src, $file);
+    }
 
     if (file_put_contents($file, $src) === false) {
         fwrite(STDERR, "patch-admin-relay: 写入失败 {$file}\n");
@@ -95,7 +113,7 @@ foreach ($targets as $file) {
     // 文件名里的 hash 是构建时算的，改内容不改名会让浏览器继续用缓存里的旧产物。
     // 按补丁后的内容重新命名，并同步更新引用，才能真正让客户端取到新版本。
     $newBase = renameWithNewHash($file, $src, $root);
-    fwrite(STDOUT, "patch-admin-relay: 已注入前置入口字段与列表列 -> {$newBase}\n");
+    fwrite(STDOUT, "patch-admin-relay: 已注入前置入口界面、VLESS 中转矩阵与密钥按钮 -> {$newBase}\n");
     $patched++;
 }
 
@@ -286,6 +304,82 @@ function patchListVisibility(string $src, string $file): string
     $replacement = $m[0] . "relay_entry:!{$flagVar},";
 
     return str_replace($m[0], $replacement, $src);
+}
+
+/**
+ * 修正 VLESS 表单为当前 Xray 的有效集合，并在传输变化后纠正非法安全模式。
+ *
+ * 后端仍会做完整校验；这里的作用是避免用户在下拉框里直接选出已知无效组合。
+ */
+function patchVlessMatrix(string $src, string $file): string
+{
+    $oldOptions = 'P4t={networkOptions:[{value:"tcp",label:"TCP"},{value:"ws",label:"Websocket"},{value:"grpc",label:"gRPC"},{value:"h2",label:"HTTP/2"},{value:"kcp",label:"mKCP"},{value:"httpupgrade",label:"HttpUpgrade"},{value:"xhttp",label:"XHTTP"}],flowOptions:["none","xtls-rprx-direct","xtls-rprx-splice","xtls-rprx-vision"]}';
+    if (!str_contains($src, $oldOptions)) {
+        fail('VLESS network/flow options', $file);
+    }
+    $newOptions = 'P4t={relay_vless_matrix:"xray-2026",networkOptions:[{value:"tcp",label:"RAW / TCP"},{value:"ws",label:"WebSocket"},{value:"grpc",label:"gRPC"},{value:"kcp",label:"mKCP"},{value:"httpupgrade",label:"HTTPUpgrade"},{value:"xhttp",label:"XHTTP"},{value:"hysteria",label:"Hysteria"}],flowOptions:["none","xtls-rprx-vision"]}';
+    $src = str_replace($oldOptions, $newOptions, $src);
+
+    $componentStart = 'j4t=({form:e,t:t})=>Q.jsxs(';
+    if (!str_contains($src, $componentStart)) {
+        fail('VLESS form component start', $file);
+    }
+    $componentReplacement = 'j4t=({form:e,t:t})=>{const __relayNetwork=e.watch("network");H.useEffect(()=>{const __relayTLS=Number(e.getValues("tls"));"hysteria"===__relayNetwork&&1!==__relayTLS?e.setValue("tls",1):2===__relayTLS&&!['
+        . '"tcp","grpc","xhttp"].includes(__relayNetwork)&&e.setValue("tls",1)},[__relayNetwork]);return Q.jsxs(';
+    $src = str_replace($componentStart, $componentReplacement, $src);
+
+    $nextComponent = strpos($src, '),F4t=', strpos($src, $componentReplacement));
+    if ($nextComponent === false) {
+        fail('VLESS form component end', $file);
+    }
+    $src = substr($src, 0, $nextComponent + 1) . '}' . substr($src, $nextComponent + 1);
+
+    $tlsOptions = 'Q.jsx(Lzt,{value:"0",children:t("dynamic_form.vless.tls.none")}),Q.jsx(Lzt,{value:"1",children:t("dynamic_form.vless.tls.tls")}),Q.jsx(Lzt,{value:"2",children:t("dynamic_form.vless.tls.reality")})';
+    if (!str_contains($src, $tlsOptions)) {
+        fail('VLESS TLS options', $file);
+    }
+    $tlsReplacement = 'Q.jsx(Lzt,{value:"0",disabled:"hysteria"===__relayNetwork,children:t("dynamic_form.vless.tls.none")}),Q.jsx(Lzt,{value:"1",children:t("dynamic_form.vless.tls.tls")}),Q.jsx(Lzt,{value:"2",disabled:!["tcp","grpc","xhttp"].includes(__relayNetwork),children:t("dynamic_form.vless.tls.reality")})';
+
+    return str_replace($tlsOptions, $tlsReplacement, $src);
+}
+
+/**
+ * 给 VLESS Encryption 的 decryption 输入框加入钥匙按钮。
+ *
+ * O4t() 是当前管理端给 Reality 私钥按钮使用的 X25519 生成器，返回 Base64URL 编码的
+ * privateKey/publicKey。私钥用于服务端 decryption，公钥用于客户端 encryption。
+ */
+function patchVlessEncryptionKeygen(string $src, string $file): string
+{
+    $componentAnchor = 'j4t=({form:e,t:t})=>{const __relayNetwork=e.watch("network");';
+    if (!str_contains($src, $componentAnchor)) {
+        fail('VLESS Encryption component', $file);
+    }
+
+    $success = jsString('VLESS Encryption 密钥对已生成');
+    $error = jsString('VLESS Encryption 密钥对生成失败');
+    $tooltip = jsString('生成 X25519 VLESS Encryption 密钥对');
+    $keygen = 'const relay_vless_keygen=()=>{try{const __vlessKeys=O4t();'
+        . 'e.setValue("encryption.decryption","mlkem768x25519plus.native.600s."+__vlessKeys.privateKey),'
+        . 'e.setValue("encryption.encryption","mlkem768x25519plus.native.0rtt."+__vlessKeys.publicKey),'
+        . 'gE.success(' . $success . ')}catch(__vlessKeyError){gE.error(' . $error . ')}};';
+    $src = str_replace($componentAnchor, $componentAnchor . $keygen, $src);
+
+    $input = 'Q.jsx(Yy,{children:Q.jsx(u8e,{className:"font-mono text-xs",placeholder:t("dynamic_form.vless.encryption.server_placeholder"),...e})})';
+    if (substr_count($src, $input) !== 1) {
+        fail('VLESS Encryption decryption input', $file);
+    }
+
+    $button = 'Q.jsxs("div",{className:"relative",children:['
+        . 'Q.jsx(Yy,{children:Q.jsx(u8e,{className:"pr-9 font-mono text-xs",placeholder:t("dynamic_form.vless.encryption.server_placeholder"),...e})}),'
+        . 'Q.jsx(Zot,{children:Q.jsxs(Yot,{children:['
+        . 'Q.jsx(Xot,{asChild:!0,children:Q.jsx(xtt,{type:"button",variant:"ghost",size:"icon",onClick:relay_vless_keygen,'
+        . 'className:"absolute right-0 top-0 h-full px-2 transition-transform duration-150 active:scale-90",'
+        . 'children:Q.jsx(YXt,{icon:"ion:key-outline",className:"h-4 w-4 transition-transform duration-300 hover:rotate-180"})})}),'
+        . 'Q.jsx(Kot,{children:Q.jsx(Qot,{children:Q.jsx("p",{children:' . $tooltip . '})})})'
+        . ']})})]})';
+
+    return str_replace($input, $button, $src);
 }
 
 /** 输出为 \u 转义的 JS 字符串字面量，避免产物编码问题。 */

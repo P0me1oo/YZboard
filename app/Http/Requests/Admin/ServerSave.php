@@ -243,22 +243,20 @@ class ServerSave extends FormRequest
     }
 
     /**
-     * 校验中转拓扑：禁止自引用、多层中转、入口套入口，并限制第一版支持的中转协议。
+     * 校验中转拓扑、内部协议参数和当前核心实际支持的 VLESS 组合。
      */
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator) {
             // 0、空串和 null 都表示“不使用中转”，管理端会把“无”提交为 0。
             $entryId = (int) $this->input('relay_entry_id');
-            if ($entryId <= 0) {
-                return;
-            }
 
             $error = ServerRelayService::validateEntry(
                 $this->input('id') !== null ? (int) $this->input('id') : null,
-                $entryId,
+                $entryId > 0 ? $entryId : null,
                 $this->input('type'),
-                $this->input('protocol_settings.cipher'),
+                (array) $this->input('protocol_settings', []),
+                $this->input('host'),
             );
 
             if ($error !== null) {

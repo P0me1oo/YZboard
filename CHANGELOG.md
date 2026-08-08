@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.0 - 2026-08-09
+
+- 中转落地协议在保留 Shadowsocks 的基础上新增 VLESS。入口端生成独立 VLESS 出站，落地端生成只含面板派生内部 UUID 的 VLESS 入站，不下发面板用户。
+- VLESS 内部链路支持 RAW/TCP、WebSocket、gRPC、XHTTP、HTTPUpgrade、mKCP 和 Hysteria，并按当前 YZ-Xray-core 限制 TLS/Reality 组合；H2/HTTP、mKCP 旧 header/seed、无效 Flow、ECH 和 `allowInsecure` 会在保存时拒绝，已被落地引用的入口也不能改成无效配置。
+- 支持把节点页面已有的 VLESS Encryption `encryption`/`decryption` 对用于入口到落地的内部链路。客户端公有项只发给入口，decryption、Reality 私钥和证书配置只留在落地。
+- 公网 VLESS 内部链路在不使用 TLS/Reality 时强制启用 VLESS Encryption；内网链路仍允许显式 `none`。
+- 前置入口不再限定为 VLESS Reality。只要入口本身是有效的 VLESS + Xray 组合，WS、gRPC、XHTTP、HTTPUpgrade、mKCP、Hysteria 等有效传输都可以承载中转入口流量。
+- 管理端构建期补丁同步修正 VLESS 下拉：移除 H2 和过时 Flow，增加 Hysteria，并在切换传输后自动纠正已知无效的 Reality/Hysteria 组合。VLESS Encryption 的 `decryption` 输入框新增与 Reality 私钥一致的钥匙按钮，复用浏览器 X25519 生成器并成对填入两项。补丁继续使用锚点失败即中止构建和内容 hash 重命名。
+- 中转配置、订阅私密字段隔离、前置入口与内部链路各 16 组有效传输组合及 VLESS Encryption 增加面板与 Node 回归测试；Node 生成的入口、内部出站和落地配置均由固定 YZ-Xray-core 解析验证。
+
 ## 1.3.1 - 2026-07-27
 
 - 节点列表「前置入口」列的徽标改用权限组列的样式：淡底、浅描边、悬停加深。原先跟的是倍率列的实心底色，单值列用实心块在整行里显得过重。

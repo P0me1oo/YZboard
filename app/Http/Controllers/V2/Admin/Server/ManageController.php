@@ -226,7 +226,7 @@ class ManageController extends Controller
     }
 
     /**
-     * 批量更新节点属性（show等）
+     * 批量更新节点属性，或增量添加、移除权限组
      */
     public function batchUpdate(Request $request)
     {
@@ -236,6 +236,8 @@ class ManageController extends Controller
             'show' => 'nullable|integer|in:0,1',
             'enabled' => 'nullable|boolean',
             'machine_id' => 'nullable|integer',
+            'group_action' => 'required_with:group_id|string|in:add,remove',
+            'group_id' => 'required_with:group_action|integer|exists:v2_server_group,id',
         ]);
 
         $ids = $params['ids'];
@@ -254,16 +256,43 @@ class ManageController extends Controller
             $update['machine_id'] = $params['machine_id'] ?: null;
         }
 
-        if (empty($update)) {
+        $groupAction = $params['group_action'] ?? null;
+        $groupId = isset($params['group_id']) ? (string) $params['group_id'] : null;
+
+        if (empty($update) && $groupAction === null) {
             return $this->fail([400, '没有可更新的字段']);
         }
 
         try {
             $servers = Server::whereIn('id', $ids)->get();
-            DB::transaction(function () use ($servers, $update) {
+            DB::transaction(function () use ($servers, $update, $groupAction, $groupId) {
                 /** @var Server $server */
                 foreach ($servers as $server) {
-                    $server->update($update);
+                    if (!empty($update)) {
+                        $server->fill($update);
+                    }
+
+                    if ($groupAction !== null && $groupId !== null) {
+                        $groupIds = array_values(array_unique(array_map(
+                            'strval',
+                            $server->group_ids ?? []
+                        )));
+
+                        if ($groupAction === 'add' && !in_array($groupId, $groupIds, true)) {
+                            $groupIds[] = $groupId;
+                        } elseif ($groupAction === 'remove') {
+                            $groupIds = array_values(array_filter(
+                                $groupIds,
+                                fn (string $currentGroupId): bool => $currentGroupId !== $groupId
+                            ));
+                        }
+
+                        $server->group_ids = $groupIds;
+                    }
+
+                    if ($server->isDirty()) {
+                        $server->save();
+                    }
                 }
             });
             return $this->success(true);

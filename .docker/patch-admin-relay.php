@@ -1,9 +1,9 @@
 <?php
 /**
- * 给管理端构建产物注入「前置入口」相关界面。
+ * 给管理端构建产物注入 YZboard 的节点管理补充界面。
  *
  * 管理端源码不在本仓库（public/assets/admin 是 cedar2025/xboard-admin-dist 的构建产物），
- * 需要在构建阶段对压缩产物做定点补丁，补上两处上游没有的界面：
+ * 需要在构建阶段对压缩产物做定点补丁，补上上游没有的界面：
  *
  * 1. 节点编辑表单里的前置入口下拉。原有的「父级节点」下拉写死了同协议过滤，
  *    选不到跨协议的 VLESS 入口，因此新增一个独立的 relay_entry_id 字段，
@@ -14,6 +14,8 @@
  *    自动纠正不合法的 Reality/Hysteria 组合。H2 不再展示，新增 Hysteria 传输。
  * 4. 在 VLESS Encryption 的 decryption 输入框加入与 Reality 私钥一致的钥匙按钮，
  *    复用产物现有的 X25519 生成器，一次填入配对的 decryption/encryption。
+ * 5. 节点批量操作增加按权限组添加、移除的增量动作。
+ * 6. Shadowsocks 新建表单优先使用 SS2022 128 位 AES-GCM。
  *
  * 任一锚点匹配不到就直接失败退出，让构建显式报错，而不是静默产出一个缺少这些界面的管理端。
  * 重复执行是幂等的。
@@ -44,6 +46,8 @@ const FIELD_MARKER = 'relay_entry_id';
 const COLUMN_MARKER = 'relay_entry_name';
 const VLESS_MATRIX_MARKER = 'relay_vless_matrix';
 const VLESS_KEYGEN_MARKER = 'relay_vless_keygen';
+const BATCH_GROUP_MARKER = 'batch_group_membership';
+const SS2022_DEFAULT_MARKER = 'yz_ss2022_default';
 
 $root = $argv[1] ?? '/www/public/assets/admin/assets';
 if (!is_dir($root)) {
@@ -69,8 +73,10 @@ foreach ($targets as $file) {
     $hasColumn = str_contains($src, COLUMN_MARKER);
     $hasVlessMatrix = str_contains($src, VLESS_MATRIX_MARKER);
     $hasVlessKeygen = str_contains($src, VLESS_KEYGEN_MARKER);
+    $hasBatchGroup = str_contains($src, BATCH_GROUP_MARKER);
+    $hasSs2022Default = str_contains($src, SS2022_DEFAULT_MARKER);
 
-    if ($hasField && $hasColumn && $hasVlessMatrix && $hasVlessKeygen) {
+    if ($hasField && $hasColumn && $hasVlessMatrix && $hasVlessKeygen && $hasBatchGroup && $hasSs2022Default) {
         fwrite(STDOUT, "patch-admin-relay: 已完整打过补丁，跳过 " . basename($file) . "\n");
         $patched++;
         continue;
@@ -80,7 +86,9 @@ foreach ($targets as $file) {
     // 因此直接失败，要求先取回干净的构建产物。
     if ($hasField !== $hasColumn
         || (($hasVlessMatrix || $hasVlessKeygen) && !$hasField)
-        || ($hasVlessKeygen && !$hasVlessMatrix)) {
+        || ($hasVlessKeygen && !$hasVlessMatrix)
+        || ($hasBatchGroup && !$hasField)
+        || ($hasSs2022Default && !$hasField)) {
         fwrite(STDERR, "patch-admin-relay: " . basename($file) . " 只包含部分补丁标记，需先还原干净的管理端产物\n");
         exit(1);
     }
@@ -104,6 +112,12 @@ foreach ($targets as $file) {
     if (!$hasVlessKeygen) {
         $src = patchVlessEncryptionKeygen($src, $file);
     }
+    if (!$hasBatchGroup) {
+        $src = patchBatchGroupMembership($src, $file);
+    }
+    if (!$hasSs2022Default) {
+        $src = patchShadowsocksDefault($src, $file);
+    }
 
     if (file_put_contents($file, $src) === false) {
         fwrite(STDERR, "patch-admin-relay: 写入失败 {$file}\n");
@@ -113,7 +127,7 @@ foreach ($targets as $file) {
     // 文件名里的 hash 是构建时算的，改内容不改名会让浏览器继续用缓存里的旧产物。
     // 按补丁后的内容重新命名，并同步更新引用，才能真正让客户端取到新版本。
     $newBase = renameWithNewHash($file, $src, $root);
-    fwrite(STDOUT, "patch-admin-relay: 已注入前置入口界面、VLESS 中转矩阵与密钥按钮 -> {$newBase}\n");
+    fwrite(STDOUT, "patch-admin-relay: 已注入节点管理补充界面与 SS2022 默认值 -> {$newBase}\n");
     $patched++;
 }
 
@@ -380,6 +394,72 @@ function patchVlessEncryptionKeygen(string $src, string $file): string
         . ']})})]})';
 
     return str_replace($input, $button, $src);
+}
+
+/**
+ * 给节点批量操作菜单增加按权限组增量添加、移除动作。
+ *
+ * 权限组列表已经由节点管理页加载，动作直接复用现有 batchUpdate 接口，
+ * 每次只提交一个目标权限组，不覆盖节点已有的其它权限组。
+ */
+function patchBatchGroupMembership(string $src, string $file): string
+{
+    $handlerAnchor = '}},p=Q.jsxs("div"';
+    if (substr_count($src, $handlerAnchor) !== 1) {
+        fail('batch action handler', $file);
+    }
+
+    $handler = 'batch_group_membership=async(__bgAction,__bgGroup)=>{const __bgIds=a.map(e=>e.original.id);try{const{data:__bgOk}=await ZL({ids:__bgIds,group_action:__bgAction,group_id:__bgGroup.id});__bgOk&&(gE.success("add"===__bgAction?`已将 ${__bgIds.length} 个节点添加为「${__bgGroup.name}」权限组`:`已将 ${__bgIds.length} 个节点移除「${__bgGroup.name}」权限组`),e.resetRowSelection(),t())}catch{gE.error("add"===__bgAction?"批量添加权限组失败":"批量移除权限组失败")}}';
+    $src = str_replace($handlerAnchor, '}},' . $handler . ',p=Q.jsxs("div"', $src);
+
+    $menuContainer = 'Q.jsxs(Ust,{align:"start",className:"w-48",children:[';
+    if (substr_count($src, $menuContainer) !== 1) {
+        fail('batch action menu container', $file);
+    }
+    $src = str_replace(
+        $menuContainer,
+        'Q.jsxs(Ust,{align:"start",className:"w-72 overflow-y-auto",style:{maxHeight:"70vh"},children:[',
+        $src
+    );
+
+    $menuAnchor = 'Q.jsx(Zst,{}),Q.jsx(hQt,{title:c("toolbar.batch_reset_traffic.title")';
+    if (substr_count($src, $menuAnchor) !== 1) {
+        fail('batch group menu anchor', $file);
+    }
+
+    $menu = 'Q.jsx(Zst,{}),Q.jsx(Gst,{children:"权限组操作"}),'
+        . 'r.length?r.map(__bgGroup=>Q.jsxs($st,{disabled:!l,style:{whiteSpace:"normal"},onSelect:()=>batch_group_membership("add",__bgGroup),children:['
+        . 'Q.jsx(YXt,{icon:"ion:add-circle-outline",className:"mr-2 size-4"}),`添加为「${__bgGroup.name}」权限组`,]},`batch-group-add-${__bgGroup.id}`)):'
+        . 'Q.jsx($st,{disabled:!0,children:"暂无权限组"}),'
+        . 'Q.jsx(Zst,{}),Q.jsx(Gst,{children:"移除权限组"}),'
+        . 'r.length?r.map(__bgGroup=>Q.jsxs($st,{disabled:!l,style:{whiteSpace:"normal"},onSelect:()=>batch_group_membership("remove",__bgGroup),children:['
+        . 'Q.jsx(YXt,{icon:"ion:remove-circle-outline",className:"mr-2 size-4"}),`移除「${__bgGroup.name}」权限组`,]},`batch-group-remove-${__bgGroup.id}`)):'
+        . 'Q.jsx($st,{disabled:!0,children:"暂无权限组"}),'
+        . 'Q.jsx(Zst,{}),Q.jsx(hQt,{title:c("toolbar.batch_reset_traffic.title")';
+
+    return str_replace($menuAnchor, $menu, $src);
+}
+
+/** 将 Shadowsocks 新建表单的默认及首选算法调整为 SS2022 128 位 AES-GCM。 */
+function patchShadowsocksDefault(string $src, string $file): string
+{
+    $schemaNeedle = 'const h4t=e=>py({cipher:cy().default("aes-128-gcm"),';
+    if (substr_count($src, $schemaNeedle) !== 1) {
+        fail('Shadowsocks cipher default', $file);
+    }
+    $src = str_replace(
+        $schemaNeedle,
+        'const h4t=e=>py({cipher:cy().default("2022-blake3-aes-128-gcm"),',
+        $src
+    );
+
+    $listNeedle = 'g4t={ciphers:["aes-128-gcm","aes-192-gcm","aes-256-gcm","chacha20-ietf-poly1305","2022-blake3-aes-128-gcm","2022-blake3-aes-256-gcm","2022-blake3-chacha20-poly1305"]';
+    if (substr_count($src, $listNeedle) !== 1) {
+        fail('Shadowsocks cipher options', $file);
+    }
+    $listReplacement = 'g4t={yz_ss2022_default:"2022-blake3-aes-128-gcm",ciphers:["2022-blake3-aes-128-gcm","aes-128-gcm","aes-192-gcm","aes-256-gcm","chacha20-ietf-poly1305","2022-blake3-aes-256-gcm","2022-blake3-chacha20-poly1305"]';
+
+    return str_replace($listNeedle, $listReplacement, $src);
 }
 
 /** 输出为 \u 转义的 JS 字符串字面量，避免产物编码问题。 */

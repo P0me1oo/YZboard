@@ -169,7 +169,8 @@ VLESS Encryption 可以与表中任一有效传输/安全组合叠加。使用 T
 - VLESS 传输下拉移除 H2 和过时 Flow，增加 Hysteria，并禁用已知无效的 Reality/Hysteria 组合。
 - VLESS Encryption 的 `decryption` 输入框加入与 Reality 私钥相同的钥匙按钮，在浏览器内
   生成 X25519 配对内容并同时填入两个字段；密钥在管理员保存前不会发送到面板或 Node。
-- 节点列表的批量操作菜单提供「添加到权限组...」和「从权限组移除...」两个入口；弹窗支持搜索、多选、状态统计和确认后执行，操作只增量修改目标组，不会覆盖节点已有的其它权限组。
+- 节点列表的批量操作菜单按权限组提供「添加为」和「移除」动作，操作只增量修改目标组，
+  不会覆盖节点已有的其它权限组。
 - Shadowsocks 新建节点默认优先选择 `2022-blake3-aes-128-gcm`；已有节点的算法配置不变。
 
 列显示的入口名称由 `GET /api/v2/admin/server/manage/getNodes` 的 `relay_entry_name` 字段

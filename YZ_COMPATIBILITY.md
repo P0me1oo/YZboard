@@ -6,16 +6,16 @@
 
 | 项目 | 标识 |
 | --- | --- |
-| YZboard 面板源码版本 | `1.6.1`（生产未启用） |
+| YZboard 面板源码版本 | `1.5.0`（待发布） |
 | 面板兼容标识 | `xray-v26.7.11-yz.1` |
 | YZboard 上游仓库 | `https://github.com/cedar2025/Xboard.git` |
 | YZboard 上游基线 | `master` 固定快照 / `8ecb762d77ef16491fe919b7092aea66b834deed` |
-| YZboard 生产版本 | `v1.5.0` / `1ea82abba7624113303d17d9aac635772865d20d` |
-| YZboard 当前生产 Tag / commit | `v1.5.0` / `1ea82abba7624113303d17d9aac635772865d20d` |
-| YZboard 已发布 Docker 镜像 | `ghcr.io/p0me1oo/yzboard:latest`、`ghcr.io/p0me1oo/yzboard:1.5.0`；生产和审计使用不可变标签 `ghcr.io/p0me1oo/yzboard:1.5.0-1ea82ab`；`v1.6.0`、`v1.6.1` 历史镜像保留但不作为生产别名 |
-| YZboard Docker manifest | `sha256:0ed171a1e86709b81bd2ecaf0f1f356d0d0d2c470b9768bdcb50a20b5c9accf9`；包含 `linux/amd64` 与 `linux/arm64` |
+| YZboard 目标发布 Tag | `v1.5.0`（尚未创建，源码 commit 待提交后记录） |
+| YZboard 最近已发布 Tag / commit | `v1.4.0` / `cf698392cd0b0623876b5166ab31b10fea2cb889` |
+| YZboard 已发布 Docker 镜像 | `ghcr.io/p0me1oo/yzboard:latest`、`ghcr.io/p0me1oo/yzboard:1.4.0`；审计和回滚使用不可变标签 `ghcr.io/p0me1oo/yzboard:1.4.0-cf69839` |
+| YZboard Docker manifest | `sha256:3fd521f0a7092a4f51c4b1bdb960e214a6a374babdd6a5f8e9c9279f4f44d1ab` |
 | YZboard Docker 架构 | `linux/amd64`、`linux/arm64` |
-| YZboard Docker 构建 | 生产 `latest` 已通过 GitHub Actions [run 32300726906](https://github.com/P0me1oo/YZboard/actions/runs/32300726906) 重标记到固定来源 `v1.5.0-1ea82ab`；manifest 为 `sha256:0ed171a1e86709b81bd2ecaf0f1f356d0d0d2c470b9768bdcb50a20b5c9accf9`；`v1.6.0`、`v1.6.1` 不作为当前生产版本 |
+| YZboard Docker 构建 | 固定来源 `v1.4.0`；Tag 推送触发 GitHub Actions [run 31269870277](https://github.com/P0me1oo/YZboard/actions/runs/31269870277)；上一版 `1.3.1-aa7de17` 的 manifest 为 `sha256:a8d1654d0bb8585bbf7909e7cfde30c830bc9e54baa4fcf642f3791aac89d983`，可用于回退 |
 | YZboard-Node 兼容版本 | `v1.13-yz.10`（VLESS 落地必需） |
 | YZboard-Node 最近已发布版本 | `v1.13-yz.10` |
 | YZboard-Node 上游基线 | `v1.13` / `0a29338e1f102a462363ce3527417029f89bab28` |
@@ -64,30 +64,16 @@
 - Shadowsocks 新建表单默认使用 `2022-blake3-aes-128-gcm`；该默认值只存在于管理端表单，存量节点的 `protocol_settings.cipher` 不会被迁移。
 - 管理端补充界面继续由 `.docker/patch-admin-relay.php` 在构建阶段注入。上游管理端产物锚点变化时，构建应失败并更新补丁，不应跳过补丁。
 
-## 1.6.0 节点管理兼容约束
-
-- 节点批量权限组操作继续复用 `POST /api/v2/admin/server/manage/batchUpdate`，新增 `group_ids` 数组参数；旧的单个 `group_id` 参数继续兼容。
-- 管理端提供「添加到权限组...」和「从权限组移除...」两个入口，弹窗支持搜索、多选、确认后执行，并显示每个权限组在所选节点中的加入数量。
-- 一次请求可以处理多个权限组，服务端在单个事务内增量合并或移除，返回 `updated_nodes` 与 `unchanged_nodes`；未选中的节点不受影响，重复操作保持幂等。
-- 管理端补丁标记升级为 `batch_group_dialog_v2`，构建阶段仍要求锚点完整匹配并保持幂等。
-
-## 1.6.1 节点管理兼容约束
-
-- 修复 `batch_group_dialog_v2` 管理端补丁的 JavaScript 注入语法错误。旧产物会在变量逗号链中生成 `...,const ...`，导致管理端入口无法执行并显示白屏。
-- 修复后的补丁继续复用 `POST /api/v2/admin/server/manage/batchUpdate` 和 `group_ids` 数组参数，节点端通信协议、权限组操作语义和 Shadowsocks 默认算法均不变。
-
 ## 发布与回滚
 
-当前生产结果及撤回记录：
+当前已发布结果及 `1.5.0` 发布约束：
 
-1. 已发布面板 `v1.5.0` 固定到 `1ea82abba7624113303d17d9aac635772865d20d`，不可变镜像 `1.5.0-1ea82ab` 和 manifest digest `sha256:0ed171a1e86709b81bd2ecaf0f1f356d0d0d2c470b9768bdcb50a20b5c9accf9` 可作为回滚基线；
-2. 面板 `v1.6.0` 固定到 `8bbe3e60bb1edf1237f483eb0789cde9a545e327`，不可变镜像标签为 `1.6.0-8bbe3e6`，manifest digest 为 `sha256:c650e305632e5035cbffd1b71e320a477950e80c933df8000f5fbf1321d290cc`；保留作历史审计，不作为生产别名；
-3. 面板 `v1.6.1` 固定到 `6e9eda5c76c21e41208018b544f41c3c688b529e`，不可变镜像标签为 `1.6.1-6e9eda5`，manifest digest 为 `sha256:3f095ba6b8e70381086da288afac9ce4a698842aebf7f0b69de08d54ab827ada`；保留作历史审计，不作为生产别名；
-4. `latest` 已通过 [run 32300726906](https://github.com/P0me1oo/YZboard/actions/runs/32300726906) 指回 `v1.5.0-1ea82ab`，并校验为 manifest `sha256:0ed171a1e86709b81bd2ecaf0f1f356d0d0d2c470b9768bdcb50a20b5c9accf9`；不得移动或覆盖 `v1.5.0` Tag；
-5. Node `v1.13-yz.10` 固定到 `82114adc8755ef520df6d99e3cd25a4b97073cec`，本次面板版本调整不要求 Node 版本变更；
-6. Node `go list -m -json github.com/xtls/xray-core` 的 replacement 路径和 pseudo-version 指向 `620bee93867095f73880056cdfb08bc54a15f69e`；
-7. Xray fork 的 `v26.7.11-yz.1` Tag 指向同一 fork commit；
-8. sing-box 请求版本和实际 replacement 版本与上表一致。
+1. 发布 `v1.5.0` 前将面板源码 commit 写入本表，并以固定 Tag 或完整 commit 构建；不可变镜像、版本别名和 `latest` 只能在测试完成后更新；
+2. 已发布面板 `v1.4.0` 固定到 `cf698392cd0b0623876b5166ab31b10fea2cb889`，可作为回滚基线；
+3. Node `v1.13-yz.10` 固定到 `82114adc8755ef520df6d99e3cd25a4b97073cec`，本次 1.5.0 改动不要求 Node 版本变更；
+4. Node `go list -m -json github.com/xtls/xray-core` 的 replacement 路径和 pseudo-version 指向 `620bee93867095f73880056cdfb08bc54a15f69e`；
+5. Xray fork 的 `v26.7.11-yz.1` Tag 指向同一 fork commit；
+6. sing-box 请求版本和实际 replacement 版本与上表一致。
 
 推送语义版本 Tag 会自动触发构建，并同时更新“面板版本 + 短 commit”的不可变标签、面板版本别名和 `latest`，中间没有确认环节。**推 `v*` Tag 等同于发布生产**，不要用它做试探性标记。手动 dispatch 仍然可用，适合对固定 Tag 或完整 commit 重新构建，那条路径的 `publish_latest` 默认关闭，需要显式勾选。生产 Compose 长期使用 `latest` 拉取更新，不可变标签和 digest 用于确认实际版本与回滚。
 

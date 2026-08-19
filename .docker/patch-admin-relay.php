@@ -46,7 +46,7 @@ const FIELD_MARKER = 'relay_entry_id';
 const COLUMN_MARKER = 'relay_entry_name';
 const VLESS_MATRIX_MARKER = 'relay_vless_matrix';
 const VLESS_KEYGEN_MARKER = 'relay_vless_keygen';
-const BATCH_GROUP_MARKER = 'batch_group_membership';
+const BATCH_GROUP_MARKER = 'batch_group_dialog_v2';
 const SS2022_DEFAULT_MARKER = 'yz_ss2022_default';
 
 $root = $argv[1] ?? '/www/public/assets/admin/assets';
@@ -397,10 +397,10 @@ function patchVlessEncryptionKeygen(string $src, string $file): string
 }
 
 /**
- * 给节点批量操作菜单增加按权限组增量添加、移除动作。
+ * 给节点批量操作菜单增加两个权限组入口，并注入可搜索、多选、确认后执行的弹窗。
  *
- * 权限组列表已经由节点管理页加载，动作直接复用现有 batchUpdate 接口，
- * 每次只提交一个目标权限组，不覆盖节点已有的其它权限组。
+ * 权限组列表已经由节点管理页加载，弹窗复用现有 batchUpdate 接口，一次提交多个目标组，
+ * 后端按增量集合合并或移除，不覆盖节点已有的其它权限组。
  */
 function patchBatchGroupMembership(string $src, string $file): string
 {
@@ -409,35 +409,35 @@ function patchBatchGroupMembership(string $src, string $file): string
         fail('batch action handler', $file);
     }
 
-    $handler = 'batch_group_membership=async(__bgAction,__bgGroup)=>{const __bgIds=a.map(e=>e.original.id);try{const{data:__bgOk}=await ZL({ids:__bgIds,group_action:__bgAction,group_id:__bgGroup.id});__bgOk&&(gE.success("add"===__bgAction?`已将 ${__bgIds.length} 个节点添加为「${__bgGroup.name}」权限组`:`已将 ${__bgIds.length} 个节点移除「${__bgGroup.name}」权限组`),e.resetRowSelection(),t())}catch{gE.error("add"===__bgAction?"批量添加权限组失败":"批量移除权限组失败")}}';
-    $src = str_replace($handlerAnchor, '}},' . $handler . ',p=Q.jsxs("div"', $src);
+    $dialog = 'const batch_group_dialog_v2=1,[_bgOpen,_bgSetOpen]=H.useState(false),[_bgAction,_bgSetAction]=H.useState("add"),[_bgSearch,_bgSetSearch]=H.useState(""),[_bgChosen,_bgSetChosen]=H.useState([]),_bgOpenDialog=_bgMode=>{_bgSetAction(_bgMode),_bgSetSearch(""),_bgSetChosen([]),_bgSetOpen(true)},_bgVisibleGroups=r.filter(_bgGroup=>!_bgSearch||_bgGroup.name.toLowerCase().includes(_bgSearch.toLowerCase())),_bgToggleGroup=_bgId=>{_bgSetChosen(_bgCurrent=>_bgCurrent.includes(_bgId)?_bgCurrent.filter(_bgItem=>_bgItem!==_bgId):[..._bgCurrent,_bgId])},_bgApply=async()=>{if(!_bgChosen.length)return;const _bgIds=a.map(_bgRow=>_bgRow.original.id);try{const{data:_bgResult}=await ZL({ids:_bgIds,group_action:_bgAction,group_ids:_bgChosen.map(Number)});_bgResult&&(gE.success(("add"===_bgAction?"已添加":"已移除")+" "+_bgResult.updated_nodes+" 个节点，"+_bgResult.unchanged_nodes+" 个节点无需修改"),_bgSetOpen(false),t())}catch{gE.error("add"===_bgAction?"批量添加权限组失败":"批量移除权限组失败")}},_bgDialog=Q.jsx(m7e,{open:_bgOpen,onOpenChange:_bgSetOpen,children:Q.jsx(_7e,{children:Q.jsxs(Q.Fragment,{children:[Q.jsx(v7e,{}),Q.jsxs(b7e,{className:"w-[min(92vw,560px)] p-0",children:[Q.jsxs("div",{className:"border-b px-6 py-5",children:[Q.jsx(y7e,{className:"font-mono text-lg",children:"add"===_bgAction?"添加到权限组":"从权限组移除"}),Q.jsx(x7e,{className:"mt-1 font-mono text-xs text-muted-foreground",children:"已选择 "+a.length+" 个节点"})]}),Q.jsxs("div",{className:"space-y-4 px-6 py-5",children:[Q.jsx(u8e,{value:_bgSearch,onChange:_bgEvent=>_bgSetSearch(_bgEvent.target.value),placeholder:"搜索权限组",className:"h-9 font-mono text-xs"}),Q.jsx("div",{className:"max-h-72 space-y-2 overflow-y-auto pr-1",children:_bgVisibleGroups.length?_bgVisibleGroups.map(_bgGroup=>{const _bgId=String(_bgGroup.id),_bgCount=a.filter(_bgRow=>(_bgRow.original.group_ids??[]).map(String).includes(_bgId)).length,_bgChecked=_bgChosen.includes(_bgId),_bgDisabled=("add"===_bgAction&&_bgCount===a.length)||("remove"===_bgAction&&0===_bgCount);return Q.jsxs("label",{className:"flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2 transition-colors hover:bg-muted/50",children:[Q.jsx(j5t,{checked:_bgChecked,disabled:_bgDisabled,onCheckedChange:()=>_bgToggleGroup(_bgId)}),Q.jsxs("span",{className:"min-w-0 flex-1",children:[Q.jsx("span",{className:"block truncate font-mono text-sm font-medium",children:_bgGroup.name}),Q.jsx("span",{className:"font-mono text-[11px] text-muted-foreground",children:_bgCount+" / "+a.length+" 个节点已加入"})]})]},_bgId)}):Q.jsx("p",{className:"py-8 text-center font-mono text-xs text-muted-foreground",children:"没有匹配的权限组"})}),Q.jsx("p",{className:"font-mono text-xs text-muted-foreground",children:_bgChosen.length+" 个权限组待处理"})]}),Q.jsxs("div",{className:"flex justify-end gap-2 border-t bg-muted/20 px-6 py-4",children:[Q.jsx(w7e,{asChild:!0,children:Q.jsx(Lf,{type:"button",variant:"ghost",children:"取消"})}),Q.jsx(Lf,{type:"button",disabled:!_bgChosen.length,variant:"remove"===_bgAction?"destructive":"default",onClick:_bgApply,children:"add"===_bgAction?"确认添加":"确认移除"})]})]})]})})});';
+    $src = str_replace($handlerAnchor, '}},' . $dialog . ',p=Q.jsxs("div"', $src);
 
     $menuContainer = 'Q.jsxs(Ust,{align:"start",className:"w-48",children:[';
     if (substr_count($src, $menuContainer) !== 1) {
         fail('batch action menu container', $file);
     }
-    $src = str_replace(
-        $menuContainer,
-        'Q.jsxs(Ust,{align:"start",className:"w-72 overflow-y-auto",style:{maxHeight:"70vh"},children:[',
-        $src
-    );
+    $src = str_replace($menuContainer, 'Q.jsxs(Ust,{align:"start",className:"w-64",children:[', $src);
 
     $menuAnchor = 'Q.jsx(Zst,{}),Q.jsx(hQt,{title:c("toolbar.batch_reset_traffic.title")';
     if (substr_count($src, $menuAnchor) !== 1) {
         fail('batch group menu anchor', $file);
     }
 
-    $menu = 'Q.jsx(Zst,{}),Q.jsx(Gst,{children:"权限组操作"}),'
-        . 'r.length?r.map(__bgGroup=>Q.jsxs($st,{disabled:!l,style:{whiteSpace:"normal"},onSelect:()=>batch_group_membership("add",__bgGroup),children:['
-        . 'Q.jsx(YXt,{icon:"ion:add-circle-outline",className:"mr-2 size-4"}),`添加为「${__bgGroup.name}」权限组`,]},`batch-group-add-${__bgGroup.id}`)):'
-        . 'Q.jsx($st,{disabled:!0,children:"暂无权限组"}),'
-        . 'Q.jsx(Zst,{}),Q.jsx(Gst,{children:"移除权限组"}),'
-        . 'r.length?r.map(__bgGroup=>Q.jsxs($st,{disabled:!l,style:{whiteSpace:"normal"},onSelect:()=>batch_group_membership("remove",__bgGroup),children:['
-        . 'Q.jsx(YXt,{icon:"ion:remove-circle-outline",className:"mr-2 size-4"}),`移除「${__bgGroup.name}」权限组`,]},`batch-group-remove-${__bgGroup.id}`)):'
-        . 'Q.jsx($st,{disabled:!0,children:"暂无权限组"}),'
-        . 'Q.jsx(Zst,{}),Q.jsx(hQt,{title:c("toolbar.batch_reset_traffic.title")';
+    $menu = 'Q.jsx(Zst,{}),Q.jsxs($st,{disabled:!l,onSelect:()=>_bgOpenDialog("add"),children:[Q.jsx(YXt,{icon:"ion:add-circle-outline",className:"mr-2 size-4"}),"添加到权限组...",l&&Q.jsxs("span",{className:"ml-auto font-mono text-[10px] text-muted-foreground",children:["(",a.length,")"]})]}),Q.jsxs($st,{disabled:!l,onSelect:()=>_bgOpenDialog("remove"),className:"text-destructive focus:text-destructive",children:[Q.jsx(YXt,{icon:"ion:remove-circle-outline",className:"mr-2 size-4"}),"从权限组移除...",l&&Q.jsxs("span",{className:"ml-auto font-mono text-[10px] text-muted-foreground",children:["(",a.length,")"]})]}),Q.jsx(Zst,{}),Q.jsx(hQt,{title:c("toolbar.batch_reset_traffic.title")';
+    $src = str_replace($menuAnchor, $menu, $src);
 
-    return str_replace($menuAnchor, $menu, $src);
+    $menuStart = 'm=Q.jsxs(Vst,{modal:!1,children:[';
+    if (substr_count($src, $menuStart) !== 1) {
+        fail('batch action menu root', $file);
+    }
+    $src = str_replace($menuStart, 'm=Q.jsxs(Q.Fragment,{children:[Q.jsxs(Vst,{modal:!1,children:[', $src);
+
+    $menuEnd = ']});return i?';
+    if (substr_count($src, $menuEnd) !== 1) {
+        fail('batch action menu end', $file);
+    }
+
+    return str_replace($menuEnd, ',_bgDialog]});return i?', $src);
 }
 
 /** 将 Shadowsocks 新建表单的默认及首选算法调整为 SS2022 128 位 AES-GCM。 */

@@ -6,11 +6,11 @@
 
 | 项目 | 标识 |
 | --- | --- |
-| YZboard 面板源码版本 | `1.5.0`（已发布） |
+| YZboard 面板源码版本 | `1.6.0`（待发布） |
 | 面板兼容标识 | `xray-v26.7.11-yz.1` |
 | YZboard 上游仓库 | `https://github.com/cedar2025/Xboard.git` |
 | YZboard 上游基线 | `master` 固定快照 / `8ecb762d77ef16491fe919b7092aea66b834deed` |
-| YZboard 目标发布 Tag | `v1.5.0` / `1ea82abba7624113303d17d9aac635772865d20d` |
+| YZboard 目标发布 Tag | `v1.6.0`（尚未创建，源码 commit 待提交后记录） |
 | YZboard 最近已发布 Tag / commit | `v1.5.0` / `1ea82abba7624113303d17d9aac635772865d20d` |
 | YZboard 已发布 Docker 镜像 | `ghcr.io/p0me1oo/yzboard:latest`、`ghcr.io/p0me1oo/yzboard:1.5.0`；审计和回滚使用不可变标签 `ghcr.io/p0me1oo/yzboard:1.5.0-1ea82ab` |
 | YZboard Docker manifest | `sha256:0ed171a1e86709b81bd2ecaf0f1f356d0d0d2c470b9768bdcb50a20b5c9accf9`；包含 `linux/amd64` 与 `linux/arm64` |
@@ -64,13 +64,20 @@
 - Shadowsocks 新建表单默认使用 `2022-blake3-aes-128-gcm`；该默认值只存在于管理端表单，存量节点的 `protocol_settings.cipher` 不会被迁移。
 - 管理端补充界面继续由 `.docker/patch-admin-relay.php` 在构建阶段注入。上游管理端产物锚点变化时，构建应失败并更新补丁，不应跳过补丁。
 
+## 1.6.0 节点管理兼容约束
+
+- 节点批量权限组操作继续复用 `POST /api/v2/admin/server/manage/batchUpdate`，新增 `group_ids` 数组参数；旧的单个 `group_id` 参数继续兼容。
+- 管理端提供「添加到权限组...」和「从权限组移除...」两个入口，弹窗支持搜索、多选、确认后执行，并显示每个权限组在所选节点中的加入数量。
+- 一次请求可以处理多个权限组，服务端在单个事务内增量合并或移除，返回 `updated_nodes` 与 `unchanged_nodes`；未选中的节点不受影响，重复操作保持幂等。
+- 管理端补丁标记升级为 `batch_group_dialog_v2`，构建阶段仍要求锚点完整匹配并保持幂等。
+
 ## 发布与回滚
 
-当前已发布结果及 `1.5.0` 发布约束：
+当前已发布结果及 `1.6.0` 发布约束：
 
-1. 面板 `v1.5.0` 固定到 `1ea82abba7624113303d17d9aac635772865d20d`，不可变镜像、版本别名和 `latest` 指向同一 manifest digest；
-2. 已发布面板 `v1.4.0` 固定到 `cf698392cd0b0623876b5166ab31b10fea2cb889`，可作为回滚基线；
-3. Node `v1.13-yz.10` 固定到 `82114adc8755ef520df6d99e3cd25a4b97073cec`，本次 1.5.0 改动不要求 Node 版本变更；
+1. 已发布面板 `v1.5.0` 固定到 `1ea82abba7624113303d17d9aac635772865d20d`，不可变镜像 `1.5.0-1ea82ab` 和 manifest digest `sha256:0ed171a1e86709b81bd2ecaf0f1f356d0d0d2c470b9768bdcb50a20b5c9accf9` 可作为回滚基线；
+2. 面板 `v1.6.0` 发布前必须写入最终源码 commit，并以固定 Tag 或完整 commit 构建；不得移动或覆盖 `v1.5.0` Tag；
+3. Node `v1.13-yz.10` 固定到 `82114adc8755ef520df6d99e3cd25a4b97073cec`，本次 1.6.0 改动不要求 Node 版本变更；
 4. Node `go list -m -json github.com/xtls/xray-core` 的 replacement 路径和 pseudo-version 指向 `620bee93867095f73880056cdfb08bc54a15f69e`；
 5. Xray fork 的 `v26.7.11-yz.1` Tag 指向同一 fork commit；
 6. sing-box 请求版本和实际 replacement 版本与上表一致。

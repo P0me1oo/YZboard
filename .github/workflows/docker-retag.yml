@@ -1,0 +1,106 @@
+name: Retag existing YZboard image
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_tag:
+        description: "现有不可变镜像标签，例如 1.5.0-1ea82ab"
+        required: true
+        type: string
+      expected_digest:
+        description: "来源镜像的完整 sha256 digest"
+        required: true
+        type: string
+      target_tag:
+        description: "要更新的标签，生产回滚使用 latest"
+        required: true
+        default: "latest"
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  retag:
+    name: Verify and retag existing manifest
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: 校验输入
+        shell: bash
+        env:
+          SOURCE_TAG: ${{ inputs.source_tag }}
+          EXPECTED_DIGEST: ${{ inputs.expected_digest }}
+          TARGET_TAG: ${{ inputs.target_tag }}
+        run: |
+          set -euo pipefail
+
+          [[ "$SOURCE_TAG" =~ ^[0-9A-Za-z][0-9A-Za-z._-]{0,127}$ ]]
+          [[ "$TARGET_TAG" =~ ^[0-9A-Za-z][0-9A-Za-z._-]{0,127}$ ]]
+          [[ "$EXPECTED_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+
+      - name: 配置 Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 登录 GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 校验来源并更新标签
+        id: retag
+        shell: bash
+        env:
+          SOURCE_TAG: ${{ inputs.source_tag }}
+          EXPECTED_DIGEST: ${{ inputs.expected_digest }}
+          TARGET_TAG: ${{ inputs.target_tag }}
+        run: |
+          set -euo pipefail
+
+          image="${REGISTRY}/${GITHUB_REPOSITORY,,}"
+          source_ref="${image}:${SOURCE_TAG}"
+          target_ref="${image}:${TARGET_TAG}"
+
+          source_digest=$(docker buildx imagetools inspect "$source_ref" | awk '/^Digest:/ {print $2; exit}')
+          if [[ "$source_digest" != "$EXPECTED_DIGEST" ]]; then
+            echo "来源 digest 不匹配：期望 $EXPECTED_DIGEST，实际 $source_digest" >&2
+            exit 1
+          fi
+
+          source_manifest=$(docker buildx imagetools inspect "$source_ref" --raw)
+          echo "$source_manifest" | jq -e '
+            ([.manifests[].platform.architecture] | index("amd64")) != null and
+            ([.manifests[].platform.architecture] | index("arm64")) != null
+          ' >/dev/null
+
+          docker buildx imagetools create --tag "$target_ref" "${image}@${EXPECTED_DIGEST}"
+
+          target_digest=$(docker buildx imagetools inspect "$target_ref" | awk '/^Digest:/ {print $2; exit}')
+          if [[ "$target_digest" != "$EXPECTED_DIGEST" ]]; then
+            echo "目标 digest 不匹配：期望 $EXPECTED_DIGEST，实际 $target_digest" >&2
+            exit 1
+          fi
+
+          {
+            echo "image=$image"
+            echo "source_ref=$source_ref"
+            echo "target_ref=$target_ref"
+            echo "digest=$target_digest"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: 写入回滚摘要
+        shell: bash
+        run: |
+          {
+            echo "## YZboard image retag"
+            echo
+            echo "- Source: \`${{ steps.retag.outputs.source_ref }}\`"
+            echo "- Target: \`${{ steps.retag.outputs.target_ref }}\`"
+            echo "- Manifest digest: \`${{ steps.retag.outputs.digest }}\`"
+            echo "- Platforms: \`linux/amd64\`, \`linux/arm64\`"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -6,16 +6,16 @@
 
 | 项目 | 标识 |
 | --- | --- |
-| YZboard 面板源码版本 | `1.6.0`（待发布） |
+| YZboard 面板源码版本 | `1.6.0` |
 | 面板兼容标识 | `xray-v26.7.11-yz.1` |
 | YZboard 上游仓库 | `https://github.com/cedar2025/Xboard.git` |
 | YZboard 上游基线 | `master` 固定快照 / `8ecb762d77ef16491fe919b7092aea66b834deed` |
-| YZboard 目标发布 Tag | `v1.6.0`（尚未创建，源码 commit 待提交后记录） |
-| YZboard 最近已发布 Tag / commit | `v1.5.0` / `1ea82abba7624113303d17d9aac635772865d20d` |
-| YZboard 已发布 Docker 镜像 | `ghcr.io/p0me1oo/yzboard:latest`、`ghcr.io/p0me1oo/yzboard:1.5.0`；审计和回滚使用不可变标签 `ghcr.io/p0me1oo/yzboard:1.5.0-1ea82ab` |
-| YZboard Docker manifest | `sha256:0ed171a1e86709b81bd2ecaf0f1f356d0d0d2c470b9768bdcb50a20b5c9accf9`；包含 `linux/amd64` 与 `linux/arm64` |
+| YZboard 目标发布 Tag | `v1.6.0` / `8bbe3e60bb1edf1237f483eb0789cde9a545e327` |
+| YZboard 最近已发布 Tag / commit | `v1.6.0` / `8bbe3e60bb1edf1237f483eb0789cde9a545e327` |
+| YZboard 已发布 Docker 镜像 | `ghcr.io/p0me1oo/yzboard:latest`、`ghcr.io/p0me1oo/yzboard:1.6.0`；审计和回滚使用不可变标签 `ghcr.io/p0me1oo/yzboard:1.6.0-8bbe3e6`；`v1.5.0` 回滚基线保留为 `ghcr.io/p0me1oo/yzboard:1.5.0-1ea82ab` |
+| YZboard Docker manifest | `sha256:c650e305632e5035cbffd1b71e320a477950e80c933df8000f5fbf1321d290cc`；包含 `linux/amd64` 与 `linux/arm64` |
 | YZboard Docker 架构 | `linux/amd64`、`linux/arm64` |
-| YZboard Docker 构建 | 固定来源 `v1.5.0`；Tag 推送触发 GitHub Actions [run 32290030304](https://github.com/P0me1oo/YZboard/actions/runs/32290030304)；上一版 `1.4.0-cf69839` 的 manifest 为 `sha256:3fd521f0a7092a4f51c4b1bdb960e214a6a374babdd6a5f8e9c9279f4f44d1ab`，可用于回退 |
+| YZboard Docker 构建 | 固定来源 `v1.6.0`；Tag 推送触发 GitHub Actions [run 32294892503](https://github.com/P0me1oo/YZboard/actions/runs/32294892503)；上一版 `v1.5.0-1ea82ab` 的 manifest 为 `sha256:0ed171a1e86709b81bd2ecaf0f1f356d0d0d2c470b9768bdcb50a20b5c9accf9`，可用于回退 |
 | YZboard-Node 兼容版本 | `v1.13-yz.10`（VLESS 落地必需） |
 | YZboard-Node 最近已发布版本 | `v1.13-yz.10` |
 | YZboard-Node 上游基线 | `v1.13` / `0a29338e1f102a462363ce3527417029f89bab28` |
@@ -73,10 +73,10 @@
 
 ## 发布与回滚
 
-当前已发布结果及 `1.6.0` 发布约束：
+当前已发布结果及 `1.6.0` 发布记录：
 
 1. 已发布面板 `v1.5.0` 固定到 `1ea82abba7624113303d17d9aac635772865d20d`，不可变镜像 `1.5.0-1ea82ab` 和 manifest digest `sha256:0ed171a1e86709b81bd2ecaf0f1f356d0d0d2c470b9768bdcb50a20b5c9accf9` 可作为回滚基线；
-2. 面板 `v1.6.0` 发布前必须写入最终源码 commit，并以固定 Tag 或完整 commit 构建；不得移动或覆盖 `v1.5.0` Tag；
+2. 面板 `v1.6.0` 已发布，Tag 指向 `8bbe3e60bb1edf1237f483eb0789cde9a545e327`，不可变镜像标签为 `1.6.0-8bbe3e6`，manifest digest 为 `sha256:c650e305632e5035cbffd1b71e320a477950e80c933df8000f5fbf1321d290cc`，构建运行记录为 [run 32294892503](https://github.com/P0me1oo/YZboard/actions/runs/32294892503)；不得移动或覆盖 `v1.5.0` Tag；
 3. Node `v1.13-yz.10` 固定到 `82114adc8755ef520df6d99e3cd25a4b97073cec`，本次 1.6.0 改动不要求 Node 版本变更；
 4. Node `go list -m -json github.com/xtls/xray-core` 的 replacement 路径和 pseudo-version 指向 `620bee93867095f73880056cdfb08bc54a15f69e`；
 5. Xray fork 的 `v26.7.11-yz.1` Tag 指向同一 fork commit；

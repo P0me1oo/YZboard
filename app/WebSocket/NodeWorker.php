@@ -305,13 +305,13 @@ class NodeWorker
         if (!empty($conn->machineNodeIds)) {
             $machineId = $conn->machineId ?? 'unknown';
             foreach ($conn->machineNodeIds as $nodeId) {
+                if (NodeRegistry::get($nodeId) !== $conn) {
+                    continue;
+                }
                 NodeRegistry::remove($nodeId, $conn);
                 Cache::forget("node_ws_alive:{$nodeId}");
 
-                $affectedUserIds = $service->clearAllNodeDevices($nodeId);
-                foreach ($affectedUserIds as $userId) {
-                    $service->notifyUpdate($userId);
-                }
+                $service->clearAllNodeDevices($nodeId);
             }
 
             if (!empty($conn->machineId)) {
@@ -329,13 +329,13 @@ class NodeWorker
         // 旧模式：单节点
         if (!empty($conn->nodeId)) {
             $nodeId = $conn->nodeId;
+            if (NodeRegistry::get($nodeId) !== $conn) {
+                return;
+            }
             NodeRegistry::remove($nodeId, $conn);
             Cache::forget("node_ws_alive:{$nodeId}");
 
             $affectedUserIds = $service->clearAllNodeDevices($nodeId);
-            foreach ($affectedUserIds as $userId) {
-                $service->notifyUpdate($userId);
-            }
 
             Log::debug("[WS] Node#{$nodeId} disconnected", [
                 'total' => NodeRegistry::count(),

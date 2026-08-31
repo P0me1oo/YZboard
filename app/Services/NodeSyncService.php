@@ -52,6 +52,22 @@ class NodeSyncService
     }
 
     /**
+     * @param int[] $groupIds
+     */
+    public static function notifyUsersUpdatedByGroups(array $groupIds): void
+    {
+        $groupIds = collect($groupIds)
+            ->map(fn ($groupId) => (int) $groupId)
+            ->filter(fn ($groupId) => $groupId > 0)
+            ->unique()
+            ->values();
+
+        foreach ($groupIds as $groupId) {
+            self::notifyUsersUpdatedByGroup($groupId);
+        }
+    }
+
+    /**
      * Push user changes (add/remove) to affected nodes
      */
     public static function notifyUserChanged(User $user): void

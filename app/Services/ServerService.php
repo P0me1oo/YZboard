@@ -11,6 +11,7 @@ use App\Services\Plugin\HookManager;
 use App\Utils\CacheKey;
 use App\Utils\Helper;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Collection;
 
 class ServerService
@@ -193,9 +194,7 @@ class ServerService
         }
 
         $nodeType = strtoupper($node->type);
-        $nodeId = $node->id;
-
-        Cache::put(CacheKey::get("SERVER_{$nodeType}_ONLINE_USER", $nodeId), count($data), 3600);
+        Cache::put(CacheKey::get("SERVER_{$nodeType}_ONLINE_USER", $node->id), count($data), 3600);
         self::touchPush($node);
 
         (new UserService())->trafficFetch($node, $node->type, $data);
@@ -213,39 +212,12 @@ class ServerService
     }
 
     /**
-     * 为流量处理认领一次 Node 报告批次。
-     *
-     * HTTP 响应丢失时 Node 会重试同一批次。支持的缓存驱动会原子执行
-     * Cache::add，因此只有第一次请求派发流量累计任务；心跳、在线状态和指标
-     * 在重试时仍可安全刷新。
-     */
-    public static function claimReport(string $nodeType, int $nodeId, ?string $reportId): bool
-    {
-        $reportId = trim((string) $reportId);
-        if ($reportId === '') {
-            return true;
-        }
-
-        $reportId = substr((string) preg_replace('/[^A-Za-z0-9_.:-]/', '_', $reportId), 0, 128);
-        if ($reportId === '') {
-            return true;
-        }
-
-        $type = strtoupper((string) $nodeType);
-        $key = CacheKey::get("SERVER_{$type}_REPORT_ID", "{$nodeId}_{$reportId}");
-        // 保留时间应覆盖 Node 的重试和退避窗口，同时允许旧的进程报告标识过期。
-        return Cache::add($key, true, 86400);
-    }
-
-    /**
      * 处理节点在线设备汇报
      */
     public static function processAlive(int $nodeId, array $alive): void
     {
-        $service = app(DeviceStateService::class);
-        foreach ($alive as $uid => $ips) {
-            $service->setDevices((int) $uid, $nodeId, (array) $ips);
-        }
+        app(DeviceStateService::class)->replaceNodeDevices($nodeId, $alive);
+        Redis::sadd('device:push_pending_nodes', $nodeId);
     }
 
     /**
@@ -257,10 +229,30 @@ class ServerService
         $nodeType = $node->type;
         $nodeId = $node->id;
 
+        $indexKey = CacheKey::get("SERVER_{$nodeType}_ONLINE_USERS", $nodeId);
+        $previousUserIds = (array) Cache::get($indexKey, []);
+        $online = array_filter(
+            $online,
+            fn ($conn, $uid) => is_numeric($uid) && is_numeric($conn) && (int) $conn > 0,
+            ARRAY_FILTER_USE_BOTH
+        );
+        $currentUserIds = array_map('intval', array_keys($online));
+
+        foreach (array_diff($previousUserIds, $currentUserIds) as $uid) {
+            Cache::forget(CacheKey::get("USER_ONLINE_CONN_{$nodeType}_{$nodeId}", $uid));
+        }
+
         foreach ($online as $uid => $conn) {
             $cacheKey = CacheKey::get("USER_ONLINE_CONN_{$nodeType}_{$nodeId}", $uid);
             Cache::put($cacheKey, (int) $conn, $cacheTime);
         }
+
+        Cache::put($indexKey, $currentUserIds, $cacheTime);
+        Cache::put(
+            CacheKey::get('SERVER_' . strtoupper($nodeType) . '_ONLINE_USER', $nodeId),
+            count($currentUserIds),
+            $cacheTime
+        );
     }
 
     /**
@@ -576,6 +568,22 @@ class ServerService
      */
     public static function processRelayTraffic(Server $entry, array $relayTraffic): void
     {
+        foreach (self::normalizeRelayTraffic($entry, $relayTraffic) as $item) {
+            RelayNodeTrafficJob::dispatch(
+                $item['server_id'],
+                $item['server_type'],
+                $item['u'],
+                $item['d']
+            );
+        }
+    }
+
+    /**
+     * @return array<int, array{server_id: int, server_type: string, u: int, d: int}>
+     */
+    public static function normalizeRelayTraffic(Server $entry, array $relayTraffic): array
+    {
+        $normalized = [];
         foreach ($relayTraffic as $key => $value) {
             // 数据来自 Node 上报的 JSON，形状不可信，逐项校验后才使用。
             if (!is_array($value) || count($value) !== 2) {
@@ -603,8 +611,15 @@ class ServerService
                 continue;
             }
 
-            RelayNodeTrafficJob::dispatch((int) $child->id, $child->type, $u, $d);
+            $normalized[] = [
+                'server_id' => (int) $child->id,
+                'server_type' => (string) $child->type,
+                'u' => $u,
+                'd' => $d,
+            ];
         }
+
+        return $normalized;
     }
 
     /**

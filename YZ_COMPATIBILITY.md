@@ -6,17 +6,17 @@
 
 | 项目 | 标识 |
 | --- | --- |
-| YZboard 面板源码版本 | `1.5.0`（已发布） |
+| YZboard 面板源码版本 | `1.7.0`（待发布） |
 | 面板兼容标识 | `xray-v26.7.11-yz.1` |
 | YZboard 上游仓库 | `https://github.com/cedar2025/Xboard.git` |
 | YZboard 上游基线 | `master` 固定快照 / `8ecb762d77ef16491fe919b7092aea66b834deed` |
-| YZboard 目标发布 Tag | `v1.5.0` / `1ea82abba7624113303d17d9aac635772865d20d` |
+| YZboard 目标发布 Tag | `v1.7.0` / 待发布，commit 尚未固定 |
 | YZboard 最近已发布 Tag / commit | `v1.5.0` / `1ea82abba7624113303d17d9aac635772865d20d` |
 | YZboard 已发布 Docker 镜像 | `ghcr.io/p0me1oo/yzboard:latest`、`ghcr.io/p0me1oo/yzboard:1.5.0`；审计和回滚使用不可变标签 `ghcr.io/p0me1oo/yzboard:1.5.0-1ea82ab` |
 | YZboard Docker manifest | `sha256:0ed171a1e86709b81bd2ecaf0f1f356d0d0d2c470b9768bdcb50a20b5c9accf9`；包含 `linux/amd64` 与 `linux/arm64` |
 | YZboard Docker 架构 | `linux/amd64`、`linux/arm64` |
 | YZboard Docker 构建 | 固定来源 `v1.5.0`；Tag 推送触发 GitHub Actions [run 32290030304](https://github.com/P0me1oo/YZboard/actions/runs/32290030304)；生产 `latest` 已通过 [run 32300726906](https://github.com/P0me1oo/YZboard/actions/runs/32300726906) 精确重标记回同一 manifest |
-| YZboard-Node 兼容版本 | `v1.13-yz.10`（VLESS 落地必需） |
+| YZboard-Node 兼容版本 | `v1.13-yz.13`（待发布；同步修复建议成套升级） |
 | YZboard-Node 最近已发布版本 | `v1.13-yz.10` |
 | YZboard-Node 上游基线 | `v1.13` / `0a29338e1f102a462363ce3527417029f89bab28` |
 | YZboard-Node 最近已发布 commit | `82114adc8755ef520df6d99e3cd25a4b97073cec` |
@@ -35,10 +35,19 @@
 ## Node report 兼容约束
 
 - 新版 Node 为每次刷出的流量批次携带 `report_id`，失败重试复用同一批次 ID。
-- 面板按节点和 `report_id` 在 24 小时内只认领一次流量批次，避免 HTTP 响应丢失时重复派发累加任务。
-- 重复请求仍会刷新 `last_check_at`、`last_push_at`、在线连接缓存和节点指标；只有已认领的流量批次不会再次累计。
-- 不带 `report_id` 的旧 Node 请求保持兼容，仍按旧协议处理。
-- 流量方向保持 `[upload, download]`；用户流量和节点累计流量仍由既有队列任务按倍率处理。
+- 面板 `1.7.0` 起按 `server_id + report_id` 把流量写入 `v2_node_report_batch`。用户流量、用户日统计、节点日统计和中转流量在同一数据库事务中结算，任务失败会整体回滚并自动重试。
+- HTTP 接收成功只表示报告已经持久化或已经结算，不再表示多个下游队列任务都已完成。相同批次的重复请求不会重复扣量，已完成记录保留 7 天。
+- 重复请求仍会刷新 `last_check_at`、`last_push_at`、在线连接缓存、设备状态和节点指标；流量批次单独按持久化记录保证幂等。
+- 不带 `report_id` 的旧 Node 请求继续接受，但面板只能为每次请求生成临时批次 ID，无法识别 HTTP 响应丢失后的重复请求。
+- 流量方向保持 `[upload, download]`；倍率在接收报告时固定，避免排队期间节点倍率变化影响已经产生的流量。
+
+## 1.7.0 同步兼容约束
+
+- 升级面板源码后必须执行数据库迁移，创建 `v2_node_report_batch`；未迁移时 V2 节点流量报告会失败并由 Node 保留批次重试。
+- 面板在线人数以 Node 的 `online` 全量快照为准，设备状态以 `alive` 或 WebSocket `report.devices` 全量快照为准；空对象表示当前没有在线用户或设备，不能省略成旧值。
+- `v1.13-yz.13` 在 WebSocket 正常时仍至少每 5 分钟执行一次 REST ETag 对账，用于修复 Redis Pub/Sub、Workerman 重启或短暂断线造成的推送丢失。
+- Node 每次设备报告都发送完整快照并包含空快照，面板按节点替换状态并续期 300 秒 TTL。首次升级会兼容扫描旧设备键并建立节点索引，后续不再全量扫描。
+- 批量封禁和套餐强制更新使用按权限组的全量用户推送；即使 Redis 推送丢失，周期 REST 对账和 `node:sync-users` 仍会恢复最终状态。
 
 ## 中转节点兼容约束
 

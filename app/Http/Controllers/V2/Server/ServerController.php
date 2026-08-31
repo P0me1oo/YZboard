@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\V2\Server;
 
 use App\Http\Controllers\Controller;
+use App\Services\NodeReportService;
 use App\Services\ServerService;
 use App\WebSocket\NodeWorker;
 use Illuminate\Http\Request;
@@ -47,35 +48,22 @@ class ServerController extends Controller
         $node = $request->attributes->get('node_info');
 
         ServerService::touchNode($node);
+        ServerService::touchPush($node);
 
-        $traffic = $request->input('traffic');
-        $reportAccepted = ServerService::claimReport(
-            $node->type,
-            (int) $node->id,
-            $request->input('report_id')
+        app(NodeReportService::class)->accept(
+            $node,
+            $request->input('report_id'),
+            is_array($request->input('traffic')) ? $request->input('traffic') : [],
+            is_array($request->input('relay_traffic')) ? $request->input('relay_traffic') : []
         );
-        if (is_array($traffic) && !empty($traffic)) {
-            if ($reportAccepted) {
-                ServerService::processTraffic($node, $traffic);
-            } else {
-                // 重复批次仍代表 Node 正常完成了一次推送，不应把节点标成未推送。
-                ServerService::touchPush($node);
-            }
-        }
-
-        // 入口节点上各逻辑节点的 Shadowsocks 出站流量，只计入落地节点的运营统计。
-        $relayTraffic = $request->input('relay_traffic');
-        if (is_array($relayTraffic) && !empty($relayTraffic) && $reportAccepted) {
-            ServerService::processRelayTraffic($node, $relayTraffic);
-        }
 
         $alive = $request->input('alive');
-        if (is_array($alive) && !empty($alive)) {
+        if (is_array($alive)) {
             ServerService::processAlive($node->id, $alive);
         }
 
         $online = $request->input('online');
-        if (is_array($online) && !empty($online)) {
+        if (is_array($online)) {
             ServerService::processOnline($node, $online);
         }
 

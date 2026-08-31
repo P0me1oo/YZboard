@@ -4,6 +4,7 @@ namespace App\Http\Controllers\V2\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\PlanSave;
+use App\Jobs\NodeGroupSyncJob;
 use App\Models\Order;
 use App\Models\Plan;
 use App\Models\User;
@@ -42,10 +43,18 @@ class PlanController extends Controller
             if (!$plan) {
                 return $this->fail([400202, '该订阅不存在']);
             }
-            
+
+            $syncGroupIds = [];
             DB::beginTransaction();
             try {
                 if ($request->input('force_update')) {
+                    $syncGroupIds = User::query()
+                        ->where('plan_id', $plan->id)
+                        ->whereNotNull('group_id')
+                        ->distinct()
+                        ->pluck('group_id')
+                        ->map(fn ($groupId) => (int) $groupId)
+                        ->all();
                     User::where('plan_id', $plan->id)->update([
                         'group_id' => $params['group_id'],
                         'transfer_enable' => $params['transfer_enable'] * 1073741824,
@@ -55,12 +64,17 @@ class PlanController extends Controller
                 }
                 $plan->update($params);
                 DB::commit();
-                return $this->success(true);
             } catch (\Exception $e) {
                 DB::rollBack();
                 Log::error($e);
                 return $this->fail([500, '保存失败']);
             }
+
+            if ($request->input('force_update')) {
+                $syncGroupIds[] = (int) $params['group_id'];
+                NodeGroupSyncJob::dispatch(array_values(array_unique(array_filter($syncGroupIds))));
+            }
+            return $this->success(true);
         }
         if (!Plan::create($params)) {
             return $this->fail([500, '创建失败']);

@@ -114,7 +114,7 @@ class UserService
         return true;
     }
 
-    public function trafficFetch(Server $server, string $protocol, array $data)
+    public function prepareTraffic(Server $server, string $protocol, array $data): array
     {
         // 中转逻辑节点强制使用入口节点的倍率；正常情况下逻辑节点不会上报用户流量，
         // 这里作为兜底，避免逻辑节点自身填写的倍率进入用户扣费。
@@ -124,6 +124,13 @@ class UserService
         list($server, $protocol, $data) = HookManager::filter('traffic.process.before', [$server, $protocol, $data]);
         // Compatible with legacy hook
         list($server, $protocol, $data) = HookManager::filter('traffic.before_process', [$server, $protocol, $data]);
+
+        return [$server, $protocol, $data];
+    }
+
+    public function trafficFetch(Server $server, string $protocol, array $data)
+    {
+        [$server, $protocol, $data] = $this->prepareTraffic($server, $protocol, $data);
 
         $timestamp = strtotime(date('Y-m-d'));
         collect($data)->chunk(1000)->each(function ($chunk) use ($timestamp, $server, $protocol) {

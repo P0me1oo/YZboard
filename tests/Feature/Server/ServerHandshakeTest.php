@@ -2,17 +2,19 @@
 
 namespace Tests\Feature\Server;
 
-use App\Jobs\TrafficFetchJob;
-use App\Jobs\StatServerJob;
-use App\Jobs\StatUserJob;
+use App\Jobs\ProcessNodeReportBatch;
+use App\Models\NodeReportBatch;
 use App\Models\Server;
 use App\Models\ServerMachine;
+use App\Models\StatServer;
+use App\Models\StatUser;
 use App\Models\User;
 use App\Support\Setting;
 use App\Utils\CacheKey;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Redis;
 use Mockery\MockInterface;
 use Tests\TestCase;
 
@@ -158,10 +160,10 @@ class ServerHandshakeTest extends TestCase
 
         $response->assertOk()->assertJson(['data' => true]);
 
-        Bus::assertDispatched(TrafficFetchJob::class, function (TrafficFetchJob $job) use ($user): bool {
-            $property = new \ReflectionProperty($job, 'data');
-            $data = $property->getValue($job);
-            return ($data[$user->id] ?? null) === [1234, 5678];
+        Bus::assertDispatched(ProcessNodeReportBatch::class, function (ProcessNodeReportBatch $job) use ($user): bool {
+            $property = new \ReflectionProperty($job, 'batchId');
+            $batch = NodeReportBatch::find($property->getValue($job));
+            return ($batch?->traffic[$user->id] ?? null) === [1234, 5678];
         });
 
         $this->assertNotNull($server->last_check_at);
@@ -202,16 +204,14 @@ class ServerHandshakeTest extends TestCase
         $this->postJson('/api/v2/server/report', $payload)->assertOk();
         $this->postJson('/api/v2/server/report', $payload)->assertOk();
 
-        Bus::assertDispatchedTimes(TrafficFetchJob::class, 1);
-        Bus::assertDispatchedTimes(StatUserJob::class, 1);
-        Bus::assertDispatchedTimes(StatServerJob::class, 1);
+        Bus::assertDispatchedTimes(ProcessNodeReportBatch::class, 1);
+        $this->assertSame(1, NodeReportBatch::count());
 
         // 不同批次仍应正常接受并派发。
         $payload['report_id'] = 'test-boot-1-2';
         $this->postJson('/api/v2/server/report', $payload)->assertOk();
-        Bus::assertDispatchedTimes(TrafficFetchJob::class, 2);
-        Bus::assertDispatchedTimes(StatUserJob::class, 2);
-        Bus::assertDispatchedTimes(StatServerJob::class, 2);
+        Bus::assertDispatchedTimes(ProcessNodeReportBatch::class, 2);
+        $this->assertSame(2, NodeReportBatch::count());
 
         $server->refresh();
         $this->assertNotNull($server->last_check_at);
@@ -223,6 +223,83 @@ class ServerHandshakeTest extends TestCase
                 $user->id
             ))
         );
+    }
+
+    public function test_report_batch_job_is_idempotent_after_success(): void
+    {
+        Bus::fake();
+
+        $server = $this->makeServer(Server::TYPE_HYSTERIA);
+        $server->forceFill(['rate' => 2])->save();
+        $user = User::create([
+            'email' => 'hysteria-batch@example.invalid',
+            'password' => 'unused',
+            'uuid' => '33333333-3333-3333-3333-333333333333',
+            'token' => str_repeat('c', 32),
+            'group_id' => 1,
+            'transfer_enable' => 1024 * 1024 * 1024,
+            'expired_at' => time() + 3600,
+        ]);
+
+        $this->postJson('/api/v2/server/report', [
+            'token' => 'server-token',
+            'node_id' => $server->id,
+            'report_id' => 'idempotent-job-1',
+            'traffic' => [(string) $user->id => [100, 200]],
+        ])->assertOk();
+
+        $batch = NodeReportBatch::firstOrFail();
+        Redis::shouldReceive('sadd')
+            ->once()
+            ->with('traffic:pending_check', $user->id)
+            ->andReturn(1);
+
+        (new ProcessNodeReportBatch($batch->id))->handle();
+        (new ProcessNodeReportBatch($batch->id))->handle();
+
+        $user->refresh();
+        $server->refresh();
+        $batch->refresh();
+        $this->assertSame(200, (int) $user->u);
+        $this->assertSame(400, (int) $user->d);
+        $this->assertSame(100, (int) $server->u);
+        $this->assertSame(200, (int) $server->d);
+        $this->assertSame(NodeReportBatch::STATUS_PROCESSED, $batch->status);
+        $this->assertSame(1, StatUser::count());
+        $this->assertSame(1, StatServer::count());
+    }
+
+    public function test_empty_online_snapshot_clears_stale_online_state(): void
+    {
+        Bus::fake();
+
+        $server = $this->makeServer(Server::TYPE_HYSTERIA);
+        $user = User::create([
+            'email' => 'hysteria-offline@example.invalid',
+            'password' => 'unused',
+            'uuid' => '44444444-4444-4444-4444-444444444444',
+            'token' => str_repeat('d', 32),
+            'group_id' => 1,
+            'transfer_enable' => 1024 * 1024 * 1024,
+            'expired_at' => time() + 3600,
+        ]);
+
+        $base = [
+            'token' => 'server-token',
+            'node_id' => $server->id,
+        ];
+        $this->postJson('/api/v2/server/report', $base + [
+            'online' => [(string) $user->id => 2],
+        ])->assertOk();
+        $this->postJson('/api/v2/server/report', $base + [
+            'online' => [],
+        ])->assertOk();
+
+        $this->assertSame(0, $server->online);
+        $this->assertNull(Cache::get(CacheKey::get(
+            'USER_ONLINE_CONN_' . Server::TYPE_HYSTERIA . '_' . $server->id,
+            $user->id
+        )));
     }
 
     private function makeServer(string $type = Server::TYPE_VMESS): Server

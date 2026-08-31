@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\V2\Admin;
 
+use App\Jobs\NodeGroupSyncJob;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UserGenerate;
 use App\Http\Requests\Admin\UserSendMail;
@@ -10,7 +11,6 @@ use App\Jobs\SendEmailJob;
 use App\Models\Plan;
 use App\Models\User;
 use App\Services\AuthService;
-use App\Services\NodeSyncService;
 use App\Services\Plugin\HookManager;
 use App\Services\UserService;
 use App\Traits\QueryOperators;
@@ -672,6 +672,13 @@ class UserController extends Controller
         } // all: ignore filter/sort
 
         try {
+            $groupIds = (clone $builder)
+                ->reorder()
+                ->whereNotNull('group_id')
+                ->distinct()
+                ->pluck('group_id')
+                ->map(fn ($groupId) => (int) $groupId)
+                ->all();
             $builder->update([
                 'banned' => 1
             ]);
@@ -679,7 +686,9 @@ class UserController extends Controller
             Log::error($e);
             return $this->fail([500, '处理失败']);
         }
-        // Full refresh not implemented.
+        if ($groupIds !== []) {
+            NodeGroupSyncJob::dispatch($groupIds);
+        }
         return $this->success(true);
     }
 

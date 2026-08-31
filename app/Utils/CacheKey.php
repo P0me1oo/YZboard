@@ -21,6 +21,7 @@ class CacheKey
     // 允许的缓存键模式（支持通配符）
     const ALLOWED_PATTERNS = [
         'SERVER_*_ONLINE_USER',        // 节点在线用户
+        'SERVER_*_ONLINE_USERS',       // 节点在线用户编号索引
         'MULTI_SERVER_*_ONLINE_USER',  // 多服务器在线用户
         'SERVER_*_LAST_CHECK_AT',      // 节点最后检查时间
         'SERVER_*_LAST_PUSH_AT',       // 节点最后推送时间

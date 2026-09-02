@@ -294,7 +294,7 @@ function patchKernelSelector(string $src, string $file): string
     if ($closePos === false) {
         fail('protocol selector close', $file);
     }
-    $src = substr($src, 0, $closePos) . '})]})]})]}),Q.jsx(vtt,{className' . substr($src, $closePos + strlen($close));
+    $src = substr($src, 0, $closePos) . '})]})]}),Q.jsx(vtt,{className' . substr($src, $closePos + strlen($close));
 
     return $src;
 }

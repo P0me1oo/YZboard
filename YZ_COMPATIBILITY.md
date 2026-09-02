@@ -10,12 +10,12 @@
 | 面板兼容标识 | `xray-v26.7.11-yz.2` |
 | YZboard 上游仓库 | `https://github.com/cedar2025/Xboard.git` |
 | YZboard 上游基线 | `master` 固定快照 / `8ecb762d77ef16491fe919b7092aea66b834deed` |
-| YZboard 目标发布 Tag | `v1.8.3`（待发布） |
-| YZboard 最近已发布 Tag / commit | `v1.8.2` / `50c5118e4681e986adb0edd6b1c6cd1ec49e4618` |
-| YZboard 已发布 Docker 镜像 | 当前生产基线为 `ghcr.io/p0me1oo/yzboard:latest`、`ghcr.io/p0me1oo/yzboard:1.8.2`；`v1.8.3` 发布后更新本行 |
-| YZboard Docker manifest | 当前生产基线为 `sha256:23b4ae1782d4b08cd70931699756eae32f936f8371339a666a4f487bbfca74bd`；`v1.8.3` 发布后更新本行 |
+| YZboard 目标发布 Tag | `v1.8.3` / `68a08991a6109c93285eb0653cd8d25981acc8d5` |
+| YZboard 最近已发布 Tag / commit | `v1.8.3` / `68a08991a6109c93285eb0653cd8d25981acc8d5` |
+| YZboard 已发布 Docker 镜像 | `ghcr.io/p0me1oo/yzboard:latest`、`ghcr.io/p0me1oo/yzboard:1.8.3`；审计和回滚使用不可变标签 `ghcr.io/p0me1oo/yzboard:1.8.3-68a0899` |
+| YZboard Docker manifest | `sha256:a752b4ce9006407e25b888237e84826ce6a14f9660a8ce11524135935825bfa9`；包含 `linux/amd64` 与 `linux/arm64` |
 | YZboard Docker 架构 | `linux/amd64`、`linux/arm64` |
-| YZboard Docker 构建 | `v1.8.3` 发布后补充固定来源、Actions 运行和 manifest 校验 |
+| YZboard Docker 构建 | 固定来源 `v1.8.3`；GitHub Actions [run 33644362438](https://github.com/P0me1oo/YZboard/actions/runs/33644362438) 成功；`latest`、版本别名和不可变标签均指向同一 manifest |
 | YZboard-Node 兼容版本 | `v1.13-yz.15`（节点级内核选择需成套升级） |
 | YZboard-Node 最近已发布版本 | `v1.13-yz.15` |
 | YZboard-Node 上游基线 | `v1.13` / `0a29338e1f102a462363ce3527417029f89bab28` |
@@ -98,11 +98,11 @@
 
 ## 发布与回滚
 
-当前已发布结果及 `1.8.2` 生产基线：
+当前已发布结果及 `1.8.3` 生产基线：
 
-1. 面板 `v1.8.2` 固定到 `50c5118e4681e986adb0edd6b1c6cd1ec49e4618`，不可变镜像 `1.8.2-50c5118`、版本别名 `1.8.2` 和 `latest` 指向 manifest `sha256:23b4ae1782d4b08cd70931699756eae32f936f8371339a666a4f487bbfca74bd`；
-2. 面板 [run 33636803263](https://github.com/P0me1oo/YZboard/actions/runs/33636803263) 固定来源构建成功，构建和清单验证均通过，manifest 包含 `linux/amd64` 与 `linux/arm64`；
-3. 上一条 `v1.8.1` 生产基线固定到 `330407ab4649f286cc2a6f7e12ca8fe18ef3bbf5`，不可变镜像 `1.8.1-330407a`、版本别名 `1.8.1` 和旧 `latest` 指向 manifest `sha256:cbd3c47aa12e0c493bd6f7403d900aa56da2be79a7f4ca29fc7924c9ddf2fb37`；
+1. 面板 `v1.8.3` 固定到 `68a08991a6109c93285eb0653cd8d25981acc8d5`，不可变镜像 `1.8.3-68a0899`、版本别名 `1.8.3` 和 `latest` 指向 manifest `sha256:a752b4ce9006407e25b888237e84826ce6a14f9660a8ce11524135935825bfa9`；
+2. 面板 [run 33644362438](https://github.com/P0me1oo/YZboard/actions/runs/33644362438) 固定来源构建成功，构建和清单验证均通过，manifest 包含 `linux/amd64` 与 `linux/arm64`；
+3. 上一条 `v1.8.2` 生产基线固定到 `50c5118e4681e986adb0edd6b1c6cd1ec49e4618`，不可变镜像 `1.8.2-50c5118`、版本别名 `1.8.2` 和旧 `latest` 指向 manifest `sha256:23b4ae1782d4b08cd70931699756eae32f936f8371339a666a4f487bbfca74bd`；
 4. Node `v1.13-yz.15` 固定到 `d821de890769aa20a001ca3f4ef43d24c001c48b`，Release 与镜像由 [run 33592394571](https://github.com/P0me1oo/YZboard-Node/actions/runs/33592394571) 发布；
 5. Node Docker manifest 为 `sha256:f3e0895ebc04ac603158a5b96413e7695e5c7a1abd596ee864d7d4852b0b4665`，包含 `linux/amd64` 与 `linux/arm64`；
 6. Node 使用 YZ-Xray-core `v26.7.11-yz.2`，固定 commit `26b01717dd8d1fd604de5e23e2868fdef59eba2f` 与 pseudo-version `v0.0.0-20260901175116-26b01717dd8d`；

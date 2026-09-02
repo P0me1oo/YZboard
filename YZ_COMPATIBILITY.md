@@ -6,22 +6,22 @@
 
 | 项目 | 标识 |
 | --- | --- |
-| YZboard 面板源码版本 | `1.8.0`（待发布） |
+| YZboard 面板源码版本 | `1.8.0` |
 | 面板兼容标识 | `xray-v26.7.11-yz.2` |
 | YZboard 上游仓库 | `https://github.com/cedar2025/Xboard.git` |
 | YZboard 上游基线 | `master` 固定快照 / `8ecb762d77ef16491fe919b7092aea66b834deed` |
-| YZboard 目标发布 Tag | `v1.8.0` / 待发布，commit 尚未固定 |
-| YZboard 最近已发布 Tag / commit | `v1.5.0` / `1ea82abba7624113303d17d9aac635772865d20d` |
-| YZboard 已发布 Docker 镜像 | `ghcr.io/p0me1oo/yzboard:latest`、`ghcr.io/p0me1oo/yzboard:1.5.0`；审计和回滚使用不可变标签 `ghcr.io/p0me1oo/yzboard:1.5.0-1ea82ab` |
-| YZboard Docker manifest | `sha256:0ed171a1e86709b81bd2ecaf0f1f356d0d0d2c470b9768bdcb50a20b5c9accf9`；包含 `linux/amd64` 与 `linux/arm64` |
+| YZboard 目标发布 Tag | `v1.8.0` / `4dd4094e6b37c611f94e059c188ffe77b3efae11` |
+| YZboard 最近已发布 Tag / commit | `v1.8.0` / `4dd4094e6b37c611f94e059c188ffe77b3efae11` |
+| YZboard 已发布 Docker 镜像 | `ghcr.io/p0me1oo/yzboard:latest`、`ghcr.io/p0me1oo/yzboard:1.8.0`；审计和回滚使用不可变标签 `ghcr.io/p0me1oo/yzboard:1.8.0-4dd4094` |
+| YZboard Docker manifest | `sha256:cb290c6641820e7631923aadb61cd902544439c4503baed2f2630a9d4802e97f`；包含 `linux/amd64` 与 `linux/arm64` |
 | YZboard Docker 架构 | `linux/amd64`、`linux/arm64` |
-| YZboard Docker 构建 | 固定来源 `v1.5.0`；Tag 推送触发 GitHub Actions [run 32290030304](https://github.com/P0me1oo/YZboard/actions/runs/32290030304)；生产 `latest` 已通过 [run 32300726906](https://github.com/P0me1oo/YZboard/actions/runs/32300726906) 精确重标记回同一 manifest |
-| YZboard-Node 兼容版本 | `v1.13-yz.15`（待发布；节点级内核选择需成套升级） |
-| YZboard-Node 最近已发布版本 | `v1.13-yz.14` |
+| YZboard Docker 构建 | 固定来源 `v1.8.0`；Tag 推送触发 GitHub Actions [run 33596231870](https://github.com/P0me1oo/YZboard/actions/runs/33596231870)；生产 `latest` 与版本别名均指向同一 manifest |
+| YZboard-Node 兼容版本 | `v1.13-yz.15`（节点级内核选择需成套升级） |
+| YZboard-Node 最近已发布版本 | `v1.13-yz.15` |
 | YZboard-Node 上游基线 | `v1.13` / `0a29338e1f102a462363ce3527417029f89bab28` |
-| YZboard-Node 最近已发布 commit | `82114adc8755ef520df6d99e3cd25a4b97073cec` |
-| YZboard-Node 发布 | GitHub [Release v1.13-yz.10](https://github.com/P0me1oo/YZboard-Node/releases/tag/v1.13-yz.10)；以固定 Tag 手动触发 GitHub Actions [run 31269894172](https://github.com/P0me1oo/YZboard-Node/actions/runs/31269894172) |
-| YZboard-Node Docker manifest | `sha256:48ce4fe3605e2e3aa29292a65fc5003ca2561c098ff3ae87ba85da86a462f1ed`；包含 `linux/amd64` 与 `linux/arm64` |
+| YZboard-Node 最近已发布 commit | `d821de890769aa20a001ca3f4ef43d24c001c48b` |
+| YZboard-Node 发布 | GitHub [Release v1.13-yz.15](https://github.com/P0me1oo/YZboard-Node/releases/tag/v1.13-yz.15)；以固定 Tag 手动触发 GitHub Actions [run 33592394571](https://github.com/P0me1oo/YZboard-Node/actions/runs/33592394571) |
+| YZboard-Node Docker manifest | `sha256:f3e0895ebc04ac603158a5b96413e7695e5c7a1abd596ee864d7d4852b0b4665`；包含 `linux/amd64` 与 `linux/arm64` |
 | Xray 官方预发布 Tag | `v26.7.11` |
 | Xray 上游 Tag commit | `50231eaff98ccc31b5cbd247a721c16e97fe5ec1` |
 | YZ-Xray-core fork 版本 | `v26.7.11-yz.2` |
@@ -83,14 +83,16 @@
 
 ## 发布与回滚
 
-当前已发布结果及 `1.5.0` 生产基线：
+当前已发布结果及 `1.8.0` 生产基线：
 
-1. 面板 `v1.5.0` 固定到 `1ea82abba7624113303d17d9aac635772865d20d`，不可变镜像 `1.5.0-1ea82ab`、版本别名 `1.5.0` 和 `latest` 指向 manifest `sha256:0ed171a1e86709b81bd2ecaf0f1f356d0d0d2c470b9768bdcb50a20b5c9accf9`；
-2. `latest` 已通过 [run 32300726906](https://github.com/P0me1oo/YZboard/actions/runs/32300726906) 从现有不可变镜像重新标记，没有重新构建或移动 `v1.5.0` Tag；
-3. Node `v1.13-yz.10` 固定到 `82114adc8755ef520df6d99e3cd25a4b97073cec`，本次 1.5.0 改动不要求 Node 版本变更；
-4. Node `go list -m -json github.com/xtls/xray-core` 的 replacement 路径和 pseudo-version 指向 `620bee93867095f73880056cdfb08bc54a15f69e`；
-5. Xray fork 的 `v26.7.11-yz.1` Tag 指向同一 fork commit；
+1. 面板 `v1.8.0` 固定到 `4dd4094e6b37c611f94e059c188ffe77b3efae11`，不可变镜像 `1.8.0-4dd4094`、版本别名 `1.8.0` 和 `latest` 指向 manifest `sha256:cb290c6641820e7631923aadb61cd902544439c4503baed2f2630a9d4802e97f`；
+2. 面板 Tag 推送触发 [run 33596231870](https://github.com/P0me1oo/YZboard/actions/runs/33596231870)，构建和清单验证均通过，manifest 包含 `linux/amd64` 与 `linux/arm64`；
+3. Node `v1.13-yz.15` 固定到 `d821de890769aa20a001ca3f4ef43d24c001c48b`，Release 与镜像由 [run 33592394571](https://github.com/P0me1oo/YZboard-Node/actions/runs/33592394571) 发布；
+4. Node Docker manifest 为 `sha256:f3e0895ebc04ac603158a5b96413e7695e5c7a1abd596ee864d7d4852b0b4665`，包含 `linux/amd64` 与 `linux/arm64`；
+5. Node 使用 YZ-Xray-core `v26.7.11-yz.2`，固定 commit `26b01717dd8d1fd604de5e23e2868fdef59eba2f` 与 pseudo-version `v0.0.0-20260901175116-26b01717dd8d`；
 6. sing-box 请求版本和实际 replacement 版本与上表一致。
+
+上一条 `1.5.0` 镜像 manifest `sha256:0ed171a1e86709b81bd2ecaf0f1f356d0d0d2c470b9768bdcb50a20b5c9accf9` 仍保留用于回滚审计。
 
 推送语义版本 Tag 会自动触发构建，并同时更新“面板版本 + 短 commit”的不可变标签、面板版本别名和 `latest`，中间没有确认环节。**推 `v*` Tag 等同于发布生产**，不要用它做试探性标记。手动 dispatch 仍然可用，适合对固定 Tag 或完整 commit 重新构建，那条路径的 `publish_latest` 默认关闭，需要显式勾选。生产 Compose 长期使用 `latest` 拉取更新，不可变标签和 digest 用于确认实际版本与回滚。
 

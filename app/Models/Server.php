@@ -29,6 +29,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
  * @property string|null $network 网络类型
  * @property int|null $parent_id 父节点ID（共享运行状态与SS2022服务端密钥，语义同上游）
  * @property int|null $relay_entry_id 前置入口节点ID（非空表示本节点是中转逻辑节点）
+ * @property string|null $kernel_type 节点内核（xray/singbox，空值按 xray 处理）
  * @property int|null $vless_route VLESS路由编号（写入客户端UUID第7、8字节）
  * @property float|null $rate 倍率
  * @property boolean $rate_time_enable 是否启用时间范围功能
@@ -64,6 +65,9 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
  */
 class Server extends Model
 {
+    public const KERNEL_XRAY = 'xray';
+    public const KERNEL_SINGBOX = 'singbox';
+
     public const TYPE_HYSTERIA = 'hysteria';
     public const TYPE_VLESS = 'vless';
     public const TYPE_TROJAN = 'trojan';
@@ -151,6 +155,7 @@ class Server extends Model
         'u' => 'integer',
         'd' => 'integer',
         'machine_id' => 'integer',
+        'kernel_type' => 'string',
         'relay_entry_id' => 'integer',
         'vless_route' => 'integer',
     ];
@@ -421,6 +426,16 @@ class Server extends Model
     public static function normalizeType(?string $type): string | null
     {
         return $type ? strtolower(self::TYPE_ALIASES[$type] ?? $type) : null;
+    }
+
+    /** 返回节点实际使用的内核。历史节点没有 kernel_type 时默认使用 Xray。 */
+    public static function effectiveKernelType(?string $kernelType): string
+    {
+        $kernelType = strtolower(trim((string) $kernelType));
+        $kernelType = $kernelType === 'sing-box' ? self::KERNEL_SINGBOX : $kernelType;
+        return in_array($kernelType, [self::KERNEL_XRAY, self::KERNEL_SINGBOX], true)
+            ? $kernelType
+            : self::KERNEL_XRAY;
     }
     
     public static function isValidType(?string $type): bool

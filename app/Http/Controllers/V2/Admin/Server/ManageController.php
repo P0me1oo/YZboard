@@ -90,6 +90,7 @@ class ManageController extends Controller
             'id' => 'required|integer',
             'show' => 'nullable|integer',
             'machine_id' => 'nullable|integer',
+            'kernel_type' => 'nullable|string|in:xray,singbox,sing-box',
             'enabled' => 'nullable|boolean',
         ]);
 
@@ -103,6 +104,9 @@ class ManageController extends Controller
         }
         if (array_key_exists('machine_id', $params)) {
             $server->machine_id = $params['machine_id'] ?: null;
+        }
+        if (array_key_exists('kernel_type', $params)) {
+            $server->kernel_type = $params['kernel_type'] ?: null;
         }
         if (array_key_exists('enabled', $params)) {
             $server->enabled = (bool) $params['enabled'];
@@ -236,6 +240,7 @@ class ManageController extends Controller
             'show' => 'nullable|integer|in:0,1',
             'enabled' => 'nullable|boolean',
             'machine_id' => 'nullable|integer',
+            'kernel_type' => 'nullable|string|in:xray,singbox,sing-box',
             'group_action' => 'required_with:group_id|string|in:add,remove',
             'group_id' => 'required_with:group_action|integer|exists:v2_server_group,id',
         ]);
@@ -254,6 +259,9 @@ class ManageController extends Controller
         }
         if (array_key_exists('machine_id', $params)) {
             $update['machine_id'] = $params['machine_id'] ?: null;
+        }
+        if (array_key_exists('kernel_type', $params) && $params['kernel_type'] !== null) {
+            $update['kernel_type'] = $params['kernel_type'];
         }
 
         $groupAction = $params['group_action'] ?? null;

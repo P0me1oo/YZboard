@@ -16,6 +16,7 @@
  *    复用产物现有的 X25519 生成器，一次填入配对的 decryption/encryption。
  * 5. 节点批量操作增加按权限组添加、移除的增量动作。
  * 6. Shadowsocks 新建表单优先使用 SS2022 128 位 AES-GCM。
+ * 7. 节点编辑表单在协议选择左侧增加 Xray/sing-box 内核下拉，默认 Xray。
  *
  * 任一锚点匹配不到就直接失败退出，让构建显式报错，而不是静默产出一个缺少这些界面的管理端。
  * 重复执行是幂等的。
@@ -48,6 +49,7 @@ const VLESS_MATRIX_MARKER = 'relay_vless_matrix';
 const VLESS_KEYGEN_MARKER = 'relay_vless_keygen';
 const BATCH_GROUP_MARKER = 'batch_group_membership';
 const SS2022_DEFAULT_MARKER = 'yz_ss2022_default';
+const KERNEL_MARKER = 'data-yz-node-kernel-selector';
 
 $root = $argv[1] ?? '/www/public/assets/admin/assets';
 if (!is_dir($root)) {
@@ -75,8 +77,23 @@ foreach ($targets as $file) {
     $hasVlessKeygen = str_contains($src, VLESS_KEYGEN_MARKER);
     $hasBatchGroup = str_contains($src, BATCH_GROUP_MARKER);
     $hasSs2022Default = str_contains($src, SS2022_DEFAULT_MARKER);
+    $hasKernel = str_contains($src, KERNEL_MARKER);
 
-    if ($hasField && $hasColumn && $hasVlessMatrix && $hasVlessKeygen && $hasBatchGroup && $hasSs2022Default) {
+    // 早期版本曾把 kernel_type 错误地套用了 machine_id 的数字校验器。
+    // 对已经打过补丁的现有产物做一次可重复修复，避免必须手工恢复整个管理端包。
+    if (str_contains($src, 'kernel_type:dy().optional().nullable().default("xray")')) {
+        $src = patchKernelSchemaType($src, $file);
+        if (file_put_contents($file, $src) === false) {
+            fwrite(STDERR, "patch-admin-relay: 写入失败 {$file}\n");
+            exit(1);
+        }
+        $newBase = renameWithNewHash($file, $src, $root);
+        fwrite(STDOUT, "patch-admin-relay: 已修复内核字段校验器 -> {$newBase}\n");
+        $patched++;
+        continue;
+    }
+
+    if ($hasField && $hasColumn && $hasVlessMatrix && $hasVlessKeygen && $hasBatchGroup && $hasSs2022Default && $hasKernel) {
         fwrite(STDOUT, "patch-admin-relay: 已完整打过补丁，跳过 " . basename($file) . "\n");
         $patched++;
         continue;
@@ -88,7 +105,8 @@ foreach ($targets as $file) {
         || (($hasVlessMatrix || $hasVlessKeygen) && !$hasField)
         || ($hasVlessKeygen && !$hasVlessMatrix)
         || ($hasBatchGroup && !$hasField)
-        || ($hasSs2022Default && !$hasField)) {
+        || ($hasSs2022Default && !$hasField)
+        || ($hasKernel && !$hasField)) {
         fwrite(STDERR, "patch-admin-relay: " . basename($file) . " 只包含部分补丁标记，需先还原干净的管理端产物\n");
         exit(1);
     }
@@ -101,6 +119,8 @@ foreach ($targets as $file) {
     if (!$hasField) {
         $src = patchSchema($src, $file);
         $src = patchDefaults($src, $file);
+        $src = patchKernelSchema($src, $file);
+        $src = patchKernelDefaults($src, $file);
         $src = patchCandidates($src, $file);
         $src = patchField($src, $file);
         $src = patchListColumn($src, $file);
@@ -117,6 +137,9 @@ foreach ($targets as $file) {
     }
     if (!$hasSs2022Default) {
         $src = patchShadowsocksDefault($src, $file);
+    }
+    if (!$hasKernel) {
+        $src = patchKernelSelector($src, $file);
     }
 
     if (file_put_contents($file, $src) === false) {
@@ -209,6 +232,70 @@ function patchDefaults(string $src, string $file): string
         fail('defaults parent_id', $file);
     }
     return str_replace($needle, 'parent_id:"0",relay_entry_id:"0",route_ids:', $src);
+}
+
+/** 节点表单内核字段默认使用 Xray；null 仍由后端解释为 Xray。 */
+function patchKernelSchema(string $src, string $file): string
+{
+    if (str_contains($src, 'kernel_type:')) {
+        return $src;
+    }
+    $pattern = '/(machine_id:(\w+)\(\)\.optional\(\)\.nullable\(\),)/';
+    if (!preg_match($pattern, $src, $m)) {
+        fail('schema machine_id', $file);
+    }
+    // machine_id 使用数字校验器；内核名称必须使用字符串校验器。
+    $insert = $m[1] . 'kernel_type:cy().optional().nullable().default("xray"),';
+    return preg_replace($pattern, addcslashes($insert, '\\$'), $src, 1);
+}
+
+function patchKernelSchemaType(string $src, string $file): string
+{
+    $needle = 'kernel_type:dy().optional().nullable().default("xray")';
+    if (substr_count($src, $needle) !== 1) {
+        fail('kernel schema type', $file);
+    }
+    return str_replace($needle, 'kernel_type:cy().optional().nullable().default("xray")', $src);
+}
+
+function patchKernelDefaults(string $src, string $file): string
+{
+    if (str_contains($src, 'kernel_type:"xray"')) {
+        return $src;
+    }
+    $needle = 'machine_id:null,enabled:null';
+    if (!str_contains($src, $needle)) {
+        fail('defaults machine_id', $file);
+    }
+    return str_replace($needle, 'machine_id:null,kernel_type:"xray",enabled:null', $src);
+}
+
+/** 在协议选择左侧加入节点级内核下拉，保存仍走原有表单状态。 */
+function patchKernelSelector(string $src, string $file): string
+{
+    $anchor = 'Q.jsxs(yzt,{value:l||"",onValueChange:';
+    $start = strpos($src, $anchor);
+    if ($start === false) {
+        fail('protocol selector', $file);
+    }
+
+    $prefix = 'Q.jsxs("div",{className:"flex items-center gap-2",' .
+        '"data-yz-node-kernel-selector":!0,children:[' .
+        'Q.jsx($y,{control:x.control,name:"kernel_type",render:({field:t})=>Q.jsxs(Gy,{className:"w-[130px]",children:[' .
+        'Q.jsx(Zy,{className:"sr-only",children:e("form.kernel.label","内核")}),Q.jsxs(yzt,{onValueChange:t.onChange,value:t.value||"xray",children:[' .
+        'Q.jsx(Czt,{className:"h-8 w-[130px] border-2 font-mono text-xs",children:Q.jsx(wzt,{placeholder:e("form.kernel.label","内核")})}),' .
+        'Q.jsxs(Nzt,{children:[Q.jsx(Lzt,{value:"xray",children:"Xray"}),Q.jsx(Lzt,{value:"singbox",children:"sing-box"})]})]})]}),' .
+        $anchor;
+    $src = substr($src, 0, $start) . $prefix . substr($src, $start + strlen($anchor));
+
+    $close = '})]})]}),Q.jsx(vtt,{className';
+    $closePos = strpos($src, $close, $start);
+    if ($closePos === false) {
+        fail('protocol selector close', $file);
+    }
+    $src = substr($src, 0, $closePos) . '})]})]})]}),Q.jsx(vtt,{className' . substr($src, $closePos + strlen($close));
+
+    return $src;
 }
 
 /**

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\V2\Server;
 
 use App\Http\Controllers\Controller;
+use App\Models\Server;
 use App\Models\ServerMachine;
 use App\Models\ServerMachineLoadHistory;
 use App\Services\ServerService;
@@ -26,6 +27,7 @@ class MachineController extends Controller
                 'id' => $node->id,
                 'type' => $node->type,
                 'name' => $node->name,
+                'kernel_type' => Server::effectiveKernelType($node->kernel_type),
             ])->values();
 
         return response()->json([

@@ -20,6 +20,7 @@ class ServerObserver
         'server_port',
         'protocol_settings',
         'enabled',
+        'kernel_type',
         'vless_route',
     ];
 
@@ -42,11 +43,11 @@ class ServerObserver
             'custom_outbounds',
             'custom_routes',
             'cert_config',
-        ])) {
+        ]) || ($server->wasChanged('kernel_type') && !$server->machine_id)) {
             NodeSyncService::notifyConfigUpdated($server->id);
         }
 
-        if ($server->wasChanged(['machine_id', 'enabled'])) {
+        if ($server->wasChanged(['machine_id', 'enabled', 'kernel_type'])) {
             $this->notifyMachineChange(
                 $server->machine_id,
                 $server->getOriginal('machine_id')

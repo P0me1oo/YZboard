@@ -345,6 +345,8 @@ class ServerService
 
         $baseConfig = [
             'protocol' => $nodeType,
+            // 节点内核独立于协议；历史节点的空值按默认 Xray 下发。
+            'kernel_type' => Server::effectiveKernelType($node->kernel_type),
             'listen_ip' => '0.0.0.0',
             'server_port' => (int) $serverPort,
             'network' => data_get($protocolSettings, 'network'),

@@ -6,27 +6,27 @@
 
 | 项目 | 标识 |
 | --- | --- |
-| YZboard 面板源码版本 | `1.7.0`（待发布） |
-| 面板兼容标识 | `xray-v26.7.11-yz.1` |
+| YZboard 面板源码版本 | `1.8.0`（待发布） |
+| 面板兼容标识 | `xray-v26.7.11-yz.2` |
 | YZboard 上游仓库 | `https://github.com/cedar2025/Xboard.git` |
 | YZboard 上游基线 | `master` 固定快照 / `8ecb762d77ef16491fe919b7092aea66b834deed` |
-| YZboard 目标发布 Tag | `v1.7.0` / 待发布，commit 尚未固定 |
+| YZboard 目标发布 Tag | `v1.8.0` / 待发布，commit 尚未固定 |
 | YZboard 最近已发布 Tag / commit | `v1.5.0` / `1ea82abba7624113303d17d9aac635772865d20d` |
 | YZboard 已发布 Docker 镜像 | `ghcr.io/p0me1oo/yzboard:latest`、`ghcr.io/p0me1oo/yzboard:1.5.0`；审计和回滚使用不可变标签 `ghcr.io/p0me1oo/yzboard:1.5.0-1ea82ab` |
 | YZboard Docker manifest | `sha256:0ed171a1e86709b81bd2ecaf0f1f356d0d0d2c470b9768bdcb50a20b5c9accf9`；包含 `linux/amd64` 与 `linux/arm64` |
 | YZboard Docker 架构 | `linux/amd64`、`linux/arm64` |
 | YZboard Docker 构建 | 固定来源 `v1.5.0`；Tag 推送触发 GitHub Actions [run 32290030304](https://github.com/P0me1oo/YZboard/actions/runs/32290030304)；生产 `latest` 已通过 [run 32300726906](https://github.com/P0me1oo/YZboard/actions/runs/32300726906) 精确重标记回同一 manifest |
-| YZboard-Node 兼容版本 | `v1.13-yz.13`（待发布；同步修复建议成套升级） |
-| YZboard-Node 最近已发布版本 | `v1.13-yz.10` |
+| YZboard-Node 兼容版本 | `v1.13-yz.15`（待发布；节点级内核选择需成套升级） |
+| YZboard-Node 最近已发布版本 | `v1.13-yz.14` |
 | YZboard-Node 上游基线 | `v1.13` / `0a29338e1f102a462363ce3527417029f89bab28` |
 | YZboard-Node 最近已发布 commit | `82114adc8755ef520df6d99e3cd25a4b97073cec` |
 | YZboard-Node 发布 | GitHub [Release v1.13-yz.10](https://github.com/P0me1oo/YZboard-Node/releases/tag/v1.13-yz.10)；以固定 Tag 手动触发 GitHub Actions [run 31269894172](https://github.com/P0me1oo/YZboard-Node/actions/runs/31269894172) |
 | YZboard-Node Docker manifest | `sha256:48ce4fe3605e2e3aa29292a65fc5003ca2561c098ff3ae87ba85da86a462f1ed`；包含 `linux/amd64` 与 `linux/arm64` |
 | Xray 官方预发布 Tag | `v26.7.11` |
 | Xray 上游 Tag commit | `50231eaff98ccc31b5cbd247a721c16e97fe5ec1` |
-| YZ-Xray-core fork 版本 | `v26.7.11-yz.1` |
-| YZ-Xray-core fork commit | `620bee93867095f73880056cdfb08bc54a15f69e` |
-| Node Xray replace pseudo-version | `v0.0.0-20260724203739-620bee938670` |
+| YZ-Xray-core fork 版本 | `v26.7.11-yz.2` |
+| YZ-Xray-core fork commit | `26b01717dd8d1fd604de5e23e2868fdef59eba2f` |
+| Node Xray replace pseudo-version | `v0.0.0-20260901175116-26b01717dd8d` |
 | sing-box `require` 版本 | `v1.13.2` |
 | sing-box 实际 replacement | `github.com/cedar2025/sing-box v1.14.0-alpha.2.0.20260316103356-2e665cb7e295` |
 
@@ -48,6 +48,14 @@
 - `v1.13-yz.13` 在 WebSocket 正常时仍至少每 5 分钟执行一次 REST ETag 对账，用于修复 Redis Pub/Sub、Workerman 重启或短暂断线造成的推送丢失。
 - Node 每次设备报告都发送完整快照并包含空快照，面板按节点替换状态并续期 300 秒 TTL。首次升级会兼容扫描旧设备键并建立节点索引，后续不再全量扫描。
 - 批量封禁和套餐强制更新使用按权限组的全量用户推送；即使 Redis 推送丢失，周期 REST 对账和 `node:sync-users` 仍会恢复最终状态。
+
+## 1.8.0 节点级内核兼容约束
+
+- 面板节点表新增可空的 `kernel_type`：`xray` 或 `singbox`；空值兼容历史数据并按 Xray 处理，默认值不改变已有协议配置。
+- 机器节点发现接口和节点配置接口都会返回有效的 `kernel_type`。Node `v1.13-yz.15` 及以上在机器模式按节点选择后端，同一台机器可以同时运行 Xray 与 sing-box。
+- 机器模式节点的内核选择变化会触发该节点单独重启；机器只包含 Xray 节点时不会启动 sing-box 服务实例。
+- 中转入口和落地节点仍必须使用 Xray；sing-box 不具备当前 VLESS 路由编号能力。XHTTP 等仅 Xray 传输仍按 Node 的内核能力校验。
+- 管理端构建阶段补丁 `.docker/patch-admin-relay.php` 增加内核下拉、表单字段和 Xray 默认值；补丁保持锚点失败即中止，并按内容 hash 重命名入口产物。
 
 ## 中转节点兼容约束
 

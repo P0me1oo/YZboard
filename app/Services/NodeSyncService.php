@@ -153,6 +153,7 @@ class NodeSyncService
                 'id' => $n->id,
                 'type' => $n->type,
                 'name' => $n->name,
+                'kernel_type' => Server::effectiveKernelType($n->kernel_type),
             ])->values()->toArray();
         }
 

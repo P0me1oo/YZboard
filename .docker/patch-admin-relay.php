@@ -284,7 +284,7 @@ function patchKernelSelector(string $src, string $file): string
         'Q.jsx($y,{control:x.control,name:"kernel_type",render:({field:t})=>Q.jsxs(Gy,{className:"w-[130px]",children:[' .
         'Q.jsx(Zy,{className:"sr-only",children:e("form.kernel.label","内核")}),Q.jsxs(yzt,{onValueChange:t.onChange,value:t.value||"xray",children:[' .
         'Q.jsx(Czt,{className:"h-8 w-[130px] border-2 font-mono text-xs",children:Q.jsx(wzt,{placeholder:e("form.kernel.label","内核")})}),' .
-        'Q.jsxs(Nzt,{children:[Q.jsx(Lzt,{value:"xray",children:"Xray"}),Q.jsx(Lzt,{value:"singbox",children:"sing-box"})]})]})]}),' .
+        'Q.jsxs(Nzt,{children:[Q.jsx(Lzt,{value:"xray",children:"Xray"}),Q.jsx(Lzt,{value:"singbox",children:"sing-box"})]})]})]})}),' .
         $anchor;
     $src = substr($src, 0, $start) . $prefix . substr($src, $start + strlen($anchor));
 

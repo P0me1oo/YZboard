@@ -6,16 +6,16 @@
 
 | 项目 | 标识 |
 | --- | --- |
-| YZboard 面板源码版本 | `1.8.1` |
+| YZboard 面板源码版本 | `1.8.2` |
 | 面板兼容标识 | `xray-v26.7.11-yz.2` |
 | YZboard 上游仓库 | `https://github.com/cedar2025/Xboard.git` |
 | YZboard 上游基线 | `master` 固定快照 / `8ecb762d77ef16491fe919b7092aea66b834deed` |
-| YZboard 目标发布 Tag | `v1.8.1` / `330407ab4649f286cc2a6f7e12ca8fe18ef3bbf5` |
+| YZboard 目标发布 Tag | `v1.8.2`（待发布） |
 | YZboard 最近已发布 Tag / commit | `v1.8.1` / `330407ab4649f286cc2a6f7e12ca8fe18ef3bbf5` |
-| YZboard 已发布 Docker 镜像 | `ghcr.io/p0me1oo/yzboard:latest`、`ghcr.io/p0me1oo/yzboard:1.8.1`；审计和回滚使用不可变标签 `ghcr.io/p0me1oo/yzboard:1.8.1-330407a` |
-| YZboard Docker manifest | `sha256:cbd3c47aa12e0c493bd6f7403d900aa56da2be79a7f4ca29fc7924c9ddf2fb37`；包含 `linux/amd64` 与 `linux/arm64` |
+| YZboard 已发布 Docker 镜像 | 当前生产基线仍为 `ghcr.io/p0me1oo/yzboard:latest`、`ghcr.io/p0me1oo/yzboard:1.8.1`；`v1.8.2` 发布后更新本行 |
+| YZboard Docker manifest | 当前生产基线为 `sha256:cbd3c47aa12e0c493bd6f7403d900aa56da2be79a7f4ca29fc7924c9ddf2fb37`；`v1.8.2` 发布后更新本行 |
 | YZboard Docker 架构 | `linux/amd64`、`linux/arm64` |
-| YZboard Docker 构建 | 固定来源 `v1.8.1`；GitHub Actions [run 33630794565](https://github.com/P0me1oo/YZboard/actions/runs/33630794565) 手动重跑成功；生产 `latest` 与版本别名均指向同一 manifest |
+| YZboard Docker 构建 | `v1.8.2` 发布后补充固定来源、Actions 运行和 manifest 校验 |
 | YZboard-Node 兼容版本 | `v1.13-yz.15`（节点级内核选择需成套升级） |
 | YZboard-Node 最近已发布版本 | `v1.13-yz.15` |
 | YZboard-Node 上游基线 | `v1.13` / `0a29338e1f102a462363ce3527417029f89bab28` |
@@ -61,6 +61,11 @@
 
 - 修复节点内核选择器的构建期注入缺少一个闭合调用的问题。此前生成的管理端 bundle 会在 Chrome 中报 `Uncaught SyntaxError: Unexpected token '.'`，导致 React 根节点为空并显示白屏。
 - 修复后的管理端 bundle 已在当前 Chrome 152 中实际加载验证，登录界面可以正常挂载；补丁脚本重复执行仍保持幂等。
+
+## 1.8.2 管理端节点编辑修复
+
+- 修复节点编辑弹窗标题区域的内核下拉错误使用 `Controller`/`FormItem` 的问题。该区域不在 React Hook Form 的 `FormProvider` 内，点击任意节点编辑时会触发 `Cannot destructure property 'getFieldState' ... as it is null` 并显示 500 错误页。
+- 内核下拉现在直接使用当前表单实例的 `watch` 和 `setValue`，仍位于协议选择左侧，默认 Xray；生成的管理端 JavaScript 通过语法检查，补丁重复执行保持幂等。
 
 ## 中转节点兼容约束
 

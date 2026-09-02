@@ -279,12 +279,13 @@ function patchKernelSelector(string $src, string $file): string
         fail('protocol selector', $file);
     }
 
+    // 协议选择器位于弹窗标题区域，不在 FormProvider 内；这里直接读写当前表单实例，
+    // 避免 Controller/FormItem 访问空的 useFormContext() 导致编辑节点时整页报 500。
     $prefix = 'Q.jsxs("div",{className:"flex items-center gap-2",' .
         '"data-yz-node-kernel-selector":!0,children:[' .
-        'Q.jsx($y,{control:x.control,name:"kernel_type",render:({field:t})=>Q.jsxs(Gy,{className:"w-[130px]",children:[' .
-        'Q.jsx(Zy,{className:"sr-only",children:e("form.kernel.label","内核")}),Q.jsxs(yzt,{onValueChange:t.onChange,value:t.value||"xray",children:[' .
+        'Q.jsx("span",{className:"sr-only",children:e("form.kernel.label","内核")}),Q.jsxs(yzt,{onValueChange:t=>x.setValue("kernel_type",t,{shouldDirty:!0,shouldTouch:!0,shouldValidate:!0}),value:x.watch("kernel_type")||"xray",children:[' .
         'Q.jsx(Czt,{className:"h-8 w-[130px] border-2 font-mono text-xs",children:Q.jsx(wzt,{placeholder:e("form.kernel.label","内核")})}),' .
-        'Q.jsxs(Nzt,{children:[Q.jsx(Lzt,{value:"xray",children:"Xray"}),Q.jsx(Lzt,{value:"singbox",children:"sing-box"})]})]})]})}),' .
+        'Q.jsxs(Nzt,{children:[Q.jsx(Lzt,{value:"xray",children:"Xray"}),Q.jsx(Lzt,{value:"singbox",children:"sing-box"})]})]})]}),' .
         $anchor;
     $src = substr($src, 0, $start) . $prefix . substr($src, $start + strlen($anchor));
 

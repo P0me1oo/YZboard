@@ -6,16 +6,16 @@
 
 | 项目 | 标识 |
 | --- | --- |
-| YZboard 面板源码版本 | `1.8.0` |
+| YZboard 面板源码版本 | `1.8.1` |
 | 面板兼容标识 | `xray-v26.7.11-yz.2` |
 | YZboard 上游仓库 | `https://github.com/cedar2025/Xboard.git` |
 | YZboard 上游基线 | `master` 固定快照 / `8ecb762d77ef16491fe919b7092aea66b834deed` |
-| YZboard 目标发布 Tag | `v1.8.0` / `4dd4094e6b37c611f94e059c188ffe77b3efae11` |
-| YZboard 最近已发布 Tag / commit | `v1.8.0` / `4dd4094e6b37c611f94e059c188ffe77b3efae11` |
-| YZboard 已发布 Docker 镜像 | `ghcr.io/p0me1oo/yzboard:latest`、`ghcr.io/p0me1oo/yzboard:1.8.0`；审计和回滚使用不可变标签 `ghcr.io/p0me1oo/yzboard:1.8.0-4dd4094` |
-| YZboard Docker manifest | `sha256:cb290c6641820e7631923aadb61cd902544439c4503baed2f2630a9d4802e97f`；包含 `linux/amd64` 与 `linux/arm64` |
+| YZboard 目标发布 Tag | `v1.8.1` / `330407ab4649f286cc2a6f7e12ca8fe18ef3bbf5` |
+| YZboard 最近已发布 Tag / commit | `v1.8.1` / `330407ab4649f286cc2a6f7e12ca8fe18ef3bbf5` |
+| YZboard 已发布 Docker 镜像 | `ghcr.io/p0me1oo/yzboard:latest`、`ghcr.io/p0me1oo/yzboard:1.8.1`；审计和回滚使用不可变标签 `ghcr.io/p0me1oo/yzboard:1.8.1-330407a` |
+| YZboard Docker manifest | `sha256:cbd3c47aa12e0c493bd6f7403d900aa56da2be79a7f4ca29fc7924c9ddf2fb37`；包含 `linux/amd64` 与 `linux/arm64` |
 | YZboard Docker 架构 | `linux/amd64`、`linux/arm64` |
-| YZboard Docker 构建 | 固定来源 `v1.8.0`；Tag 推送触发 GitHub Actions [run 33596231870](https://github.com/P0me1oo/YZboard/actions/runs/33596231870)；生产 `latest` 与版本别名均指向同一 manifest |
+| YZboard Docker 构建 | 固定来源 `v1.8.1`；GitHub Actions [run 33630794565](https://github.com/P0me1oo/YZboard/actions/runs/33630794565) 手动重跑成功；生产 `latest` 与版本别名均指向同一 manifest |
 | YZboard-Node 兼容版本 | `v1.13-yz.15`（节点级内核选择需成套升级） |
 | YZboard-Node 最近已发布版本 | `v1.13-yz.15` |
 | YZboard-Node 上游基线 | `v1.13` / `0a29338e1f102a462363ce3527417029f89bab28` |
@@ -57,6 +57,11 @@
 - 中转入口和落地节点仍必须使用 Xray；sing-box 不具备当前 VLESS 路由编号能力。XHTTP 等仅 Xray 传输仍按 Node 的内核能力校验。
 - 管理端构建阶段补丁 `.docker/patch-admin-relay.php` 增加内核下拉、表单字段和 Xray 默认值；补丁保持锚点失败即中止，并按内容 hash 重命名入口产物。
 
+## 1.8.1 管理端白屏热修复
+
+- 修复节点内核选择器的构建期注入缺少一个闭合调用的问题。此前生成的管理端 bundle 会在 Chrome 中报 `Uncaught SyntaxError: Unexpected token '.'`，导致 React 根节点为空并显示白屏。
+- 修复后的管理端 bundle 已在当前 Chrome 152 中实际加载验证，登录界面可以正常挂载；补丁脚本重复执行仍保持幂等。
+
 ## 中转节点兼容约束
 
 - 面板 `1.1.0` 起在节点配置接口增加 `relay` 段，并在上报接口接受 `relay_traffic`；对应 Node 版本为 `v1.13-yz.5`。
@@ -83,10 +88,10 @@
 
 ## 发布与回滚
 
-当前已发布结果及 `1.8.0` 生产基线：
+当前已发布结果及 `1.8.1` 生产基线：
 
-1. 面板 `v1.8.0` 固定到 `4dd4094e6b37c611f94e059c188ffe77b3efae11`，不可变镜像 `1.8.0-4dd4094`、版本别名 `1.8.0` 和 `latest` 指向 manifest `sha256:cb290c6641820e7631923aadb61cd902544439c4503baed2f2630a9d4802e97f`；
-2. 面板 Tag 推送触发 [run 33596231870](https://github.com/P0me1oo/YZboard/actions/runs/33596231870)，构建和清单验证均通过，manifest 包含 `linux/amd64` 与 `linux/arm64`；
+1. 面板 `v1.8.1` 固定到 `330407ab4649f286cc2a6f7e12ca8fe18ef3bbf5`，不可变镜像 `1.8.1-330407a`、版本别名 `1.8.1` 和 `latest` 指向 manifest `sha256:cbd3c47aa12e0c493bd6f7403d900aa56da2be79a7f4ca29fc7924c9ddf2fb37`；
+2. 面板 [run 33630794565](https://github.com/P0me1oo/YZboard/actions/runs/33630794565) 固定来源重跑成功，构建和清单验证均通过，manifest 包含 `linux/amd64` 与 `linux/arm64`；
 3. Node `v1.13-yz.15` 固定到 `d821de890769aa20a001ca3f4ef43d24c001c48b`，Release 与镜像由 [run 33592394571](https://github.com/P0me1oo/YZboard-Node/actions/runs/33592394571) 发布；
 4. Node Docker manifest 为 `sha256:f3e0895ebc04ac603158a5b96413e7695e5c7a1abd596ee864d7d4852b0b4665`，包含 `linux/amd64` 与 `linux/arm64`；
 5. Node 使用 YZ-Xray-core `v26.7.11-yz.2`，固定 commit `26b01717dd8d1fd604de5e23e2868fdef59eba2f` 与 pseudo-version `v0.0.0-20260901175116-26b01717dd8d`；

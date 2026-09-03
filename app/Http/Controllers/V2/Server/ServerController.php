@@ -54,7 +54,8 @@ class ServerController extends Controller
             $node,
             $request->input('report_id'),
             is_array($request->input('traffic')) ? $request->input('traffic') : [],
-            is_array($request->input('relay_traffic')) ? $request->input('relay_traffic') : []
+            is_array($request->input('relay_traffic')) ? $request->input('relay_traffic') : [],
+            is_array($request->input('relay_user_traffic')) ? $request->input('relay_user_traffic') : []
         );
 
         $alive = $request->input('alive');

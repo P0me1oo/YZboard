@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\NodeReportBatch;
 use App\Models\StatServer;
 use App\Models\StatUser;
+use App\Services\Plugin\HookManager;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -52,6 +53,15 @@ class ProcessNodeReportBatch implements ShouldQueue
 
             $userIds = $this->applyUserTraffic($batch);
             $this->applyRelayTraffic($batch);
+
+            if ((array) $batch->relay_user_traffic !== []) {
+                HookManager::call('traffic.relay_user.processed', [
+                    'batch_id' => (int) $batch->id,
+                    'entry_server_id' => (int) $batch->server_id,
+                    'record_at' => (int) $batch->record_at,
+                    'traffic' => (array) $batch->relay_user_traffic,
+                ]);
+            }
 
             // Redis 集合写入可重复执行。放在数据库提交前，失败时整批回滚并由队列重试。
             if ($userIds !== []) {

@@ -19,6 +19,7 @@ class NodeReportBatch extends Model
         'server_snapshot' => 'array',
         'traffic' => 'array',
         'relay_traffic' => 'array',
+        'relay_user_traffic' => 'array',
         'record_at' => 'integer',
         'attempts' => 'integer',
         'processed_at' => 'datetime',

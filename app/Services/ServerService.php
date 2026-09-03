@@ -625,6 +625,51 @@ class ServerService
     }
 
     /**
+     * 归一化入口按用户拆分的落地流量，只接受当前入口的逻辑子节点。
+     *
+     * @param array<string|int, mixed> $relayUserTraffic 用户 ID => 节点 ID => [上行, 下行]
+     * @return array<int, array<int, array{0: int, 1: int}>>
+     */
+    public static function normalizeRelayUserTraffic(Server $entry, array $relayUserTraffic): array
+    {
+        $normalized = [];
+        foreach ($relayUserTraffic as $userKey => $nodes) {
+            $userId = filter_var($userKey, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+            if ($userId === false || !is_array($nodes)) {
+                continue;
+            }
+
+            $userId = (int) $userId;
+
+            foreach ($nodes as $nodeKey => $value) {
+                $nodeId = filter_var($nodeKey, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+                if ($nodeId === false || !is_array($value) || count($value) !== 2
+                    || !isset($value[0], $value[1])
+                    || !is_numeric($value[0]) || !is_numeric($value[1])) {
+                    continue;
+                }
+
+                $nodeId = (int) $nodeId;
+
+                $u = max(0, (int) $value[0]);
+                $d = max(0, (int) $value[1]);
+                if ($u === 0 && $d === 0) {
+                    continue;
+                }
+
+                $child = Server::find($nodeId);
+                if (!$child || (int) $child->relayEntryId() !== (int) $entry->id) {
+                    continue;
+                }
+
+                $normalized[$userId][$nodeId] = [$u, $d];
+            }
+        }
+
+        return $normalized;
+    }
+
+    /**
      * 根据协议类型和标识获取服务器
      * @param int $serverId
      * @param string $serverType

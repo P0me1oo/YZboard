@@ -13,7 +13,8 @@ class NodeReportService
         Server $node,
         ?string $reportId,
         array $traffic,
-        array $relayTraffic
+        array $relayTraffic,
+        array $relayUserTraffic = []
     ): ?NodeReportBatch {
         $traffic = $this->normalizeTraffic($traffic);
         $serverSnapshot = null;
@@ -34,7 +35,8 @@ class NodeReportService
         }
 
         $relayTraffic = ServerService::normalizeRelayTraffic($node, $relayTraffic);
-        if ($traffic === [] && $relayTraffic === []) {
+        $relayUserTraffic = ServerService::normalizeRelayUserTraffic($node, $relayUserTraffic);
+        if ($traffic === [] && $relayTraffic === [] && $relayUserTraffic === []) {
             return null;
         }
 
@@ -55,6 +57,7 @@ class NodeReportService
                 'server_snapshot' => $serverSnapshot,
                 'traffic' => $traffic,
                 'relay_traffic' => $relayTraffic,
+                'relay_user_traffic' => $relayUserTraffic,
                 'record_at' => strtotime(date('Y-m-d')),
                 'status' => NodeReportBatch::STATUS_PENDING,
                 'attempts' => 0,

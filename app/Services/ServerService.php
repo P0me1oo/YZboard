@@ -86,7 +86,7 @@ class ServerService
                 $server->port = (int) $server->port;
             }
             $server->password = $server->generateServerPassword($user);
-            if ($server->type === ServerRelayService::ENTRY_TYPE && ServerRelayService::hasRelayChildren($server)) {
+            if (ServerRelayService::hasRelayChildren($server)) {
                 // 入口节点自身也需要一个路由编号，用于在入口上显式选择直接出站。
                 $server->password = Helper::applyVlessRoute(
                     $server->password,
@@ -523,7 +523,7 @@ class ServerService
             return $relay;
         }
 
-        if ($node->relayEntryId() !== null || $node->type !== ServerRelayService::ENTRY_TYPE) {
+        if (!ServerRelayService::isSupportedEntry($node)) {
             return null;
         }
 

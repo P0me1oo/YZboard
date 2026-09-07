@@ -30,7 +30,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
  * @property int|null $parent_id 父节点ID（共享运行状态与SS2022服务端密钥，语义同上游）
  * @property int|null $relay_entry_id 前置入口节点ID（非空表示本节点是中转逻辑节点）
  * @property string|null $kernel_type 节点内核（xray/singbox，空值按 xray 处理）
- * @property int|null $vless_route VLESS路由编号（写入客户端UUID第7、8字节）
+ * @property int|null $vless_route VLESS/HY2 路由编号（写入客户端认证 UUID 的第 7、8 字节）
  * @property float|null $rate 倍率
  * @property boolean $rate_time_enable 是否启用时间范围功能
  * @property array|null $rate_time_ranges 倍率时间范围

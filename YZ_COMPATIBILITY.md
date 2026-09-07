@@ -2,35 +2,66 @@
 
 本文件记录面板、Node、Xray fork 和 sing-box 的可回滚兼容关系。面板版本与兼容标识必须和对应 Node Release、Xray fork commit 及变更说明一起发布。
 
-## 当前源码与已发布基线
+## 本版发布引用与回滚基线
 
 | 项目 | 标识 |
 | --- | --- |
-| YZboard 面板源码版本 | `1.8.3` |
-| 面板兼容标识 | `xray-v26.7.11-yz.2` |
+| YZboard 面板源码版本 | `1.11.0`；固定来源使用同名语义版本 Tag |
+| 面板兼容标识 | `xray-v26.7.11-yz.5` |
 | YZboard 上游仓库 | `https://github.com/cedar2025/Xboard.git` |
 | YZboard 上游基线 | `master` 固定快照 / `8ecb762d77ef16491fe919b7092aea66b834deed` |
-| YZboard 目标发布 Tag | `v1.8.3` / `68a08991a6109c93285eb0653cd8d25981acc8d5` |
-| YZboard 最近已发布 Tag / commit | `v1.8.3` / `68a08991a6109c93285eb0653cd8d25981acc8d5` |
-| YZboard 已发布 Docker 镜像 | `ghcr.io/p0me1oo/yzboard:latest`、`ghcr.io/p0me1oo/yzboard:1.8.3`；审计和回滚使用不可变标签 `ghcr.io/p0me1oo/yzboard:1.8.3-68a0899` |
-| YZboard Docker manifest | `sha256:a752b4ce9006407e25b888237e84826ce6a14f9660a8ce11524135935825bfa9`；包含 `linux/amd64` 与 `linux/arm64` |
+| YZboard 本版发布 Tag | `v1.11.0`；完整 commit 与镜像 digest 由发布记录固定 |
+| YZboard 回滚 Tag / commit | `v1.9.0` / `eff2fa22531f2e15168d3e7e96d8ab45639b1969` |
+| YZboard 回滚 Docker 镜像 | `ghcr.io/p0me1oo/yzboard:1.9.0-eff2fa2` |
+| YZboard 回滚 Docker manifest | `sha256:cdadd4d870313a15a52b224f8db730af54ffa64330cb50d4beaee004524ad6e3`；包含 `linux/amd64` 与 `linux/arm64` |
 | YZboard Docker 架构 | `linux/amd64`、`linux/arm64` |
-| YZboard Docker 构建 | 固定来源 `v1.8.3`；GitHub Actions [run 33644362438](https://github.com/P0me1oo/YZboard/actions/runs/33644362438) 成功；`latest`、版本别名和不可变标签均指向同一 manifest |
-| YZboard-Node 兼容版本 | `v1.13-yz.15`（节点级内核选择需成套升级） |
-| YZboard-Node 最近已发布版本 | `v1.13-yz.15` |
+| YZboard 本版 Docker 构建 | 固定来源 `v1.11.0`；发布不可变标签 `1.11.0-<短commit>`，验证后同步 `1.11.0` 与 `latest` |
+| YZboard-Node 兼容版本 | `v1.13-yz.21`（本次源码目标；sing-box 中转需成套升级） |
+| YZboard-Node 上一正式版本（回滚） | `v1.13-yz.19` |
 | YZboard-Node 上游基线 | `v1.13` / `0a29338e1f102a462363ce3527417029f89bab28` |
-| YZboard-Node 最近已发布 commit | `d821de890769aa20a001ca3f4ef43d24c001c48b` |
-| YZboard-Node 发布 | GitHub [Release v1.13-yz.15](https://github.com/P0me1oo/YZboard-Node/releases/tag/v1.13-yz.15)；以固定 Tag 手动触发 GitHub Actions [run 33592394571](https://github.com/P0me1oo/YZboard-Node/actions/runs/33592394571) |
-| YZboard-Node Docker manifest | `sha256:f3e0895ebc04ac603158a5b96413e7695e5c7a1abd596ee864d7d4852b0b4665`；包含 `linux/amd64` 与 `linux/arm64` |
+| YZboard-Node 已发布基线 commit | `d22037477a7e97825990eb35e41d12926c117680` |
+| YZboard-Node 已发布基线 | GitHub [Release v1.13-yz.19](https://github.com/P0me1oo/YZboard-Node/releases/tag/v1.13-yz.19)；发布记录见 Node 兼容矩阵 |
+| YZboard-Node 已发布基线 Docker manifest | `sha256:8b65c52c0c0f59a24c56ab48ced7a1dda9a07c6948edc3f454b41c140d999818`；包含 `linux/amd64` 与 `linux/arm64` |
 | Xray 官方预发布 Tag | `v26.7.11` |
 | Xray 上游 Tag commit | `50231eaff98ccc31b5cbd247a721c16e97fe5ec1` |
-| YZ-Xray-core fork 版本 | `v26.7.11-yz.2` |
-| YZ-Xray-core fork commit | `26b01717dd8d1fd604de5e23e2868fdef59eba2f` |
-| Node Xray replace pseudo-version | `v0.0.0-20260901175116-26b01717dd8d` |
-| sing-box `require` 版本 | `v1.13.2` |
-| sing-box 实际 replacement | `github.com/cedar2025/sing-box v1.14.0-alpha.2.0.20260316103356-2e665cb7e295` |
+| YZ-Xray-core 源码 Tag | `v26.7.11-yz.5` |
+| YZ-Xray-core fork commit | `dcb690846b525851f0ee8dc47388e110d4600042` |
+| Node Xray replace pseudo-version | `v0.0.0-20260907183145-dcb690846b52` |
+| sing-box `require` 版本 | `v1.14.0` |
+| sing-box 实际 replacement | `github.com/P0me1oo/YZ-sing-box v1.14.0-yz.2` / `09615a105e219076330d9d2a25ea1e2e733d5427` |
+| SS2022 关闭补丁 | Node 的 `compat/sing-shadowsocks`，随 Node 固定提交发布；上游 `v0.2.8` / `e0612494bafdd1429e9632bc52fd278585d28690` |
 
 三个项目的内部版本不强行相同：面板使用自己的语义版本，Node 使用独立的 Release Tag，Xray 使用“上游版本 + YZ fork patch”格式。官方 `v26.7.11` Tag 不由 YZ fork 创建或覆盖。
+
+## sing-box 中转兼容约束（1.11.0）
+
+- 面板 `1.11.0` 与 Node `v1.13-yz.21` 支持 sing-box VLESS/HY2 入口，以及 sing-box Shadowsocks/VLESS 落地；入口和落地可以与 Xray 混用。
+- 修改基于面板 `eff2fa22531f2e15168d3e7e96d8ab45639b1969` 和 Node `94e2a76e42c1f059126b588b2d02f49e54fd8246` 的工作区，保留已有 HY2 实现。2026-09-08 将 Node 的 Xray、sing-box 依赖及构建标识固定到上表提交，并纳入 SS2022 关闭补丁。
+- sing-box 使用原生 `auth_user` 规则，按「用户 × 线路」生成认证身份。`relay`、`traffic`、`relay_traffic`、`relay_user_traffic` 的格式不变，速度和设备限制仍使用真实用户。
+- 任一端使用 sing-box 时，VLESS 内部链路只允许 RAW/TCP、WebSocket、gRPC、HTTPUpgrade，并按传输限制 TLS/Reality；不支持 VLESS Encryption、TCP 头部伪装及无效 Vision 组合。
+- sing-box 的线路流量按实际选中出站的有效载荷统计；Xray 沿用内部出站计数，两者节点总量口径可能不同。用户流量仍只在入口扣费一次。
+- 先升级相关 Node，再升级面板并启用拓扑；上一正式版本继续用于回滚。
+- 本轮面板完整测试为 57 项、549 个断言，通过。管理端原始资源、旧补丁升级及重复应用检查通过。Node 和双机验收结果记录在 Node 的 `docs/singbox-relay-validation.md`。
+- 当前固定 Xray `yz.5` 包含 VLESS 首批缓冲上传计数与 UDP 缓存关闭修复；sing-box `yz.2` 和 Node 自有 SS2022 兼容模块修复其余两类并发问题。Node 完整普通测试通过：17 个有测试的包、609 项测试及子测试，无失败或测试跳过。
+- 修复后四个相关包各连续 10 轮并发检测通过，共 180 项测试执行。Linux 完整 sing-box 包并发检测为 142 项测试及子测试全部通过，耗时 126.042 秒，无失败、无跳过、无竞争报告；此前失败的混合内核及 gRPC 分支保留。
+- YT-HK、DGN-HK 使用修复后依赖完成 60 次实际转发及生命周期检查，包含 Xray VLESS 前置到 sing-box SS2022 落地的 TCP/UDP；原 `yz.4` 下的竞争报告保留在 Node 验证文档的历史部分。
+- 本地和双机探针来自待发布工作区，正式 Node 安装包与镜像由 CI 从固定提交构建并核对实际依赖、目标架构、来源及 `vcs.modified=false`。面板镜像按同样的固定来源原则发布两个 Linux 架构。
+
+## HY2 前置入口基线（1.10.0）
+
+- 面板 `1.10.0` 与 Node `v1.13-yz.20` 为上一轮源码目标，未生成对应 Tag、Release 或镜像；上表已发布镜像仍是回滚基线。
+- 修改起点为面板 `eff2fa22531f2e15168d3e7e96d8ab45639b1969` 和 Node `94e2a76e42c1f059126b588b2d02f49e54fd8246`。HY2 认证路由复用当时固定 Xray `yz.3` 的既有能力；该轮尚未纳入 VLESS 出站统计修复，后续接入见上文 `1.11.0` 记录。
+- HY2 前置入口和 Shadowsocks/VLESS 落地均使用 Xray。HY2 认证 UUID 携带原有路由编号，`relay`、`traffic`、`relay_traffic`、`relay_user_traffic` 的结构保持兼容。
+- 发布后应先升级 Node，再在面板启用 HY2 前置入口；旧 Node 会拒绝这种中转入口配置。普通节点及原有 VLESS 中转沿用既有配置。
+- 使用步骤和支持范围见 [中转节点说明](docs/relay-nodes.md)。
+
+### 本地验证状态（2026-09-07，Xray yz.3 历史结果）
+
+- 面板完整测试通过：55 项测试、412 个断言，包含列表切换内核、编辑请求省略字段和无效落地过滤；管理端补丁在当前产物和旧补丁升级路径上均通过语法、候选过滤和重复执行检查。
+- 固定核心下的 HY2 实际转发、用户流量和用户-落地明细验证通过，但 VLESS 落地出站上传计数为零，运行测试在该断言失败。
+- 原因是 Xray 的缓冲写入绕过了出站计数器。仅用本地临时覆盖补上字节写入计数后，Node 完整 Go 测试及核心 `common/buf` 测试通过；这些结果不能替代正式固定依赖的验收。
+- Node 的 `linux/amd64`、`linux/arm64` 交叉编译通过，产物确认使用当前固定依赖并标记 `vcs.modified=true`；Windows 的 race 检查因未启用 CGO 未执行，Linux 运行验收未执行。
+- 核心修复及依赖更新仍待确认，当前代码尚不具备完整发布验收结果。
 
 ## Node report 兼容约束
 
@@ -54,7 +85,7 @@
 - 面板节点表新增可空的 `kernel_type`：`xray` 或 `singbox`；空值兼容历史数据并按 Xray 处理，默认值不改变已有协议配置。
 - 机器节点发现接口和节点配置接口都会返回有效的 `kernel_type`。Node `v1.13-yz.15` 及以上在机器模式按节点选择后端，同一台机器可以同时运行 Xray 与 sing-box。
 - 机器模式节点的内核选择变化会触发该节点单独重启；机器只包含 Xray 节点时不会启动 sing-box 服务实例。
-- 中转入口和落地节点仍必须使用 Xray；sing-box 不具备当前 VLESS 路由编号能力。XHTTP 等仅 Xray 传输仍按 Node 的内核能力校验。
+- 中转在面板 `1.11.0`、Node `v1.13-yz.21` 起支持两种内核混用；旧版本中转仍要求 Xray。XHTTP 等仅 Xray 传输按链路两端的共同能力校验。
 - 管理端构建阶段补丁 `.docker/patch-admin-relay.php` 增加内核下拉、表单字段和 Xray 默认值；补丁保持锚点失败即中止，并按内容 hash 重命名入口产物。
 
 ## 1.8.1 管理端白屏热修复
@@ -76,14 +107,14 @@
 
 - 面板 `1.1.0` 起在节点配置接口增加 `relay` 段，并在上报接口接受 `relay_traffic`；对应 Node 版本为 `v1.13-yz.5`。
 - 旧版 Node 会忽略 `relay` 段，也不会上报 `relay_traffic`，因此升级面板但未升级 Node 时中转拓扑不会生效，普通节点行为不变。
-- 中转依赖 Xray 的 VLESS 路由值能力（认证前清零 UUID 第 7、8 字节，认证后还原并由 `vlessRoute` 规则匹配），入口和落地节点都必须使用 xray 内核。
+- Xray 中转入口使用 VLESS 路由值能力（认证前清零 UUID 第 7、8 字节，认证后还原并由 `vlessRoute` 规则匹配）；sing-box 入口使用线路认证身份及 `auth_user` 规则。
 - `relay_traffic` 只累计到逻辑节点的节点流量，不进入用户套餐扣费，也不套用倍率；用户流量仍只在入口按真实用户身份统计一次。
 - 节点表新增 `vless_route` 列，迁移会按 id 顺序回填存量节点并记录分配游标。回滚该迁移会删除列和索引，但不会回收已写入订阅的编号。
 - 面板 `1.2.0` 起中转关系存放在新增的 `relay_entry_id` 列，不再借用 `parent_id`；`parent_id` 的行为与上游完全一致。升级后该列对存量节点为空，不会有节点被识别成中转逻辑节点。节点端接口未变，`v1.13-yz.5` 及以上均兼容。
 - 管理端的「前置入口」下拉和节点列表的「前置入口」列，由构建阶段补丁 `.docker/patch-admin-relay.php` 注入到 `xboard-admin-dist` 产物。上游管理端产物结构变化会导致补丁锚点失配并使镜像构建失败，此时需要同步更新补丁而不是跳过。
 - 面板 `1.3.0` 起管理端节点列表接口 `GET /api/v2/admin/server/manage/getNodes` 增加 `relay_entry_name` 字段，仅用于列表展示，节点端接口未变。
 - 面板 `1.4.0` 与 Node `v1.13-yz.10` 起，`relay` child/landing 可以使用 `protocol: vless`，并增加嵌套 `vless` 配置。旧 Node 不认识该结构，VLESS 落地必须成套升级；既有 Shadowsocks relay 的平面 `cipher/password` 结构不变。
-- VLESS 中转的当前有效传输为 RAW/TCP、WS、gRPC、XHTTP、HTTPUpgrade、mKCP、Hysteria；Reality 只允许 RAW/TCP、gRPC、XHTTP，Hysteria 只允许 TLS，H2/HTTP 不支持。
+- 两端均为 Xray 时，VLESS 中转支持 RAW/TCP、WS、gRPC、XHTTP、HTTPUpgrade、mKCP、Hysteria；Reality 只允许 RAW/TCP、gRPC、XHTTP，Hysteria 只允许 TLS，H2/HTTP 不支持。任一端使用 sing-box 时，内部传输限于 RAW/TCP、WS、gRPC、HTTPUpgrade，并按传输校验安全组合。
 - VLESS Encryption 的 `encryption` 只进入入口 child，`decryption`、Reality 私钥和证书配置只进入落地顶层配置。内部 UUID 与 Hysteria transport auth 由面板应用密钥按独立域派生，不落库、不进入订阅。
 - `1.4.0` 的管理端构建补丁复用 Reality 的浏览器端 X25519 生成器，为 VLESS Encryption
   提供钥匙按钮并同时填入 `decryption`/`encryption`。生成动作只修改未保存表单，手工填写

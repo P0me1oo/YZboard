@@ -244,20 +244,24 @@ class ServerSave extends FormRequest
     }
 
     /**
-     * 校验中转拓扑、内部协议参数和当前核心实际支持的 VLESS 组合。
+     * 校验中转拓扑、内核、入口协议和内部协议参数。
      */
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator) {
+            $selfId = $this->input('id') !== null ? (int) $this->input('id') : null;
+            $existing = $selfId !== null ? Server::find($selfId) : null;
             // 0、空串和 null 都表示“不使用中转”，管理端会把“无”提交为 0。
-            $entryId = (int) $this->input('relay_entry_id');
+            // 编辑时省略可选字段表示保留已保存值，校验必须与实际更新一致。
+            $entryId = (int) $this->input('relay_entry_id', $existing?->relay_entry_id);
 
             $error = ServerRelayService::validateEntry(
-                $this->input('id') !== null ? (int) $this->input('id') : null,
+                $selfId,
                 $entryId > 0 ? $entryId : null,
                 $this->input('type'),
                 (array) $this->input('protocol_settings', []),
                 $this->input('host'),
+                $this->input('kernel_type', $existing?->kernel_type),
             );
 
             if ($error !== null) {

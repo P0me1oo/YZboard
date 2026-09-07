@@ -156,7 +156,7 @@ class SingBox extends AbstractProtocol
                 $proxies[] = $vlessConfig;
             }
             if ($item['type'] === Server::TYPE_HYSTERIA) {
-                $hysteriaConfig = $this->buildHysteria($this->user['uuid'], $item);
+                $hysteriaConfig = $this->buildHysteria($item['password'] ?? $this->user['uuid'], $item);
                 $proxies[] = $hysteriaConfig;
             }
             if ($item['type'] === Server::TYPE_TUIC) {

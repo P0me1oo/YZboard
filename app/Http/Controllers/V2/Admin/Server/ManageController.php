@@ -7,10 +7,12 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ServerSave;
 use App\Models\Server;
 use App\Models\ServerGroup;
+use App\Services\ServerRelayService;
 use App\Services\ServerService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 class ManageController extends Controller
 {
@@ -27,6 +29,7 @@ class ManageController extends Controller
             // 供节点列表的「前置入口」列直接展示；入口已被删除时为 null，与未设置的显示一致。
             $entryId = $item->relayEntryId();
             $item['relay_entry_name'] = $entryId === null ? null : $nameById->get($entryId);
+            $item['relay_entry_supported'] = ServerRelayService::isSupportedEntry($item);
             return $item;
         });
 
@@ -97,6 +100,20 @@ class ManageController extends Controller
         $server = Server::find($request->id);
         if (!$server) {
             return $this->fail([400202, '服务器不存在']);
+        }
+
+        if (array_key_exists('kernel_type', $params)) {
+            $error = ServerRelayService::validateEntry(
+                $server->id,
+                $server->relayEntryId(),
+                $server->type,
+                (array) $server->protocol_settings,
+                (string) $server->host,
+                $params['kernel_type'],
+            );
+            if ($error !== null) {
+                throw ValidationException::withMessages(['kernel_type' => $error]);
+            }
         }
 
         if (array_key_exists('show', $params)) {

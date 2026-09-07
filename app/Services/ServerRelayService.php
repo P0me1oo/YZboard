@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\DB;
  */
 class ServerRelayService
 {
-    /** 入口节点必须使用的客户端协议。路由编号能力由 VLESS 入站提供。 */
+    /** 保留旧版 VLESS 入口常量；入口能力统一通过 isSupportedEntry 判断。 */
     public const ENTRY_TYPE = Server::TYPE_VLESS;
 
     /** 内部中转链路支持的加密算法。键为算法名，值为 SS2022 的密钥字节长度（传统算法为 null）。 */
@@ -156,7 +156,7 @@ class ServerRelayService
      */
     public static function entryFor(Server $child): ?Server
     {
-        if (!$child->isRelayChild()) {
+        if (!self::isSupportedLanding($child)) {
             return null;
         }
 
@@ -165,20 +165,7 @@ class ServerRelayService
             return null;
         }
 
-        // 只支持一层中转：入口自身不能再挂在别的入口下面。
-        if ($entry->relayEntryId() !== null) {
-            return null;
-        }
-
-        if ($entry->type !== self::ENTRY_TYPE) {
-            return null;
-        }
-
-        if (self::validateTransitSettings(
-            $entry->type,
-            (array) $entry->protocol_settings,
-            (string) $entry->host,
-        ) !== null) {
+        if (!self::isSupportedEntry($entry)) {
             return null;
         }
 
@@ -190,12 +177,7 @@ class ServerRelayService
      */
     public static function childrenOf(Server $entry): Collection
     {
-        if ($entry->relayEntryId() !== null || $entry->type !== self::ENTRY_TYPE
-            || self::validateTransitSettings(
-                $entry->type,
-                (array) $entry->protocol_settings,
-                (string) $entry->host,
-            ) !== null) {
+        if (!self::isSupportedEntry($entry)) {
             return collect();
         }
 
@@ -206,17 +188,69 @@ class ServerRelayService
             })
             ->orderBy('sort', 'ASC')
             ->get()
-            ->filter(fn(Server $child) => self::validateTransitSettings(
-                $child->type,
-                (array) $child->protocol_settings,
-                (string) $child->host,
-            ) === null)
+            ->filter(fn(Server $child) => self::isSupportedLanding($child, $entry))
             ->values();
     }
 
     public static function hasRelayChildren(Server $entry): bool
     {
         return self::childrenOf($entry)->isNotEmpty();
+    }
+
+    /** 入口按实际内核校验，且自身不能再连接其它前置入口。 */
+    public static function isSupportedEntry(Server $entry): bool
+    {
+        return $entry->relayEntryId() === null
+            && self::validateEntrySettings(
+                $entry->type,
+                (array) $entry->protocol_settings,
+                (string) $entry->host,
+                $entry->kernel_type,
+            ) === null;
+    }
+
+    /** 旧数据中的无效落地也不能进入订阅或入口配置。 */
+    private static function isSupportedLanding(Server $child, ?Server $entry = null): bool
+    {
+        $entry ??= $child->relayEntry;
+        return $child->isRelayChild()
+            && $entry !== null
+            && self::validateTransitSettings(
+                $child->type,
+                (array) $child->protocol_settings,
+                (string) $child->host,
+                $child->kernel_type,
+            ) === null
+            && self::validateTransitSettings(
+                $child->type,
+                (array) $child->protocol_settings,
+                (string) $child->host,
+                $entry->kernel_type,
+            ) === null;
+    }
+
+    /** 校验客户端入口协议；入口协议与入口到落地的内部协议分别校验。 */
+    public static function validateEntrySettings(?string $type, array $settings, ?string $host, ?string $kernelType = null): ?string
+    {
+        $type = Server::normalizeType($type);
+        if ($type === Server::TYPE_VLESS) {
+            return self::validateTransitSettings($type, $settings, $host, $kernelType);
+        }
+        if ($type !== Server::TYPE_HYSTERIA || (int) data_get($settings, 'version', 2) !== 2) {
+            return '前置入口必须是 VLESS 或 Hysteria2 节点';
+        }
+        if (data_get($settings, 'obfs.open')) {
+            if (data_get($settings, 'obfs.type') !== 'salamander') {
+                return 'Hysteria2 前置入口只支持 Salamander 混淆';
+            }
+            if (strlen((string) data_get($settings, 'obfs.password')) < 4) {
+                return 'Hysteria2 前置入口的混淆密码至少需要 4 字节';
+            }
+        }
+        if (data_get($settings, 'tls.ech.enabled')) {
+            return 'Hysteria2 前置入口暂不支持 ECH';
+        }
+        return null;
     }
 
     /**
@@ -411,7 +445,7 @@ class ServerRelayService
     }
 
     /** 校验协议自身是否能作为内部链路。合法时返回 null。 */
-    public static function validateTransitSettings(?string $type, array $settings, ?string $host): ?string
+    public static function validateTransitSettings(?string $type, array $settings, ?string $host, ?string $kernelType = null): ?string
     {
         $type = Server::normalizeType($type);
         if ($type === Server::TYPE_SHADOWSOCKS) {
@@ -436,6 +470,22 @@ class ServerRelayService
         $network = self::normalizeVlessNetwork($rawNetwork);
         if ($network === null) {
             return 'VLESS 中转不支持该传输，可选：RAW/TCP、WS、gRPC、XHTTP、HTTPUpgrade、mKCP、Hysteria';
+        }
+
+        if (Server::effectiveKernelType($kernelType) === Server::KERNEL_SINGBOX) {
+            if (!in_array($network, ['tcp', 'ws', 'grpc', 'httpupgrade'], true)) {
+                return 'sing-box 中转的 VLESS 传输只支持 RAW/TCP、WS、gRPC、HTTPUpgrade';
+            }
+            if (data_get($settings, 'encryption.enabled')) {
+                return 'sing-box 中转暂不支持 VLESS Encryption';
+            }
+            if (data_get($settings, 'flow') === 'xtls-rprx-vision'
+                && ($network !== 'tcp' || (int) data_get($settings, 'tls', 0) === 0)) {
+                return 'sing-box 中转的 Vision 必须使用 RAW/TCP 和 TLS/Reality';
+            }
+            if ($network === 'tcp' && !in_array(data_get($settings, 'network_settings.header.type', 'none'), ['', 'none'], true)) {
+                return 'sing-box 中转不支持 TCP 头部伪装';
+            }
         }
 
         $tls = (int) data_get($settings, 'tls', 0);
@@ -560,17 +610,20 @@ class ServerRelayService
         ?string $type,
         array $protocolSettings = [],
         ?string $host = null,
+        ?string $kernelType = null,
     ): ?string
     {
         // 0 与 null 都表示“不使用中转”，管理端会把“无”提交为 0。
         if (!$entryId) {
-            // 当前节点若已被其它节点引用，就必须继续保持一个有效的 VLESS 入口。
+            // 已被落地引用的入口必须保持支持路由编号的协议和内核。
             if ($selfId !== null && Server::where('relay_entry_id', $selfId)->exists()) {
-                if (Server::normalizeType($type) !== self::ENTRY_TYPE) {
-                    return '该节点已被其它节点用作前置入口，协议必须保持 VLESS';
-                }
-                if ($error = self::validateTransitSettings($type, $protocolSettings, $host)) {
+                if ($error = self::validateEntrySettings($type, $protocolSettings, $host, $kernelType)) {
                     return '该节点已被其它节点用作前置入口：' . $error;
+                }
+                foreach (Server::where('relay_entry_id', $selfId)->get() as $child) {
+                    if ($error = self::validateTransitSettings($child->type, (array) $child->protocol_settings, $child->host, $kernelType)) {
+                        return '该入口与已有落地不兼容：' . $error;
+                    }
                 }
             }
 
@@ -581,7 +634,7 @@ class ServerRelayService
             return '前置入口不能是节点自身';
         }
 
-        if ($error = self::validateTransitSettings($type, $protocolSettings, $host)) {
+        if ($error = self::validateTransitSettings($type, $protocolSettings, $host, $kernelType)) {
             return $error;
         }
 
@@ -590,16 +643,17 @@ class ServerRelayService
             return '前置入口节点不存在';
         }
 
-        if ($entry->type !== self::ENTRY_TYPE) {
-            return '前置入口必须是 VLESS 节点';
-        }
-
-        if ($error = self::validateTransitSettings(
+        if ($error = self::validateEntrySettings(
             $entry->type,
             (array) $entry->protocol_settings,
             (string) $entry->host,
+            $entry->kernel_type,
         )) {
             return '前置入口配置无效：' . $error;
+        }
+
+        if ($error = self::validateTransitSettings($type, $protocolSettings, $host, $entry->kernel_type)) {
+            return '前置入口与落地不兼容：' . $error;
         }
 
         if ($entry->relayEntryId() !== null) {

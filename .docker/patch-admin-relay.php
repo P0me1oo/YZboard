@@ -6,8 +6,8 @@
  * 需要在构建阶段对压缩产物做定点补丁，补上上游没有的界面：
  *
  * 1. 节点编辑表单里的前置入口下拉。原有的「父级节点」下拉写死了同协议过滤，
- *    选不到跨协议的 VLESS 入口，因此新增一个独立的 relay_entry_id 字段，
- *    候选为「没有前置入口的 VLESS 节点」，不改动原有的父级节点字段。
+ *    选不到跨协议入口，因此新增一个独立的 relay_entry_id 字段，
+ *    候选为「没有前置入口、使用 Xray 或 sing-box 的 VLESS/Hysteria2 节点」。
  * 2. 节点列表表头的「前置入口」列，显示每个节点走哪个入口，未设置时显示占位符。
  *    列的显隐跟随排序模式，与地址、部署方式等数据列保持一致。
  * 3. VLESS 落地表单按当前 YZ-Xray-core 能力修正传输和 Flow，并在切换传输时
@@ -50,6 +50,8 @@ const VLESS_KEYGEN_MARKER = 'relay_vless_keygen';
 const BATCH_GROUP_MARKER = 'batch_group_membership';
 const SS2022_DEFAULT_MARKER = 'yz_ss2022_default';
 const KERNEL_MARKER = 'data-yz-node-kernel-selector';
+const HY2_ENTRY_MARKER = 'relay_hysteria2_entry';
+const SINGBOX_RELAY_MARKER = 'relay_singbox_entry';
 
 $root = $argv[1] ?? '/www/public/assets/admin/assets';
 if (!is_dir($root)) {
@@ -78,22 +80,19 @@ foreach ($targets as $file) {
     $hasBatchGroup = str_contains($src, BATCH_GROUP_MARKER);
     $hasSs2022Default = str_contains($src, SS2022_DEFAULT_MARKER);
     $hasKernel = str_contains($src, KERNEL_MARKER);
+    $hasHy2Entry = str_contains($src, HY2_ENTRY_MARKER);
+    $hasSingboxRelay = str_contains($src, SINGBOX_RELAY_MARKER);
 
     // 早期版本曾把 kernel_type 错误地套用了 machine_id 的数字校验器。
     // 对已经打过补丁的现有产物做一次可重复修复，避免必须手工恢复整个管理端包。
+    $kernelSchemaRepaired = false;
     if (str_contains($src, 'kernel_type:dy().optional().nullable().default("xray")')) {
         $src = patchKernelSchemaType($src, $file);
-        if (file_put_contents($file, $src) === false) {
-            fwrite(STDERR, "patch-admin-relay: 写入失败 {$file}\n");
-            exit(1);
-        }
-        $newBase = renameWithNewHash($file, $src, $root);
-        fwrite(STDOUT, "patch-admin-relay: 已修复内核字段校验器 -> {$newBase}\n");
-        $patched++;
-        continue;
+        $kernelSchemaRepaired = true;
     }
 
-    if ($hasField && $hasColumn && $hasVlessMatrix && $hasVlessKeygen && $hasBatchGroup && $hasSs2022Default && $hasKernel) {
+    if ($hasField && $hasColumn && $hasVlessMatrix && $hasVlessKeygen && $hasBatchGroup
+        && $hasSs2022Default && $hasKernel && $hasHy2Entry && $hasSingboxRelay && !$kernelSchemaRepaired) {
         fwrite(STDOUT, "patch-admin-relay: 已完整打过补丁，跳过 " . basename($file) . "\n");
         $patched++;
         continue;
@@ -106,7 +105,8 @@ foreach ($targets as $file) {
         || ($hasVlessKeygen && !$hasVlessMatrix)
         || ($hasBatchGroup && !$hasField)
         || ($hasSs2022Default && !$hasField)
-        || ($hasKernel && !$hasField)) {
+        || ($hasKernel && !$hasField)
+        || ($hasHy2Entry && !$hasField)) {
         fwrite(STDERR, "patch-admin-relay: " . basename($file) . " 只包含部分补丁标记，需先还原干净的管理端产物\n");
         exit(1);
     }
@@ -141,6 +141,12 @@ foreach ($targets as $file) {
     if (!$hasKernel) {
         $src = patchKernelSelector($src, $file);
     }
+    if (!$hasHy2Entry) {
+        $src = patchHysteria2Candidates($src, $file);
+    }
+    if (!$hasSingboxRelay) {
+        $src = patchSingboxRelayCandidates($src, $file);
+    }
 
     if (file_put_contents($file, $src) === false) {
         fwrite(STDERR, "patch-admin-relay: 写入失败 {$file}\n");
@@ -150,7 +156,7 @@ foreach ($targets as $file) {
     // 文件名里的 hash 是构建时算的，改内容不改名会让浏览器继续用缓存里的旧产物。
     // 按补丁后的内容重新命名，并同步更新引用，才能真正让客户端取到新版本。
     $newBase = renameWithNewHash($file, $src, $root);
-    fwrite(STDOUT, "patch-admin-relay: 已注入节点管理补充界面与 SS2022 默认值 -> {$newBase}\n");
+    fwrite(STDOUT, "patch-admin-relay: 已注入节点管理补充界面与 HY2 前置入口 -> {$newBase}\n");
     $patched++;
 }
 
@@ -318,6 +324,30 @@ function patchCandidates(string $src, string $file): string
         . ",__relayEntryOpts={$useMemoHost}.useMemo(()=>{$serversVar}?.filter(e=>(0===e.relay_entry_id||null===e.relay_entry_id)&&\"vless\"===e.type&&e.id!=={$formVar}.watch(\"id\")),[{$serversVar},{$formVar}])";
 
     return str_replace($whole, $added, $src);
+}
+
+/** 同时支持干净产物和旧版 VLESS 入口候选补丁的增量升级。 */
+function patchHysteria2Candidates(string $src, string $file): string
+{
+    $pattern = '/(__relayEntryOpts=\w+\.useMemo\(\(\)=>\w+\?\.filter\(e=>\(0===e\.relay_entry_id\|\|null===e\.relay_entry_id\)&&)"vless"===e\.type&&/';
+    $result = preg_replace_callback($pattern, fn(array $match) => $match[1]
+        . '/*' . HY2_ENTRY_MARKER . '*/'
+        . '("vless"===e.type||("hysteria"===e.type&&2===Number(e.protocol_settings?.version??2)))'
+        . '&&!("singbox"===e.kernel_type||"sing-box"===e.kernel_type)&&', $src, -1, $count);
+    if ($result === null || $count !== 1) {
+        fail('relay entry candidates', $file);
+    }
+    return $result;
+}
+
+/** 保留已有 HY2 候选补丁的升级路径，组合有效性由后端统一校验。 */
+function patchSingboxRelayCandidates(string $src, string $file): string
+{
+    $needle = '&&!("singbox"===e.kernel_type||"sing-box"===e.kernel_type)&&';
+    if (substr_count($src, $needle) !== 1) {
+        fail('sing-box relay entry candidates', $file);
+    }
+    return str_replace($needle, '&&/*' . SINGBOX_RELAY_MARKER . '*/false!==e.relay_entry_supported&&', $src);
 }
 
 /** 在父级节点字段之后插入一个结构相同的前置入口字段。 */

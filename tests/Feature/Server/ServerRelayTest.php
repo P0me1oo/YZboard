@@ -9,6 +9,13 @@ use App\Jobs\TrafficFetchJob;
 use App\Models\Server;
 use App\Models\StatServer;
 use App\Models\User;
+use App\Protocols\ClashMeta;
+use App\Protocols\General;
+use App\Protocols\Loon;
+use App\Protocols\Shadowrocket;
+use App\Protocols\SingBox;
+use App\Protocols\Stash;
+use App\Protocols\Surge;
 use App\Services\ServerRelayService;
 use App\Services\ServerService;
 use App\Support\Setting;
@@ -16,6 +23,7 @@ use App\Utils\Helper;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Validation\ValidationException;
 use Mockery\MockInterface;
 use Tests\TestCase;
 
@@ -89,6 +97,292 @@ class ServerRelayTest extends TestCase
             'sort' => 2,
             'protocol_settings' => ['cipher' => '2022-blake3-aes-128-gcm'],
         ], $overrides));
+    }
+
+    private function makeHysteriaEntry(array $overrides = []): Server
+    {
+        return $this->makeEntry(array_replace_recursive([
+            'type' => Server::TYPE_HYSTERIA,
+            'name' => 'HY2 入口',
+            'kernel_type' => Server::KERNEL_XRAY,
+            'protocol_settings' => [
+                'version' => 2,
+                'bandwidth' => ['up' => 100, 'down' => 100],
+                'obfs' => ['open' => false, 'type' => 'salamander'],
+                'tls' => ['server_name' => 'entry.example.com', 'allow_insecure' => false],
+            ],
+        ], $overrides));
+    }
+
+    public function test_hysteria2_relay_subscription_inherits_entry_and_keeps_route_identity(): void
+    {
+        $entry = $this->makeHysteriaEntry();
+        $ss = $this->makeChild($entry);
+        $vless = $this->makeVlessChild($entry);
+        $user = $this->makeUser();
+        $servers = collect(ServerService::getAvailableServers($user))->keyBy('id');
+
+        $this->assertCount(3, $servers);
+        foreach ([$entry, $ss, $vless] as $node) {
+            $out = $servers[$node->id];
+            $this->assertSame(Server::TYPE_HYSTERIA, $out['type']);
+            $this->assertSame(2, data_get($out, 'protocol_settings.version'));
+            $this->assertSame($entry->host, $out['host']);
+            $this->assertSame((int) $entry->port, $out['port']);
+            $this->assertSame($entry->server_port, $out['server_port']);
+            $this->assertSame($node->name, $out['name']);
+            $this->assertSame(Helper::applyVlessRoute($user->uuid, $node->vless_route), $out['password']);
+            $this->assertSame($entry->getCurrentRate(), (float) $out['rate']);
+        }
+        $this->assertSame($user->uuid, ServerService::getAvailableUsers($entry)->first()->uuid);
+        foreach ([$ss, $vless] as $child) {
+            $this->assertCount(0, ServerService::getAvailableUsers($child));
+            $encoded = json_encode($servers[$child->id]);
+            $this->assertStringNotContainsString($child->host, $encoded);
+            $this->assertStringNotContainsString((string) $child->server_port, $encoded);
+            $this->assertArrayNotHasKey('relay_entry', $servers[$child->id]);
+        }
+    }
+
+    public function test_hysteria2_relay_config_preserves_both_landing_protocols_and_lifecycle(): void
+    {
+        $entry = $this->makeHysteriaEntry([
+            'protocol_settings' => ['obfs' => ['open' => true, 'password' => bin2hex(random_bytes(16))]],
+        ]);
+        $ss = $this->makeChild($entry);
+        $vless = $this->makeVlessChild($entry);
+        $config = ServerService::buildNodeConfig($entry->fresh());
+
+        $this->assertSame('hysteria', $config['protocol']);
+        $this->assertSame(2, $config['version']);
+        $this->assertSame('xray', $config['kernel_type']);
+        $this->assertSame('salamander', $config['obfs']);
+        $this->assertSame(data_get($entry->protocol_settings, 'obfs.password'), $config['obfs-password']);
+        $this->assertSame('entry', data_get($config, 'relay.mode'));
+        $children = collect(data_get($config, 'relay.children'))->keyBy('node_id');
+        $this->assertCount(2, $children);
+        $this->assertSame('shadowsocks', $children[$ss->id]['protocol']);
+        $this->assertSame('vless', $children[$vless->id]['protocol']);
+        $this->assertSame($children[$ss->id]['password'], data_get(ServerService::buildNodeConfig($ss), 'relay.password'));
+        $this->assertSame($children[$vless->id]['vless']['id'], data_get(ServerService::buildNodeConfig($vless), 'relay.vless.id'));
+        $this->assertSame($config, ServerService::buildNodeConfig($entry->fresh()));
+
+        $ss->update(['enabled' => false]);
+        $active = data_get(ServerService::buildNodeConfig($entry->fresh()), 'relay.children');
+        $this->assertCount(1, $active);
+        $this->assertSame($vless->id, $active[0]['node_id']);
+        $ss->update(['enabled' => true]);
+        $this->assertSame($config, ServerService::buildNodeConfig($entry->fresh()));
+        $this->assertSame($ss->vless_route, $ss->fresh()->vless_route);
+    }
+
+    public function test_hysteria2_client_formats_preserve_the_selected_route(): void
+    {
+        $entry = $this->makeHysteriaEntry();
+        $this->makeChild($entry);
+        $this->makeVlessChild($entry);
+        $user = $this->makeUser();
+        $servers = ServerService::getAvailableServers($user);
+
+        $singbox = new SingBox($user->toArray(), $servers, 'sing-box', '1.14.0');
+        (new \ReflectionProperty(SingBox::class, 'config'))->setValue($singbox, ['outbounds' => []]);
+        $outbounds = collect((new \ReflectionMethod(SingBox::class, 'buildOutbounds'))->invoke($singbox))->keyBy('tag');
+        $this->assertCount(3, $outbounds);
+
+        foreach ($servers as $server) {
+            $password = $server['password'];
+            $this->assertNotSame($user->uuid, $password);
+            $this->assertSame($password, $outbounds[$server['name']]['password']);
+            $this->assertSame('hysteria2', $outbounds[$server['name']]['type']);
+            $this->assertSame($password, ClashMeta::buildHysteria($password, $server, $user)['password']);
+            $this->assertSame($password, Stash::buildHysteria($password, $server)['auth']);
+            foreach ([General::class, Shadowrocket::class] as $protocol) {
+                $uri = trim($protocol::buildHysteria($password, $server));
+                $this->assertSame('hysteria2', parse_url($uri, PHP_URL_SCHEME));
+                $this->assertSame($password, parse_url($uri, PHP_URL_USER));
+                $this->assertSame($entry->host, parse_url($uri, PHP_URL_HOST));
+            }
+            $this->assertStringContainsString('password=' . $password, Surge::buildHysteria($password, $server));
+            $this->assertStringContainsString(',' . $password . ',', Loon::buildHysteria($password, $server, $user));
+        }
+    }
+
+    public function test_hysteria2_entry_rejects_unsupported_protocol_settings_and_kernel(): void
+    {
+        $entry = $this->makeHysteriaEntry();
+        $child = $this->makeChild($entry);
+        $this->assertNull(ServerRelayService::validateEntry(
+            $child->id, $entry->id, $child->type, $child->protocol_settings, $child->host, 'xray',
+        ));
+        $this->assertNull(ServerRelayService::validateEntry(
+            $entry->id, null, $entry->type, $entry->protocol_settings, $entry->host, 'xray',
+        ));
+        $this->assertNull(ServerRelayService::validateEntry(
+            $child->id, $entry->id, $child->type, $child->protocol_settings, $child->host, 'singbox',
+        ));
+        $this->assertNull(ServerRelayService::validateEntry(
+            $entry->id, null, $entry->type, $entry->protocol_settings, $entry->host, 'singbox',
+        ));
+        $baseSettings = $entry->protocol_settings;
+        foreach ([
+            ['version' => 1],
+            ['tls' => ['ech' => ['enabled' => true]]],
+            ['obfs' => ['open' => true, 'type' => 'unknown']],
+            ['obfs' => ['open' => true, 'type' => 'salamander', 'password' => '']],
+        ] as $invalid) {
+            $settings = array_replace_recursive($baseSettings, $invalid);
+            $this->assertNotNull(ServerRelayService::validateEntry(
+                $entry->id, null, $entry->type, $settings, $entry->host, 'xray',
+            ));
+            $entry->update(['protocol_settings' => $settings]);
+            $this->assertNull(ServerRelayService::entryFor($child->fresh()));
+            $this->assertCount(0, ServerRelayService::childrenOf($entry->fresh()));
+        }
+    }
+
+    public function test_plain_hysteria_nodes_keep_original_auth_and_invalid_entries_hide_landings(): void
+    {
+        $user = $this->makeUser();
+        $plain = $this->makeHysteriaEntry(['kernel_type' => 'singbox']);
+        $v1 = $this->makeHysteriaEntry(['name' => 'HY1 普通节点', 'protocol_settings' => ['version' => 1]]);
+        $servers = collect(ServerService::getAvailableServers($user))->keyBy('id');
+        foreach ([$plain, $v1] as $node) {
+            $this->assertSame($user->uuid, $servers[$node->id]['password']);
+            $this->assertArrayNotHasKey('relay', ServerService::buildNodeConfig($node));
+            $this->makeVlessChild($node, ['protocol_settings' => ['network' => 'xhttp', 'tls' => 1]]);
+        }
+        $servers = ServerService::getAvailableServers($user);
+        $this->assertCount(2, $servers);
+        $this->assertStringNotContainsString('10.0.0.7', json_encode($servers));
+    }
+
+    public function test_relay_kernel_switch_cannot_bypass_topology_validation(): void
+    {
+        foreach ([$this->makeEntry(), $this->makeHysteriaEntry()] as $entry) {
+            $child = $this->makeVlessChild($entry, ['protocol_settings' => ['network' => 'xhttp', 'tls' => 1]]);
+            $nodes = [$entry, $child];
+            foreach ($nodes as $node) {
+                foreach (['singbox', 'sing-box'] as $kernel) {
+                    $request = Request::create('/', 'POST', ['id' => $node->id, 'kernel_type' => $kernel]);
+                    try {
+                        app(ManageController::class)->update($request);
+                        $this->fail('中转节点切换到不支持的内核时未被拒绝');
+                    } catch (ValidationException $error) {
+                        $this->assertArrayHasKey('kernel_type', $error->errors());
+                    }
+                    $this->assertSame('xray', Server::effectiveKernelType($node->fresh()->kernel_type));
+                }
+                foreach (['xray', null] as $kernel) {
+                    $response = app(ManageController::class)->update(
+                        Request::create('/', 'POST', ['id' => $node->id, 'kernel_type' => $kernel]),
+                    );
+                    $this->assertSame(200, $response->getStatusCode());
+                    $this->assertSame('xray', Server::effectiveKernelType($node->fresh()->kernel_type));
+                }
+            }
+        }
+        $ordinary = $this->makeHysteriaEntry();
+        $response = app(ManageController::class)->update(
+            Request::create('/', 'POST', ['id' => $ordinary->id, 'kernel_type' => 'singbox']),
+        );
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertSame('singbox', $ordinary->fresh()->kernel_type);
+    }
+
+    public function test_relay_save_uses_existing_values_for_omitted_optional_fields(): void
+    {
+        $entry = $this->makeHysteriaEntry();
+        $child = $this->makeVlessChild($entry, [
+            'kernel_type' => 'singbox', 'protocol_settings' => ['network' => 'xhttp', 'tls' => 1],
+        ]);
+        $payload = $child->only([
+            'id', 'type', 'name', 'relay_entry_id', 'host', 'port', 'server_port', 'rate', 'group_ids', 'protocol_settings',
+        ]);
+        $this->assertArrayHasKey('relay_entry_id', $this->validateServerSave($payload));
+        $payload['kernel_type'] = 'xray';
+        $this->assertArrayNotHasKey('relay_entry_id', $this->validateServerSave($payload));
+
+        unset($payload['relay_entry_id']);
+        $payload['kernel_type'] = 'singbox';
+        $this->assertArrayHasKey('relay_entry_id', $this->validateServerSave($payload));
+        $payload['kernel_type'] = 'xray';
+        $this->assertArrayNotHasKey('relay_entry_id', $this->validateServerSave($payload));
+
+        $payload['relay_entry_id'] = 0;
+        $payload['kernel_type'] = 'singbox';
+        $this->assertArrayNotHasKey('relay_entry_id', $this->validateServerSave($payload));
+    }
+
+    public function test_hysteria2_relay_hides_landings_with_an_unsupported_kernel(): void
+    {
+        $entry = $this->makeHysteriaEntry();
+        $invalid = $this->makeVlessChild($entry, [
+            'kernel_type' => 'singbox', 'sort' => 2, 'protocol_settings' => ['network' => 'xhttp', 'tls' => 1],
+        ]);
+        $valid = $this->makeVlessChild($entry);
+        $user = $this->makeUser();
+        $this->assertNull(ServerRelayService::entryFor($invalid));
+        $this->assertSame([$valid->id], ServerRelayService::childrenOf($entry)->pluck('id')->all());
+        $this->assertSame([$entry->id, $valid->id], array_column(ServerService::getAvailableServers($user), 'id'));
+        $this->assertSame([$valid->id], array_column(data_get(ServerService::buildNodeConfig($entry), 'relay.children'), 'node_id'));
+
+        $invalid->update(['kernel_type' => 'xray']);
+        $this->assertCount(3, ServerService::getAvailableServers($user));
+        $this->assertCount(2, data_get(ServerService::buildNodeConfig($entry), 'relay.children'));
+    }
+
+    public function test_relay_supports_singbox_and_mixed_kernels(): void
+    {
+        $user = $this->makeUser();
+        foreach (['vless', 'hysteria'] as $protocol) {
+            foreach (['xray', 'singbox'] as $entryKernel) {
+                foreach (['xray', 'singbox'] as $landingKernel) {
+                    $entry = $protocol === 'vless'
+                        ? $this->makeEntry(['kernel_type' => $entryKernel])
+                        : $this->makeHysteriaEntry(['kernel_type' => $entryKernel]);
+                    $children = [
+                        $this->makeChild($entry, ['kernel_type' => $landingKernel]),
+                        $this->makeVlessChild($entry, ['kernel_type' => $landingKernel]),
+                    ];
+                    foreach ($children as $child) {
+                        $this->assertNull(ServerRelayService::validateEntry(
+                            $child->id, $entry->id, $child->type, $child->protocol_settings, $child->host, $landingKernel,
+                        ));
+                        $this->assertSame($entry->id, ServerRelayService::entryFor($child)?->id);
+                        $this->assertSame('landing', data_get(ServerService::buildNodeConfig($child), 'relay.mode'));
+                        $this->assertSame((float) $entry->rate, $child->getEffectiveRate());
+                    }
+                    $this->assertCount(2, data_get(ServerService::buildNodeConfig($entry), 'relay.children'));
+                    $servers = collect(ServerService::getAvailableServers($user))->keyBy('id');
+                    foreach ([$entry, ...$children] as $node) {
+                        $this->assertSame($entry->host, $servers[$node->id]['host']);
+                        $this->assertSame($protocol, $servers[$node->id]['type']);
+                        $this->assertSame(Helper::applyVlessRoute($user->uuid, $node->vless_route), $servers[$node->id]['password']);
+                    }
+                }
+            }
+        }
+    }
+
+    public function test_singbox_relay_checks_both_ends_of_internal_vless_link(): void
+    {
+        $entry = $this->makeHysteriaEntry(['kernel_type' => 'singbox']);
+        $child = $this->makeVlessChild($entry);
+        foreach (['xhttp', 'kcp', 'hysteria'] as $network) {
+            $settings = ['network' => $network, 'tls' => 1];
+            $this->assertNotNull(ServerRelayService::validateEntry(
+                $child->id, $entry->id, $child->type, $settings, $child->host, 'xray',
+            ));
+        }
+        $settings = $child->protocol_settings;
+        $settings['encryption']['enabled'] = true;
+        $this->assertStringContainsString('VLESS Encryption', ServerRelayService::validateEntry(
+            $child->id, $entry->id, $child->type, $settings, $child->host, 'singbox',
+        ));
+        foreach (['xray', 'singbox', 'sing-box'] as $kernel) {
+            $response = app(ManageController::class)->update(Request::create('/', 'POST', ['id' => $child->id, 'kernel_type' => $kernel]));
+            $this->assertSame(200, $response->getStatusCode());
+        }
     }
 
     private function makeVlessChild(Server $entry, array $overrides = []): Server
@@ -250,6 +544,8 @@ class ServerRelayTest extends TestCase
         $this->assertSame($entry->name, $nodes[$child->id]['relay_entry_name']);
         $this->assertNull($nodes[$entry->id]['relay_entry_name']);
         $this->assertNull($nodes[$orphan->id]['relay_entry_name']);
+        $this->assertTrue($nodes[$entry->id]['relay_entry_supported']);
+        $this->assertFalse($nodes[$child->id]['relay_entry_supported']);
     }
 
     public function test_route_ids_are_unique_stable_and_in_range(): void

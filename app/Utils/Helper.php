@@ -15,7 +15,8 @@ class Helper
     /**
      * 把 VLESS 路由编号写入 UUID 的第 7、8 字节（0 基下标 6、7），即标准写法的第三段。
      *
-     * Xray 在校验 VLESS 用户前会把这两个字节清零，因此写入编号不会影响用户身份匹配；
+     * VLESS 身份与 HY2 认证均可使用此 UUID。Xray 校验用户前会把这两个字节清零，
+     * 因此写入编号不会影响用户身份匹配；
      * 认证通过后内核再按原始字节还原编号供路由规则使用。编号非法或 UUID 格式不符时原样返回。
      */
     public static function applyVlessRoute(string $uuid, $route): string

@@ -7,7 +7,7 @@
 | 项目 | 标识 |
 | --- | --- |
 | YZboard 面板源码版本 | `1.11.0`；固定来源使用同名语义版本 Tag |
-| 面板兼容标识 | `xray-v26.7.11-yz.5` |
+| 面板兼容标识 | `xray-v26.7.11-yz.6` |
 | YZboard 上游仓库 | `https://github.com/cedar2025/Xboard.git` |
 | YZboard 上游基线 | `master` 固定快照 / `8ecb762d77ef16491fe919b7092aea66b834deed` |
 | YZboard 本版发布 Tag | `v1.11.0`；完整 commit 与镜像 digest 由发布记录固定 |
@@ -24,9 +24,9 @@
 | YZboard-Node 已发布基线 Docker manifest | `sha256:8b65c52c0c0f59a24c56ab48ced7a1dda9a07c6948edc3f454b41c140d999818`；包含 `linux/amd64` 与 `linux/arm64` |
 | Xray 官方预发布 Tag | `v26.7.11` |
 | Xray 上游 Tag commit | `50231eaff98ccc31b5cbd247a721c16e97fe5ec1` |
-| YZ-Xray-core 源码 Tag | `v26.7.11-yz.5` |
-| YZ-Xray-core fork commit | `dcb690846b525851f0ee8dc47388e110d4600042` |
-| Node Xray replace pseudo-version | `v0.0.0-20260907183145-dcb690846b52` |
+| YZ-Xray-core 源码 Tag | `v26.7.11-yz.6` |
+| YZ-Xray-core fork commit | `b4caa82d6414196565599c19ebc1b53e331349b6` |
+| Node Xray replace pseudo-version | `v0.0.0-20260907200713-b4caa82d6414` |
 | sing-box `require` 版本 | `v1.14.0` |
 | sing-box 实际 replacement | `github.com/P0me1oo/YZ-sing-box v1.14.0-yz.2` / `09615a105e219076330d9d2a25ea1e2e733d5427` |
 | SS2022 关闭补丁 | Node 的 `compat/sing-shadowsocks`，随 Node 固定提交发布；上游 `v0.2.8` / `e0612494bafdd1429e9632bc52fd278585d28690` |
@@ -42,10 +42,11 @@
 - sing-box 的线路流量按实际选中出站的有效载荷统计；Xray 沿用内部出站计数，两者节点总量口径可能不同。用户流量仍只在入口扣费一次。
 - 先升级相关 Node，再升级面板并启用拓扑；上一正式版本继续用于回滚。
 - 本轮面板完整测试为 57 项、549 个断言，通过。管理端原始资源、旧补丁升级及重复应用检查通过。Node 和双机验收结果记录在 Node 的 `docs/singbox-relay-validation.md`。
-- 当前固定 Xray `yz.5` 包含 VLESS 首批缓冲上传计数与 UDP 缓存关闭修复；sing-box `yz.2` 和 Node 自有 SS2022 兼容模块修复其余两类并发问题。Node 完整普通测试通过：17 个有测试的包、609 项测试及子测试，无失败或测试跳过。
+- 当前固定 Xray `yz.6` 包含 VLESS 首批缓冲上传计数、UDP 缓存与 HY2 会话关闭同步修复；sing-box `yz.2` 和 Node 自有 SS2022 兼容模块修复其余两类并发问题。`yz.5` 阶段 Node 完整普通测试通过：17 个有测试的包、609 项测试及子测试，无失败或测试跳过。
 - 修复后四个相关包各连续 10 轮并发检测通过，共 180 项测试执行。Linux 完整 sing-box 包并发检测为 142 项测试及子测试全部通过，耗时 126.042 秒，无失败、无跳过、无竞争报告；此前失败的混合内核及 gRPC 分支保留。
 - YT-HK、DGN-HK 使用修复后依赖完成 60 次实际转发及生命周期检查，包含 Xray VLESS 前置到 sing-box SS2022 落地的 TCP/UDP；原 `yz.4` 下的竞争报告保留在 Node 验证文档的历史部分。
 - 本地和双机探针来自待发布工作区，正式 Node 安装包与镜像由 CI 从固定提交构建并核对实际依赖、目标架构、来源及 `vcs.modified=false`。面板镜像按同样的固定来源原则发布两个 Linux 架构。
+- 发布前完整 Node 并发检测曾在 HY2 关闭状态处失败，构建与发布尚未执行。补充的 Xray `yz.6` 用例在旧代码上复现管理器和单会话两处状态竞争，修复后 5 项测试连续 10 轮 Linux 并发检测共 50 次通过；最终完整验收随新依赖重新执行。
 
 ## HY2 前置入口基线（1.10.0）
 

@@ -59,7 +59,7 @@ sing-box 未注册的线路编号会认证失败，已删除或轮换的身份�
 ## HY2 前置入口
 
 面板 `1.10.0` 与 Node `v1.13-yz.20` 起支持“客户端 → HY2 前置入口 → Shadowsocks/VLESS 落地”。
-Node `v1.13-yz.21` 固定使用 YZ-Xray-core `v26.7.11-yz.5`，包含 VLESS 首批缓冲上传计数与 UDP 缓存关闭修复；
+Node `v1.13-yz.21` 固定使用 YZ-Xray-core `v26.7.11-yz.6`，包含 VLESS 首批缓冲上传计数、UDP 缓存与 HY2 会话关闭同步修复；
 sing-box 配套 `v1.14.0-yz.2`，原 SS2022 模块的关闭补丁随 Node 发布，整体验证见 [兼容记录](../YZ_COMPATIBILITY.md)。
 
 1. 创建入口节点，内核选择 `Xray` 或 `sing-box`，协议选择 `Hysteria`，版本选择 `2`，配置入口地址、UDP 端口和有效证书。

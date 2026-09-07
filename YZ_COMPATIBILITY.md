@@ -10,18 +10,23 @@
 | 面板兼容标识 | `xray-v26.7.11-yz.6` |
 | YZboard 上游仓库 | `https://github.com/cedar2025/Xboard.git` |
 | YZboard 上游基线 | `master` 固定快照 / `8ecb762d77ef16491fe919b7092aea66b834deed` |
-| YZboard 本版发布 Tag | `v1.11.0`；完整 commit 与镜像 digest 由发布记录固定 |
+| YZboard 本版发布 Tag / commit | `v1.11.0` / `f91568d72ffb55205cbcd9b15a8476283a017683` |
+| YZboard 本版 Release | [v1.11.0](https://github.com/P0me1oo/YZboard/releases/tag/v1.11.0) |
 | YZboard 回滚 Tag / commit | `v1.9.0` / `eff2fa22531f2e15168d3e7e96d8ab45639b1969` |
 | YZboard 回滚 Docker 镜像 | `ghcr.io/p0me1oo/yzboard:1.9.0-eff2fa2` |
 | YZboard 回滚 Docker manifest | `sha256:cdadd4d870313a15a52b224f8db730af54ffa64330cb50d4beaee004524ad6e3`；包含 `linux/amd64` 与 `linux/arm64` |
 | YZboard Docker 架构 | `linux/amd64`、`linux/arm64` |
-| YZboard 本版 Docker 构建 | 固定来源 `v1.11.0`；发布不可变标签 `1.11.0-<短commit>`，验证后同步 `1.11.0` 与 `latest` |
-| YZboard-Node 兼容版本 | `v1.13-yz.21`（本次源码目标；sing-box 中转需成套升级） |
+| YZboard 本版 Docker 构建 | `ghcr.io/p0me1oo/yzboard:1.11.0-f91568d`；`1.11.0` 与 `latest` 已同步并核对同一 digest |
+| YZboard 本版 Docker manifest | `sha256:9ec52732a2f93f77e1ae6f34e314cf9399b26a8c4febf4a82db2e32cd7e651b4` |
+| YZboard 本版 Docker OCI 标识 | 两架构均为 `revision=f91568d72ffb55205cbcd9b15a8476283a017683`、`version=1.11.0-f91568d` |
+| YZboard-Node 兼容版本 / commit | `v1.13-yz.21` / `2f08f4134d352e127828e1e15aeaa4cfd479864c`；sing-box 中转需成套升级 |
+| YZboard-Node 本版 Release | [v1.13-yz.21](https://github.com/P0me1oo/YZboard-Node/releases/tag/v1.13-yz.21)；10 个附件均已下载核验 |
+| YZboard-Node 本版 Docker manifest | `sha256:500bd8ac445a38ae76550bc2d66c7fd9700515255ab92e9276020bc6136984a0`；版本、完整提交和 `latest` 标签一致，含两个 Linux 架构 |
 | YZboard-Node 上一正式版本（回滚） | `v1.13-yz.19` |
 | YZboard-Node 上游基线 | `v1.13` / `0a29338e1f102a462363ce3527417029f89bab28` |
-| YZboard-Node 已发布基线 commit | `d22037477a7e97825990eb35e41d12926c117680` |
-| YZboard-Node 已发布基线 | GitHub [Release v1.13-yz.19](https://github.com/P0me1oo/YZboard-Node/releases/tag/v1.13-yz.19)；发布记录见 Node 兼容矩阵 |
-| YZboard-Node 已发布基线 Docker manifest | `sha256:8b65c52c0c0f59a24c56ab48ced7a1dda9a07c6948edc3f454b41c140d999818`；包含 `linux/amd64` 与 `linux/arm64` |
+| YZboard-Node 回滚 commit | `d22037477a7e97825990eb35e41d12926c117680` |
+| YZboard-Node 回滚 Release | GitHub [Release v1.13-yz.19](https://github.com/P0me1oo/YZboard-Node/releases/tag/v1.13-yz.19)；发布记录见 Node 兼容矩阵 |
+| YZboard-Node 回滚 Docker manifest | `sha256:8b65c52c0c0f59a24c56ab48ced7a1dda9a07c6948edc3f454b41c140d999818`；包含 `linux/amd64` 与 `linux/arm64` |
 | Xray 官方预发布 Tag | `v26.7.11` |
 | Xray 上游 Tag commit | `50231eaff98ccc31b5cbd247a721c16e97fe5ec1` |
 | YZ-Xray-core 源码 Tag | `v26.7.11-yz.6` |
@@ -32,6 +37,20 @@
 | SS2022 关闭补丁 | Node 的 `compat/sing-shadowsocks`，随 Node 固定提交发布；上游 `v0.2.8` / `e0612494bafdd1429e9632bc52fd278585d28690` |
 
 三个项目的内部版本不强行相同：面板使用自己的语义版本，Node 使用独立的 Release Tag，Xray 使用“上游版本 + YZ fork patch”格式。官方 `v26.7.11` Tag 不由 YZ fork 创建或覆盖。
+
+## 本版发布验证（2026-09-08）
+
+[面板发布 CI](https://github.com/P0me1oo/YZboard/actions/runs/34161072639) 从上表固定提交构建并发布两个 Linux 架构。
+不可变标签、面板版本别名和 `latest` 的 manifest digest 一致，各架构的 OCI 来源及版本均已核对。
+[面板 Release](https://github.com/P0me1oo/YZboard/releases/tag/v1.11.0) 已创建并设为最新正式版本；面板完整测试为 57 项、549 个断言。
+
+配套 Node 的 [发布前 CI](https://github.com/P0me1oo/YZboard-Node/actions/runs/34158600477) 和
+[正式发布 CI](https://github.com/P0me1oo/YZboard-Node/actions/runs/34159504349/attempts/2) 各完成 637 项测试及子测试，无跳过、无竞争报告。
+两个架构的安装包与镜像构建、来源及运行版本检查通过；下载后的 10 个附件与校验清单、GitHub 摘要及实际构建信息一致。
+正式 CI 第一次因测试回环端口被占用失败，随后使用同一源码、Tag 和全部检查在新 runner 上通过，具体记录见 Node 验证文档。
+
+Node 已先于面板发布。生产环境由用户确认部署目录、服务和持久化数据后执行更新，先升级相关 Node，再升级面板并启用新拓扑。
+回滚基线为 Node `v1.13-yz.19` 与面板 `1.9.0`；应同时评估已启用的中转组合。发布记录以单独的文档提交补充，已发布 Tag 和镜像来源保持不变。
 
 ## sing-box 中转兼容约束（1.11.0）
 
@@ -45,12 +64,12 @@
 - 当前固定 Xray `yz.6` 包含 VLESS 首批缓冲上传计数、UDP 缓存与 HY2 会话关闭同步修复；sing-box `yz.2` 和 Node 自有 SS2022 兼容模块修复其余两类并发问题。`yz.5` 阶段 Node 完整普通测试通过：17 个有测试的包、609 项测试及子测试，无失败或测试跳过。
 - 修复后四个相关包各连续 10 轮并发检测通过，共 180 项测试执行。Linux 完整 sing-box 包并发检测为 142 项测试及子测试全部通过，耗时 126.042 秒，无失败、无跳过、无竞争报告；此前失败的混合内核及 gRPC 分支保留。
 - YT-HK、DGN-HK 使用修复后依赖完成 60 次实际转发及生命周期检查，包含 Xray VLESS 前置到 sing-box SS2022 落地的 TCP/UDP；原 `yz.4` 下的竞争报告保留在 Node 验证文档的历史部分。
-- 本地和双机探针来自待发布工作区，正式 Node 安装包与镜像由 CI 从固定提交构建并核对实际依赖、目标架构、来源及 `vcs.modified=false`。面板镜像按同样的固定来源原则发布两个 Linux 架构。
-- 发布前完整 Node 并发检测曾在 HY2 关闭状态处失败，构建与发布尚未执行。补充的 Xray `yz.6` 用例在旧代码上复现管理器和单会话两处状态竞争，修复后 5 项测试连续 10 轮 Linux 并发检测共 50 次通过；最终完整验收随新依赖重新执行。
+- 本地和双机探针属于发布前阶段；正式 Node 安装包及镜像已从上表固定提交发布并核对实际依赖、目标架构、来源及 `vcs.modified=false`。面板镜像也已按固定来源发布两个 Linux 架构。
+- 发布前完整 Node 并发检测曾在 HY2 关闭状态处失败，该次未进入构建和发布。补充的 Xray `yz.6` 用例在旧代码上复现管理器和单会话两处状态竞争，修复后 5 项测试连续 10 轮 Linux 并发检测共 50 次通过；新依赖随后通过上述完整 Node 发布验收。
 
 ## HY2 前置入口基线（1.10.0）
 
-- 面板 `1.10.0` 与 Node `v1.13-yz.20` 为上一轮源码目标，未生成对应 Tag、Release 或镜像；上表已发布镜像仍是回滚基线。
+- 面板 `1.10.0` 与 Node `v1.13-yz.20` 为上一轮源码目标，没有单独生成对应 Tag、Release 或镜像，相关功能随 `1.11.0` 与 `yz.21` 一同发布。回滚使用上表明确标注的面板 `1.9.0` 与 Node `yz.19`。
 - 修改起点为面板 `eff2fa22531f2e15168d3e7e96d8ab45639b1969` 和 Node `94e2a76e42c1f059126b588b2d02f49e54fd8246`。HY2 认证路由复用当时固定 Xray `yz.3` 的既有能力；该轮尚未纳入 VLESS 出站统计修复，后续接入见上文 `1.11.0` 记录。
 - HY2 前置入口和 Shadowsocks/VLESS 落地均使用 Xray。HY2 认证 UUID 携带原有路由编号，`relay`、`traffic`、`relay_traffic`、`relay_user_traffic` 的结构保持兼容。
 - 发布后应先升级 Node，再在面板启用 HY2 前置入口；旧 Node 会拒绝这种中转入口配置。普通节点及原有 VLESS 中转沿用既有配置。
@@ -128,9 +147,9 @@
 - Shadowsocks 新建表单默认使用 `2022-blake3-aes-128-gcm`；该默认值只存在于管理端表单，存量节点的 `protocol_settings.cipher` 不会被迁移。
 - 管理端补充界面继续由 `.docker/patch-admin-relay.php` 在构建阶段注入。上游管理端产物锚点变化时，构建应失败并更新补丁，不应跳过补丁。
 
-## 发布与回滚
+## 历史发布与回滚记录
 
-当前已发布结果及 `1.8.3` 生产基线：
+以下为 `1.8.3` 及更早版本的历史发布记录；当前版本与回滚基线见本文开头：
 
 1. 面板 `v1.8.3` 固定到 `68a08991a6109c93285eb0653cd8d25981acc8d5`，不可变镜像 `1.8.3-68a0899`、版本别名 `1.8.3` 和 `latest` 指向 manifest `sha256:a752b4ce9006407e25b888237e84826ce6a14f9660a8ce11524135935825bfa9`；
 2. 面板 [run 33644362438](https://github.com/P0me1oo/YZboard/actions/runs/33644362438) 固定来源构建成功，构建和清单验证均通过，manifest 包含 `linux/amd64` 与 `linux/arm64`；

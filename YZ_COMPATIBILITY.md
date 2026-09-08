@@ -6,41 +6,41 @@
 
 | 项目 | 标识 |
 | --- | --- |
-| 当前面板源码版本 | `1.12.0`；正式镜像由固定 Tag 构建 |
+| 当前面板源码版本 | `1.12.0`；Tag、Release 与正式镜像已发布 |
 | 本次面板修改基线 | `f5d5075baf9592080a9bd0a1dba8c492f3684cc3` |
-| 配套 Node 源码版本 | `v1.13-yz.22`，修改基线 `0066db507d5fe26698528175d69e30522fa2f4ce` |
+| 配套 Node 版本 | `v1.13-yz.22`，正式来源 `2aa021b65481a14b1d34ff9f594939387c5f0f05` |
 | Xray 固定依赖 | `v26.7.11-yz.6` / `b4caa82d6414196565599c19ebc1b53e331349b6`，本次没有修改核心 |
 | sing-box 固定依赖 | `v1.14.0-yz.2` / `09615a105e219076330d9d2a25ea1e2e733d5427`，本次没有修改依赖 |
 | 修改范围与验证 | HY2 ECH 候选、Node 密钥写入、Mihomo 订阅参数及客户端版本判断；见 [验证记录](docs/hy2-ech-validation.md) |
 | 部署顺序 | 先更新 Node，再更新面板和客户端订阅 |
 
-以下是本次发布前的正式版本和回滚参考；本版发布结果在产物核验完成后补充。
+以下记录本版正式发布结果；回滚基线为面板 `1.11.0` 与 Node `v1.13-yz.21`。
 
 ## 最近正式发布引用与回滚基线
 
 | 项目 | 标识 |
 | --- | --- |
-| YZboard 面板源码版本 | `1.11.0`；固定来源使用同名语义版本 Tag |
+| YZboard 面板源码版本 | `1.12.0`；固定来源使用同名语义版本 Tag |
 | 面板兼容标识 | `xray-v26.7.11-yz.6` |
 | YZboard 上游仓库 | `https://github.com/cedar2025/Xboard.git` |
 | YZboard 上游基线 | `master` 固定快照 / `8ecb762d77ef16491fe919b7092aea66b834deed` |
-| YZboard 本版发布 Tag / commit | `v1.11.0` / `f91568d72ffb55205cbcd9b15a8476283a017683` |
-| YZboard 本版 Release | [v1.11.0](https://github.com/P0me1oo/YZboard/releases/tag/v1.11.0) |
-| YZboard 回滚 Tag / commit | `v1.9.0` / `eff2fa22531f2e15168d3e7e96d8ab45639b1969` |
-| YZboard 回滚 Docker 镜像 | `ghcr.io/p0me1oo/yzboard:1.9.0-eff2fa2` |
-| YZboard 回滚 Docker manifest | `sha256:cdadd4d870313a15a52b224f8db730af54ffa64330cb50d4beaee004524ad6e3`；包含 `linux/amd64` 与 `linux/arm64` |
+| YZboard 本版发布 Tag / commit | `v1.12.0` / `c2d6873ec055dbb8d48184eb296d50db6c85e529` |
+| YZboard 本版 Release | [v1.12.0](https://github.com/P0me1oo/YZboard/releases/tag/v1.12.0) |
+| YZboard 回滚 Tag / commit | `v1.11.0` / `f91568d72ffb55205cbcd9b15a8476283a017683` |
+| YZboard 回滚 Docker 镜像 | `ghcr.io/p0me1oo/yzboard:1.11.0-f91568d` |
+| YZboard 回滚 Docker manifest | `sha256:9ec52732a2f93f77e1ae6f34e314cf9399b26a8c4febf4a82db2e32cd7e651b4`；包含 `linux/amd64` 与 `linux/arm64` |
 | YZboard Docker 架构 | `linux/amd64`、`linux/arm64` |
-| YZboard 本版 Docker 构建 | `ghcr.io/p0me1oo/yzboard:1.11.0-f91568d`；`1.11.0` 与 `latest` 已同步并核对同一 digest |
-| YZboard 本版 Docker manifest | `sha256:9ec52732a2f93f77e1ae6f34e314cf9399b26a8c4febf4a82db2e32cd7e651b4` |
-| YZboard 本版 Docker OCI 标识 | 两架构均为 `revision=f91568d72ffb55205cbcd9b15a8476283a017683`、`version=1.11.0-f91568d` |
-| YZboard-Node 兼容版本 / commit | `v1.13-yz.21` / `2f08f4134d352e127828e1e15aeaa4cfd479864c`；sing-box 中转需成套升级 |
-| YZboard-Node 本版 Release | [v1.13-yz.21](https://github.com/P0me1oo/YZboard-Node/releases/tag/v1.13-yz.21)；10 个附件均已下载核验 |
-| YZboard-Node 本版 Docker manifest | `sha256:500bd8ac445a38ae76550bc2d66c7fd9700515255ab92e9276020bc6136984a0`；版本、完整提交和 `latest` 标签一致，含两个 Linux 架构 |
-| YZboard-Node 上一正式版本（回滚） | `v1.13-yz.19` |
+| YZboard 本版 Docker 构建 | `ghcr.io/p0me1oo/yzboard:1.12.0-c2d6873`；`1.12.0` 与 `latest` 已同步并核对同一 digest |
+| YZboard 本版 Docker manifest | `sha256:39065c1b1fb66537e62f8b18f8c44c21a8ae0e64b3d120944573a17cfd471aa6` |
+| YZboard 本版 Docker OCI 标识 | 两架构均为 `revision=c2d6873ec055dbb8d48184eb296d50db6c85e529`、`version=1.12.0-c2d6873` |
+| YZboard-Node 兼容版本 / commit | `v1.13-yz.22` / `2aa021b65481a14b1d34ff9f594939387c5f0f05`；HY2 ECH 中转需成套升级 |
+| YZboard-Node 本版 Release | [v1.13-yz.22](https://github.com/P0me1oo/YZboard-Node/releases/tag/v1.13-yz.22)；10 个附件均已下载核验 |
+| YZboard-Node 本版 Docker manifest | `sha256:8c831eca80ebc66680055e0f6f443a2c0e1830a28fc6bab638fc7a0487a54235`；版本、完整提交和 `latest` 标签一致，含两个 Linux 架构 |
+| YZboard-Node 上一正式版本（回滚） | `v1.13-yz.21` |
 | YZboard-Node 上游基线 | `v1.13` / `0a29338e1f102a462363ce3527417029f89bab28` |
-| YZboard-Node 回滚 commit | `d22037477a7e97825990eb35e41d12926c117680` |
-| YZboard-Node 回滚 Release | GitHub [Release v1.13-yz.19](https://github.com/P0me1oo/YZboard-Node/releases/tag/v1.13-yz.19)；发布记录见 Node 兼容矩阵 |
-| YZboard-Node 回滚 Docker manifest | `sha256:8b65c52c0c0f59a24c56ab48ced7a1dda9a07c6948edc3f454b41c140d999818`；包含 `linux/amd64` 与 `linux/arm64` |
+| YZboard-Node 回滚 commit | `2f08f4134d352e127828e1e15aeaa4cfd479864c` |
+| YZboard-Node 回滚 Release | GitHub [Release v1.13-yz.21](https://github.com/P0me1oo/YZboard-Node/releases/tag/v1.13-yz.21)；发布记录见 Node 兼容矩阵 |
+| YZboard-Node 回滚 Docker manifest | `sha256:500bd8ac445a38ae76550bc2d66c7fd9700515255ab92e9276020bc6136984a0`；包含 `linux/amd64` 与 `linux/arm64` |
 | Xray 官方预发布 Tag | `v26.7.11` |
 | Xray 上游 Tag commit | `50231eaff98ccc31b5cbd247a721c16e97fe5ec1` |
 | YZ-Xray-core 源码 Tag | `v26.7.11-yz.6` |
@@ -54,7 +54,23 @@
 
 ## 本版发布验证（2026-09-08）
 
-[面板发布 CI](https://github.com/P0me1oo/YZboard/actions/runs/34161072639) 从上表固定提交构建并发布两个 Linux 架构。
+[面板发布 CI](https://github.com/P0me1oo/YZboard/actions/runs/34173634258) 从 `v1.12.0` 的固定提交构建并发布两个 Linux 架构。
+不可变标签、版本别名和 `latest` 的 manifest digest 一致，两个架构的 OCI 来源与版本均已核对，支持匿名拉取。
+[面板 Release](https://github.com/P0me1oo/YZboard/releases/tag/v1.12.0) 已设为最新正式版本；面板完整测试为 60 项、813 个断言。
+
+配套 Node 的 [正式发布 CI](https://github.com/P0me1oo/YZboard-Node/actions/runs/34172378951) 完成 Linux `make test`，
+主模块和六组兼容模块共 661 项测试及子测试通过，无失败、无跳过、无数据竞争报告。
+双架构安装包、镜像和来源检查通过，10 个 Release 附件已下载核对摘要及实际构建信息，`vcs.modified=false`。
+Linux amd64 runner 已执行实际 ECH 握手和八组中转组合；arm64 镜像通过 QEMU 运行版本检查，未进行 arm64 实际转发。
+本地 sing-box 与官方 Mihomo `1.19.9` 联测、公共参数及环境限制见 [HY2 ECH 验证记录](docs/hy2-ech-validation.md)。
+
+Node 先于面板发布。生产环境先升级相关 Node，再更新面板和客户端订阅。
+回退至 Node `v1.13-yz.21` 或面板 `1.11.0` 前，应先关闭 HY2 入口的 ECH 并刷新订阅。
+发布记录以单独文档提交补充，已发布 Tag 和镜像来源保持不变；本次没有操作生产服务器。
+
+## 历史发布验证：1.11.0（2026-09-08）
+
+[面板发布 CI](https://github.com/P0me1oo/YZboard/actions/runs/34161072639) 从 `f91568d72ffb55205cbcd9b15a8476283a017683` 构建并发布两个 Linux 架构。
 不可变标签、面板版本别名和 `latest` 的 manifest digest 一致，各架构的 OCI 来源及版本均已核对。
 [面板 Release](https://github.com/P0me1oo/YZboard/releases/tag/v1.11.0) 已创建并设为最新正式版本；面板完整测试为 57 项、549 个断言。
 

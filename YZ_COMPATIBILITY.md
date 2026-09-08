@@ -6,14 +6,37 @@
 
 | 项目 | 标识 |
 | --- | --- |
-| 当前面板源码版本 | `1.12.1` |
+| 当前面板源码版本 | `1.12.1`；Tag、Release 与双架构镜像已发布 |
 | 面板修改基线 | `4eb7238e381e8afa217cfbbea76c02f266ae1660` |
+| 本版发布 Tag / commit | `v1.12.1` / `0f2b708cdd5c7bdfc346831356f12712e3ed37a3` |
+| 本版 Release | [v1.12.1](https://github.com/P0me1oo/YZboard/releases/tag/v1.12.1)，最新正式版本 |
+| 本版不可变镜像 | `ghcr.io/p0me1oo/yzboard:1.12.1-0f2b708`；`1.12.1` 与 `latest` 已同步 |
+| 本版 Docker manifest | `sha256:39b49d8879da52402c2e8710fb65b9248a63a07596d5aced1cf907638f45ade1` |
+| Docker 架构与 OCI 标识 | `linux/amd64`、`linux/arm64`；两架构均为 `revision=0f2b708cdd5c7bdfc346831356f12712e3ed37a3`、`version=1.12.1-0f2b708` |
 | 配套 Node / 服务端核心 | 沿用下方 `1.12.0` 的固定依赖，无数据库变更 |
+| 面板回滚 Tag / commit | `v1.12.0` / `c2d6873ec055dbb8d48184eb296d50db6c85e529` |
+| 面板回滚镜像 | `ghcr.io/p0me1oo/yzboard:1.12.0-c2d6873` |
+| 回滚 Docker manifest | `sha256:39065c1b1fb66537e62f8b18f8c44c21a8ae0e64b3d120944573a17cfd471aa6`；两架构与来源已重新核对 |
 | Mihomo 核对源码 | `fc8c5a24b16991f98cd736950c17d1aa306a5041` |
 | 修改范围 | ECH / XHTTP、常见传输参数、Shadowsocks 插件、Mieru、HTTP TLS、Reality 指纹、入口内核与多路复用、sing-box HY1 ALPN、内核版本过滤 |
 | 字段和验证记录 | [Mihomo 订阅兼容说明](docs/mihomo-subscription.md) |
 
-本节记录 `1.12.1` 的源码与验证范围，Tag、镜像摘要及回滚引用在发布验证后补充。下方保留 `1.12.0` 的既有发布记录。
+### 本版发布验证（2026-09-08）
+
+[面板发布 CI](https://github.com/P0me1oo/YZboard/actions/runs/34241282162) 从 `v1.12.1` 固定提交构建并发布两个 Linux 架构，构建与多架构清单检查全部通过。
+通过 GHCR 匿名拉取接口重新获取清单、架构清单和镜像配置，校验响应内容的 SHA256、OCI 来源及版本；不可变标签、版本别名和 `latest` 均指向上表摘要。
+
+| 架构 | 架构清单 digest | 镜像配置 digest |
+| --- | --- | --- |
+| `linux/amd64` | `sha256:c0b77b1d84266edac82003fe1c9026183399ba4562ba94bf3b1d4e0aff017148` | `sha256:e0a84cd5ed180755ab3ccab4848f00675e6f965dae2da6c11635153e2d6ff170` |
+| `linux/arm64` | `sha256:5131ccbe1ca06401c633156ce8125d1cb7d3668401893154652db2da9039219f` | `sha256:fc805e69ceb80421d95afbc26df366d05dcfbed5f18e47df883bfb44fed78d7d` |
+
+发布源码的完整面板回归为 105 项测试、1693 个断言；Mihomo 扩展核对中，68 组配置、11 种出站类型、226 项字段检查通过实际解析。
+测试使用本地 PHP 8.4.21、内存 SQLite 和固定 Mihomo 源码，具体范围见兼容说明。双架构镜像完成构建及元数据核验，本次未进行实际线路握手或转发测试。
+
+Node 继续使用 `v1.13-yz.22`，Xray、sing-box 依赖和数据库结构不变。已使用 `1.12.0` 配套版本时，只需更新面板并刷新客户端订阅。
+回滚面板后也应刷新订阅，旧版不包含本次参数修复；Node 和核心无需随本补丁回退。
+发布记录以独立文档提交补充，已发布 Tag 和镜像的源码固定在上表提交；本次没有操作生产服务器。下方保留 `1.12.0` 的历史发布与回滚记录。
 
 ## HY2 ECH 前置入口（1.12.0）
 
@@ -29,7 +52,7 @@
 
 以下记录本版正式发布结果；回滚基线为面板 `1.11.0` 与 Node `v1.13-yz.21`。
 
-## 最近正式发布引用与回滚基线
+## 历史正式发布引用与回滚基线：1.12.0
 
 | 项目 | 标识 |
 | --- | --- |
@@ -65,7 +88,7 @@
 
 三个项目的内部版本不强行相同：面板使用自己的语义版本，Node 使用独立的 Release Tag，Xray 使用“上游版本 + YZ fork patch”格式。官方 `v26.7.11` Tag 不由 YZ fork 创建或覆盖。
 
-## 本版发布验证（2026-09-08）
+## 历史发布验证：1.12.0（2026-09-08）
 
 [面板发布 CI](https://github.com/P0me1oo/YZboard/actions/runs/34173634258) 从 `v1.12.0` 的固定提交构建并发布两个 Linux 架构。
 不可变标签、版本别名和 `latest` 的 manifest digest 一致，两个架构的 OCI 来源与版本均已核对，支持匿名拉取。

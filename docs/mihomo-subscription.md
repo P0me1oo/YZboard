@@ -162,3 +162,7 @@ ECH/XHTTP 专项此前另有 32 组配置、175 个字段检查通过实际解�
 运行面板回归测试：`php vendor/bin/phpunit --do-not-cache-result`。Windows 本次使用 PHP `8.4.21`，通过命令行显式加载 `pdo_sqlite` 和 `sqlite3`，数据库使用内存 SQLite。Mihomo 解析程序通过 `go run -mod=readonly` 执行，不修改核心仓库。
 
 测试身份和 ECH 密钥在运行时生成；解析用 YAML 只通过进程管道传递。验证没有连接实际节点，也没有验证公网 DNS ECH 记录或真实上下行转发，不能把配置解析通过当作所有线路已经完成握手。
+
+`v1.12.1` 已正式发布，固定来源为 `0f2b708cdd5c7bdfc346831356f12712e3ed37a3`。
+[发布 CI](https://github.com/P0me1oo/YZboard/actions/runs/34241282162) 完成 `linux/amd64`、`linux/arm64` 构建；镜像 `ghcr.io/p0me1oo/yzboard:1.12.1-0f2b708`、版本别名和 `latest` 的摘要一致，两架构的来源、版本及匿名拉取已核验。
+镜像摘要与 `1.12.0` 回滚引用见 [兼容矩阵](../YZ_COMPATIBILITY.md)。

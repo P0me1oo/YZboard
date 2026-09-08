@@ -480,7 +480,11 @@ class ServerRelayTest extends TestCase
                     foreach ([$entry, ...$children] as $node) {
                         $this->assertSame($entry->host, $servers[$node->id]['host']);
                         $this->assertSame($protocol, $servers[$node->id]['type']);
+                        $this->assertSame($entryKernel, $servers[$node->id]['kernel_type']);
                         $this->assertSame(Helper::applyVlessRoute($user->uuid, $node->vless_route), $servers[$node->id]['password']);
+                    }
+                    foreach ($children as $child) {
+                        $this->assertSame($landingKernel, $child->fresh()->kernel_type);
                     }
                 }
             }

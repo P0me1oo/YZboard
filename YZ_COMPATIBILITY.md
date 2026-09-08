@@ -2,11 +2,24 @@
 
 本文件记录面板、Node、Xray fork 和 sing-box 的可回滚兼容关系。面板版本与兼容标识必须和对应 Node Release、Xray fork commit 及变更说明一起发布。
 
+## Mihomo 订阅修复（1.12.1）
+
+| 项目 | 标识 |
+| --- | --- |
+| 当前面板源码版本 | `1.12.1` |
+| 面板修改基线 | `4eb7238e381e8afa217cfbbea76c02f266ae1660` |
+| 配套 Node / 服务端核心 | 沿用下方 `1.12.0` 的固定依赖，无数据库变更 |
+| Mihomo 核对源码 | `fc8c5a24b16991f98cd736950c17d1aa306a5041` |
+| 修改范围 | ECH / XHTTP、常见传输参数、Shadowsocks 插件、Mieru、HTTP TLS、Reality 指纹、入口内核与多路复用、sing-box HY1 ALPN、内核版本过滤 |
+| 字段和验证记录 | [Mihomo 订阅兼容说明](docs/mihomo-subscription.md) |
+
+本节记录 `1.12.1` 的源码与验证范围，Tag、镜像摘要及回滚引用在发布验证后补充。下方保留 `1.12.0` 的既有发布记录。
+
 ## HY2 ECH 前置入口（1.12.0）
 
 | 项目 | 标识 |
 | --- | --- |
-| 当前面板源码版本 | `1.12.0`；Tag、Release 与正式镜像已发布 |
+| 本节面板版本 | `1.12.0`；Tag、Release 与正式镜像已发布 |
 | 本次面板修改基线 | `f5d5075baf9592080a9bd0a1dba8c492f3684cc3` |
 | 配套 Node 版本 | `v1.13-yz.22`，正式来源 `2aa021b65481a14b1d34ff9f594939387c5f0f05` |
 | Xray 固定依赖 | `v26.7.11-yz.6` / `b4caa82d6414196565599c19ebc1b53e331349b6`，本次没有修改核心 |

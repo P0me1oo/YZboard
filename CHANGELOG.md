@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.12.1 - 2026-09-08
+
+- 修复 Mihomo 订阅遗漏 XHTTP 请求头、填充、会话参数、XMUX 和上下行分离配置的问题，遵循 Xray 的 `extra` 优先级并转换为 Mihomo 字段。
+- 下载链路独立转换地址、端口、TLS、Reality 和 ECH 公共参数，避免继承上行的认证设置；不支持或无效的 XHTTP 组合从订阅中过滤。
+- 按 Xray 语义处理 XHTTP 零值、倒序范围、填充和上传默认字段；上下行 XMUX 分别转换，无 TLS 下载显式使用 HTTP/1.1。
+- ECH 版本判断覆盖布尔开关，补齐 HY1、TUIC 的 ECH 下发；基础 ECH、DNS 查询域名以及不同 XHTTP 能力使用各自的内核最低版本，不再用应用外壳版本判断这些能力。
+- 订阅增加 `mihomo` 标识识别，保留未知内核版本的节点；修复 VLESS、VMess 旧 HTTP/2 别名被当成 TCP 输出的问题。
+- 补齐 WebSocket / HTTPUpgrade 请求头、TCP HTTP 伪装请求方法、gRPC User-Agent 和可表示的 authority；无法独立表示 TLS 服务名与 authority 的组合从订阅中过滤。
+- 修复 Mieru 同时输出单端口和范围的问题，启用 UDP 并补齐流量模式；补 HTTP TLS 服务名及 Reality 默认指纹，过滤 HTTP/SOCKS5 无法表示的 TLS 参数。
+- 修复 Shadowsocks 插件布尔开关、默认选项、ShadowTLS 扩展和 Restls 必需字段，避免固定输出无效 Restls 脚本。
+- sing-box 多路复用按实际入口内核生成，修复中转节点误用落地内核的问题；补齐 sing-box HY1 入站需要的 ALPN。
+- AnyTLS、Mieru、VLESS Encryption 和 Mieru 流量模式分别按实际内核版本过滤。
+- 配套 Node 和核心依赖沿用 `1.12.0`，本次只修改面板订阅生成与中转对象的入口内核投影。完整协议范围与验证记录见 [Mihomo 订阅兼容说明](docs/mihomo-subscription.md)。
+
 ## 1.12.0 - 2026-09-08
 
 - HY2 前置入口支持 ECH，Xray 与 sing-box 入口均可挂接现有 VLESS／Shadowsocks 落地；入口需要提供 ECH 服务端密钥，保留 HY1、无效混淆和内部协议组合的限制。

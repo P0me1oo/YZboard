@@ -113,6 +113,7 @@ class ServerService
 
         $child->type = $entry->type;
         $child->host = $entry->host;
+        $child->kernel_type = $entry->kernel_type;
         $child->protocol_settings = $entry->protocol_settings;
         // 服务端口属于落地服务器的内部监听端口，必须一并换成入口的值，
         // 否则用户侧节点列表仍能看到内部端口。

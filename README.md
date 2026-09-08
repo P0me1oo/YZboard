@@ -45,6 +45,7 @@ docker compose up -d
 ### Development Guides
 - [Plugin Development Guide](./docs/en/development/plugin-development-guide.md) - Complete guide for developing XBoard plugins
 - [Node User Sync Reconciliation](./docs/en/development/node-user-sync.md) - Explains periodic node user-list reconciliation for expired users
+- [Mihomo 订阅兼容说明](./docs/mihomo-subscription.md) - 各协议参数核对、ECH / XHTTP 转换、内核版本要求与验证范围
 - [YZboard/Xray Compatibility](./YZ_COMPATIBILITY.md) - Fixed Xray fork, Node build, and report compatibility matrix
 
 ### Deployment Guides

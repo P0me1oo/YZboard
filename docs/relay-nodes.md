@@ -6,6 +6,7 @@
 
 面板 `1.11.0` 与 Node `v1.13-yz.21` 的源码实现支持 Xray、sing-box 入口和落地混用。
 面板 `1.12.0` 与 Node `v1.13-yz.22` 进一步支持开启 ECH 的 HY2 入口。
+面板 `1.12.1` 生成客户端订阅时按入口内核判断 sing-box 多路复用，避免混合内核中转误用落地的内核选择；数据库中的落地配置不变。
 发布引用、固定核心依赖与验证状态见 [兼容矩阵](../YZ_COMPATIBILITY.md)。
 
 ## 前置入口的含义
@@ -88,11 +89,13 @@ ECH 只终止在 HY2 入口，入口到落地继续使用原有 VLESS 或 Shadow
 | 订阅格式 | HY2 ECH 参数 | 使用条件 |
 | --- | --- | --- |
 | sing-box JSON | `tls.ech.enabled`、PEM 数组 `tls.ech.config`、可选 `query_server_name` | 实测客户端内核为 `1.14.0-yz.2`；沿用现有 sing-box 版本规则 |
-| Mihomo YAML | `ech-opts.enable`、Base64 `ech-opts.config`、可选 `query-server-name` | 实测官方 Mihomo `1.19.9`；识别为 `meta` 且低于该版本时过滤此类节点 |
+| Mihomo YAML | `ech-opts.enable`、Base64 `ech-opts.config`、可选 `query-server-name` | 内联配置实测官方 Mihomo `1.19.9`；只靠查询域名获取配置需要 `1.19.20`；已知内核低于对应版本时过滤 |
 | 通用 HY2 URI、其他客户端格式 | 本次未增加 ECH 字段 | 不将其视为已验证的 ECH 订阅，使用上面两种格式完成 ECH 连接 |
 
 Clash Verge 等应用需要确认内嵌的 Mihomo 版本，应用版本本身不能直接换算为内核版本。
-只指定 `flag=meta` 而没有版本信息时仍保留节点及 ECH 参数，由用户确认客户端内核支持。
+面板 `1.12.1` 起同时识别 `mihomo` 和 `meta`，并区分基础 ECH 与 DNS 查询域名的最低版本。
+只指定 `flag=meta`、`flag=mihomo` 而没有版本信息时仍保留节点及 ECH 参数，由用户确认客户端内核支持。
+字段转换、版本规则和 XHTTP 支持范围见 [Mihomo 订阅兼容说明](mihomo-subscription.md)。
 两种已支持格式只输出公共配置，不输出 ECH 服务端密钥或本地文件路径。公共配置为空时可保留 DNS 查询域名；
 本次实际握手验证使用内联公共配置，没有验证外部 DNS 记录的部署。
 

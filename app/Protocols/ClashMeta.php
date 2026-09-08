@@ -7,10 +7,11 @@ use App\Utils\Helper;
 use Illuminate\Support\Facades\File;
 use Symfony\Component\Yaml\Yaml;
 use App\Support\AbstractProtocol;
+use App\Support\MihomoXhttp;
 
 class ClashMeta extends AbstractProtocol
 {
-    public $flags = ['meta', 'verge', 'flclash', 'nekobox', 'clashmetaforandroid'];
+    public $flags = ['meta', 'mihomo', 'verge', 'flclash', 'nekobox', 'clashmetaforandroid'];
     const CUSTOM_TEMPLATE_FILE = 'resources/rules/custom.clashmeta.yaml';
     const CUSTOM_CLASH_TEMPLATE_FILE = 'resources/rules/custom.clash.yaml';
     const DEFAULT_TEMPLATE_FILE = 'resources/rules/default.clash.yaml';
@@ -36,7 +37,7 @@ class ClashMeta extends AbstractProtocol
                 'http' => '0.0.0',
                 'h2' => '0.0.0',
                 'httpupgrade' => '0.0.0',
-                'xhttp' => '0.0.0',
+                'xhttp' => '0.0.0', // 内核版本单独判断，不能使用应用外壳版本。
             ],
             'strict' => true,
         ],
@@ -79,81 +80,127 @@ class ClashMeta extends AbstractProtocol
         'flclash.hysteria.protocol_settings.version' => [
             2 => '0.8.0',
         ],
-        'meta.vmess.protocol_settings.tls_settings.ech.enabled' => [
-            1 => '1.19.9',
-        ],
-        'meta.vless.protocol_settings.tls_settings.ech.enabled' => [
-            1 => '1.19.9',
-        ],
-        'meta.trojan.protocol_settings.tls_settings.ech.enabled' => [
-            1 => '1.19.9',
-        ],
-        'meta.anytls.protocol_settings.tls.ech.enabled' => [
-            1 => '1.19.9',
-        ],
-        'verge.vmess.protocol_settings.tls_settings.ech.enabled' => [
-            1 => '1.19.9',
-        ],
-        'verge.vless.protocol_settings.tls_settings.ech.enabled' => [
-            1 => '1.19.9',
-        ],
-        'verge.trojan.protocol_settings.tls_settings.ech.enabled' => [
-            1 => '1.19.9',
-        ],
-        'verge.anytls.protocol_settings.tls.ech.enabled' => [
-            1 => '1.19.9',
-        ],
-        'flclash.vmess.protocol_settings.tls_settings.ech.enabled' => [
-            1 => '1.19.9',
-        ],
-        'flclash.vless.protocol_settings.tls_settings.ech.enabled' => [
-            1 => '1.19.9',
-        ],
-        'flclash.trojan.protocol_settings.tls_settings.ech.enabled' => [
-            1 => '1.19.9',
-        ],
-        'flclash.anytls.protocol_settings.tls.ech.enabled' => [
-            1 => '1.19.9',
-        ],
-        'nekobox.vmess.protocol_settings.tls_settings.ech.enabled' => [
-            1 => '1.19.9',
-        ],
-        'nekobox.vless.protocol_settings.tls_settings.ech.enabled' => [
-            1 => '1.19.9',
-        ],
-        'nekobox.trojan.protocol_settings.tls_settings.ech.enabled' => [
-            1 => '1.19.9',
-        ],
-        'nekobox.anytls.protocol_settings.tls.ech.enabled' => [
-            1 => '1.19.9',
-        ],
-        'clashmetaforandroid.vmess.protocol_settings.tls_settings.ech.enabled' => [
-            1 => '1.19.9',
-        ],
-        'clashmetaforandroid.vless.protocol_settings.tls_settings.ech.enabled' => [
-            1 => '1.19.9',
-        ],
-        'clashmetaforandroid.trojan.protocol_settings.tls_settings.ech.enabled' => [
-            1 => '1.19.9',
-        ],
-        'clashmetaforandroid.anytls.protocol_settings.tls.ech.enabled' => [
-            1 => '1.19.9',
-        ],
     ];
 
     protected function isCompatible($server)
     {
-        // ECH 开关是布尔值；这里只判断已知的 Mihomo 内核版本，不能套用应用外壳版本。
-        if (data_get($server, 'type') === Server::TYPE_HYSTERIA
-            && (int) data_get($server, 'protocol_settings.version', 2) === 2
-            && data_get($server, 'protocol_settings.tls.ech.enabled')
-            && $this->clientName === 'meta'
-            && filled($this->clientVersion)
-            && version_compare($this->clientVersion, '1.19.9', '<')) {
+        if (!parent::isCompatible($server)) {
             return false;
         }
 
-        return parent::isCompatible($server);
+        $version = $this->mihomoVersion();
+        $type = data_get($server, 'type');
+        $settings = data_get($server, 'protocol_settings', []);
+        $minimum = match ($type) {
+            Server::TYPE_ANYTLS => '1.19.3',
+            Server::TYPE_MIERU => filled(data_get($settings, 'traffic_pattern')) ? '1.19.21' : '1.19.0',
+            Server::TYPE_VLESS => data_get($settings, 'encryption.enabled')
+                && !in_array(data_get($settings, 'encryption.encryption'), [null, '', 'none'], true) ? '1.19.13' : null,
+            default => null,
+        };
+        if ($version !== null && $minimum !== null && version_compare($version, $minimum, '<')) {
+            return false;
+        }
+        if (in_array($type, [Server::TYPE_HTTP, Server::TYPE_SOCKS], true) && data_get($settings, 'tls')) {
+            // 当前 Mihomo 的 HTTP/SOCKS 出站没有 ECH 选项，SOCKS 也不能单独指定 TLS 服务名。
+            if (Helper::toMihomoEchOptions(data_get($settings, 'tls_settings.ech'))) {
+                return false;
+            }
+            $serverName = data_get($settings, 'tls_settings.server_name');
+            if ($type === Server::TYPE_SOCKS && filled($serverName)
+                && strcasecmp(rtrim($serverName, '.'), rtrim(data_get($server, 'host', ''), '.')) !== 0) {
+                return false;
+            }
+        }
+        if ($type === Server::TYPE_SHADOWSOCKS) {
+            $plugin = data_get($settings, 'plugin');
+            if (filled($plugin) && !in_array($plugin, ['obfs', 'obfs-local', 'v2ray-plugin', 'gost-plugin', 'shadow-tls', 'restls', 'kcptun'], true)) {
+                return false;
+            }
+            if ($plugin === 'restls') {
+                $options = self::buildShadowsocks(data_get($server, 'password', ''), $server)['plugin-opts'];
+                if (!filled($options['host'] ?? null) || !filled($options['password'] ?? null)
+                    || !in_array($options['version-hint'] ?? '', ['tls12', 'tls13'], true)) {
+                    return false;
+                }
+            }
+        }
+        if (data_get($settings, 'network') === 'grpc'
+            && ($type === Server::TYPE_TROJAN || data_get($settings, 'tls'))
+            && filled($authority = data_get($settings, 'network_settings.authority'))) {
+            $serverName = match ($type) {
+                Server::TYPE_VLESS => match ((int) data_get($settings, 'tls')) {
+                    1 => data_get($settings, 'tls_settings.server_name'),
+                    2 => data_get($settings, 'reality_settings.server_name'),
+                    default => null,
+                },
+                Server::TYPE_TROJAN => (int) data_get($settings, 'tls', 1) === 2
+                    ? data_get($settings, 'reality_settings.server_name') : data_get($settings, 'tls_settings.server_name'),
+                default => data_get($settings, 'tls') ? data_get($settings, 'tls_settings.server_name') : null,
+            };
+            $host = data_get($server, 'host', '');
+            $address = (str_contains($host, ':') ? '[' . trim($host, '[]') . ']' : $host) . ':' . data_get($server, 'port');
+            // 未填写 TLS 服务名时，显式使用连接主机不会改变 TLS 校验目标。
+            $authorities = filled($serverName) ? [$serverName]
+                : ($type === Server::TYPE_TROJAN ? [$host] : [$host, $address]);
+            if (!in_array(strtolower($authority), array_map('strtolower', $authorities), true)) {
+                return false;
+            }
+        }
+        $ech = match ($type) {
+            Server::TYPE_VMESS => data_get($settings, 'tls') ? data_get($settings, 'tls_settings.ech') : null,
+            Server::TYPE_VLESS => (int) data_get($settings, 'tls') === 1 ? data_get($settings, 'tls_settings.ech') : null,
+            Server::TYPE_TROJAN => (int) data_get($settings, 'tls', 1) !== 2 ? data_get($settings, 'tls_settings.ech') : null,
+            Server::TYPE_HYSTERIA, Server::TYPE_TUIC, Server::TYPE_ANYTLS => data_get($settings, 'tls.ech'),
+            default => null,
+        };
+        if (!self::echCompatible(Helper::toMihomoEchOptions($ech), $version)) {
+            return false;
+        }
+
+        if ($type === Server::TYPE_VLESS && data_get($settings, 'network') === 'xhttp') {
+            try {
+                $options = MihomoXhttp::build(data_get($settings, 'network_settings') ?? []);
+            } catch (\InvalidArgumentException $e) {
+                return false;
+            }
+            if ($version !== null && version_compare($version, MihomoXhttp::minimumVersion($options), '<')) {
+                return false;
+            }
+            if (!self::echCompatible(data_get($options, 'download-settings.ech-opts'), $version)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** 只接受明确标注的内核版本；应用版本和未知版本不参与内核能力过滤。 */
+    private function mihomoVersion(): ?string
+    {
+        $number = '([0-9]+(?:\.[0-9]+){0,2}(?:[-+][0-9a-z.-]+)?)';
+        if (filled($this->userAgent)) {
+            return preg_match('/\b(?:clash[._-]?meta|mihomo|meta)[\/\s]+v?' . $number . '/i', $this->userAgent, $matches)
+                ? $matches[1]
+                : null;
+        }
+
+        return in_array($this->clientName, ['meta', 'mihomo'], true)
+            && preg_match('/^v?' . $number . '$/i', $this->clientVersion ?? '', $matches)
+                ? $matches[1]
+                : null;
+    }
+
+    private static function echCompatible(?array $options, ?string $version): bool
+    {
+        if ($version === null || !data_get($options, 'enable')) {
+            return true;
+        }
+
+        $minimum = empty($options['config']) && filled(data_get($options, 'query-server-name'))
+            ? '1.19.20'
+            : '1.19.9';
+        return version_compare($version, $minimum, '>=');
     }
 
     public function handle()
@@ -239,7 +286,7 @@ class ClashMeta extends AbstractProtocol
         $config['proxy-groups'] = array_values($config['proxy-groups']);
         $config = $this->buildRules($config);
 
-        $yaml = Yaml::dump($config, 2, 4, Yaml::DUMP_EMPTY_ARRAY_AS_SEQUENCE);
+        $yaml = Yaml::dump($config, 2, 4, Yaml::DUMP_EMPTY_ARRAY_AS_SEQUENCE | Yaml::DUMP_OBJECT_AS_MAP);
         $yaml = str_replace('$app_name', admin_setting('app_name', 'XBoard'), $yaml);
         return response($yaml)
             ->header('content-type', 'text/yaml')
@@ -280,9 +327,9 @@ class ClashMeta extends AbstractProtocol
         $array['cipher'] = data_get($server['protocol_settings'], 'cipher');
         $array['password'] = data_get($server, 'password', $password);
         $array['udp'] = true;
-        if (data_get($protocol_settings, 'plugin') && data_get($protocol_settings, 'plugin_opts')) {
+        if (data_get($protocol_settings, 'plugin')) {
             $plugin = data_get($protocol_settings, 'plugin');
-            $pluginOpts = data_get($protocol_settings, 'plugin_opts', '');
+            $pluginOpts = (string) data_get($protocol_settings, 'plugin_opts', '');
             $array['plugin'] = $plugin;
 
             // 解析插件选项
@@ -309,12 +356,17 @@ class ClashMeta extends AbstractProtocol
                     break;
 
                 case 'v2ray-plugin':
+                case 'gost-plugin':
                     $array['plugin-opts'] = array_filter([
                         'mode' => $parsedOpts['mode'] ?? 'websocket',
-                        'tls' => isset($parsedOpts['tls']) || isset($parsedOpts['server']),
+                        'tls' => self::pluginBoolean($parsedOpts, 'tls', false),
                         'host' => $parsedOpts['host'] ?? null,
                         'path' => $parsedOpts['path'] ?? '/',
-                        'mux' => isset($parsedOpts['mux']) ? true : null,
+                        'mux' => self::pluginBoolean($parsedOpts, 'mux'),
+                        'skip-cert-verify' => self::pluginBoolean($parsedOpts, 'skip-cert-verify'),
+                        'fingerprint' => $parsedOpts['fingerprint'] ?? null,
+                        'v2ray-http-upgrade' => $plugin === 'v2ray-plugin' ? self::pluginBoolean($parsedOpts, 'v2ray-http-upgrade') : null,
+                        'v2ray-http-upgrade-fast-open' => $plugin === 'v2ray-plugin' ? self::pluginBoolean($parsedOpts, 'v2ray-http-upgrade-fast-open') : null,
                         'headers' => isset($parsedOpts['host']) ? ['Host' => $parsedOpts['host']] : null
                     ], fn($v) => $v !== null);
                     break;
@@ -323,7 +375,10 @@ class ClashMeta extends AbstractProtocol
                     $array['plugin-opts'] = array_filter([
                         'host' => $parsedOpts['host'] ?? null,
                         'password' => $parsedOpts['password'] ?? null,
-                        'version' => isset($parsedOpts['version']) ? (int) $parsedOpts['version'] : 2
+                        'version' => isset($parsedOpts['version']) ? (int) $parsedOpts['version'] : 2,
+                        'fingerprint' => $parsedOpts['fingerprint'] ?? null,
+                        'skip-cert-verify' => self::pluginBoolean($parsedOpts, 'skip-cert-verify'),
+                        'alpn' => isset($parsedOpts['alpn']) ? array_map('trim', explode(',', $parsedOpts['alpn'])) : null,
                     ], fn($v) => $v !== null);
                     break;
 
@@ -331,7 +386,8 @@ class ClashMeta extends AbstractProtocol
                     $array['plugin-opts'] = array_filter([
                         'host' => $parsedOpts['host'] ?? null,
                         'password' => $parsedOpts['password'] ?? null,
-                        'restls-script' => $parsedOpts['restls-script'] ?? '123'
+                        'version-hint' => $parsedOpts['version-hint'] ?? null,
+                        'restls-script' => $parsedOpts['restls-script'] ?? null,
                     ], fn($v) => $v !== null);
                     break;
 
@@ -340,6 +396,13 @@ class ClashMeta extends AbstractProtocol
             }
         }
         return $array;
+    }
+
+    private static function pluginBoolean(array $options, string $key, ?bool $default = null): ?bool
+    {
+        return array_key_exists($key, $options)
+            ? filter_var($options[$key], FILTER_VALIDATE_BOOLEAN)
+            : $default;
     }
 
     public static function buildVmess($uuid, $server)
@@ -364,7 +427,7 @@ class ClashMeta extends AbstractProtocol
         }
 
         self::appendUtls($array, $protocol_settings);
-        self::appendMultiplex($array, $protocol_settings);
+        self::appendMultiplex($array, $protocol_settings, $server);
 
         switch (data_get($protocol_settings, 'network')) {
             case 'tcp':
@@ -373,6 +436,7 @@ class ClashMeta extends AbstractProtocol
                 if ($headerType === 'http') {
                     if (
                         $httpOpts = array_filter([
+                            'method' => data_get($protocol_settings, 'network_settings.header.request.method'),
                             'headers' => data_get($protocol_settings, 'network_settings.header.request.headers'),
                             'path' => data_get($protocol_settings, 'network_settings.header.request.path', ['/'])
                         ])
@@ -382,17 +446,12 @@ class ClashMeta extends AbstractProtocol
                 }
                 break;
             case 'ws':
-                $array['network'] = 'ws';
-                if ($path = data_get($protocol_settings, 'network_settings.path'))
-                    $array['ws-opts']['path'] = $path;
-                if ($host = data_get($protocol_settings, 'network_settings.headers.Host'))
-                    $array['ws-opts']['headers'] = ['Host' => $host];
+                self::appendWebsocket($array, $protocol_settings);
                 break;
             case 'grpc':
-                $array['network'] = 'grpc';
-                if ($serviceName = data_get($protocol_settings, 'network_settings.serviceName'))
-                    $array['grpc-opts']['grpc-service-name'] = $serviceName;
+                self::appendGrpc($array, $protocol_settings);
                 break;
+            case 'http': // 旧版 Xray 的 HTTP/2 传输别名。
             case 'h2':
                 $array['network'] = 'h2';
                 $array['h2-opts'] = [];
@@ -402,12 +461,7 @@ class ClashMeta extends AbstractProtocol
                     $array['h2-opts']['host'] = is_array($host) ? $host : [$host];
                 break;
             case 'httpupgrade':
-                $array['network'] = 'ws';
-                $array['ws-opts'] = ['v2ray-http-upgrade' => true];
-                if ($path = data_get($protocol_settings, 'network_settings.path'))
-                    $array['ws-opts']['path'] = $path;
-                if ($host = data_get($protocol_settings, 'network_settings.host'))
-                    $array['ws-opts']['headers'] = ['Host' => $host];
+                self::appendWebsocket($array, $protocol_settings, true);
                 break;
             default:
                 break;
@@ -425,8 +479,6 @@ class ClashMeta extends AbstractProtocol
             'server' => $server['host'],
             'port' => $server['port'],
             'uuid' => $password,
-            'alterId' => 0,
-            'cipher' => 'auto',
             'udp' => true,
             'flow' => data_get($protocol_settings, 'flow'),
             'encryption' => match (data_get($protocol_settings, 'encryption.enabled')) {
@@ -454,7 +506,7 @@ class ClashMeta extends AbstractProtocol
                     'public-key' => data_get($protocol_settings, 'reality_settings.public_key'),
                     'short-id' => data_get($protocol_settings, 'reality_settings.short_id')
                 ];
-                self::appendUtls($array, $protocol_settings);
+                self::appendUtls($array, $protocol_settings, true);
                 break;
             default:
                 break;
@@ -468,6 +520,7 @@ class ClashMeta extends AbstractProtocol
                     $array['network'] = 'http';
                     if (
                         $httpOpts = array_filter([
+                            'method' => data_get($protocol_settings, 'network_settings.header.request.method'),
                             'headers' => data_get($protocol_settings, 'network_settings.header.request.headers'),
                             'path' => data_get($protocol_settings, 'network_settings.header.request.path', ['/'])
                         ])
@@ -477,17 +530,12 @@ class ClashMeta extends AbstractProtocol
                 }
                 break;
             case 'ws':
-                $array['network'] = 'ws';
-                if ($path = data_get($protocol_settings, 'network_settings.path'))
-                    $array['ws-opts']['path'] = $path;
-                if ($host = data_get($protocol_settings, 'network_settings.headers.Host'))
-                    $array['ws-opts']['headers'] = ['Host' => $host];
+                self::appendWebsocket($array, $protocol_settings);
                 break;
             case 'grpc':
-                $array['network'] = 'grpc';
-                if ($serviceName = data_get($protocol_settings, 'network_settings.serviceName'))
-                    $array['grpc-opts']['grpc-service-name'] = $serviceName;
+                self::appendGrpc($array, $protocol_settings);
                 break;
+            case 'http': // 旧版 Xray 的 HTTP/2 传输别名。
             case 'h2':
                 $array['network'] = 'h2';
                 $array['h2-opts'] = [];
@@ -497,30 +545,20 @@ class ClashMeta extends AbstractProtocol
                     $array['h2-opts']['host'] = is_array($host) ? $host : [$host];
                 break;
             case 'httpupgrade':
-                $array['network'] = 'ws';
-                $array['ws-opts'] = ['v2ray-http-upgrade' => true];
-                if ($path = data_get($protocol_settings, 'network_settings.path'))
-                    $array['ws-opts']['path'] = $path;
-                if ($host = data_get($protocol_settings, 'network_settings.host'))
-                    $array['ws-opts']['headers'] = ['Host' => $host];
+                self::appendWebsocket($array, $protocol_settings, true);
                 break;
             case 'xhttp':
                 $array['network'] = 'xhttp';
-                $xhttpOpts = [];
-                if ($path = data_get($protocol_settings, 'network_settings.path'))
-                    $xhttpOpts['path'] = $path;
-                if ($host = data_get($protocol_settings, 'network_settings.host'))
-                    $xhttpOpts['host'] = $host;
-                if ($mode = data_get($protocol_settings, 'network_settings.mode'))
-                    $xhttpOpts['mode'] = $mode;
-                if (!empty($xhttpOpts))
+                $xhttpOpts = MihomoXhttp::build(data_get($protocol_settings, 'network_settings') ?? []);
+                if ($xhttpOpts) {
                     $array['xhttp-opts'] = $xhttpOpts;
+                }
                 break;
             default:
                 break;
         }
 
-        self::appendMultiplex($array, $protocol_settings);
+        self::appendMultiplex($array, $protocol_settings, $server);
 
         return $array;
     }
@@ -558,24 +596,18 @@ class ClashMeta extends AbstractProtocol
                 break;
         }
 
-        self::appendUtls($array, $protocol_settings);
-        self::appendMultiplex($array, $protocol_settings);
+        self::appendUtls($array, $protocol_settings, $tlsMode === 2);
+        self::appendMultiplex($array, $protocol_settings, $server);
 
         switch (data_get($protocol_settings, 'network')) {
             case 'tcp':
                 $array['network'] = 'tcp';
                 break;
             case 'ws':
-                $array['network'] = 'ws';
-                if ($path = data_get($protocol_settings, 'network_settings.path'))
-                    $array['ws-opts']['path'] = $path;
-                if ($host = data_get($protocol_settings, 'network_settings.headers.Host'))
-                    $array['ws-opts']['headers'] = ['Host' => $host];
+                self::appendWebsocket($array, $protocol_settings);
                 break;
             case 'grpc':
-                $array['network'] = 'grpc';
-                if ($serviceName = data_get($protocol_settings, 'network_settings.serviceName'))
-                    $array['grpc-opts']['grpc-service-name'] = $serviceName;
+                self::appendGrpc($array, $protocol_settings);
                 break;
             case 'h2':
                 $array['network'] = 'h2';
@@ -586,12 +618,7 @@ class ClashMeta extends AbstractProtocol
                     $array['h2-opts']['host'] = is_array($host) ? $host : [$host];
                 break;
             case 'httpupgrade':
-                $array['network'] = 'ws';
-                $array['ws-opts'] = ['v2ray-http-upgrade' => true];
-                if ($path = data_get($protocol_settings, 'network_settings.path'))
-                    $array['ws-opts']['path'] = $path;
-                if ($host = data_get($protocol_settings, 'network_settings.host'))
-                    $array['ws-opts']['headers'] = ['Host' => $host];
+                self::appendWebsocket($array, $protocol_settings, true);
                 break;
             default:
                 $array['network'] = 'tcp';
@@ -622,6 +649,11 @@ class ClashMeta extends AbstractProtocol
         switch (data_get($protocol_settings, 'version')) {
             case 1:
                 $array['type'] = 'hysteria';
+                self::appendEch($array, data_get($protocol_settings, 'tls.ech'));
+                if (Server::effectiveKernelType(data_get($server, 'kernel_type')) === Server::KERNEL_SINGBOX) {
+                    // 配套 Node 的 sing-box HY1 入站显式使用 h3，与 Mihomo 的默认值不同。
+                    $array['alpn'] = ['h3'];
+                }
                 $array['auth_str'] = $password;
                 $array['protocol'] = 'udp'; // 支持 udp/wechat-video/faketcp
                 if (data_get($protocol_settings, 'obfs.open')) {
@@ -673,6 +705,7 @@ class ClashMeta extends AbstractProtocol
 
         $array['congestion-controller'] = data_get($protocol_settings, 'congestion_control', 'cubic');
         $array['udp-relay-mode'] = data_get($protocol_settings, 'udp_relay_mode', 'native');
+        self::appendEch($array, data_get($protocol_settings, 'tls.ech'));
 
         return $array;
     }
@@ -711,12 +744,17 @@ class ClashMeta extends AbstractProtocol
             'port' => $server['port'],
             'username' => $password,
             'password' => $password,
-            'transport' => strtoupper(data_get($protocol_settings, 'transport', 'TCP'))
+            'transport' => strtoupper(data_get($protocol_settings, 'transport', 'TCP')),
+            'udp' => true,
         ];
 
         // 如果配置了端口范围
-        if (isset($server['ports'])) {
+        if (filled($server['ports'] ?? null)) {
+            unset($array['port']);
             $array['port-range'] = $server['ports'];
+        }
+        if ($pattern = data_get($protocol_settings, 'traffic_pattern')) {
+            $array['traffic-pattern'] = $pattern;
         }
 
         return $array;
@@ -760,6 +798,9 @@ class ClashMeta extends AbstractProtocol
         if (data_get($protocol_settings, 'tls')) {
             $array['tls'] = true;
             $array['skip-cert-verify'] = (bool) data_get($protocol_settings, 'tls_settings.allow_insecure', false);
+            if ($serverName = data_get($protocol_settings, 'tls_settings.server_name')) {
+                $array['sni'] = $serverName;
+            }
         }
 
         return $array;
@@ -786,8 +827,58 @@ class ClashMeta extends AbstractProtocol
         }
     }
 
-    protected static function appendMultiplex(&$array, $protocol_settings)
+    private static function appendWebsocket(array &$array, array $settings, bool $upgrade = false): void
     {
+        $array['network'] = 'ws';
+        $options = $upgrade ? ['v2ray-http-upgrade' => true] : [];
+        if ($path = data_get($settings, 'network_settings.path')) {
+            $options['path'] = $path;
+        }
+        $headers = (array) data_get($settings, 'network_settings.headers', []);
+        $host = data_get($settings, 'network_settings.host');
+        foreach ($headers as $name => $value) {
+            if (strcasecmp((string) $name, 'host') === 0) {
+                $host = filled($host) ? $host : $value;
+                unset($headers[$name]);
+            }
+        }
+        // Xray 的客户端 Host 优先级为独立 host、旧 Host 请求头、TLS 服务名、连接地址。
+        $host = filled($host) ? $host : ($array['servername'] ?? $array['sni'] ?? null);
+        if (filled($host)) {
+            $headers['Host'] = $host;
+        }
+        if ($headers) {
+            $options['headers'] = $headers;
+        }
+        if ($options) {
+            $array['ws-opts'] = $options;
+        }
+    }
+
+    private static function appendGrpc(array &$array, array $settings): void
+    {
+        $array['network'] = 'grpc';
+        if ($serviceName = data_get($settings, 'network_settings.serviceName')) {
+            $array['grpc-opts']['grpc-service-name'] = $serviceName;
+        }
+        if ($userAgent = data_get($settings, 'network_settings.user_agent')) {
+            $array['grpc-opts']['grpc-user-agent'] = $userAgent;
+        }
+        $authority = data_get($settings, 'network_settings.authority');
+        if ($array['type'] !== 'trojan' && filled($authority)
+            && (empty($array['tls'])
+                || (empty($array['servername']) && strcasecmp($authority, $array['server']) === 0))) {
+            // 无 TLS 时 servername 只控制 gRPC authority；启用 TLS 时不能改变校验目标。
+            $array['servername'] = $authority;
+        }
+    }
+
+    protected static function appendMultiplex(&$array, $protocol_settings, $server)
+    {
+        // 这里输出的是 sing-box 多路复用；Xray 服务端不使用此协议。
+        if (Server::effectiveKernelType(data_get($server, 'kernel_type')) !== Server::KERNEL_SINGBOX) {
+            return;
+        }
         if ($multiplex = data_get($protocol_settings, 'multiplex')) {
             if (data_get($multiplex, 'enabled')) {
                 $array['smux'] = array_filter([
@@ -810,23 +901,22 @@ class ClashMeta extends AbstractProtocol
         }
     }
 
-    protected static function appendUtls(&$array, $protocol_settings)
+    protected static function appendUtls(&$array, $protocol_settings, bool $required = false)
     {
         if ($utls = data_get($protocol_settings, 'utls')) {
             if (data_get($utls, 'enabled')) {
                 $array['client-fingerprint'] = Helper::getTlsFingerprint($utls);
             }
         }
+        if ($required && (empty($array['client-fingerprint']) || $array['client-fingerprint'] === 'none')) {
+            $array['client-fingerprint'] = 'chrome';
+        }
     }
 
     protected static function appendEch(&$array, $ech): void
     {
-        if ($normalized = Helper::normalizeEchSettings($ech)) {
-            $array['ech-opts'] = array_filter([
-                'enable' => true,
-                'config' => Helper::toMihomoEchConfig(data_get($normalized, 'config')),
-                'query-server-name' => data_get($normalized, 'query_server_name'),
-            ], fn($value) => $value !== null);
+        if ($options = Helper::toMihomoEchOptions($ech)) {
+            $array['ech-opts'] = $options;
         }
     }
 }

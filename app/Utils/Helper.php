@@ -252,6 +252,20 @@ class Helper
         ], static fn($value) => $value !== null);
     }
 
+    /** 生成 Mihomo 客户端使用的 ECH 公共选项。 */
+    public static function toMihomoEchOptions($ech): ?array
+    {
+        if (!$normalized = self::normalizeEchSettings($ech)) {
+            return null;
+        }
+
+        return array_filter([
+            'enable' => true,
+            'config' => self::toMihomoEchConfig(data_get($normalized, 'config')),
+            'query-server-name' => data_get($normalized, 'query_server_name'),
+        ], static fn($value) => $value !== null);
+    }
+
     public static function toMihomoEchConfig(?string $config): ?string
     {
         $config = self::trimToNull($config);

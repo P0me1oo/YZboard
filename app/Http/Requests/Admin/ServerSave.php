@@ -240,6 +240,22 @@ class ServerSave extends FormRequest
             $rules['protocol_settings.' . $field] = $rule;
         }
 
+        if ($type === Server::TYPE_HYSTERIA && (int) $this->input('protocol_settings.version', 2) === 2) {
+            $rules['port'] = ['required', function ($attribute, $value, $fail) {
+                if (!is_string($value) && !is_int($value)) {
+                    $fail('连接端口格式无效');
+                    return;
+                }
+                try {
+                    \App\Utils\PortSet::parse((string) $value);
+                } catch (\InvalidArgumentException $exception) {
+                    $fail($exception->getMessage());
+                }
+            }];
+            $rules['server_port'] = 'required|integer|min:1|max:65535';
+            $rules['protocol_settings.hop_interval'] = 'nullable|integer|min:5';
+        }
+
         return $rules;
     }
 

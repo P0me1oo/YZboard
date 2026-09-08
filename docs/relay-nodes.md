@@ -5,6 +5,7 @@
 不需要代理链，也看不到任何落地服务器的连接信息。
 
 面板 `1.11.0` 与 Node `v1.13-yz.21` 的源码实现支持 Xray、sing-box 入口和落地混用。
+面板 `1.12.0` 与 Node `v1.13-yz.22` 进一步支持开启 ECH 的 HY2 入口。
 发布引用、固定核心依赖与验证状态见 [兼容矩阵](../YZ_COMPATIBILITY.md)。
 
 ## 前置入口的含义
@@ -71,8 +72,32 @@ HY2 入口终止客户端的 QUIC/TLS 连接，从认证信息恢复真实用户
 标准 HY2 客户端无需识别编号，也不需要额外的代理链配置。
 
 入口支持可选的 Salamander 混淆，密码至少 4 字节；带宽和混淆参数随订阅继承。
-HY1 和 HY2 ECH 暂不作为中转入口。入口自身仍可选择直接出口，普通 HY2 节点的认证值不改写。
+HY1 不作为中转入口。入口自身仍可选择直接出口，普通 HY2 节点的认证值不改写。
 路由优先级沿用现有 VLESS 中转规则。Xray 未匹配编号时使用默认出站；sing-box 只接受已经下发的线路身份。
+
+### HY2 入口开启 ECH
+
+需要配套面板 `1.12.0` 和 Node `v1.13-yz.22`。发布后应先更新 Node，再更新面板并使用新的入口候选，
+旧版 Node 的中转校验仍会拒绝 HY2 ECH。入口保留正常的 TLS 证书和服务名，再启用 ECH、生成或填写配对的
+服务端密钥与客户端公共配置。服务端密钥缺失的入口不会进入候选；Node 在启动时检查实际密钥文件及格式。
+
+面板将入口的 `protocol_settings.tls.ech` 下发为 Node 的 `tls_settings.ech`。
+Node 为 Xray 写入 `tlsSettings.echServerKeys`，为 sing-box 写入 `tls.ech.key` 或 `key_path`。
+ECH 只终止在 HY2 入口，入口到落地继续使用原有 VLESS 或 Shadowsocks 配置。
+
+| 订阅格式 | HY2 ECH 参数 | 使用条件 |
+| --- | --- | --- |
+| sing-box JSON | `tls.ech.enabled`、PEM 数组 `tls.ech.config`、可选 `query_server_name` | 实测客户端内核为 `1.14.0-yz.2`；沿用现有 sing-box 版本规则 |
+| Mihomo YAML | `ech-opts.enable`、Base64 `ech-opts.config`、可选 `query-server-name` | 实测官方 Mihomo `1.19.9`；识别为 `meta` 且低于该版本时过滤此类节点 |
+| 通用 HY2 URI、其他客户端格式 | 本次未增加 ECH 字段 | 不将其视为已验证的 ECH 订阅，使用上面两种格式完成 ECH 连接 |
+
+Clash Verge 等应用需要确认内嵌的 Mihomo 版本，应用版本本身不能直接换算为内核版本。
+只指定 `flag=meta` 而没有版本信息时仍保留节点及 ECH 参数，由用户确认客户端内核支持。
+两种已支持格式只输出公共配置，不输出 ECH 服务端密钥或本地文件路径。公共配置为空时可保留 DNS 查询域名；
+本次实际握手验证使用内联公共配置，没有验证外部 DNS 记录的部署。
+
+验证覆盖 ECH 接受状态、错误公共配置拒绝、TCP/UDP 三路选路、Salamander、用户增删、重复同步、
+ECH 密钥轮换、停止恢复，以及用户流量只累计一次。具体范围见 [HY2 ECH 验证记录](hy2-ech-validation.md)。
 
 ## 订阅生成
 

@@ -25,6 +25,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Validation\ValidationException;
 use Mockery\MockInterface;
+use Symfony\Component\Yaml\Yaml;
 use Tests\TestCase;
 
 /**
@@ -237,6 +238,128 @@ class ServerRelayTest extends TestCase
             $entry->update(['protocol_settings' => $settings]);
             $this->assertNull(ServerRelayService::entryFor($child->fresh()));
             $this->assertCount(0, ServerRelayService::childrenOf($entry->fresh()));
+        }
+    }
+
+    public function test_hysteria2_ech_entries_are_selectable_and_preserve_relay_and_subscription_settings(): void
+    {
+        $user = $this->makeUser();
+        foreach (['xray', 'singbox'] as $entryKernel) {
+            foreach (['xray', 'singbox'] as $landingKernel) {
+                $material = app(ManageController::class)->generateEchKey(
+                    Request::create('/', 'GET', ['public_name' => 'public.ech.example']),
+                )->getData(true)['data'];
+                $entry = $this->makeHysteriaEntry([
+                    'kernel_type' => $entryKernel,
+                    'name' => "ECH {$entryKernel} 入口 {$landingKernel}",
+                    'protocol_settings' => ['tls' => ['ech' => [
+                        'enabled' => true,
+                        'key' => $material['key'],
+                        'config' => $material['config'],
+                        'query_server_name' => 'public.ech.example',
+                    ]]],
+                ]);
+                $ss = $this->makeChild($entry, ['kernel_type' => $landingKernel, 'name' => "ECH SS {$entry->id}"]);
+                $vless = $this->makeVlessChild($entry, ['kernel_type' => $landingKernel, 'name' => "ECH VLESS {$entry->id}"]);
+                $nodes = collect(app(ManageController::class)->getNodes(new Request())->getData(true)['data'])->keyBy('id');
+                $this->assertTrue($nodes[$entry->id]['relay_entry_supported']);
+                $this->assertFalse($nodes[$ss->id]['relay_entry_supported']);
+                foreach ([$ss, $vless] as $landing) {
+                    $this->assertNull(ServerRelayService::validateEntry(
+                        $landing->id, $entry->id, $landing->type, $landing->protocol_settings, $landing->host, $landingKernel,
+                    ));
+                    $this->assertArrayNotHasKey('relay_entry_id', $this->validateServerSave($landing->only([
+                        'id', 'type', 'name', 'relay_entry_id', 'host', 'port', 'server_port', 'rate', 'group_ids',
+                        'kernel_type', 'protocol_settings',
+                    ])));
+                }
+                $config = ServerService::buildNodeConfig($entry->fresh());
+                $this->assertSame($material['key'], data_get($config, 'tls_settings.ech.key'));
+                $this->assertSame($entryKernel, $config['kernel_type']);
+                $this->assertSame('entry', data_get($config, 'relay.mode'));
+                $this->assertSame(['shadowsocks', 'vless'], array_column(data_get($config, 'relay.children'), 'protocol'));
+                $this->assertSame($config, ServerService::buildNodeConfig($entry->fresh()));
+
+                $servers = collect(ServerService::getAvailableServers($user))->keyBy('id');
+                $selected = $servers->only([$entry->id, $ss->id, $vless->id])->values()->all();
+                $this->assertCount(3, $selected);
+                $singbox = (new SingBox($user, $selected, 'sing-box', '1.14.0'))->handle()->getData(true);
+                $outbounds = collect($singbox['outbounds'])->keyBy('tag');
+                $mihomoYaml = (new ClashMeta($user, $selected, 'meta', '1.19.9'))->handle()->getContent();
+                $mihomo = collect(Yaml::parse($mihomoYaml)['proxies'])->keyBy('name');
+                foreach ([$entry, $ss, $vless] as $logical) {
+                    $password = Helper::applyVlessRoute($user->uuid, $logical->vless_route);
+                    $boxOutbound = $outbounds[$logical->name];
+                    $metaOutbound = $mihomo[$logical->name];
+                    $this->assertSame('hysteria2', $boxOutbound['type']);
+                    $this->assertSame($password, $boxOutbound['password']);
+                    $this->assertSame($password, $metaOutbound['password']);
+                    $this->assertSame($entry->host, $boxOutbound['server']);
+                    $this->assertSame($entry->host, $metaOutbound['server']);
+                    $this->assertSame((int) $entry->port, $boxOutbound['server_port']);
+                    $this->assertSame((int) $entry->port, $metaOutbound['port']);
+                    $this->assertTrue(data_get($boxOutbound, 'tls.ech.enabled'));
+                    $this->assertSame([trim($material['config'])], data_get($boxOutbound, 'tls.ech.config'));
+                    $this->assertSame('public.ech.example', data_get($boxOutbound, 'tls.ech.query_server_name'));
+                    $this->assertTrue(data_get($metaOutbound, 'ech-opts.enable'));
+                    $this->assertSame(Helper::toMihomoEchConfig($material['config']), data_get($metaOutbound, 'ech-opts.config'));
+                    $this->assertSame('public.ech.example', data_get($metaOutbound, 'ech-opts.query-server-name'));
+                    $this->assertStringNotContainsString('ECH KEYS', json_encode($boxOutbound));
+                    $this->assertStringNotContainsString('ECH KEYS', json_encode($metaOutbound));
+                }
+                $oldMihomo = Yaml::parse((new ClashMeta($user, $selected, 'meta', '1.19.8'))->handle()->getContent());
+                $this->assertCount(0, collect($oldMihomo['proxies'])->where('type', 'hysteria2'));
+                $unversioned = Yaml::parse((new ClashMeta($user, $selected, 'meta'))->handle()->getContent());
+                $this->assertCount(3, collect($unversioned['proxies'])->where('type', 'hysteria2'));
+                foreach ([$ss, $vless] as $landing) {
+                    $this->assertStringNotContainsString('ECH KEYS', json_encode(ServerService::buildNodeConfig($landing)));
+                }
+            }
+        }
+    }
+
+    public function test_hysteria2_ech_subscription_supports_dns_config_and_keeps_plain_nodes_unchanged(): void
+    {
+        $entry = $this->makeHysteriaEntry();
+        $user = $this->makeUser();
+        $server = ServerService::getAvailableServers($user)[0];
+        $plain = ClashMeta::buildHysteria($user->uuid, $server, $user);
+        $this->assertArrayNotHasKey('ech-opts', $plain);
+
+        data_set($server, 'protocol_settings.tls.ech', [
+            'enabled' => true, 'query_server_name' => 'public.ech.example',
+        ]);
+        $meta = ClashMeta::buildHysteria($user->uuid, $server, $user);
+        $this->assertSame(['enable' => true, 'query-server-name' => 'public.ech.example'], $meta['ech-opts']);
+        $outbounds = collect((new SingBox($user, [$server], 'sing-box', '1.14.0'))->handle()->getData(true)['outbounds'])->keyBy('tag');
+        $this->assertSame(
+            ['enabled' => true, 'query_server_name' => 'public.ech.example'],
+            data_get($outbounds[$entry->name], 'tls.ech'),
+        );
+
+        data_set($server, 'protocol_settings.tls.ech.enabled', false);
+        $this->assertSame($plain, ClashMeta::buildHysteria($user->uuid, $server, $user));
+    }
+
+    public function test_hysteria2_ech_version_filter_only_uses_known_mihomo_core_versions(): void
+    {
+        $this->makeHysteriaEntry();
+        $user = $this->makeUser();
+        $server = ServerService::getAvailableServers($user)[0];
+        $count = function (array $node, string $client, ?string $version) use ($user): int {
+            $yaml = (new ClashMeta($user, [$node], $client, $version))->handle()->getContent();
+            return collect(Yaml::parse($yaml)['proxies'])->where('type', 'hysteria2')->count();
+        };
+        foreach ([true, 1, '1'] as $enabled) {
+            data_set($server, 'protocol_settings.tls.ech.enabled', $enabled);
+            $this->assertSame(0, $count($server, 'meta', '1.19.8'));
+            $this->assertSame(1, $count($server, 'meta', '1.19.9'));
+            $this->assertSame(1, $count($server, 'meta', null));
+            $this->assertSame(1, $count($server, 'flclash', '0.8.0'));
+        }
+        foreach ([false, 0, '0', null] as $disabled) {
+            data_set($server, 'protocol_settings.tls.ech.enabled', $disabled);
+            $this->assertSame(1, $count($server, 'meta', '1.19.8'));
         }
     }
 

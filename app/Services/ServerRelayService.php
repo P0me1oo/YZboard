@@ -247,8 +247,10 @@ class ServerRelayService
                 return 'Hysteria2 前置入口的混淆密码至少需要 4 字节';
             }
         }
-        if (data_get($settings, 'tls.ech.enabled')) {
-            return 'Hysteria2 前置入口暂不支持 ECH';
+        if (data_get($settings, 'tls.ech.enabled')
+            && trim((string) data_get($settings, 'tls.ech.key')) === ''
+            && trim((string) data_get($settings, 'tls.ech.key_path')) === '') {
+            return 'Hysteria2 前置入口开启 ECH 时必须提供服务端密钥';
         }
         return null;
     }

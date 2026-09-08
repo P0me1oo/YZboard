@@ -141,6 +141,21 @@ class ClashMeta extends AbstractProtocol
         ],
     ];
 
+    protected function isCompatible($server)
+    {
+        // ECH 开关是布尔值；这里只判断已知的 Mihomo 内核版本，不能套用应用外壳版本。
+        if (data_get($server, 'type') === Server::TYPE_HYSTERIA
+            && (int) data_get($server, 'protocol_settings.version', 2) === 2
+            && data_get($server, 'protocol_settings.tls.ech.enabled')
+            && $this->clientName === 'meta'
+            && filled($this->clientVersion)
+            && version_compare($this->clientVersion, '1.19.9', '<')) {
+            return false;
+        }
+
+        return parent::isCompatible($server);
+    }
+
     public function handle()
     {
         $servers = $this->servers;
@@ -618,6 +633,7 @@ class ClashMeta extends AbstractProtocol
             case 2:
                 $array['type'] = 'hysteria2';
                 $array['password'] = $password;
+                self::appendEch($array, data_get($protocol_settings, 'tls.ech'));
                 if (data_get($protocol_settings, 'obfs.open')) {
                     $array['obfs'] = data_get($protocol_settings, 'obfs.type');
                     $array['obfs-password'] = data_get($protocol_settings, 'obfs.password');

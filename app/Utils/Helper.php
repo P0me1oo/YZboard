@@ -168,6 +168,9 @@ class Helper
     }
 
     public static function randomPort($range): int {
+        if (str_contains((string) $range, ',')) {
+            return PortSet::random((string) $range);
+        }
         $portRange = explode('-', (string) $range, 2);
         $min = (int) ($portRange[0] ?? 0);
         $max = (int) ($portRange[1] ?? $portRange[0] ?? 0);

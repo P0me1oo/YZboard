@@ -17,6 +17,15 @@ use Illuminate\Support\Collection;
 class ServerService
 {
 
+    private static function normalizedPorts(Server $server): string
+    {
+        $ports = (string) $server->port;
+        if ($server->type === Server::TYPE_HYSTERIA && (int) data_get($server->protocol_settings, 'version', 2) === 2) {
+            return \App\Utils\PortSet::normalize($ports);
+        }
+        return $ports;
+    }
+
     /**
      * 获取所有服务器列表
      * @return Collection
@@ -78,8 +87,8 @@ class ServerService
             }
 
             // 判断动态端口
-            if (str_contains($server->port, '-')) {
-                $port = $server->port;
+            if (\App\Utils\PortSet::isMultiple((string) $server->port)) {
+                $port = self::normalizedPorts($server);
                 $server->port = (int) Helper::randomPort($port);
                 $server->ports = $port;
             } else {
@@ -119,9 +128,10 @@ class ServerService
         // 否则用户侧节点列表仍能看到内部端口。
         $child->server_port = $entry->server_port;
 
-        if (str_contains((string) $entry->port, '-')) {
-            $child->port = (int) Helper::randomPort($entry->port);
-            $child->ports = $entry->port;
+        if (\App\Utils\PortSet::isMultiple((string) $entry->port)) {
+            $ports = self::normalizedPorts($entry);
+            $child->port = (int) Helper::randomPort($ports);
+            $child->ports = $ports;
         } else {
             $child->port = (int) $entry->port;
             $child->ports = null;
@@ -462,6 +472,14 @@ class ServerService
 
         if ($relay = self::buildRelayConfig($node)) {
             $response['relay'] = $relay;
+        }
+
+        // HY2 内核仍监听单个服务端口，由 Node 管理客户端端口到监听端口的转发。
+        if ($nodeType === Server::TYPE_HYSTERIA
+            && (int) data_get($protocolSettings, 'version', 2) === 2
+            && \App\Utils\PortSet::isMultiple((string) $node->port)
+            && data_get($response, 'relay.mode') !== 'landing') {
+            $response['port_hopping'] = self::normalizedPorts($node);
         }
 
         if (!empty($node['route_ids'])) {

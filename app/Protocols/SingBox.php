@@ -691,7 +691,7 @@ class SingBox extends AbstractProtocol
         // 支持 1.11.0 版本及以上 `server_ports` 和 `hop_interval` 配置
         if ($this->supportsFeature('sing-box', '1.11.0')) {
             if (isset($server['ports'])) {
-                $baseConfig['server_ports'] = [str_replace('-', ':', $server['ports'])];
+                $baseConfig['server_ports'] = \App\Utils\PortSet::singBoxRanges((string) $server['ports']);
             }
             if (isset($protocol_settings['hop_interval'])) {
                 $baseConfig['hop_interval'] = "{$protocol_settings['hop_interval']}s";

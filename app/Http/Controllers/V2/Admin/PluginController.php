@@ -293,13 +293,13 @@ class PluginController extends Controller
                 'required',
                 'file',
                 'mimes:zip',
-                'max:10240', // 最大10MB
+                'max:65536', // 最大 64 MiB
             ]
         ], [
             'file.required' => '请选择插件包文件',
             'file.file' => '无效的文件类型',
             'file.mimes' => '插件包必须是zip格式',
-            'file.max' => '插件包大小不能超过10MB'
+            'file.max' => '插件包大小不能超过64 MiB'
         ]);
 
         try {

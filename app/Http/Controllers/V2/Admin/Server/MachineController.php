@@ -206,7 +206,7 @@ class MachineController extends Controller
         $panelUrl = rtrim((string) (admin_setting('app_url') ?: $request->getSchemeAndHttpHost()), '/');
 
         return sprintf(
-            'curl -fsSL %s | sudo bash -s -- --mode machine --panel %s --token %s --machine-id %d --kernel xray --version latest',
+            'curl -fsSL %s | sudo bash -s -- --mode machine --panel %s --token %s --machine-id %d --version latest',
             self::NODE_INSTALLER_URL,
             escapeshellarg($panelUrl),
             escapeshellarg($machine->token),

@@ -38,6 +38,13 @@ return [
 
     'server' => env('OCTANE_SERVER', 'swoole'),
 
+    // 接收 64 MiB 插件文件，并为 multipart 表单字段和边界留出空间。
+    'swoole' => [
+        'options' => [
+            'package_max_length' => 80 * 1024 * 1024,
+        ],
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Force HTTPS

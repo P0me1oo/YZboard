@@ -38,6 +38,9 @@ RUN test -n "${SOURCE_COMMIT}" && \
 # 锚点匹配不到会直接失败。
 RUN php /www/.docker/patch-admin-relay.php /www/public/assets/admin/assets
 
+# 插件上传支持 64 MiB，并在服务器拒绝大请求时显示明确提示。
+RUN php /www/.docker/patch-admin-upload.php /www/public/assets/admin/assets
+
 COPY .docker/supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY .docker/caddy/Caddyfile /etc/caddy/Caddyfile
 COPY .docker/php/zz-xboard.ini /usr/local/etc/php/conf.d/zz-xboard.ini

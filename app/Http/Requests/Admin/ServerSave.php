@@ -10,6 +10,15 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class ServerSave extends FormRequest
 {
+    protected function prepareForValidation(): void
+    {
+        // 在校验前写入新建默认值，保证中转校验与最终保存的内核一致。
+        // 编辑时保留已有值，包括仍按 Xray 解释的历史空值。
+        if (!$this->input('id') && !$this->filled('kernel_type')) {
+            $this->merge(['kernel_type' => Server::defaultKernelType($this->input('type'))]);
+        }
+    }
+
     private const UTLS_RULES = [
         'utls.enabled' => 'nullable|boolean',
         'utls.fingerprint' => 'nullable|string',

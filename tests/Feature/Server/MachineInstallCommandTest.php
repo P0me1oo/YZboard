@@ -12,7 +12,7 @@ use Tests\TestCase;
 
 class MachineInstallCommandTest extends TestCase
 {
-    public function test_machine_install_command_uses_latest_release_installer_and_xray(): void
+    public function test_machine_install_command_uses_installer_defaults_without_overriding_existing_kernel(): void
     {
         $this->mock(Setting::class, function (MockInterface $mock): void {
             $mock->shouldReceive('get')
@@ -35,7 +35,7 @@ class MachineInstallCommandTest extends TestCase
         );
 
         $expected = sprintf(
-            'curl -fsSL https://github.com/P0me1oo/YZboard-Node/releases/latest/download/install.sh | sudo bash -s -- --mode machine --panel %s --token %s --machine-id 42 --kernel xray --version latest',
+            'curl -fsSL https://github.com/P0me1oo/YZboard-Node/releases/latest/download/install.sh | sudo bash -s -- --mode machine --panel %s --token %s --machine-id 42 --version latest',
             escapeshellarg('https://panel.example.com'),
             escapeshellarg('test-machine-token')
         );

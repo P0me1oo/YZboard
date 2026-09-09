@@ -103,6 +103,31 @@ jobs:
           sudo rm -rf /opt/hostedtoolcache/CodeQL
           sudo docker image prune -af
 
+      - name: 配置与生产镜像一致的 PHP 版本
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: bcmath, curl, fileinfo, mbstring, openssl, pcntl, pdo_sqlite, sqlite3, sodium, zip
+          tools: composer:v2
+          coverage: none
+
+      - name: 安装测试依赖
+        run: composer install --prefer-dist --no-interaction --no-progress --no-security-blocking
+
+      - name: 运行面板完整回归
+        env:
+          LOG_CHANNEL: stderr
+          LOG_LEVEL: critical
+        run: php vendor/bin/phpunit --do-not-cache-result
+
+      - name: 配置管理端测试环境
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 验证默认内核与插件上传构建补丁
+        run: node --test --test-reporter=tap tests/admin-kernel-defaults.test.cjs tests/admin-plugin-upload.test.cjs
+
       - name: 配置 QEMU
         uses: docker/setup-qemu-action@v3
         with:

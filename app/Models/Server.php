@@ -428,6 +428,14 @@ class Server extends Model
         return $type ? strtolower(self::TYPE_ALIASES[$type] ?? $type) : null;
     }
 
+    /** 新建节点默认使用 sing-box，VLESS 保留 Xray 默认值。 */
+    public static function defaultKernelType(?string $type): string
+    {
+        return self::normalizeType($type) === self::TYPE_VLESS
+            ? self::KERNEL_XRAY
+            : self::KERNEL_SINGBOX;
+    }
+
     /** 返回节点实际使用的内核。历史节点没有 kernel_type 时默认使用 Xray。 */
     public static function effectiveKernelType(?string $kernelType): string
     {

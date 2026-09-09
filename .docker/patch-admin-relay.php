@@ -16,7 +16,7 @@
  *    复用产物现有的 X25519 生成器，一次填入配对的 decryption/encryption。
  * 5. 节点批量操作增加按权限组添加、移除的增量动作。
  * 6. Shadowsocks 新建表单优先使用 SS2022 128 位 AES-GCM。
- * 7. 节点编辑表单在协议选择左侧增加 Xray/sing-box 内核下拉，默认 Xray。
+ * 7. 节点编辑表单在协议选择左侧增加 Xray/sing-box 内核下拉，新建默认 sing-box，VLESS 默认 Xray。
  *
  * 任一锚点匹配不到就直接失败退出，让构建显式报错，而不是静默产出一个缺少这些界面的管理端。
  * 重复执行是幂等的。
@@ -50,6 +50,7 @@ const VLESS_KEYGEN_MARKER = 'relay_vless_keygen';
 const BATCH_GROUP_MARKER = 'batch_group_membership';
 const SS2022_DEFAULT_MARKER = 'yz_ss2022_default';
 const KERNEL_MARKER = 'data-yz-node-kernel-selector';
+const KERNEL_DEFAULTS_MARKER = 'data-yz-protocol-kernel-default';
 const HY2_ENTRY_MARKER = 'relay_hysteria2_entry';
 const SINGBOX_RELAY_MARKER = 'relay_singbox_entry';
 
@@ -80,6 +81,7 @@ foreach ($targets as $file) {
     $hasBatchGroup = str_contains($src, BATCH_GROUP_MARKER);
     $hasSs2022Default = str_contains($src, SS2022_DEFAULT_MARKER);
     $hasKernel = str_contains($src, KERNEL_MARKER);
+    $hasKernelDefaults = str_contains($src, KERNEL_DEFAULTS_MARKER);
     $hasHy2Entry = str_contains($src, HY2_ENTRY_MARKER);
     $hasSingboxRelay = str_contains($src, SINGBOX_RELAY_MARKER);
 
@@ -92,7 +94,7 @@ foreach ($targets as $file) {
     }
 
     if ($hasField && $hasColumn && $hasVlessMatrix && $hasVlessKeygen && $hasBatchGroup
-        && $hasSs2022Default && $hasKernel && $hasHy2Entry && $hasSingboxRelay && !$kernelSchemaRepaired) {
+        && $hasSs2022Default && $hasKernel && $hasKernelDefaults && $hasHy2Entry && $hasSingboxRelay && !$kernelSchemaRepaired) {
         fwrite(STDOUT, "patch-admin-relay: 已完整打过补丁，跳过 " . basename($file) . "\n");
         $patched++;
         continue;
@@ -140,6 +142,9 @@ foreach ($targets as $file) {
     }
     if (!$hasKernel) {
         $src = patchKernelSelector($src, $file);
+    }
+    if (!$hasKernelDefaults) {
+        $src = patchProtocolKernelDefaults($src, $file);
     }
     if (!$hasHy2Entry) {
         $src = patchHysteria2Candidates($src, $file);
@@ -240,7 +245,7 @@ function patchDefaults(string $src, string $file): string
     return str_replace($needle, 'parent_id:"0",relay_entry_id:"0",route_ids:', $src);
 }
 
-/** 节点表单内核字段默认使用 Xray；null 仍由后端解释为 Xray。 */
+/** 默认值由新建表单按协议填入；历史空值仍由后端解释为 Xray。 */
 function patchKernelSchema(string $src, string $file): string
 {
     if (str_contains($src, 'kernel_type:')) {
@@ -251,7 +256,7 @@ function patchKernelSchema(string $src, string $file): string
         fail('schema machine_id', $file);
     }
     // machine_id 使用数字校验器；内核名称必须使用字符串校验器。
-    $insert = $m[1] . 'kernel_type:cy().optional().nullable().default("xray"),';
+    $insert = $m[1] . 'kernel_type:cy().optional().nullable(),';
     return preg_replace($pattern, addcslashes($insert, '\\$'), $src, 1);
 }
 
@@ -261,19 +266,50 @@ function patchKernelSchemaType(string $src, string $file): string
     if (substr_count($src, $needle) !== 1) {
         fail('kernel schema type', $file);
     }
-    return str_replace($needle, 'kernel_type:cy().optional().nullable().default("xray")', $src);
+    return str_replace($needle, 'kernel_type:cy().optional().nullable()', $src);
 }
 
 function patchKernelDefaults(string $src, string $file): string
 {
-    if (str_contains($src, 'kernel_type:"xray"')) {
+    if (str_contains($src, 'machine_id:null,kernel_type:null,enabled:null')) {
         return $src;
     }
     $needle = 'machine_id:null,enabled:null';
     if (!str_contains($src, $needle)) {
         fail('defaults machine_id', $file);
     }
-    return str_replace($needle, 'machine_id:null,kernel_type:"xray",enabled:null', $src);
+    return str_replace($needle, 'machine_id:null,kernel_type:null,enabled:null', $src);
+}
+
+/** 区分新建、编辑和手动选择，并兼容已经应用旧补丁的管理端产物。 */
+function patchProtocolKernelDefaults(string $src, string $file): string
+{
+    $src = str_replace(
+        ['kernel_type:cy().optional().nullable().default("xray")', 'machine_id:null,kernel_type:"xray",enabled:null'],
+        ['kernel_type:cy().optional().nullable()', 'machine_id:null,kernel_type:null,enabled:null'],
+        $src,
+    );
+
+    $replacements = [
+        'x.reset({...i,...o,transfer_enable_gb:n,protocol_settings:e})' =>
+            'x.reset({...i,...o,kernel_type:o.kernel_type??null,transfer_enable_gb:n,protocol_settings:e})',
+        'x.reset({...i,machine_id:d?.machine_id??null,enabled:d?.enabled??null})' =>
+            'x.reset({...i,kernel_type:"vless"===l?"xray":"singbox",machine_id:d?.machine_id??null,enabled:d?.enabled??null})',
+        'x.setValue("protocol_settings",r),c(t)' =>
+            'x.setValue("protocol_settings",r),!o&&!x.getFieldState("kernel_type").isTouched&&x.setValue("kernel_type","vless"===t?"xray":"singbox"),c(t)',
+        'value:x.watch("kernel_type")||"xray"' =>
+            'value:x.watch("kernel_type")||(o?"xray":"vless"===l?"xray":"singbox")',
+        '"data-yz-node-kernel-selector":!0' =>
+            '"data-yz-node-kernel-selector":!0,"data-yz-protocol-kernel-default":!0',
+    ];
+    foreach ($replacements as $needle => $replacement) {
+        if (substr_count($src, $needle) !== 1) {
+            fail('protocol kernel defaults: ' . $needle, $file);
+        }
+        $src = str_replace($needle, $replacement, $src);
+    }
+
+    return $src;
 }
 
 /** 在协议选择左侧加入节点级内核下拉，保存仍走原有表单状态。 */

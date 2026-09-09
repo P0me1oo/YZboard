@@ -8,7 +8,7 @@ return new class extends Migration {
     public function up(): void
     {
         Schema::table('v2_server', function (Blueprint $table) {
-            // null 表示沿用机器默认值；当前机器默认值为 xray。
+            // null 保留历史 Xray 语义；新建节点的默认内核由保存入口显式写入。
             $table->string('kernel_type', 16)->nullable()->after('machine_id');
         });
     }

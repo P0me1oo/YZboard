@@ -125,8 +125,8 @@ jobs:
         with:
           node-version: '22'
 
-      - name: 验证默认内核与插件上传构建补丁
-        run: node --test --test-reporter=tap tests/admin-kernel-defaults.test.cjs tests/admin-plugin-upload.test.cjs
+      - name: 验证管理端构建补丁
+        run: node --test --test-reporter=tap tests/admin-kernel-defaults.test.cjs tests/admin-plugin-upload.test.cjs tests/admin-plan-prices.test.cjs
 
       - name: 配置 QEMU
         uses: docker/setup-qemu-action@v3

@@ -41,6 +41,9 @@ RUN php /www/.docker/patch-admin-relay.php /www/public/assets/admin/assets
 # 插件上传支持 64 MiB，并在服务器拒绝大请求时显示明确提示。
 RUN php /www/.docker/patch-admin-upload.php /www/public/assets/admin/assets
 
+# 套餐基础价格按周期月数直接填价，移除默认长期订阅折扣。
+RUN php /www/.docker/patch-admin-plan-prices.php /www/public/assets/admin/assets
+
 COPY .docker/supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY .docker/caddy/Caddyfile /etc/caddy/Caddyfile
 COPY .docker/php/zz-xboard.ini /usr/local/etc/php/conf.d/zz-xboard.ini

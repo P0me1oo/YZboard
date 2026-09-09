@@ -32,9 +32,9 @@ client_max_body_size 80m;
 
 ## 更新与检查
 
-本修复与默认内核、上游同步一同纳入正式版 `1.13.3`，不单独发布此前的 `1.13.2` 开发版本。实际发布状态以 [兼容矩阵](../YZ_COMPATIBILITY.md) 中的 Tag、完整 commit 和镜像 digest 为准。
+本修复与默认内核、上游同步已一同发布为正式版 [1.13.3](https://github.com/P0me1oo/YZboard/releases/tag/v1.13.3)。不可变镜像为 `ghcr.io/p0me1oo/yzboard:1.13.3-f88d243`，`latest` 已指向本次发布；完整 commit、镜像 digest 和回滚引用见 [兼容矩阵](../YZ_COMPATIBILITY.md)。此前的 `1.13.2` 开发版本不单独发布。
 
-确认包含本次修复的正式镜像已发布后，在服务器实际 Compose 部署目录执行以下命令。示例要求服务名确实为 `xboard`，并已备份现有 Compose、持久化数据与回滚镜像信息。
+在服务器实际 Compose 部署目录执行以下命令。示例要求服务名确实为 `xboard`，镜像使用 `ghcr.io/p0me1oo/yzboard:latest`，并已备份现有 Compose、持久化数据与回滚镜像信息。默认内核功能配套 Node `v1.13.1`，升级顺序为 Node、面板。
 
 ```bash
 docker compose pull xboard

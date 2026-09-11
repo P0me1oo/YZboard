@@ -2,11 +2,18 @@
 
 本文件记录面板、Node、Xray fork 和 sing-box 的可回滚兼容关系。面板版本与兼容标识必须和对应 Node Release、Xray fork commit 及变更说明一起发布。
 
-## 内部端口冲突检查（1.13.5，发布准备）
+## 内部端口冲突检查（1.13.5，已发布）
 
 | 项目 | 标识 |
 | --- | --- |
-| 目标面板版本 | `1.13.5`；正式来源与镜像核验记录在发布完成后追加 |
+| 当前正式面板版本 | `1.13.5`；Tag、Release 与双架构镜像已于 2026-09-11 发布并核验 |
+| 正式来源 Tag / commit | `v1.13.5` / `e342cbedab78eebf2326a4b709d9c01391f47e1a`；后续发布记录提交不改变此构建来源 |
+| 正式 Release | [v1.13.5](https://github.com/P0me1oo/YZboard/releases/tag/v1.13.5)，已核对为最新正式版本；交付物为 GHCR 镜像，没有独立安装附件 |
+| 不可变镜像标签 | `ghcr.io/p0me1oo/yzboard:1.13.5-e342cbe`；`1.13.5` 与 `latest` 已核对指向同一镜像，可匿名获取 |
+| Docker manifest | `sha256:72046ae0fe8300c89508b61aeb787577b6a8a7b92e5717baa6abdeb432d53d1c` |
+| Docker 平台与 OCI 标识 | `linux/amd64`、`linux/arm64`；两架构均为 `revision=e342cbedab78eebf2326a4b709d9c01391f47e1a`、`version=1.13.5-e342cbe` |
+| 正式发布验证 | [面板 CI 34572296684](https://github.com/P0me1oo/YZboard/actions/runs/34572296684)：PHP 8.2 完整回归 176 项、2289 个断言及管理端 33 项测试通过，双架构构建与清单核验成功 |
+| 面板回滚基线 | `ghcr.io/p0me1oo/yzboard:1.13.4-127a590`；manifest `sha256:ba9e18904000fd1ad96928910e22fa510a01062dd136147bb037eb4b0f93f714`，发布前已核对两个架构与原 `latest` 一致 |
 | 修改基线 | `a022a5e859e9f762a65f70d57624bf99388eb029` |
 | 检查范围 | 同一绑定服务器、内部端口和 TCP/UDP 监听交集；连接端口不参与重复检查 |
 | 复制兼容 | 保留两个端口、绑定服务器和启用状态；未改变监听占用的编辑仍可保存 |
@@ -17,16 +24,23 @@
 | 浏览器验证 | 本机 Chrome 独立实例与模拟接口：字段冲突提示、重复端口拦截、TCP/UDP 同号共存、复制后保留端口编辑通过，没有 JavaScript 异常 |
 | 使用与验证范围 | [内部端口检查](docs/node-port-validation.md) |
 
-本节记录发布准备阶段的修改与验证。发布完成前，当前已核验的正式面板与回滚来源仍见下方 `1.13.4` 发布记录。
+发布后通过匿名 GHCR 接口逐项核对三个标签、两个平台清单和 OCI 配置的 SHA256、版本与完整来源提交，并读取两个架构的内部端口补丁层。两者的 `assets/index-1059ff9a.js` 均为 `6544724` 字节，SHA256 为 `3528645a0ba0b4c5f4b63915b5bb3ebf17dafbe9b485a8a7485d76ca7e9da02e`；字段检查、保存拦截和错误提示代码完整，manifest 和 HTML 引用一致且指向该入口，文件名与正式 CI 构建输出一致。
 
-## 套餐默认折扣移除（1.13.4，已发布）
+| 面板镜像平台 | 平台 manifest |
+| --- | --- |
+| `linux/amd64` | `sha256:3dbaeab06a01d3833a5437f04266d9a8ff547c34a187ea1d0a3af94f8bba9794` |
+| `linux/arm64` | `sha256:cf6d9886aa577e464b7557e02d311e264e45d8a6f0b2f9f489c140d00f1a038a` |
+
+本次只需更新面板，没有连接或更新生产服务器。服务器更新由用户在实际部署目录执行，沿用 Compose 的 `latest`；更新前保留原镜像、Compose 和必要的数据备份，需要回滚时使用上表的 `1.13.4-127a590`。本地数据库验证使用内存 SQLite，未验证 MySQL 多连接并发或真实服务器监听。以下各节保留历史发布记录，当前正式版本和 `latest` 来源以本节为准。
+
+## 套餐默认折扣移除（1.13.4，历史发布）
 
 | 项目 | 标识 |
 | --- | --- |
-| 当前正式面板版本 | `1.13.4`；Tag、Release 与双架构镜像已于 2026-09-10 发布并核验 |
+| 当时正式面板版本 | `1.13.4`；Tag、Release 与双架构镜像已于 2026-09-10 发布并核验 |
 | 正式来源 Tag / commit | `v1.13.4` / `127a590fc19ad7cb0fe7e7d1bc95c01e676c1e32`；后续发布记录提交不改变此构建来源 |
-| 正式 Release | [v1.13.4](https://github.com/P0me1oo/YZboard/releases/tag/v1.13.4)，已核对为最新正式版本；交付物为 GHCR 镜像，没有独立安装附件 |
-| 不可变镜像标签 | `ghcr.io/p0me1oo/yzboard:1.13.4-127a590`；`1.13.4` 与 `latest` 已核对指向同一镜像，可匿名获取 |
+| 正式 Release | [v1.13.4](https://github.com/P0me1oo/YZboard/releases/tag/v1.13.4)，发布时已核对为最新正式版本；交付物为 GHCR 镜像，没有独立安装附件 |
+| 不可变镜像标签 | `ghcr.io/p0me1oo/yzboard:1.13.4-127a590`；发布时已核对 `1.13.4` 与 `latest` 指向同一镜像，可匿名获取 |
 | Docker manifest | `sha256:ba9e18904000fd1ad96928910e22fa510a01062dd136147bb037eb4b0f93f714` |
 | Docker 平台与 OCI 标识 | `linux/amd64`、`linux/arm64`；两架构均为 `revision=127a590fc19ad7cb0fe7e7d1bc95c01e676c1e32`、`version=1.13.4-127a590` |
 | 正式发布验证 | [面板 CI 34418748588](https://github.com/P0me1oo/YZboard/actions/runs/34418748588)：PHP 8.2 完整回归 142 项、2042 个断言及管理端 19 项测试通过，双架构构建与清单核验成功 |
@@ -45,7 +59,7 @@
 | `linux/amd64` | `sha256:fefa4299df7893aad512a6d5bd8e43608406216dcfab49d05855f77c55412e09` |
 | `linux/arm64` | `sha256:7d39a936f2450108c04da1fd15c6654a39b070af8c4232489cb754a243151cd6` |
 
-本次未连接或更新生产服务器。服务器更新由用户在实际部署目录执行，沿用 Compose 的 `latest`；更新前保留原镜像、Compose 和必要的数据备份，需要回滚时使用上表的 `1.13.3-f88d243`。以下各节保留各版本发布时的审计记录，当前正式版本和 `latest` 来源以本节为准。
+本次未连接或更新生产服务器。服务器更新由用户在实际部署目录执行，沿用 Compose 的 `latest`；更新前保留原镜像、Compose 和必要的数据备份，需要回滚时使用上表的 `1.13.3-f88d243`。本节保留 `1.13.4` 发布时的审计记录，当前正式版本和 `latest` 来源见本文顶部。
 
 ## 上游同步与功能合并发布（1.13.3，历史发布）
 

@@ -12,6 +12,11 @@ class ServerSave extends FormRequest
 {
     protected function prepareForValidation(): void
     {
+        // 与列表绑定操作保持一致，0 表示取消绑定，不能作为机器外键保存。
+        if (in_array($this->input('machine_id'), [0, '0'], true)) {
+            $this->merge(['machine_id' => null]);
+        }
+
         // 在校验前写入新建默认值，保证中转校验与最终保存的内核一致。
         // 编辑时保留已有值，包括仍按 Xray 解释的历史空值。
         if (!$this->input('id') && !$this->filled('kernel_type')) {
@@ -137,7 +142,7 @@ class ServerSave extends FormRequest
             'enabled' => 'nullable|boolean',
             'host' => 'required',
             'port' => 'required',
-            'server_port' => 'required',
+            'server_port' => 'required|integer|min:1|max:65535',
             'tags' => 'nullable|array',
             'excludes' => 'nullable|array',
             'ips' => 'nullable|array',
@@ -343,6 +348,9 @@ class ServerSave extends FormRequest
             'host.required' => '节点地址不能为空',
             'port.required' => '连接端口不能为空',
             'server_port.required' => '后端服务端口不能为空',
+            'server_port.integer' => '内部端口必须是整数',
+            'server_port.min' => '内部端口必须在 1 到 65535 之间',
+            'server_port.max' => '内部端口必须在 1 到 65535 之间',
             'tls.required' => 'TLS不能为空',
             'tags.array' => '标签格式不正确',
             'rate.required' => '倍率不能为空',

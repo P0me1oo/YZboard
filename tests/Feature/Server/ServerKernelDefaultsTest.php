@@ -95,7 +95,9 @@ class ServerKernelDefaultsTest extends TestCase
         $machine = ServerMachine::create(['name' => '默认内核测试机器', 'token' => $credential, 'is_active' => true]);
         $expected = [];
         foreach ([Server::TYPE_SHADOWSOCKS => 'singbox', Server::TYPE_VLESS => 'xray'] as $type => $kernel) {
-            $this->postJson('/_tests/kernel-defaults/save', $this->payload($type, ['machine_id' => $machine->id]))->assertOk();
+            $this->postJson('/_tests/kernel-defaults/save', $this->payload($type, [
+                'machine_id' => $machine->id, 'server_port' => 24443 + count($expected),
+            ]))->assertOk();
             $expected[Server::latest('id')->firstOrFail()->id] = $kernel;
         }
         $legacy = Server::create($this->payload(overrides: ['machine_id' => $machine->id, 'kernel_type' => null]));

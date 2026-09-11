@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ServerSave;
 use App\Models\Server;
 use App\Models\ServerGroup;
+use App\Services\ServerPortService;
 use App\Services\ServerRelayService;
 use App\Services\ServerService;
 use Illuminate\Http\Request;
@@ -64,27 +65,53 @@ class ManageController extends Controller
     public function save(ServerSave $request)
     {
         $params = $request->validated();
-        if ($request->input('id')) {
-            $server = Server::find($request->input('id'));
-            if (!$server) {
-                return $this->fail([400202, '服务器不存在']);
-            }
-            try {
-                $server->update($params);
-                return $this->success(true);
-            } catch (\Exception $e) {
-                Log::error($e);
-                return $this->fail([500, '保存失败']);
-            }
-        }
-
         try {
-            Server::create($params);
-            return $this->success(true);
+            return DB::transaction(function () use ($request, $params) {
+                $server = $request->input('id')
+                    ? Server::whereKey($request->input('id'))->lockForUpdate()->first()
+                    : new Server();
+                if (!$server) {
+                    return $this->fail([400202, '服务器不存在']);
+                }
+                $previous = $server->exists ? clone $server : null;
+                $server->fill($params);
+                ServerPortService::validateForSave($server, $previous);
+                $server->save();
+                return $this->success(true);
+            }, 3);
+        } catch (ValidationException $e) {
+            throw $e;
         } catch (\Exception $e) {
             Log::error($e);
-            return $this->fail([500, '创建失败']);
+            return $this->fail([500, $request->input('id') ? '保存失败' : '创建失败']);
         }
+    }
+
+    /** 表单填写时检查内部端口；正式保存仍在事务中重新核对。 */
+    public function checkPort(Request $request)
+    {
+        $params = $request->validate([
+            'id' => 'nullable|integer|exists:v2_server,id',
+            'machine_id' => 'nullable|integer',
+            'server_port' => 'required|integer|min:1|max:65535',
+            'type' => 'required|in:' . implode(',', Server::VALID_TYPES),
+            'kernel_type' => 'nullable|string|in:xray,singbox,sing-box',
+            'enabled' => 'nullable|boolean',
+            'protocol_settings' => 'nullable|array',
+            'protocol_settings.network' => 'nullable|string',
+            'protocol_settings.transport' => 'nullable|string',
+            'protocol_settings.tls' => 'nullable|integer',
+        ]);
+        $previous = isset($params['id']) ? Server::find($params['id']) : null;
+        $server = $previous !== null ? clone $previous : new Server();
+        unset($params['id']);
+        $server->fill($params);
+        if ($previous === null && !$server->kernel_type) {
+            $server->kernel_type = Server::defaultKernelType($server->type);
+        }
+        $message = ServerPortService::conflictMessage($server, $previous);
+
+        return $this->success(['valid' => $message === null, 'message' => $message]);
     }
 
     public function update(Request $request)
@@ -97,43 +124,47 @@ class ManageController extends Controller
             'enabled' => 'nullable|boolean',
         ]);
 
-        $server = Server::find($request->id);
-        if (!$server) {
-            return $this->fail([400202, '服务器不存在']);
-        }
-
-        if (array_key_exists('kernel_type', $params)) {
-            $error = ServerRelayService::validateEntry(
-                $server->id,
-                $server->relayEntryId(),
-                $server->type,
-                (array) $server->protocol_settings,
-                (string) $server->host,
-                $params['kernel_type'],
-            );
-            if ($error !== null) {
-                throw ValidationException::withMessages(['kernel_type' => $error]);
+        return DB::transaction(function () use ($request, $params) {
+            $server = Server::whereKey($request->id)->lockForUpdate()->first();
+            if (!$server) {
+                return $this->fail([400202, '服务器不存在']);
             }
-        }
+            $previous = clone $server;
 
-        if (array_key_exists('show', $params)) {
-            $server->show = (int) $params['show'];
-        }
-        if (array_key_exists('machine_id', $params)) {
-            $server->machine_id = $params['machine_id'] ?: null;
-        }
-        if (array_key_exists('kernel_type', $params)) {
-            $server->kernel_type = $params['kernel_type'] ?: null;
-        }
-        if (array_key_exists('enabled', $params)) {
-            $server->enabled = (bool) $params['enabled'];
-        }
+            if (array_key_exists('kernel_type', $params)) {
+                $error = ServerRelayService::validateEntry(
+                    $server->id,
+                    $server->relayEntryId(),
+                    $server->type,
+                    (array) $server->protocol_settings,
+                    (string) $server->host,
+                    $params['kernel_type'],
+                );
+                if ($error !== null) {
+                    throw ValidationException::withMessages(['kernel_type' => $error]);
+                }
+            }
 
-        if (!$server->save()) {
-            return $this->fail([500, '保存失败']);
-        }
+            if (array_key_exists('show', $params)) {
+                $server->show = (int) $params['show'];
+            }
+            if (array_key_exists('machine_id', $params)) {
+                $server->machine_id = $params['machine_id'] ?: null;
+            }
+            if (array_key_exists('kernel_type', $params)) {
+                $server->kernel_type = $params['kernel_type'] ?: null;
+            }
+            if (array_key_exists('enabled', $params)) {
+                $server->enabled = (bool) $params['enabled'];
+            }
 
-        return $this->success(true);
+            ServerPortService::validateForSave($server, $previous);
+            if (!$server->save()) {
+                return $this->fail([500, '保存失败']);
+            }
+
+            return $this->success(true);
+        }, 3);
     }
 
     /**
@@ -289,10 +320,11 @@ class ManageController extends Controller
         }
 
         try {
-            $servers = Server::whereIn('id', $ids)->get();
-            DB::transaction(function () use ($servers, $update, $groupAction, $groupId) {
+            DB::transaction(function () use ($ids, $update, $groupAction, $groupId) {
+                $servers = Server::whereIn('id', $ids)->orderBy('id')->lockForUpdate()->get();
                 /** @var Server $server */
                 foreach ($servers as $server) {
+                    $previous = clone $server;
                     if (!empty($update)) {
                         $server->fill($update);
                     }
@@ -316,11 +348,14 @@ class ManageController extends Controller
                     }
 
                     if ($server->isDirty()) {
+                        ServerPortService::validateForSave($server, $previous);
                         $server->save();
                     }
                 }
-            });
+            }, 3);
             return $this->success(true);
+        } catch (ValidationException $e) {
+            throw $e;
         } catch (\Exception $e) {
             Log::error($e);
             return $this->fail([500, '批量更新失败']);

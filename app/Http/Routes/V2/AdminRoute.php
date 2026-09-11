@@ -84,6 +84,7 @@ class AdminRoute
                 'prefix' => 'server/manage'
             ], function ($router) {
                 $router->get('/getNodes', [ManageController::class, 'getNodes']);
+                $router->post('/checkPort', [ManageController::class, 'checkPort']);
                 $router->post('/update', [ManageController::class, 'update']);
                 $router->post('/save', [ManageController::class, 'save']);
                 $router->post('/drop', [ManageController::class, 'drop']);

@@ -17,6 +17,7 @@
  * 5. 节点批量操作按所选节点的权限组筛选添加、移除的增量动作。
  * 6. Shadowsocks 新建表单优先使用 SS2022 128 位 AES-GCM。
  * 7. 节点编辑表单在协议选择左侧增加 Xray/sing-box 内核下拉，新建默认 sing-box，VLESS 默认 Xray。
+ * 8. 节点列表在类型旁增加内核筛选，兼容历史空值与 sing-box 别名。
  *
  * 任一锚点匹配不到就直接失败退出，让构建显式报错，而不是静默产出一个缺少这些界面的管理端。
  * 重复执行是幂等的。
@@ -52,6 +53,7 @@ const BATCH_GROUP_OPTIONS_MARKER = 'yz_batch_group_options';
 const SS2022_DEFAULT_MARKER = 'yz_ss2022_default';
 const KERNEL_MARKER = 'data-yz-node-kernel-selector';
 const KERNEL_DEFAULTS_MARKER = 'data-yz-protocol-kernel-default';
+const KERNEL_FILTER_MARKER = 'yz_kernel_filter';
 const HY2_ENTRY_MARKER = 'relay_hysteria2_entry';
 const SINGBOX_RELAY_MARKER = 'relay_singbox_entry';
 
@@ -84,6 +86,7 @@ foreach ($targets as $file) {
     $hasSs2022Default = str_contains($src, SS2022_DEFAULT_MARKER);
     $hasKernel = str_contains($src, KERNEL_MARKER);
     $hasKernelDefaults = str_contains($src, KERNEL_DEFAULTS_MARKER);
+    $hasKernelFilter = str_contains($src, KERNEL_FILTER_MARKER);
     $hasHy2Entry = str_contains($src, HY2_ENTRY_MARKER);
     $hasSingboxRelay = str_contains($src, SINGBOX_RELAY_MARKER);
 
@@ -96,7 +99,8 @@ foreach ($targets as $file) {
     }
 
     if ($hasField && $hasColumn && $hasVlessMatrix && $hasVlessKeygen && $hasBatchGroup && $hasBatchGroupOptions
-        && $hasSs2022Default && $hasKernel && $hasKernelDefaults && $hasHy2Entry && $hasSingboxRelay && !$kernelSchemaRepaired) {
+        && $hasSs2022Default && $hasKernel && $hasKernelDefaults && $hasKernelFilter
+        && $hasHy2Entry && $hasSingboxRelay && !$kernelSchemaRepaired) {
         fwrite(STDOUT, "patch-admin-relay: 已完整打过补丁，跳过 " . basename($file) . "\n");
         $patched++;
         continue;
@@ -111,6 +115,7 @@ foreach ($targets as $file) {
         || ($hasBatchGroupOptions && !$hasBatchGroup)
         || ($hasSs2022Default && !$hasField)
         || ($hasKernel && !$hasField)
+        || ($hasKernelFilter && !$hasKernel)
         || ($hasHy2Entry && !$hasField)) {
         fwrite(STDERR, "patch-admin-relay: " . basename($file) . " 只包含部分补丁标记，需先还原干净的管理端产物\n");
         exit(1);
@@ -151,6 +156,9 @@ foreach ($targets as $file) {
     }
     if (!$hasKernelDefaults) {
         $src = patchProtocolKernelDefaults($src, $file);
+    }
+    if (!$hasKernelFilter) {
+        $src = patchKernelFilter($src, $file);
     }
     if (!$hasHy2Entry) {
         $src = patchHysteria2Candidates($src, $file);
@@ -343,6 +351,37 @@ function patchKernelSelector(string $src, string $file): string
         fail('protocol selector close', $file);
     }
     $src = substr($src, 0, $closePos) . '})]})]}),Q.jsx(vtt,{className' . substr($src, $closePos + strlen($close));
+
+    return $src;
+}
+
+/** 复用列表筛选组件，内核分类与 Server::effectiveKernelType 保持一致。 */
+function patchKernelFilter(string $src, string $file): string
+{
+    // 隐藏列只提供筛选值与数量统计，首次渲染及切换排序模式时均保持隐藏。
+    $column = <<<'JS'
+/* yz_kernel_filter */{id:"kernel_type",accessorFn:row=>{
+    const kernel=String(row.kernel_type??"").trim().toLowerCase();
+    return kernel==="singbox"||kernel==="sing-box"?"singbox":"xray";
+},filterFn:(row,id,values)=>!Array.isArray(values)||values.length===0||values.includes(row.getValue(id)),enableSorting:!1,enableHiding:!1},
+JS;
+    $columnAnchor = '{accessorKey:"type",header:({column:e})=>Q.jsx(eQt,{column:e,title:t("columns.type")})';
+    $toolbarAnchor = 'e.getColumn("type")&&Q.jsx(b5t,{column:e.getColumn("type"),title:c("toolbar.type"),options:y5t})';
+    $filter = 'e.getColumn("kernel_type")&&Q.jsx(b5t,{column:e.getColumn("kernel_type"),title:c("form.kernel.label",'
+        . jsString('内核') . '),options:[{label:"sing-box",value:"singbox"},{label:"Xray",value:"xray"}]})';
+
+    $replacements = [
+        ['column', $columnAnchor, $column . $columnAnchor],
+        ['toolbar', $toolbarAnchor, $toolbarAnchor . ',' . $filter],
+        ['initial visibility', '[s,o]=H.useState({"drag-handle":!1})', '[s,o]=H.useState({"drag-handle":!1,kernel_type:!1})'],
+        ['sort visibility', 'group_ids:!g,type:!1,actions:!g', 'group_ids:!g,type:!1,kernel_type:!1,actions:!g'],
+    ];
+    foreach ($replacements as [$name, $needle, $replacement]) {
+        if (substr_count($src, $needle) !== 1) {
+            fail('kernel filter ' . $name, $file);
+        }
+        $src = str_replace($needle, $replacement, $src);
+    }
 
     return $src;
 }

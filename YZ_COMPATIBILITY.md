@@ -2,11 +2,18 @@
 
 本文件记录面板、Node、Xray fork 和 sing-box 的可回滚兼容关系。面板版本与兼容标识必须和对应 Node Release、Xray fork commit 及变更说明一起发布。
 
-## 节点运行开关（1.14.0，发布准备）
+## 节点运行开关（1.14.0，已发布）
 
 | 项目 | 标识 |
 | --- | --- |
-| 待发布面板版本 | `1.14.0`；发布完成后记录固定来源、Release、镜像与核验结果 |
+| 当前正式面板版本 | `1.14.0`；Tag、Release 与双架构镜像已于 2026-09-13 发布并核验 |
+| 正式来源 Tag / commit | `v1.14.0` / `8e360ae81a52ebf1cd4f8d0bd32dd788057f3862`；后续发布记录提交不改变此构建来源 |
+| 正式 Release | [v1.14.0](https://github.com/P0me1oo/YZboard/releases/tag/v1.14.0)，已核对为最新正式版本；交付物为 GHCR 镜像，没有独立安装附件 |
+| 不可变镜像标签 | `ghcr.io/p0me1oo/yzboard:1.14.0-8e360ae`；`1.14.0` 与 `latest` 已核对指向同一镜像，可匿名获取 |
+| Docker manifest | `sha256:ba4d6204f8b10f9a0f9675bff5299bc8d548ad31898b46f5293a219eda5ae046` |
+| Docker 平台与 OCI 标识 | `linux/amd64`、`linux/arm64`；两架构均为 `revision=8e360ae81a52ebf1cd4f8d0bd32dd788057f3862`、`version=1.14.0-8e360ae` |
+| 正式发布验证 | [面板 CI 34714913767](https://github.com/P0me1oo/YZboard/actions/runs/34714913767)：PHP 8.2 完整回归 183 项、2420 个断言及管理端 45 项测试通过，双架构构建与清单核验成功 |
+| 面板回滚基线 | `ghcr.io/p0me1oo/yzboard:1.13.5-e342cbe`；manifest `sha256:72046ae0fe8300c89508b61aeb787577b6a8a7b92e5717baa6abdeb432d53d1c`，发布前已核对两个架构与原 `latest` 一致 |
 | 修改基线 | `5a03ea2669467820e1949a2c48e398f8b423ea6d` |
 | 管理端 | 固定子模块不变，追加单节点运行开关构建补丁，列由 `show` 改为 `enabled` |
 | 控制范围 | 当前节点编号；服务器启用状态、同服务器其他节点及共享通信连接保持独立 |
@@ -16,16 +23,23 @@
 | 浏览器验证 | 本地模拟接口，桌面和窄屏卡片的单节点关闭、重新开启与失败恢复通过；未操作真实节点服务器 |
 | 使用与验证范围 | [节点运行开关](docs/node-runtime-switch.md) |
 
-正式发布记录仍以下面的 `1.13.5` 章节为准；发布前已通过匿名 GHCR 接口确认 `latest` 与 `1.13.5-e342cbe` 指向同一双架构镜像，manifest 为 `sha256:72046ae0fe8300c89508b61aeb787577b6a8a7b92e5717baa6abdeb432d53d1c`，作为本次回滚基线。
+发布后通过匿名 GHCR 接口逐项核对三个标签、两个平台清单、OCI 配置和节点运行开关补丁层的 SHA256。两架构的 `assets/index-68ee5c1c.js` 均为 `6548150` 字节，SHA256 为 `fe7f0a73b2de396202ca977aec893cd19ee3b5106b01a9fe3c494d47f1bdc059`；注入脚本与固定 Git 提交中的 `.docker/admin-node-switch.js` 一致，运行列、桌面与窄屏表头及排序模式完整，manifest 和 HTML 引用均指向该入口，文件名与正式 CI 构建输出一致。
 
-## 内部端口冲突检查（1.13.5，已发布）
+| 面板镜像平台 | 平台 manifest |
+| --- | --- |
+| `linux/amd64` | `sha256:ad8fdaa20bc2e22b444e8a971aebaf5560417a12096d8e51fd667910f03e8ca3` |
+| `linux/arm64` | `sha256:bfec3180d8e110a98ac6b02866046446437d612c7619b4d592109289b7cfe4c3` |
+
+本次只需更新面板，沿用现有 Node 配套版本，没有连接或更新生产服务器。服务器更新由用户在实际部署目录执行，沿用 Compose 的 `latest`；更新前保留原镜像、Compose 和必要的数据备份，需要回滚时使用上表的 `1.13.5-e342cbe`。单节点隔离已通过回归和本地模拟接口验证，未进行真实节点服务器启停测试；实际启停在 Node 完成同步后生效。以下各节保留历史发布记录，当前正式版本和 `latest` 来源以本节为准。
+
+## 内部端口冲突检查（1.13.5，历史发布）
 
 | 项目 | 标识 |
 | --- | --- |
-| 当前正式面板版本 | `1.13.5`；Tag、Release 与双架构镜像已于 2026-09-11 发布并核验 |
+| 当时正式面板版本 | `1.13.5`；Tag、Release 与双架构镜像已于 2026-09-11 发布并核验 |
 | 正式来源 Tag / commit | `v1.13.5` / `e342cbedab78eebf2326a4b709d9c01391f47e1a`；后续发布记录提交不改变此构建来源 |
-| 正式 Release | [v1.13.5](https://github.com/P0me1oo/YZboard/releases/tag/v1.13.5)，已核对为最新正式版本；交付物为 GHCR 镜像，没有独立安装附件 |
-| 不可变镜像标签 | `ghcr.io/p0me1oo/yzboard:1.13.5-e342cbe`；`1.13.5` 与 `latest` 已核对指向同一镜像，可匿名获取 |
+| 正式 Release | [v1.13.5](https://github.com/P0me1oo/YZboard/releases/tag/v1.13.5)，发布时已核对为最新正式版本；交付物为 GHCR 镜像，没有独立安装附件 |
+| 不可变镜像标签 | `ghcr.io/p0me1oo/yzboard:1.13.5-e342cbe`；发布时已核对 `1.13.5` 与 `latest` 指向同一镜像，可匿名获取 |
 | Docker manifest | `sha256:72046ae0fe8300c89508b61aeb787577b6a8a7b92e5717baa6abdeb432d53d1c` |
 | Docker 平台与 OCI 标识 | `linux/amd64`、`linux/arm64`；两架构均为 `revision=e342cbedab78eebf2326a4b709d9c01391f47e1a`、`version=1.13.5-e342cbe` |
 | 正式发布验证 | [面板 CI 34572296684](https://github.com/P0me1oo/YZboard/actions/runs/34572296684)：PHP 8.2 完整回归 176 项、2289 个断言及管理端 33 项测试通过，双架构构建与清单核验成功 |
@@ -47,7 +61,7 @@
 | `linux/amd64` | `sha256:3dbaeab06a01d3833a5437f04266d9a8ff547c34a187ea1d0a3af94f8bba9794` |
 | `linux/arm64` | `sha256:cf6d9886aa577e464b7557e02d311e264e45d8a6f0b2f9f489c140d00f1a038a` |
 
-本次只需更新面板，没有连接或更新生产服务器。服务器更新由用户在实际部署目录执行，沿用 Compose 的 `latest`；更新前保留原镜像、Compose 和必要的数据备份，需要回滚时使用上表的 `1.13.4-127a590`。本地数据库验证使用内存 SQLite，未验证 MySQL 多连接并发或真实服务器监听。以下各节保留历史发布记录，当前正式版本和 `latest` 来源以本节为准。
+本次只需更新面板，没有连接或更新生产服务器。服务器更新由用户在实际部署目录执行，沿用 Compose 的 `latest`；更新前保留原镜像、Compose 和必要的数据备份，需要回滚时使用上表的 `1.13.4-127a590`。本地数据库验证使用内存 SQLite，未验证 MySQL 多连接并发或真实服务器监听。本节保留 `1.13.5` 发布时的审计记录，当前正式版本和 `latest` 来源见本文顶部。
 
 ## 套餐默认折扣移除（1.13.4，历史发布）
 

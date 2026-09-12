@@ -14,7 +14,7 @@
  *    自动纠正不合法的 Reality/Hysteria 组合。H2 不再展示，新增 Hysteria 传输。
  * 4. 在 VLESS Encryption 的 decryption 输入框加入与 Reality 私钥一致的钥匙按钮，
  *    复用产物现有的 X25519 生成器，一次填入配对的 decryption/encryption。
- * 5. 节点批量操作增加按权限组添加、移除的增量动作。
+ * 5. 节点批量操作按所选节点的权限组筛选添加、移除的增量动作。
  * 6. Shadowsocks 新建表单优先使用 SS2022 128 位 AES-GCM。
  * 7. 节点编辑表单在协议选择左侧增加 Xray/sing-box 内核下拉，新建默认 sing-box，VLESS 默认 Xray。
  *
@@ -48,6 +48,7 @@ const COLUMN_MARKER = 'relay_entry_name';
 const VLESS_MATRIX_MARKER = 'relay_vless_matrix';
 const VLESS_KEYGEN_MARKER = 'relay_vless_keygen';
 const BATCH_GROUP_MARKER = 'batch_group_membership';
+const BATCH_GROUP_OPTIONS_MARKER = 'yz_batch_group_options';
 const SS2022_DEFAULT_MARKER = 'yz_ss2022_default';
 const KERNEL_MARKER = 'data-yz-node-kernel-selector';
 const KERNEL_DEFAULTS_MARKER = 'data-yz-protocol-kernel-default';
@@ -79,6 +80,7 @@ foreach ($targets as $file) {
     $hasVlessMatrix = str_contains($src, VLESS_MATRIX_MARKER);
     $hasVlessKeygen = str_contains($src, VLESS_KEYGEN_MARKER);
     $hasBatchGroup = str_contains($src, BATCH_GROUP_MARKER);
+    $hasBatchGroupOptions = str_contains($src, BATCH_GROUP_OPTIONS_MARKER);
     $hasSs2022Default = str_contains($src, SS2022_DEFAULT_MARKER);
     $hasKernel = str_contains($src, KERNEL_MARKER);
     $hasKernelDefaults = str_contains($src, KERNEL_DEFAULTS_MARKER);
@@ -93,7 +95,7 @@ foreach ($targets as $file) {
         $kernelSchemaRepaired = true;
     }
 
-    if ($hasField && $hasColumn && $hasVlessMatrix && $hasVlessKeygen && $hasBatchGroup
+    if ($hasField && $hasColumn && $hasVlessMatrix && $hasVlessKeygen && $hasBatchGroup && $hasBatchGroupOptions
         && $hasSs2022Default && $hasKernel && $hasKernelDefaults && $hasHy2Entry && $hasSingboxRelay && !$kernelSchemaRepaired) {
         fwrite(STDOUT, "patch-admin-relay: 已完整打过补丁，跳过 " . basename($file) . "\n");
         $patched++;
@@ -106,6 +108,7 @@ foreach ($targets as $file) {
         || (($hasVlessMatrix || $hasVlessKeygen) && !$hasField)
         || ($hasVlessKeygen && !$hasVlessMatrix)
         || ($hasBatchGroup && !$hasField)
+        || ($hasBatchGroupOptions && !$hasBatchGroup)
         || ($hasSs2022Default && !$hasField)
         || ($hasKernel && !$hasField)
         || ($hasHy2Entry && !$hasField)) {
@@ -136,6 +139,9 @@ foreach ($targets as $file) {
     }
     if (!$hasBatchGroup) {
         $src = patchBatchGroupMembership($src, $file);
+    }
+    if (!$hasBatchGroupOptions) {
+        $src = patchBatchGroupOptions($src, $file);
     }
     if (!$hasSs2022Default) {
         $src = patchShadowsocksDefault($src, $file);
@@ -592,6 +598,49 @@ function patchBatchGroupMembership(string $src, string $file): string
         . 'Q.jsx(Zst,{}),Q.jsx(hQt,{title:c("toolbar.batch_reset_traffic.title")';
 
     return str_replace($menuAnchor, $menu, $src);
+}
+
+/** 按当前所选节点筛选权限组，同时支持升级已注入批量操作的旧产物。 */
+function patchBatchGroupOptions(string $src, string $file): string
+{
+    $handlerAnchor = 'batch_group_membership=async(';
+    if (substr_count($src, $handlerAnchor) !== 1) {
+        fail('batch group options handler', $file);
+    }
+
+    // 每次渲染重新读取所选节点；编号统一为字符串，兼容接口中的数字和字符串。
+    $options = <<<'JS'
+yz_batch_group_options=(()=>{
+    const memberships=a.map(row=>new Set((row.original.group_ids??[]).map(String)));
+    return {
+        add:r.filter(group=>memberships.some(ids=>!ids.has(String(group.id)))),
+        remove:r.filter(group=>memberships.some(ids=>ids.has(String(group.id))))
+    };
+})(),
+JS;
+    $src = str_replace($handlerAnchor, $options . $handlerAnchor, $src);
+
+    foreach (['add' => '添加', 'remove' => '移除'] as $action => $label) {
+        $menu = 'r.length?r.map(__bgGroup=>Q.jsxs($st,{disabled:!l,style:{whiteSpace:"normal"},onSelect:()=>batch_group_membership("'
+            . $action . '",__bgGroup)';
+        $empty = '`batch-group-' . $action . '-${__bgGroup.id}`)):Q.jsx($st,{disabled:!0,children:"暂无权限组"})';
+        if (substr_count($src, $menu) !== 1 || substr_count($src, $empty) !== 1) {
+            fail('batch group ' . $action . ' options', $file);
+        }
+
+        $filtered = 'yz_batch_group_options.' . $action;
+        $src = str_replace(
+            [$menu, $empty],
+            [
+                str_replace('r.length?r.map', $filtered . '.length?' . $filtered . '.map', $menu),
+                '`batch-group-' . $action . '-${__bgGroup.id}`)):Q.jsx($st,{disabled:!0,children:l?'
+                    . jsString("暂无可{$label}的权限组") . ':' . jsString('请先选择节点') . '})',
+            ],
+            $src
+        );
+    }
+
+    return $src;
 }
 
 /** 将 Shadowsocks 新建表单的默认及首选算法调整为 SS2022 128 位 AES-GCM。 */

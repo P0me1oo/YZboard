@@ -48,6 +48,7 @@ docker compose up -d
 - [Node User Sync Reconciliation](./docs/en/development/node-user-sync.md) - Explains periodic node user-list reconciliation for expired users
 - [Mihomo 订阅兼容说明](./docs/mihomo-subscription.md) - 各协议参数核对、ECH / XHTTP 转换、内核版本要求与验证范围
 - [节点防火墙和 HY2 端口跳跃](./docs/firewall-port-hopping.md) - 端口列表、范围、自动放行与停用清理
+- [节点运行开关](./docs/node-runtime-switch.md) - 列表单节点启停、同服务器节点隔离与独立部署说明
 - [YZboard/Xray Compatibility](./YZ_COMPATIBILITY.md) - Fixed Xray fork, Node build, and report compatibility matrix
 
 ### Deployment Guides

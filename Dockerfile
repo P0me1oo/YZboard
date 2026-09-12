@@ -47,6 +47,9 @@ RUN php /www/.docker/patch-admin-plan-prices.php /www/public/assets/admin/assets
 # 内部端口按同一服务器上的 TCP/UDP 监听占用检查，复制保留原端口。
 RUN php /www/.docker/patch-admin-server-port.php /www/public/assets/admin/assets
 
+# 节点列表使用单节点运行开关，保留同服务器上其他节点的运行状态。
+RUN php /www/.docker/patch-admin-node-switch.php /www/public/assets/admin/assets
+
 COPY .docker/supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY .docker/caddy/Caddyfile /etc/caddy/Caddyfile
 COPY .docker/php/zz-xboard.ini /usr/local/etc/php/conf.d/zz-xboard.ini

@@ -126,7 +126,7 @@ jobs:
           node-version: '22'
 
       - name: 验证管理端构建补丁
-        run: node --test --test-reporter=tap tests/admin-kernel-defaults.test.cjs tests/admin-plugin-upload.test.cjs tests/admin-plan-prices.test.cjs tests/admin-server-port.test.cjs
+        run: node --test --test-reporter=tap tests/admin-kernel-defaults.test.cjs tests/admin-plugin-upload.test.cjs tests/admin-plan-prices.test.cjs tests/admin-server-port.test.cjs tests/admin-node-switch.test.cjs
 
       - name: 配置 QEMU
         uses: docker/setup-qemu-action@v3

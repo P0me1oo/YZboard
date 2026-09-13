@@ -152,7 +152,8 @@ class SingBox extends AbstractProtocol
                 $item['type'] === Server::TYPE_VLESS
                 && in_array(data_get($protocol_settings, 'network'), ['tcp', 'ws', 'grpc', 'http', 'quic', 'httpupgrade'])
             ) {
-                $vlessConfig = $this->buildVless($this->user['uuid'], $item);
+                // 节点身份已包含中转路由编号，不能换回原始用户 UUID。
+                $vlessConfig = $this->buildVless($item['password'] ?? $this->user['uuid'], $item);
                 $proxies[] = $vlessConfig;
             }
             if ($item['type'] === Server::TYPE_HYSTERIA) {

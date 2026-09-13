@@ -477,17 +477,73 @@ class ServerRelayTest extends TestCase
                     }
                     $this->assertCount(2, data_get(ServerService::buildNodeConfig($entry), 'relay.children'));
                     $servers = collect(ServerService::getAvailableServers($user))->keyBy('id');
+                    $selected = $servers->only([$entry->id, $children[0]->id, $children[1]->id])->values()->all();
+                    $singbox = (new SingBox($user->toArray(), $selected, 'sing-box', '1.14.0'))->handle()->getData(true);
+                    $outbounds = collect($singbox['outbounds'])->whereIn('type', ['vless', 'hysteria2'])->keyBy('tag');
+                    $mihomo = Yaml::parse((new ClashMeta($user->toArray(), $selected, 'mihomo', '1.19.21'))->handle()->getContent());
+                    $proxies = collect($mihomo['proxies'])->keyBy('name');
+                    $identityField = $protocol === 'vless' ? 'uuid' : 'password';
+                    $this->assertCount(3, $outbounds);
+                    $this->assertCount(3, $outbounds->pluck($identityField)->unique());
                     foreach ([$entry, ...$children] as $node) {
                         $this->assertSame($entry->host, $servers[$node->id]['host']);
                         $this->assertSame($protocol, $servers[$node->id]['type']);
                         $this->assertSame($entryKernel, $servers[$node->id]['kernel_type']);
                         $this->assertSame(Helper::applyVlessRoute($user->uuid, $node->vless_route), $servers[$node->id]['password']);
+                        $this->assertSame($servers[$node->id]['password'], $outbounds[$node->name][$identityField]);
+                        $this->assertSame($proxies[$node->name][$identityField], $outbounds[$node->name][$identityField]);
+                        $this->assertSame($entry->host, $outbounds[$node->name]['server']);
+                        $this->assertSame((int) $entry->port, $outbounds[$node->name]['server_port']);
                     }
                     foreach ($children as $child) {
                         $this->assertSame($landingKernel, $child->fresh()->kernel_type);
                     }
                 }
             }
+        }
+    }
+
+    public function test_singbox_vless_relay_identity_survives_refresh_disable_restore_and_user_rotation(): void
+    {
+        $entry = $this->makeEntry(['kernel_type' => Server::KERNEL_XRAY]);
+        $child = $this->makeChild($entry, ['kernel_type' => Server::KERNEL_SINGBOX]);
+        $user = $this->makeUser();
+        $render = fn() => collect((new SingBox(
+            $user->toArray(), ServerService::getAvailableServers($user), 'sing-box', '1.14.0',
+        ))->handle()->getData(true)['outbounds'])->where('type', 'vless')->keyBy('tag')->all();
+
+        $initial = $render();
+        $this->assertSame($child->vless_route, hexdec(substr($initial[$child->name]['uuid'], 14, 4)));
+        $this->assertSame($initial, $render());
+
+        $child->update(['enabled' => false]);
+        $this->assertArrayNotHasKey($child->name, $render());
+        $child->update(['enabled' => true]);
+        $this->assertSame($initial, $render());
+
+        $user->update(['uuid' => (string) \Illuminate\Support\Str::uuid()]);
+        $rotated = $render();
+        $this->assertNotSame($initial[$child->name]['uuid'], $rotated[$child->name]['uuid']);
+        $this->assertSame(Helper::applyVlessRoute($user->uuid, $child->vless_route), $rotated[$child->name]['uuid']);
+        $this->assertSame($child->vless_route, hexdec(substr($rotated[$child->name]['uuid'], 14, 4)));
+
+        $entry->delete();
+        $this->assertArrayNotHasKey($child->name, $render());
+    }
+
+    public function test_plain_vless_singbox_subscription_keeps_user_identity_with_or_without_node_password(): void
+    {
+        $node = $this->makeEntry();
+        $user = $this->makeUser();
+        $server = ServerService::getAvailableServers($user)[0];
+        $withoutPassword = $server;
+        unset($withoutPassword['password']);
+
+        foreach ([$server, $withoutPassword, array_replace($server, ['password' => null])] as $input) {
+            $config = (new SingBox($user->toArray(), [$input], 'sing-box', '1.14.0'))->handle()->getData(true);
+            $outbound = collect($config['outbounds'])->firstWhere('tag', $node->name);
+            $this->assertSame($user->uuid, $outbound['uuid']);
+            $this->assertSame($node->host, $outbound['server']);
         }
     }
 

@@ -44,7 +44,7 @@ docker compose up -d
 
 ### Development Guides
 - [Plugin Development Guide](./docs/en/development/plugin-development-guide.md) - Complete guide for developing XBoard plugins
-- [插件上传限制](./docs/plugin-upload.md) - 64 MiB 安装包、PHP / Swoole 请求限制及更新检查
+- [插件上传限制与错误提示](./docs/plugin-upload.md) - 64 MiB 安装包、独立上传超时及网关错误排查
 - [Node User Sync Reconciliation](./docs/en/development/node-user-sync.md) - Explains periodic node user-list reconciliation for expired users
 - [Mihomo 订阅兼容说明](./docs/mihomo-subscription.md) - 各协议参数核对、ECH / XHTTP 转换、内核版本要求与验证范围
 - [节点防火墙和 HY2 端口跳跃](./docs/firewall-port-hopping.md) - 端口列表、范围、自动放行与停用清理

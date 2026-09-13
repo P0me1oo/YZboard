@@ -2,30 +2,55 @@
 
 本文件记录面板、Node、Xray fork 和 sing-box 的可回滚兼容关系。面板版本与兼容标识必须和对应 Node Release、Xray fork commit 及变更说明一起发布。
 
-## 插件上传独立超时与错误提示（1.15.1，发布准备）
+## 插件上传独立超时与错误提示（1.15.1，已发布）
 
 | 项目 | 标识 |
 | --- | --- |
-| 目标面板版本 | `1.15.1`；按 `v1.15.1` 固定 Tag 发布，Release 与镜像验证完成后补充来源记录 |
-| 修改基线 | `04ba530ac07a89184c3ca071596ade939f7d367e`；正式发布基线仍为下节的 `1.15.0` |
+| 当前正式面板版本 | `1.15.1`；Tag、Release 与双架构镜像已于 2026-09-13 发布并核验 |
+| 正式来源 Tag / commit | `v1.15.1` / `8714e570cfc9a271d0348e25cd01a497a270137e`；后续发布记录提交不改变此构建来源 |
+| 正式 Release | [v1.15.1](https://github.com/P0me1oo/YZboard/releases/tag/v1.15.1)，已核对为最新正式版本；交付物为 GHCR 镜像，没有独立安装附件 |
+| 不可变镜像标签 | `ghcr.io/p0me1oo/yzboard:1.15.1-8714e57`；`1.15.1` 与 `latest` 已核对指向同一镜像，可匿名获取 |
+| Docker manifest | `sha256:c8f969bfda12e1707ad33621e4fbbddea55ce5d818fa502d2241895d4c700ef2` |
+| Docker 平台与 OCI 标识 | `linux/amd64`、`linux/arm64`；两架构均为 `revision=8714e570cfc9a271d0348e25cd01a497a270137e`、`version=1.15.1-8714e57` |
+| 修改基线 | `04ba530ac07a89184c3ca071596ade939f7d367e`；更新前的正式版本为下节的 `1.15.0` |
 | 管理端基线 | 上游子模块固定为 `ef5f43da335092cbff8fdf0ad7ff9b4d92d7d0d7`，通过现有构建补丁应用修改 |
 | 上传行为 | 插件 ZIP 请求独立使用 5 分钟超时；普通请求维持 30 秒，64 MiB 大小限制不变 |
 | 错误处理 | 保留服务端消息、表单详情和客户端原因，区分浏览器超时、断网与网关错误；插件上传页面只提示一次 |
 | 配套关系 | 沿用正式 Node `v1.13.1` 的配套关系；没有数据库迁移、Node 通信或核心依赖变更 |
 | 本地验证 | 完整管理端 72 项测试通过，其中插件上传相关 16 项；PHP `8.4.21` 完整回归 183 项测试、2420 个断言通过；补丁重复执行、资源引用及 PHP / JavaScript 语法检查通过 |
+| 正式发布验证 | [面板 CI 34728102435](https://github.com/P0me1oo/YZboard/actions/runs/34728102435)：PHP 8.2 完整回归 183 项测试、2420 个断言及管理端 72 项测试通过，双架构构建与清单核验成功 |
 | 面板回滚基线 | `ghcr.io/p0me1oo/yzboard:1.15.0-3cafec4`；manifest `sha256:db915f06f5c8737da13ba1c307ebf49afdd3b3c40f278896a3396a11ce9ed241`，发布前已核对两个架构、OCI revision 与原 `latest` 一致，可匿名获取 |
 | 配置说明 | [插件上传限制与错误提示](docs/plugin-upload.md)；Octane 执行限制默认仍为 60 秒，外部网关超时独立生效 |
 
-上传测试执行生成产物中的实际方法、错误处理和页面回调，验证超时原因只显示一次、失败后恢复上传状态且不自动重发；同时覆盖旧补丁升级、重复运行、资源引用和锚点失效时不写入半成品。发布前的 `latest` 已核对使用下节的 `1.15.0` 来源；本版发布后重新核对版本别名、不可变标签和 `latest` 的一致性。
+上传测试执行生成产物中的实际方法、错误处理和页面回调，验证超时原因只显示一次、失败后恢复上传状态且不自动重发；同时覆盖旧补丁升级、重复运行、资源引用和锚点失效时不写入半成品。
 
-## 节点内核筛选与批量权限组选项（1.15.0，已发布）
+发布后通过匿名 GHCR 接口核对三个标签、两个平台清单和 OCI 配置，并从镜像最终文件层读取应用版本、管理端脚本、manifest 与 HTML。两架构的 `assets/index-e6d83733.js` 均为 `6552596` 字节，SHA256 为 `e4197b5deb7d35f2a68502c0497c72179a891cccd23f627c94d3e5f3536fc015`；与发布提交及固定子模块的 Git 原始字节重建结果一致，包含 5 分钟插件上传配置及完整错误处理，入口引用有效。
+
+| 面板镜像平台 | 平台 manifest |
+| --- | --- |
+| `linux/amd64` | `sha256:ba6d740efd36938e6cd0bdd269b63cce42479ea9f39c33db55b6b62aa756245e` |
+| `linux/arm64` | `sha256:db61b1fd70fea5db9565e7824c8e680f1c98889e36b5d69b20974f899d20b470` |
+
+本次只需更新面板，没有新增 Node 升级要求。在实际生产 Compose 部署目录确认项目、服务名、现用镜像和持久化挂载，备份 Compose 与必要数据，并保留旧镜像。服务名为 `xboard`、镜像配置为 `ghcr.io/p0me1oo/yzboard:latest` 时执行：
+
+```bash
+docker compose pull xboard
+docker compose config -q
+docker compose up -d --no-build xboard
+docker compose ps xboard
+docker compose logs --tail=100 xboard
+```
+
+更新后确认面板 HTTP 正常、应用版本为 `1.15.1`，运行容器的 OCI revision 和镜像 digest 与上表一致；完整检查命令见本版 Release。未确认稳定前保留旧镜像，需要回滚时临时固定到 `1.15.0-3cafec4` 或对应 digest 后重建。以下各节保留历史发布记录，当前正式版本和 `latest` 来源以本节为准。
+
+## 节点内核筛选与批量权限组选项（1.15.0，历史发布）
 
 | 项目 | 标识 |
 | --- | --- |
-| 当前正式面板版本 | `1.15.0`；Tag、Release 与双架构镜像已于 2026-09-13 发布并核验 |
+| 当时正式面板版本 | `1.15.0`；Tag、Release 与双架构镜像已于 2026-09-13 发布并核验 |
 | 正式来源 Tag / commit | `v1.15.0` / `3cafec40d273911fed4b6811535539a18cd7fb03`；后续发布记录提交不改变此构建来源 |
-| 正式 Release | [v1.15.0](https://github.com/P0me1oo/YZboard/releases/tag/v1.15.0)，已核对为最新正式版本；交付物为 GHCR 镜像，没有独立安装附件 |
-| 不可变镜像标签 | `ghcr.io/p0me1oo/yzboard:1.15.0-3cafec4`；`1.15.0` 与 `latest` 已核对指向同一镜像，可匿名获取 |
+| 正式 Release | [v1.15.0](https://github.com/P0me1oo/YZboard/releases/tag/v1.15.0)，发布时已核对为最新正式版本；交付物为 GHCR 镜像，没有独立安装附件 |
+| 不可变镜像标签 | `ghcr.io/p0me1oo/yzboard:1.15.0-3cafec4`；发布时已核对 `1.15.0` 与 `latest` 指向同一镜像，可匿名获取 |
 | Docker manifest | `sha256:db915f06f5c8737da13ba1c307ebf49afdd3b3c40f278896a3396a11ce9ed241` |
 | Docker 平台与 OCI 标识 | `linux/amd64`、`linux/arm64`；两架构均为 `revision=3cafec40d273911fed4b6811535539a18cd7fb03`、`version=1.15.0-3cafec4` |
 | 正式发布验证 | [面板 CI 34720505629](https://github.com/P0me1oo/YZboard/actions/runs/34720505629)：PHP 8.2 完整回归 183 项、2420 个断言及管理端 62 项测试通过，双架构构建与清单核验成功 |
@@ -49,7 +74,7 @@
 | `linux/amd64` | `sha256:0c90ed5318266ac912d9fbc836f86715cacc64763a96f59bb112ff741d74f933` |
 | `linux/arm64` | `sha256:efbfb1d6d3edd1f3a82acc10c99b552d129311c99a50e3c97ade924fc36f5a28` |
 
-本次只需更新面板，沿用现有 Node 配套版本。用户在实际部署目录使用现有 Compose 的 `latest` 拉取并重建服务，更新前保留原镜像、Compose 和必要的数据备份；需要回滚时使用上表的 `1.14.0-8e360ae`。以下各节保留历史发布记录，当前正式版本和 `latest` 来源以本节为准。
+该版仅需更新面板，沿用原有 Node 配套版本；其回滚基线为上表的 `1.14.0-8e360ae`。本节保留历史发布记录，当前正式版本和 `latest` 来源以本文顶部记录为准。
 
 ## 节点运行开关（1.14.0，历史发布）
 

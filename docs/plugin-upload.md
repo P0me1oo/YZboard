@@ -2,7 +2,7 @@
 
 从正式版 `1.13.3` 起，管理端允许上传最大 **64 MiB** 的插件 ZIP，即 `67,108,864` 字节。恰好达到上限的文件允许上传，超过上限一字节即拒绝；文件格式仍需通过原有 ZIP 校验。
 
-`1.15.1` 增加独立上传超时和完整错误提示。发布状态及镜像来源以 [兼容矩阵](../YZ_COMPATIBILITY.md) 为准。
+正式版 [1.15.1](https://github.com/P0me1oo/YZboard/releases/tag/v1.15.1) 已发布，增加独立上传超时和完整错误提示。双架构镜像及 `latest` 已核验，来源和回滚记录见 [兼容矩阵](../YZ_COMPATIBILITY.md)。
 
 ## 上传超时
 
@@ -64,7 +64,7 @@ client_max_body_size 80m;
 
 ## 发布与配置检查
 
-64 MiB 大小限制已随正式版 [1.13.3](https://github.com/P0me1oo/YZboard/releases/tag/v1.13.3) 发布。独立超时和完整错误提示从 `1.15.1` 开始提供；正式镜像来源与更新指引统一记录在 [兼容矩阵](../YZ_COMPATIBILITY.md)，更新时确认目标版本及其来源。
+64 MiB 大小限制已随正式版 [1.13.3](https://github.com/P0me1oo/YZboard/releases/tag/v1.13.3) 发布。独立超时和完整错误提示已随 `1.15.1` 发布，不可变镜像为 `ghcr.io/p0me1oo/yzboard:1.15.1-8714e57`；`latest` 已核对指向相同 digest。更新与检查命令见 [本版 Release](https://github.com/P0me1oo/YZboard/releases/tag/v1.15.1)，完整来源见 [兼容矩阵](../YZ_COMPATIBILITY.md)。
 
 管理端由固定上游子模块提供，镜像构建按 `Dockerfile` 的顺序应用本仓库补丁。插件上传补丁会同步更新资源名称、manifest 和 HTML 引用；只读取未打补丁的上游资源不会包含这些调整。
 

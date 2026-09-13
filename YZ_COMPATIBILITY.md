@@ -2,31 +2,51 @@
 
 本文件记录面板、Node、Xray fork 和 sing-box 的可回滚兼容关系。面板版本与兼容标识必须和对应 Node Release、Xray fork commit 及变更说明一起发布。
 
-## sing-box VLESS 中转路由身份修复（1.15.2，未发布）
+## sing-box VLESS 中转路由身份修复（1.15.2，已发布）
 
 | 项目 | 标识 |
 | --- | --- |
-| 本地应用版本 | `1.15.2`；仅完成本地修复，尚未发布 Tag、Release 或镜像 |
+| 当前正式面板版本 | `1.15.2`；Tag、Release 与双架构镜像已于 2026-09-13 发布并核验 |
+| 正式来源 Tag / commit | `v1.15.2` / `db46a6d7979380d479d5dcf9b1a1345eaff7518c`；后续发布记录提交不改变此构建来源 |
+| 正式 Release | [v1.15.2](https://github.com/P0me1oo/YZboard/releases/tag/v1.15.2)，已核对为最新正式版本；交付物为 GHCR 镜像，没有独立安装附件 |
+| 不可变镜像标签 | `ghcr.io/p0me1oo/yzboard:1.15.2-db46a6d`；`1.15.2` 与 `latest` 已核对指向同一镜像，可匿名获取 |
+| Docker manifest | `sha256:46933f4c5cf9cc9aacbe5c1baefd22bf15bb9472668f5d0d1778af9f74cb6164` |
+| Docker 平台与 OCI 标识 | `linux/amd64`、`linux/arm64`；两架构均为 `revision=db46a6d7979380d479d5dcf9b1a1345eaff7518c`、`version=1.15.2-db46a6d` |
 | 修改基线 | `3fcbf3b344e596d3242b37dd49f1cd2df07619ac` |
 | 修复范围 | sing-box VLESS 订阅使用已写入路由编号的节点身份，保留前置直出和各落地的独立选路；普通节点保持原有身份 |
 | 核心对照 | 官方 sing-box `v1.14.0` / `0b8995879f29a9b98ee027bc17b75e101445b238`；VLESS 出站将配置中的 `uuid` 直接传给客户端实现 |
 | 配套关系 | 沿用正式 Node `v1.13.1` 的配套关系；没有数据库迁移、Node 通信或核心依赖变更 |
 | 本地中转回归 | PHP `8.4.21`、内存 SQLite：38 项测试、895 个断言通过；覆盖最终 sing-box/Mihomo 订阅、双核心组合、VLESS/HY2 入口、SS/VLESS 落地、重复生成、停用恢复、身份轮换及失效拓扑 |
 | 本地完整回归 | PHP `8.4.21`、内存 SQLite：185 项测试、2546 个断言通过；修改涉及的 PHP 文件语法检查和 `git diff --check` 通过 |
+| 正式发布验证 | [面板 CI 34736580561](https://github.com/P0me1oo/YZboard/actions/runs/34736580561)：PHP `8.2.33` 完整回归 185 项测试、2546 个断言及管理端 72 项测试通过，双架构构建与清单核验成功 |
 | 面板回滚基线 | `ghcr.io/p0me1oo/yzboard:1.15.1-8714e57`；manifest `sha256:c8f969bfda12e1707ad33621e4fbbddea55ce5d818fa502d2241895d4c700ef2`，发布前已核对两个架构、OCI revision 与原 `latest` 一致，可匿名获取 |
 
 新增检查在修复前复现了三个出口共用一个身份、落地路由编号被原始 UUID 字节覆盖的问题，修复后通过。
-验证范围为本地订阅生成和面板回归，未在 Android 设备或真实服务器链路上复测。说明见 [中转节点文档](docs/relay-nodes.md#sing-box-vless-路由身份)。
-本次尚未更新 `latest`；下节保留 `1.15.1` 的正式发布来源和回滚记录。包含修复的版本发布并更新面板后，客户端还需刷新远程配置并重新连接。
+业务行为已通过本地及正式 CI 的订阅生成和面板回归验证，未在 Android 设备或真实服务器链路上复测。说明见 [中转节点文档](docs/relay-nodes.md#sing-box-vless-路由身份)。
+发布后通过匿名 GHCR 接口逐项核对三个标签、两个平台清单、配置摘要和 OCI 来源，并流式读取两个架构的实际镜像文件层。
+下列文件均与上述固定发布提交的 Git 原始字节一致，包含保留节点路由身份的修复，应用版本为 `1.15.2`；读取的压缩镜像层也已核对完整 SHA256。
 
-## 插件上传独立超时与错误提示（1.15.1，已发布）
+| 镜像内文件（两个架构相同） | 字节数 | SHA256 |
+| --- | --- | --- |
+| `/www/app/Protocols/SingBox.php` | `34004` | `b2e2dfe4b73d110123dde8b5dec8632c8cd779d9372b256a9f3206ef046d0d9e` |
+| `/www/config/app.php` | `7117` | `3b1770dbd90b9a62adf0b26920825f2184fa5036f0a1debbcaa62ca037947635` |
+
+| 面板镜像平台 | 平台 manifest |
+| --- | --- |
+| `linux/amd64` | `sha256:1ae33f4ec32b794691cf0b0e325ded958949a76a981b737a14e47da6cc212ce8` |
+| `linux/arm64` | `sha256:767dfac58e22f4111756b3b11a4d12993936c686b705a2217edcb94fba4af366` |
+
+本次只需更新面板。用户在实际生产 Docker Compose 部署目录确认项目、服务名、现用镜像和持久化挂载，备份必要数据并保留旧镜像，再按本版 Release 的命令更新和检查。
+更新后确认应用版本、HTTP、日志、OCI revision 和运行容器的 digest，并在 sing-box 客户端刷新远程配置、重新连接后复测出口 IP。回滚使用上表的 `1.15.1-8714e57` 或对应 digest；当前正式版本和 `latest` 来源以本节为准。
+
+## 插件上传独立超时与错误提示（1.15.1，历史发布）
 
 | 项目 | 标识 |
 | --- | --- |
-| 当前正式面板版本 | `1.15.1`；Tag、Release 与双架构镜像已于 2026-09-13 发布并核验 |
+| 当时正式面板版本 | `1.15.1`；Tag、Release 与双架构镜像已于 2026-09-13 发布并核验 |
 | 正式来源 Tag / commit | `v1.15.1` / `8714e570cfc9a271d0348e25cd01a497a270137e`；后续发布记录提交不改变此构建来源 |
-| 正式 Release | [v1.15.1](https://github.com/P0me1oo/YZboard/releases/tag/v1.15.1)，已核对为最新正式版本；交付物为 GHCR 镜像，没有独立安装附件 |
-| 不可变镜像标签 | `ghcr.io/p0me1oo/yzboard:1.15.1-8714e57`；`1.15.1` 与 `latest` 已核对指向同一镜像，可匿名获取 |
+| 正式 Release | [v1.15.1](https://github.com/P0me1oo/YZboard/releases/tag/v1.15.1)，发布时已核对为最新正式版本；交付物为 GHCR 镜像，没有独立安装附件 |
+| 不可变镜像标签 | `ghcr.io/p0me1oo/yzboard:1.15.1-8714e57`；发布时已核对 `1.15.1` 与 `latest` 指向同一镜像，可匿名获取 |
 | Docker manifest | `sha256:c8f969bfda12e1707ad33621e4fbbddea55ce5d818fa502d2241895d4c700ef2` |
 | Docker 平台与 OCI 标识 | `linux/amd64`、`linux/arm64`；两架构均为 `revision=8714e570cfc9a271d0348e25cd01a497a270137e`、`version=1.15.1-8714e57` |
 | 修改基线 | `04ba530ac07a89184c3ca071596ade939f7d367e`；更新前的正式版本为下节的 `1.15.0` |
@@ -58,7 +78,7 @@ docker compose ps xboard
 docker compose logs --tail=100 xboard
 ```
 
-更新后确认面板 HTTP 正常、应用版本为 `1.15.1`，运行容器的 OCI revision 和镜像 digest 与上表一致；完整检查命令见本版 Release。未确认稳定前保留旧镜像，需要回滚时临时固定到 `1.15.0-3cafec4` 或对应 digest 后重建。以下各节保留历史发布记录，当前正式版本和 `latest` 来源以本节为准。
+更新后确认面板 HTTP 正常、应用版本为 `1.15.1`，运行容器的 OCI revision 和镜像 digest 与上表一致；完整检查命令见本版 Release。未确认稳定前保留旧镜像，需要回滚时临时固定到 `1.15.0-3cafec4` 或对应 digest 后重建。本节保留 `1.15.1` 发布时的审计记录，当前正式版本和 `latest` 来源见本文顶部。
 
 ## 节点内核筛选与批量权限组选项（1.15.0，历史发布）
 

@@ -75,6 +75,13 @@ class ManageController extends Controller
                 }
                 $previous = $server->exists ? clone $server : null;
                 $server->fill($params);
+                if (!$server->exists) {
+                    // 新建时显隐跟随开关；未传开关沿用数据库默认开启，显式空值保留独立部署设置。
+                    $enabled = array_key_exists('enabled', $params) ? $server->enabled : true;
+                    if ($enabled !== null) {
+                        $server->show = $enabled;
+                    }
+                }
                 ServerPortService::validateForSave($server, $previous);
                 $server->save();
                 return $this->success(true);

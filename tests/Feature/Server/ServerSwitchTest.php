@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Server;
 
+use App\Http\Controllers\V1\Client\ClientController;
+use App\Http\Controllers\V1\User\ServerController as UserServerController;
 use App\Http\Controllers\V2\Admin\Server\ManageController;
 use App\Models\Server;
 use App\Models\ServerMachine;
@@ -26,6 +28,8 @@ class ServerSwitchTest extends TestCase
         Route::post('/_tests/server-switch', [ManageController::class, 'update']);
         Route::post('/_tests/server-switch/batch', [ManageController::class, 'batchUpdate']);
         Route::post('/_tests/server-switch/save', [ManageController::class, 'save']);
+        Route::get('/_tests/server-switch/user-nodes', [UserServerController::class, 'fetch']);
+        Route::get('/_tests/server-switch/subscribe', [ClientController::class, 'subscribe']);
         Redis::shouldReceive('publish')->byDefault()->andReturnUsing(function (string $channel, string $message): int {
             $this->assertSame('node:push', $channel);
             $this->pushes[] = json_decode($message, true, flags: JSON_THROW_ON_ERROR);
@@ -85,6 +89,134 @@ class ServerSwitchTest extends TestCase
     public static function switchOperations(): array
     {
         return ['单节点' => [false], '批量节点' => [true]];
+    }
+
+    private function creationPayload(ServerMachine $machine, array $overrides = []): array
+    {
+        return array_replace([
+            'name' => '新建开关测试节点',
+            'machine_id' => $machine->id,
+            'type' => Server::TYPE_VLESS,
+            'host' => 'creation.example.invalid',
+            'port' => '24444',
+            'server_port' => 24444,
+            'protocol_settings' => ['tls' => 0, 'network' => 'tcp'],
+            'rate' => 1,
+            'group_ids' => ['1'],
+        ], $overrides);
+    }
+
+    public static function creationSwitchStates(): array
+    {
+        return [
+            '开启覆盖表单默认隐藏' => [['enabled' => true, 'show' => false], true, true],
+            '关闭覆盖显式显示' => [['enabled' => false, 'show' => true], false, false],
+            '未传开关沿用默认开启' => [['show' => false], true, true],
+            '未传开关和显隐' => [[], true, true],
+            '字符串开启' => [['enabled' => '1', 'show' => 0], true, true],
+            '数字关闭' => [['enabled' => 0, 'show' => 1], false, false],
+            '空开关保留独立部署显示' => [['machine_id' => null, 'enabled' => null, 'show' => true], null, true],
+            '空开关保留独立部署隐藏' => [['machine_id' => null, 'enabled' => null, 'show' => false], null, false],
+        ];
+    }
+
+    #[DataProvider('creationSwitchStates')]
+    public function test_new_node_visibility_follows_its_initial_switch(
+        array $fields,
+        ?bool $expectedEnabled,
+        bool $expectedShow,
+    ): void {
+        $machine = $this->machine();
+        $peer = $this->node($machine, 24443, ['show' => false]);
+        $peerAttributes = $peer->fresh()->getAttributes();
+
+        $this->postJson('/_tests/server-switch/save', $this->creationPayload($machine, $fields))
+            ->assertOk()->assertJsonPath('data', true);
+        $node = Server::latest('id')->firstOrFail();
+
+        $this->assertSame($expectedEnabled, $node->enabled);
+        $this->assertSame($expectedShow, $node->show);
+        $this->assertSame($peerAttributes, $peer->fresh()->getAttributes());
+        $this->assertDiscovered($machine, $expectedEnabled ? [$peer, $node] : [$peer]);
+        $this->assertVisible($expectedShow ? [$node] : []);
+    }
+
+    private function assertUserLists(User $user, array $nodes): void
+    {
+        $this->actingAs($user);
+        $response = $this->getJson('/_tests/server-switch/user-nodes')->assertOk();
+        $this->assertEqualsCanonicalizing(
+            array_map(fn (Server $node) => $node->id, $nodes),
+            array_column($response->json('data'), 'id'),
+        );
+
+        $response = $this->get('/_tests/server-switch/subscribe?flag=general')->assertOk();
+        $subscription = base64_decode($response->getContent(), true);
+        $this->assertIsString($subscription);
+        // 只比较最终订阅中的节点名称，不在断言失败时输出测试认证信息。
+        $names = array_map(
+            fn (string $uri) => rawurldecode((string) parse_url($uri, PHP_URL_FRAGMENT)),
+            preg_split('/\r?\n/', trim($subscription), -1, PREG_SPLIT_NO_EMPTY),
+        );
+        $this->assertEqualsCanonicalizing(array_map(fn (Server $node) => $node->name, $nodes), $names);
+    }
+
+    public function test_new_enabled_node_appears_in_user_list_and_subscription_and_survives_edits(): void
+    {
+        $machine = $this->machine();
+        $user = User::create([
+            'email' => 'creation-test@example.invalid',
+            'password' => bcrypt(Str::random(32)),
+            'uuid' => (string) Str::uuid(),
+            'token' => Str::random(32),
+            'group_id' => 1,
+            'transfer_enable' => 1024 * 1024,
+            'expired_at' => null,
+            'banned' => false,
+            'u' => 0,
+            'd' => 0,
+        ]);
+
+        // 模拟现有管理端新建表单提交的开启开关和默认隐藏值。
+        $this->postJson('/_tests/server-switch/save', $this->creationPayload($machine, [
+            'enabled' => true, 'show' => false,
+        ]))->assertOk()->assertJsonPath('data', true);
+        $node = Server::latest('id')->firstOrFail();
+
+        for ($repeat = 0; $repeat < 2; $repeat++) {
+            $this->assertUserLists($user, [$node]);
+            $this->postJson('/_tests/server-switch/save', array_replace($node->fresh()->toArray(), [
+                'name' => '新建后编辑的节点',
+            ]))->assertOk()->assertJsonPath('data', true);
+            $node->refresh();
+        }
+
+        foreach ([false, false, true, true] as $enabled) {
+            $this->postJson('/_tests/server-switch', ['id' => $node->id, 'enabled' => $enabled])
+                ->assertOk()->assertJsonPath('data', true);
+            $this->assertUserLists($user, $enabled ? [$node] : []);
+            $this->assertDiscovered($machine, $enabled ? [$node] : []);
+        }
+    }
+
+    public function test_failed_creation_leaves_existing_node_visibility_and_runtime_unchanged(): void
+    {
+        $machine = $this->machine();
+        $peer = $this->node($machine, 24443, ['show' => false]);
+        $peerAttributes = $peer->fresh()->getAttributes();
+        $this->pushes = [];
+
+        foreach ([['enabled' => 'invalid'], ['enabled' => true, 'server_port' => 24443]] as $fields) {
+            $this->postJson('/_tests/server-switch/save', $this->creationPayload($machine, $fields))
+                ->assertUnprocessable()->assertJsonValidationErrors(
+                    isset($fields['server_port']) ? 'server_port' : 'enabled',
+                );
+            $this->assertSame(1, Server::count());
+            $this->assertSame($peerAttributes, $peer->fresh()->getAttributes());
+            $this->assertDiscovered($machine, [$peer]);
+            $this->assertVisible([]);
+            $this->assertSame([], $this->pushes);
+        }
     }
 
     public function test_disabling_and_reenabling_one_node_updates_visibility_and_preserves_its_peers_and_machine(): void

@@ -2,25 +2,46 @@
 
 本文件记录面板、Node、Xray fork 和 sing-box 的可回滚兼容关系。面板版本与兼容标识必须和对应 Node Release、Xray fork commit 及变更说明一起发布。
 
-## 节点开关单向联动显隐（1.15.3，发布中）
+## 节点开关单向联动显隐（1.15.3，已发布）
 
 | 项目 | 标识 |
 | --- | --- |
-| 本次面板版本 | `1.15.3`；发布来源和镜像摘要将在完成核验后补录，上一正式版本及回滚依据见下节 `1.15.2` 发布记录 |
+| 当前正式面板版本 | `1.15.3`；Tag、Release 与双架构镜像已于 2026-09-15 发布并核验 |
+| 正式来源 Tag / commit | `v1.15.3` / `e425eb28e95763046184475d2868b9d4c61e4da0`；后续发布记录提交不改变此构建来源 |
+| 正式 Release | [v1.15.3](https://github.com/P0me1oo/YZboard/releases/tag/v1.15.3)，已核对为最新正式版本；交付物为 GHCR 镜像，没有独立安装附件 |
+| 不可变镜像标签 | `ghcr.io/p0me1oo/yzboard:1.15.3-e425eb2`；`1.15.3` 与 `latest` 已核对指向同一镜像，可匿名获取 |
+| Docker manifest | `sha256:d9bfb2a500dd565b3c3ccbdea3f5da241f098c7191ebe718a95da0be0f9ad07e` |
+| Docker 平台与 OCI 标识 | `linux/amd64`、`linux/arm64`；两架构均为 `revision=e425eb28e95763046184475d2868b9d4c61e4da0`、`version=1.15.3-e425eb2` |
 | 修改基线 | `c5333caef4d917aa3d9b00d5205a8a7f80ddab30` |
 | 修改范围 | 单节点与批量启停同时设置显隐；单独显隐不触发启停，普通编辑保留显隐设置；同一事务保存，失败全部回滚 |
 | 配套关系 | 沿用正式 Node `v1.13.1` 的配套关系；没有数据库迁移、Node 通信或核心依赖变更 |
 | 本地验证 | PHP `8.4.21`、内存 SQLite：192 项测试、2889 个断言通过；Node.js `24.14.1` 管理端 72 项测试通过；PHP 语法检查和 `git diff --check` 通过 |
+| 正式发布验证 | [面板 CI 34876727278](https://github.com/P0me1oo/YZboard/actions/runs/34876727278)：PHP `8.2.33` 完整回归 192 项测试、2889 个断言及管理端 72 项测试通过，双架构构建与清单核验成功 |
+| 面板回滚基线 | `ghcr.io/p0me1oo/yzboard:1.15.2-db46a6d`；manifest `sha256:46933f4c5cf9cc9aacbe5c1baefd22bf15bb9472668f5d0d1778af9f74cb6164`，发布前已核对两个架构、OCI revision 与原 `latest` 一致，可匿名获取 |
 | 使用说明 | [节点运行开关](docs/node-runtime-switch.md) |
 
-## sing-box VLESS 中转路由身份修复（1.15.2，已发布）
+发布后通过匿名 GHCR 接口核对三个标签、两个平台清单和 OCI 来源，并流式读取两个架构的最终文件层。以下文件均与固定发布提交的 Git 原始字节一致，包含单节点及批量启停联动显隐的修改，应用版本为 `1.15.3`；读取的压缩镜像层也已核对完整 SHA256。
+
+| 镜像内文件（两个架构相同） | 字节数 | SHA256 |
+| --- | --- | --- |
+| `/www/app/Http/Controllers/V2/Admin/Server/ManageController.php` | `16104` | `b487f5ac3306e30cfd05c4f3c22de808e82fee8f854a7066847230b7fa26c30d` |
+| `/www/config/app.php` | `7117` | `b7dfa7b221beffa4c65226f84a6e61fc31a600f9d3651ca096d0e2c74e81e26f` |
+
+| 面板镜像平台 | 平台 manifest |
+| --- | --- |
+| `linux/amd64` | `sha256:1501f7e4658747b9bb63f5d09ee47e3b0f77415811d0b186459f4063e69db58c` |
+| `linux/arm64` | `sha256:f0687aaa87dde58f0cdebd4c96631b9dc8a441e4701916179ca5c968147d39d6` |
+
+本次只需更新面板，沿用现有 Node 配套版本；没有连接或更新生产服务器，也未进行真实节点链路复测。用户在实际生产 Compose 部署目录保留原镜像和必要备份后，按本版 Release 中的命令更新并核对应用版本、HTTP、日志、OCI revision 和镜像 digest。运行启停在 Node 完成同步后生效，客户端需要更新订阅。需要回滚时使用上表的 `1.15.2-db46a6d` 或对应 digest；当前正式版本和 `latest` 来源以本节为准。
+
+## sing-box VLESS 中转路由身份修复（1.15.2，历史发布）
 
 | 项目 | 标识 |
 | --- | --- |
-| 当前正式面板版本 | `1.15.2`；Tag、Release 与双架构镜像已于 2026-09-13 发布并核验 |
+| 当时正式面板版本 | `1.15.2`；Tag、Release 与双架构镜像已于 2026-09-13 发布并核验 |
 | 正式来源 Tag / commit | `v1.15.2` / `db46a6d7979380d479d5dcf9b1a1345eaff7518c`；后续发布记录提交不改变此构建来源 |
-| 正式 Release | [v1.15.2](https://github.com/P0me1oo/YZboard/releases/tag/v1.15.2)，已核对为最新正式版本；交付物为 GHCR 镜像，没有独立安装附件 |
-| 不可变镜像标签 | `ghcr.io/p0me1oo/yzboard:1.15.2-db46a6d`；`1.15.2` 与 `latest` 已核对指向同一镜像，可匿名获取 |
+| 正式 Release | [v1.15.2](https://github.com/P0me1oo/YZboard/releases/tag/v1.15.2)，发布时已核对为最新正式版本；交付物为 GHCR 镜像，没有独立安装附件 |
+| 不可变镜像标签 | `ghcr.io/p0me1oo/yzboard:1.15.2-db46a6d`；发布时已核对 `1.15.2` 与 `latest` 指向同一镜像，可匿名获取 |
 | Docker manifest | `sha256:46933f4c5cf9cc9aacbe5c1baefd22bf15bb9472668f5d0d1778af9f74cb6164` |
 | Docker 平台与 OCI 标识 | `linux/amd64`、`linux/arm64`；两架构均为 `revision=db46a6d7979380d479d5dcf9b1a1345eaff7518c`、`version=1.15.2-db46a6d` |
 | 修改基线 | `3fcbf3b344e596d3242b37dd49f1cd2df07619ac` |
@@ -48,7 +69,7 @@
 | `linux/arm64` | `sha256:767dfac58e22f4111756b3b11a4d12993936c686b705a2217edcb94fba4af366` |
 
 本次只需更新面板。用户在实际生产 Docker Compose 部署目录确认项目、服务名、现用镜像和持久化挂载，备份必要数据并保留旧镜像，再按本版 Release 的命令更新和检查。
-更新后确认应用版本、HTTP、日志、OCI revision 和运行容器的 digest，并在 sing-box 客户端刷新远程配置、重新连接后复测出口 IP。回滚使用上表的 `1.15.1-8714e57` 或对应 digest；当前正式版本和 `latest` 来源以本节为准。
+更新后确认应用版本、HTTP、日志、OCI revision 和运行容器的 digest，并在 sing-box 客户端刷新远程配置、重新连接后复测出口 IP。回滚使用上表的 `1.15.1-8714e57` 或对应 digest；本节保留 `1.15.2` 发布时的审计记录，当前正式版本和 `latest` 来源见本文顶部。
 
 ## 插件上传独立超时与错误提示（1.15.1，历史发布）
 

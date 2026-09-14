@@ -156,6 +156,8 @@ class ManageController extends Controller
             }
             if (array_key_exists('enabled', $params)) {
                 $server->enabled = (bool) $params['enabled'];
+                // 启停单向带动显隐；单独修改 show 不改变运行状态。
+                $server->show = $server->enabled;
             }
 
             ServerPortService::validateForSave($server, $previous);
@@ -304,6 +306,7 @@ class ManageController extends Controller
         }
         if (array_key_exists('enabled', $params) && $params['enabled'] !== null) {
             $update['enabled'] = (bool) $params['enabled'];
+            $update['show'] = $update['enabled'];
         }
         if (array_key_exists('machine_id', $params)) {
             $update['machine_id'] = $params['machine_id'] ?: null;

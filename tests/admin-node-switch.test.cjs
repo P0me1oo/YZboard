@@ -65,6 +65,7 @@ function component(overrides = {}, options = {}) {
     const translate = key => resources[language]?.[key] || key;
     let cursor = 0;
     let serverEnabled = node.enabled;
+    let serverShow = node.show;
     let refreshes = 0;
     const context = {
         jy: () => ({ i18n: { resolvedLanguage: language }, t: translate }),
@@ -93,7 +94,10 @@ function component(overrides = {}, options = {}) {
         RL: async (url, payload) => {
             calls.push({ url, payload: JSON.parse(JSON.stringify(payload)) });
             const response = await (options.request?.(payload) ?? { data: true });
-            if (response?.data === true) serverEnabled = payload.enabled;
+            if (response?.data === true) {
+                serverEnabled = payload.enabled;
+                serverShow = payload.enabled;
+            }
             return response;
         },
     };
@@ -104,7 +108,10 @@ function component(overrides = {}, options = {}) {
     async function refetch() {
         refreshes++;
         const result = await options.refresh?.();
-        if (!result?.isError) node.enabled = serverEnabled;
+        if (!result?.isError) {
+            node.enabled = serverEnabled;
+            node.show = serverShow;
+        }
         return result;
     }
     function columns() {
@@ -129,18 +136,19 @@ test('列表开关反映运行启用状态，订阅显隐不影响开关', () =>
     assert.equal(component({ enabled: null, show: true }).render().props.checked, false);
 });
 
-test('关闭和重新开启只提交当前节点编号，成功后刷新列表', async () => {
+test('关闭和重新开启只提交当前节点的运行状态，刷新后显隐跟随', async () => {
     const state = component();
     await state.render().props.onCheckedChange(false);
     assert.equal(state.render().props.checked, false);
+    assert.equal(state.node.show, false);
     await state.render().props.onCheckedChange(true);
     assert.equal(state.render().props.checked, true);
+    assert.equal(state.node.show, true);
     assert.deepEqual(state.calls, [
         { url: '/_tests/admin/server/manage/update', payload: { id: 19, enabled: false } },
         { url: '/_tests/admin/server/manage/update', payload: { id: 19, enabled: true } },
     ]);
     assert.equal(state.node.machine_id, 7);
-    assert.equal(state.node.show, false);
     assert.equal(state.refreshes(), 2);
     assert.deepEqual(state.errors, []);
 });

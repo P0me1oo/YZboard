@@ -2,26 +2,49 @@
 
 本文件记录面板、Node、Xray fork 和 sing-box 的可回滚兼容关系。面板版本与兼容标识必须和对应 Node Release、Xray fork commit 及变更说明一起发布。
 
-## YZ-Agent 一键安装入口与名称（1.15.4，发布准备）
+## YZ-Agent 一键安装入口与名称（1.15.4，已发布）
 
 | 项目 | 标识 |
 | --- | --- |
-| 本次面板版本 | `1.15.4`，正式来源和镜像校验结果在发布后补录 |
+| 当前正式面板版本 | `1.15.4`；Tag、Release 与双架构镜像已于 2026-09-15 发布并核验 |
+| 正式来源 Tag / commit | `v1.15.4` / `720ee83f17d875dd6bd3ca91140207be2251693c`；后续发布记录提交不改变此构建来源 |
+| 正式 Release | [v1.15.4](https://github.com/P0me1oo/YZboard/releases/tag/v1.15.4)，已核对为最新正式版本；发布时间 `2026-09-14T18:55:13Z`；交付物为 GHCR 镜像，没有独立安装附件 |
+| 不可变镜像标签 | `ghcr.io/p0me1oo/yzboard:1.15.4-720ee83`；`1.15.4` 与 `latest` 已核对指向同一镜像，可匿名获取 |
+| Docker manifest | `sha256:3f7e4d760628bf4d97c7e30df1eceb39f8d636ea00c899e6d45a7c54c95e3826` |
+| Docker 平台与 OCI 标识 | `linux/amd64`、`linux/arm64`；两架构均为 `revision=720ee83f17d875dd6bd3ca91140207be2251693c`、`version=1.15.4-720ee83` |
 | 修改基线 | `v1.15.3` / `e425eb28e95763046184475d2868b9d4c61e4da0`，包含发布记录提交 `422be777373959b341a48246a382dceb3926d356` |
 | 修改范围 | 一键安装地址改为 `P0me1oo/YZ-Agent`；服务器管理的三种语言统一显示 `YZ-Agent`，保留原安装参数和内核选择规则 |
 | 配套 Node | [YZ-Agent v1.14.0](https://github.com/P0me1oo/YZ-Agent/releases/tag/v1.14.0) / `1bd29cbf23a72c682f25b66beae3ec874b527501`；通信和核心依赖保持原约定 |
 | 本地验证 | PHP `8.4.21` 完整回归 192 项测试、2889 个断言及管理端 72 项测试通过；实际渲染页面的三种语言共 15 处名称、旧语言包缓存和重复初始化核对通过 |
-| 面板回滚基线 | `ghcr.io/p0me1oo/yzboard:1.15.3-e425eb2`；manifest `sha256:d9bfb2a500dd565b3c3ccbdea3f5da241f098c7191ebe718a95da0be0f9ad07e` |
+| 正式发布验证 | [面板 CI 34882239892](https://github.com/P0me1oo/YZboard/actions/runs/34882239892)：PHP `8.2.33` 完整回归 192 项测试、2889 个断言及管理端 72 项测试通过，双架构构建与清单核验成功 |
+| 面板回滚基线 | `ghcr.io/p0me1oo/yzboard:1.15.3-e425eb2`；manifest `sha256:d9bfb2a500dd565b3c3ccbdea3f5da241f098c7191ebe718a95da0be0f9ad07e`；版本别名、两个架构及 OCI 来源已再次核对，可匿名获取 |
 | 使用说明 | [YZ-Agent 一键安装](docs/yz-agent-installation.md) |
 
-## 节点开关单向联动显隐（1.15.3，已发布）
+发布后通过匿名 GHCR 接口核对三个标签、两个平台清单和 OCI 来源，并流式读取两个架构中的实际文件。下列文件均与固定发布提交的 Git 原始字节一致，包含新安装器地址、页面初始化前的名称转换以及 `1.15.4` 版本；读取的压缩镜像层也已核对完整 SHA256。
+
+| 镜像内文件（两个架构相同） | 字节数 | SHA256 |
+| --- | --- | --- |
+| `/www/app/Http/Controllers/V2/Admin/Server/MachineController.php` | `6662` | `92cdf6addc1975d6322c115a40221b18385d23bf71560528919378c96ab6e8fb` |
+| `/www/resources/views/admin.blade.php` | `3267` | `1fffc64bfb466336eedb8bdbcb17a069c502c820462412580fb330eb8d93332d` |
+| `/www/config/app.php` | `7117` | `a6e6e0d1b1f537b943f3aafdc3266a2b05e45b492f7bea7fa964b665df556827` |
+
+| 面板镜像平台 | 平台 manifest |
+| --- | --- |
+| `linux/amd64` | `sha256:165e95054e99619627ce06599b8234b44a6d06ebd5a7f5af2170efec2149f85c` |
+| `linux/arm64` | `sha256:12ca56c1439b669b8bb0875e4864a329aa639a04c5467dda14b27dbe1c31e29a` |
+
+新旧仓库的 `releases/latest/download/install.sh` 地址已再次下载核对，均返回 YZ-Agent `v1.14.0` 安装器，SHA256 为 `31131e24ace7bcda452cb1df5cf95e18cddf94a8e8229729e59b094983f665a9`。旧地址可用依赖 GitHub 重定向，本版面板直接使用新地址。
+
+发布顺序为 YZ-Agent `v1.14.0`、面板 `v1.15.4`。更新面板即可取得新的安装入口和显示名称；已有节点按对应 Node Release 常规升级，保留原机器身份与绑定。用户在实际生产 Compose 部署目录按本版 Release 更新面板，并核对应用版本、HTTP、日志、OCI revision 和镜像 digest；回滚使用上表 `1.15.3-e425eb2` 或对应 digest。本次未连接或更新生产服务器。
+
+## 节点开关单向联动显隐（1.15.3，历史发布）
 
 | 项目 | 标识 |
 | --- | --- |
-| 当前正式面板版本 | `1.15.3`；Tag、Release 与双架构镜像已于 2026-09-15 发布并核验 |
+| 当时正式面板版本 | `1.15.3`；Tag、Release 与双架构镜像已于 2026-09-15 发布并核验 |
 | 正式来源 Tag / commit | `v1.15.3` / `e425eb28e95763046184475d2868b9d4c61e4da0`；后续发布记录提交不改变此构建来源 |
-| 正式 Release | [v1.15.3](https://github.com/P0me1oo/YZboard/releases/tag/v1.15.3)，已核对为最新正式版本；交付物为 GHCR 镜像，没有独立安装附件 |
-| 不可变镜像标签 | `ghcr.io/p0me1oo/yzboard:1.15.3-e425eb2`；`1.15.3` 与 `latest` 已核对指向同一镜像，可匿名获取 |
+| 正式 Release | [v1.15.3](https://github.com/P0me1oo/YZboard/releases/tag/v1.15.3)，发布时已核对为最新正式版本；交付物为 GHCR 镜像，没有独立安装附件 |
+| 不可变镜像标签 | `ghcr.io/p0me1oo/yzboard:1.15.3-e425eb2`；发布时已核对 `1.15.3` 与 `latest` 指向同一镜像，可匿名获取 |
 | Docker manifest | `sha256:d9bfb2a500dd565b3c3ccbdea3f5da241f098c7191ebe718a95da0be0f9ad07e` |
 | Docker 平台与 OCI 标识 | `linux/amd64`、`linux/arm64`；两架构均为 `revision=e425eb28e95763046184475d2868b9d4c61e4da0`、`version=1.15.3-e425eb2` |
 | 修改基线 | `c5333caef4d917aa3d9b00d5205a8a7f80ddab30` |
@@ -44,7 +67,7 @@
 | `linux/amd64` | `sha256:1501f7e4658747b9bb63f5d09ee47e3b0f77415811d0b186459f4063e69db58c` |
 | `linux/arm64` | `sha256:f0687aaa87dde58f0cdebd4c96631b9dc8a441e4701916179ca5c968147d39d6` |
 
-本次只需更新面板，沿用现有 Node 配套版本；没有连接或更新生产服务器，也未进行真实节点链路复测。用户在实际生产 Compose 部署目录保留原镜像和必要备份后，按本版 Release 中的命令更新并核对应用版本、HTTP、日志、OCI revision 和镜像 digest。运行启停在 Node 完成同步后生效，客户端需要更新订阅。需要回滚时使用上表的 `1.15.2-db46a6d` 或对应 digest；当前正式版本和 `latest` 来源以本节为准。
+本次只需更新面板，沿用现有 Node 配套版本；没有连接或更新生产服务器，也未进行真实节点链路复测。用户在实际生产 Compose 部署目录保留原镜像和必要备份后，按本版 Release 中的命令更新并核对应用版本、HTTP、日志、OCI revision 和镜像 digest。运行启停在 Node 完成同步后生效，客户端需要更新订阅。需要回滚时使用上表的 `1.15.2-db46a6d` 或对应 digest；本节保留 `1.15.3` 发布时的审计记录，当前正式版本和 `latest` 来源见本文顶部。
 
 ## sing-box VLESS 中转路由身份修复（1.15.2，历史发布）
 

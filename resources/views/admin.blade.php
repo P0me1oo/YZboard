@@ -77,6 +77,19 @@
     <script src="/assets/admin/locales/zh-CN.js"></script>
     <script src="/assets/admin/locales/ko-KR.js"></script>
   @endif
+  <script>
+    // 在管理端初始化前统一固定上游语言包中的节点程序名称。
+    for (const locale of Object.values(window.XBOARD_TRANSLATIONS || {})) {
+      for (const section of Object.values(locale?.machine || {})) {
+        if (!section || typeof section !== 'object') continue;
+        for (const [key, text] of Object.entries(section)) {
+          if (typeof text === 'string') {
+            section[key] = text.replaceAll('xboard-node', 'YZ-Agent');
+          }
+        }
+      }
+    }
+  </script>
 </head>
 
 <body>

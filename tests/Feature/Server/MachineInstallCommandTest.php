@@ -35,7 +35,7 @@ class MachineInstallCommandTest extends TestCase
         );
 
         $expected = sprintf(
-            'curl -fsSL https://github.com/P0me1oo/YZboard-Node/releases/latest/download/install.sh | sudo bash -s -- --mode machine --panel %s --token %s --machine-id 42 --version latest',
+            'curl -fsSL https://github.com/P0me1oo/YZ-Agent/releases/latest/download/install.sh | sudo bash -s -- --mode machine --panel %s --token %s --machine-id 42 --version latest',
             escapeshellarg('https://panel.example.com'),
             escapeshellarg('test-machine-token')
         );

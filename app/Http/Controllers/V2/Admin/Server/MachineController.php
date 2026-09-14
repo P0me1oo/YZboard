@@ -12,7 +12,7 @@ use Illuminate\Http\Request;
 
 class MachineController extends Controller
 {
-    private const NODE_INSTALLER_URL = 'https://github.com/P0me1oo/YZboard-Node/releases/latest/download/install.sh';
+    private const NODE_INSTALLER_URL = 'https://github.com/P0me1oo/YZ-Agent/releases/latest/download/install.sh';
 
     /**
      * 获取机器列表（附带关联节点数）

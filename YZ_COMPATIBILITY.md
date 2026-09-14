@@ -2,6 +2,18 @@
 
 本文件记录面板、Node、Xray fork 和 sing-box 的可回滚兼容关系。面板版本与兼容标识必须和对应 Node Release、Xray fork commit 及变更说明一起发布。
 
+## YZ-Agent 一键安装入口与名称（1.15.4，发布准备）
+
+| 项目 | 标识 |
+| --- | --- |
+| 本次面板版本 | `1.15.4`，正式来源和镜像校验结果在发布后补录 |
+| 修改基线 | `v1.15.3` / `e425eb28e95763046184475d2868b9d4c61e4da0`，包含发布记录提交 `422be777373959b341a48246a382dceb3926d356` |
+| 修改范围 | 一键安装地址改为 `P0me1oo/YZ-Agent`；服务器管理的三种语言统一显示 `YZ-Agent`，保留原安装参数和内核选择规则 |
+| 配套 Node | [YZ-Agent v1.14.0](https://github.com/P0me1oo/YZ-Agent/releases/tag/v1.14.0) / `1bd29cbf23a72c682f25b66beae3ec874b527501`；通信和核心依赖保持原约定 |
+| 本地验证 | PHP `8.4.21` 完整回归 192 项测试、2889 个断言及管理端 72 项测试通过；实际渲染页面的三种语言共 15 处名称、旧语言包缓存和重复初始化核对通过 |
+| 面板回滚基线 | `ghcr.io/p0me1oo/yzboard:1.15.3-e425eb2`；manifest `sha256:d9bfb2a500dd565b3c3ccbdea3f5da241f098c7191ebe718a95da0be0f9ad07e` |
+| 使用说明 | [YZ-Agent 一键安装](docs/yz-agent-installation.md) |
+
 ## 节点开关单向联动显隐（1.15.3，已发布）
 
 | 项目 | 标识 |

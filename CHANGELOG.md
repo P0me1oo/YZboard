@@ -9,6 +9,7 @@
 - 管理端产物来源改造：`public/assets/admin` 由指向上游 `cedar2025/xboard-admin-dist` 的子模块改为仓库内产物，来源为 YZboard-Dash 源码工程。删除 `.docker/patch-admin-*.php` 等 8 个构建期字符串补丁文件，`Dockerfile`、`init.sh`、`update.sh` 和发布工作流不再更新子模块。
 - 依赖补丁锚点的 7 个管理端测试替换为 `tests/admin-dist.test.cjs`，校验产物结构、语法、三语文案，并逐项确认八组 YZ 定制都在产物内，防止误发未定制的上游管理端。
 - 没有 Node 通信、配置下发或核心依赖变化，沿用 YZ-Agent `v1.14.0`。验证结果见 [兼容矩阵](YZ_COMPATIBILITY.md)，使用方式见 [管理员两步验证](docs/admin-two-factor.md)。
+- `v1.16.0` 与双架构 GHCR 镜像已发布，`latest` 已更新；正式 PHP `8.2` 回归 232 项测试、3159 个断言和管理端产物 5 项测试通过，两个架构中的管理端产物、八组 YZ 定制与版本文件均已核验。本版含数据库迁移。
 
 ## 1.15.5 - 2026-09-15
 

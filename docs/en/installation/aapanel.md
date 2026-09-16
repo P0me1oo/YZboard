@@ -169,7 +169,7 @@ sh update.sh
 ## Troubleshooting
 
 ### Common Issues
-1. **Empty Admin Dashboard**: If the admin panel is blank, run `git submodule update --init --recursive --force` to restore the theme files.
+1. **Empty Admin Dashboard**: If the admin panel is blank, verify that `public/assets/admin/manifest.json` and `public/assets/admin/locales/` exist, then clear the cache with `php artisan optimize:clear`.
 2. Changes to admin path require service restart to take effect
 3. Any code changes after enabling Octane require restart to take effect
 3. When PHP extension installation fails, check if PHP version is correct

@@ -40,6 +40,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int|null $last_login_at 最后登录时间
  * @property int|null $parent_id 父账户ID
  * @property int|null $is_admin 是否管理员
+ * @property string|null $totp_secret 两步验证密钥（加密存储）
+ * @property int|null $totp_enabled_at 两步验证启用时间
+ * @property array|null $totp_recovery_codes 两步验证恢复码（哈希后存储）
  * @property int|null $next_reset_at 下次流量重置时间
  * @property int|null $last_reset_at 上次流量重置时间
  * @property int|null $telegram_id Telegram ID
@@ -77,8 +80,13 @@ class User extends Authenticatable
         'commission_rate' => 'float',
         'next_reset_at' => 'timestamp',
         'last_reset_at' => 'timestamp',
+        // 密钥与恢复码按 APP_KEY 加密存储，数据库泄露时无法直接用于登录
+        'totp_secret' => 'encrypted',
+        'totp_recovery_codes' => 'encrypted:array',
+        'totp_enabled_at' => 'timestamp',
     ];
-    protected $hidden = ['password'];
+    // 两步验证密钥和恢复码不得随任何接口响应返回
+    protected $hidden = ['password', 'totp_secret', 'totp_recovery_codes'];
 
     public const COMMISSION_TYPE_SYSTEM = 0;
     public const COMMISSION_TYPE_PERIOD = 1;

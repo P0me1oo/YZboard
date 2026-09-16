@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.16.0 - 2026-09-16
+
+- 管理员可自愿开启两步验证（TOTP），配合 Google Authenticator、1Password 等验证器 App 使用。启用后密码校验通过不再直接下发登录令牌，需要再提交一次动态码或恢复码。
+- 邮件链接登录和快速登录链接同样绕过密码，`token2Login` 一并要求补完第二步，避免两步验证被绕开。普通用户登录流程完全不变。
+- 确认绑定时一次性返回 8 个恢复码，只保留哈希、每个仅能使用一次，可随时重新生成。验证器丢失时用 `php artisan reset:totp <邮箱>` 在服务器上关闭绑定。
+- TOTP 按 RFC 6238 自行实现，未新增 composer 依赖；密钥与恢复码按 `APP_KEY` 加密存储，且不随任何接口响应返回。新增迁移 `2026_09_16_000001_add_totp_fields_to_users`。
+- 管理端产物来源改造：`public/assets/admin` 由指向上游 `cedar2025/xboard-admin-dist` 的子模块改为仓库内产物，来源为 YZboard-Dash 源码工程。删除 `.docker/patch-admin-*.php` 等 8 个构建期字符串补丁文件，`Dockerfile`、`init.sh`、`update.sh` 和发布工作流不再更新子模块。
+- 依赖补丁锚点的 7 个管理端测试替换为 `tests/admin-dist.test.cjs`，校验产物结构、语法、三语文案，并逐项确认八组 YZ 定制都在产物内，防止误发未定制的上游管理端。
+- 没有 Node 通信、配置下发或核心依赖变化，沿用 YZ-Agent `v1.14.0`。验证结果见 [兼容矩阵](YZ_COMPATIBILITY.md)，使用方式见 [管理员两步验证](docs/admin-two-factor.md)。
+
 ## 1.15.5 - 2026-09-15
 
 - 修复新建节点的运行开关已开启，但用户端和订阅仍看不到节点的问题；新建保存时显隐跟随初始开关，覆盖表单自带的隐藏值。

@@ -1,4 +1,10 @@
 {
+    "Two-factor authentication is already enabled": "两步验证已启用",
+    "Two-factor authentication is not enabled": "两步验证未启用",
+    "Incorrect verification code": "验证码错误",
+    "The setup session has expired, please restart the binding": "绑定会话已过期，请重新开始绑定",
+    "The verification session has expired, please sign in again": "验证会话已过期，请重新登录",
+    "Too many incorrect codes, please sign in again": "验证码错误次数过多，请重新登录",
     "The user does not exist": "该用户不存在",
     "The old password is wrong": "旧密码有误",
     "Save failed": "保存失败",

@@ -19,6 +19,7 @@ use App\Http\Controllers\V2\Admin\KnowledgeController;
 use App\Http\Controllers\V2\Admin\PaymentController;
 use App\Http\Controllers\V2\Admin\SystemController;
 use App\Http\Controllers\V2\Admin\ThemeController;
+use App\Http\Controllers\V2\Admin\TotpController;
 use App\Http\Controllers\V2\Admin\TrafficResetController;
 use Illuminate\Contracts\Routing\Registrar;
 
@@ -247,6 +248,17 @@ class AdminRoute
                 $router->get('/getQueueMasters', '\\Laravel\\Horizon\\Http\\Controllers\\MasterSupervisorController@index');
                 $router->get('/getHorizonFailedJobs', [SystemController::class, 'getHorizonFailedJobs']);
                 $router->any('/getAuditLog', [SystemController::class, 'getAuditLog']);
+            });
+
+            // 管理员两步验证（仅作用于当前登录账号）
+            $router->group([
+                'prefix' => 'totp'
+            ], function ($router) {
+                $router->get('/status', [TotpController::class, 'status']);
+                $router->post('/setup', [TotpController::class, 'setup']);
+                $router->post('/confirm', [TotpController::class, 'confirm']);
+                $router->post('/disable', [TotpController::class, 'disable']);
+                $router->post('/recoveryCodes', [TotpController::class, 'regenerateRecoveryCodes']);
             });
 
             // Update

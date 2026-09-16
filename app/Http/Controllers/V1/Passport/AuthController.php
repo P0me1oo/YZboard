@@ -10,6 +10,7 @@ use App\Http\Requests\Passport\AuthRegister;
 use App\Services\Auth\LoginService;
 use App\Services\Auth\MailLinkService;
 use App\Services\Auth\RegisterService;
+use App\Services\Auth\TotpService;
 use App\Services\AuthService;
 use Illuminate\Http\Request;
 
@@ -18,15 +19,18 @@ class AuthController extends Controller
     protected MailLinkService $mailLinkService;
     protected RegisterService $registerService;
     protected LoginService $loginService;
+    protected TotpService $totpService;
 
     public function __construct(
         MailLinkService $mailLinkService,
         RegisterService $registerService,
-        LoginService $loginService
+        LoginService $loginService,
+        TotpService $totpService
     ) {
         $this->mailLinkService = $mailLinkService;
         $this->registerService = $registerService;
         $this->loginService = $loginService;
+        $this->totpService = $totpService;
     }
 
     /**
@@ -68,6 +72,9 @@ class AuthController extends Controller
 
     /**
      * 用户登录
+     *
+     * 管理员启用两步验证后，密码校验通过不直接发令牌，
+     * 而是返回一次性挑战标识，由 loginWithTotp 完成第二步。
      */
     public function login(AuthLogin $request)
     {
@@ -75,6 +82,36 @@ class AuthController extends Controller
         $password = $request->input('password');
 
         [$success, $result] = $this->loginService->login($email, $password);
+
+        if (!$success) {
+            return $this->fail($result);
+        }
+
+        if ($this->totpService->isEnabled($result)) {
+            return $this->success([
+                'totp_required' => true,
+                'challenge_id' => $this->totpService->createChallenge($result),
+            ]);
+        }
+
+        $authService = new AuthService($result);
+        return $this->success($authService->generateAuthData());
+    }
+
+    /**
+     * 两步验证第二步：校验验证码或恢复码，通过后签发登录令牌
+     */
+    public function loginWithTotp(Request $request)
+    {
+        $params = $request->validate([
+            'challenge_id' => 'required|string',
+            'code' => 'required|string'
+        ]);
+
+        [$success, $result] = $this->totpService->resolveChallenge(
+            $params['challenge_id'],
+            $params['code']
+        );
 
         if (!$success) {
             return $this->fail($result);
@@ -116,6 +153,16 @@ class AuthController extends Controller
                 return response()->json([
                     'message' => __('User not found')
                 ], 400);
+            }
+
+            // 邮件链接和快速登录同样绕过密码，管理员启用两步验证后必须补第二步
+            if ($this->totpService->isEnabled($user)) {
+                return response()->json([
+                    'data' => [
+                        'totp_required' => true,
+                        'challenge_id' => $this->totpService->createChallenge($user),
+                    ]
+                ]);
             }
 
             $authService = new AuthService($user);

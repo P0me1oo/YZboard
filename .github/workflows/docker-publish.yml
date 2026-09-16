@@ -42,7 +42,6 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.source_ref || github.ref }}
           fetch-depth: 0
-          submodules: recursive
 
       - name: 校验来源并生成镜像标识
         id: release
@@ -125,8 +124,8 @@ jobs:
         with:
           node-version: '22'
 
-      - name: 验证管理端构建补丁
-        run: node --test --test-reporter=tap tests/admin-kernel-defaults.test.cjs tests/admin-plugin-upload.test.cjs tests/admin-plan-prices.test.cjs tests/admin-server-port.test.cjs tests/admin-node-switch.test.cjs tests/admin-batch-groups.test.cjs tests/admin-kernel-filter.test.cjs
+      - name: 验证管理端产物
+        run: node --test --test-reporter=tap tests/admin-dist.test.cjs
 
       - name: 配置 QEMU
         uses: docker/setup-qemu-action@v3

@@ -2,6 +2,40 @@
 
 本文件记录面板、Node、Xray fork 和 sing-box 的可回滚兼容关系。面板版本与兼容标识必须和对应 Node Release、Xray fork commit 及变更说明一起发布。
 
+## 管理员两步验证与管理端产物来源改造（1.16.0，未发布）
+
+| 项目 | 标识 |
+| --- | --- |
+| 修改基线 | `ed855113ccd52bbb15ed82ed1c9b8bc2c92ad7ad`，包含 `1.15.5` 发布验证记录 |
+| 修改范围 | 一、管理员可自愿绑定 TOTP 两步验证；二、`public/assets/admin` 由上游子模块改为仓库内产物，来源为 YZboard-Dash 源码工程 |
+| 适用范围 | 两步验证仅 `is_admin` 账号；普通用户登录流程完全不变 |
+| 绕过路径处理 | 邮件链接登录与快速登录码同样绕过密码，`token2Login` 已一并要求第二步，避免两步验证被绕开 |
+| 数据库迁移 | `2026_09_16_000001_add_totp_fields_to_users`，为 `v2_user` 增加 `totp_secret`、`totp_enabled_at`、`totp_recovery_codes`；密钥与恢复码按 `APP_KEY` 加密存储，恢复码另存哈希 |
+| 新增接口 | `POST /api/v{1,2}/passport/auth/loginWithTotp`；管理端 `GET /totp/status`、`POST /totp/setup`、`/totp/confirm`、`/totp/disable`、`/totp/recoveryCodes` |
+| 依赖变化 | 无。TOTP 按 RFC 6238 自行实现（`app/Utils/Totp.php`），二维码复用已有 `bacon/bacon-qr-code` |
+| 锁定自救 | `php artisan reset:totp <邮箱>` 可在验证器丢失时关闭绑定 |
+| 配套关系 | 沿用正式 YZ-Agent `v1.14.0`；无 Node 通信、配置下发或核心依赖变化 |
+| 本地验证 | PHP `8.4.21`、内存 SQLite：完整回归 232 项测试、3159 个断言通过；其中两步验证 30 项测试（RFC 6238 官方向量 12 项 + 登录流程 18 项）覆盖挑战单次使用、失败锁定、恢复码一次性、邮件链接拦截、封禁账号、密钥不外泄与管理端接口鉴权。管理端产物契约 5 项测试通过 |
+| 管理前端 | YZboard-Dash `0.2.0`：登录页第二步与安全设置页两步验证卡片；`npm run verify` 全量通过（源码检查 3002 文件、12 项单元测试、构建检查、9 项浏览器测试含 2 项两步验证、开发模式冒烟） |
+| 未在本地验证 | 本机无 Docker，镜像构建与多架构清单由发布工作流验证 |
+| 使用说明 | [管理员两步验证](docs/admin-two-factor.md) |
+
+### 管理端产物来源改造
+
+`public/assets/admin` 此前是指向上游 `cedar2025/xboard-admin-dist` 的 Git 子模块（固定 `ef5f43da335092cbff8fdf0ad7ff9b4d92d7d0d7`）。`Dockerfile` 的 `git submodule update --init --recursive --force` 与工作流的 `submodules: recursive` 会在构建期从上游重新取回该目录，覆盖任何本地放入的产物；因此五组 YZ 管理端定制只能靠 `.docker/patch-admin-*.php` 在构建期对压缩产物做字符串补丁。
+
+YZboard-Dash 重建的产物已内置这五组定制，再执行那五个补丁会因锚点匹配不到而全部失败（实测五个脚本退出码均为 1）。本次改为：
+
+- 解除子模块登记，删除 `.gitmodules`，`public/assets/admin` 改为仓库内的普通目录，产物随源码提交；
+- 新增 `.gitattributes` 规则把该目录标为 `-text`，避免 `text=auto` 改写换行导致仓库、镜像与构建输出的校验值不一致；
+- 删除 `.docker/patch-admin-*.php`（5 个）和 `.docker/admin-*.js`（3 个），`Dockerfile` 不再执行 submodule 更新与补丁步骤，改为在构建期校验产物存在，缺失即失败；
+- `init.sh`、`update.sh` 移除 submodule 更新；发布工作流去掉 `submodules: recursive`；
+- 依赖补丁锚点的 7 个 `tests/admin-*.test.cjs` 已无法成立，替换为 `tests/admin-dist.test.cjs`：校验清单可被 Laravel 入口解析、产物语法正确且不残留未发布的源码映射引用、三语文案齐全、编辑器资源完整，并逐项确认八组 YZ 定制都在产物内。
+
+此后管理端修改在 YZboard-Dash 完成，执行 `npm run verify` 后用 `npm run sync:panel` 同步到面板。该脚本排除 `.map` 并移除产物末尾的映射注释，面板不发布源码映射。
+
+回滚该改造需要恢复 `.gitmodules`、子模块指针 `ef5f43da335092cbff8fdf0ad7ff9b4d92d7d0d7` 及上述被删文件；直接回滚到 `1.15.5` 的镜像标签不受影响。
+
 ## 新建节点显隐跟随初始开关（1.15.5，已发布）
 
 | 项目 | 标识 |

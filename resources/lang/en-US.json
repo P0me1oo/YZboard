@@ -1,4 +1,10 @@
 {
+    "Two-factor authentication is already enabled": "Two-factor authentication is already enabled",
+    "Two-factor authentication is not enabled": "Two-factor authentication is not enabled",
+    "Incorrect verification code": "Incorrect verification code",
+    "The setup session has expired, please restart the binding": "The setup session has expired, please restart the binding",
+    "The verification session has expired, please sign in again": "The verification session has expired, please sign in again",
+    "Too many incorrect codes, please sign in again": "Too many incorrect codes, please sign in again",
     "Article does not exist": "Article does not exist",
     "Cancel failed": "Cancel failed",
     "Close failed": "Close failed",

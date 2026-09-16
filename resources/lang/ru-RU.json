@@ -1,4 +1,10 @@
 {
+    "Two-factor authentication is already enabled": "Двухфакторная аутентификация уже включена",
+    "Two-factor authentication is not enabled": "Двухфакторная аутентификация не включена",
+    "Incorrect verification code": "Неверный код подтверждения",
+    "The setup session has expired, please restart the binding": "Сессия привязки истекла, начните привязку заново",
+    "The verification session has expired, please sign in again": "Сессия проверки истекла, войдите снова",
+    "Too many incorrect codes, please sign in again": "Слишком много неверных кодов, войдите снова",
     "Article does not exist": "Статья не существует",
     "Cancel failed": "Ошибка отмены",
     "Close failed": "Ошибка закрытия",

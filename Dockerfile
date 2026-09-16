@@ -21,6 +21,11 @@ ARG CACHEBUST=1
 ARG REPO_URL=https://github.com/P0me1oo/YZboard.git
 ARG SOURCE_COMMIT=""
 
+# 管理端产物随源码一起进入镜像：public/assets/admin 由 YZboard-Dash 源码工程构建后
+# 同步进仓库，已内置全部 YZ 定制（节点前置入口与内核、单节点运行开关、内部端口校验、
+# 节点批量权限组、插件上传 64 MiB、套餐周期价格、管理员两步验证）。
+# 该目录此前是指向上游 xboard-admin-dist 的子模块，需要在构建期用字符串补丁注入定制；
+# 现已改为仓库内产物，因此不再执行 submodule 更新，也不再有 .docker/patch-admin-*.php。
 RUN test -n "${SOURCE_COMMIT}" && \
     echo "Fetching commit ${SOURCE_COMMIT} from ${REPO_URL} with CACHEBUST=${CACHEBUST}" && \
     find /www -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + && \
@@ -29,26 +34,11 @@ RUN test -n "${SOURCE_COMMIT}" && \
     git remote add origin "${REPO_URL}" && \
     git fetch --depth 1 origin "${SOURCE_COMMIT}" && \
     git checkout --detach FETCH_HEAD && \
-    test "$(git rev-parse HEAD)" = "${SOURCE_COMMIT}" && \
-    git submodule update --init --recursive --force
+    test "$(git rev-parse HEAD)" = "${SOURCE_COMMIT}"
 
-# 管理端是构建产物，节点编辑表单的「父级节点」下拉按同协议过滤，选不到跨协议的
-# VLESS 前置入口。这里定点注入独立的前置入口选择框、节点列表的前置入口列，
-# 并同步当前 Xray 有效的 VLESS 中转传输矩阵、节点批量权限组操作和 SS2022 默认值；
-# 锚点匹配不到会直接失败。
-RUN php /www/.docker/patch-admin-relay.php /www/public/assets/admin/assets
-
-# 插件上传支持 64 MiB 和 5 分钟独立超时，并补齐请求错误提示。
-RUN php /www/.docker/patch-admin-upload.php /www/public/assets/admin/assets
-
-# 套餐基础价格按周期月数直接填价，移除默认长期订阅折扣。
-RUN php /www/.docker/patch-admin-plan-prices.php /www/public/assets/admin/assets
-
-# 内部端口按同一服务器上的 TCP/UDP 监听占用检查，复制保留原端口。
-RUN php /www/.docker/patch-admin-server-port.php /www/public/assets/admin/assets
-
-# 节点列表使用单节点运行开关，保留同服务器上其他节点的运行状态。
-RUN php /www/.docker/patch-admin-node-switch.php /www/public/assets/admin/assets
+# 缺少管理端产物会让后台白屏，这里在构建期显式失败而不是产出坏镜像。
+RUN test -f /www/public/assets/admin/manifest.json && \
+    test -n "$(ls /www/public/assets/admin/locales/*.js 2>/dev/null)"
 
 COPY .docker/supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY .docker/caddy/Caddyfile /etc/caddy/Caddyfile

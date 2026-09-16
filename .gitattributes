@@ -3,3 +3,8 @@
 *.scss linguist-vendored
 *.js linguist-vendored
 CHANGELOG.md export-ignore
+
+# 管理端产物由 YZboard-Dash 构建后同步进来，必须按字节保存：
+# 交给 text=auto 处理会改写换行，导致仓库、镜像与构建输出的校验值不一致。
+public/assets/admin/** -text
+public/assets/admin/** linguist-generated

@@ -78,6 +78,11 @@ class ServerController extends Controller
             ServerService::updateMetrics($node, $metrics);
         }
 
+        $limitEvents = $request->input('limit_events');
+        if (is_array($limitEvents) && !empty($limitEvents)) {
+            ServerService::processLimitEvents($node, $limitEvents);
+        }
+
         return response()->json(['data' => true]);
     }
 }

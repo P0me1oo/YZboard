@@ -467,6 +467,10 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
         "speed_limit_placeholder": "Оставьте пустым для безлимита",
         "device_limit": "Лимит устройств",
         "device_limit_placeholder": "Оставьте пустым для безлимита",
+        "conn_limit": "Одновременные соединения",
+        "conn_limit_placeholder": "Оставьте пустым для безлимита",
+        "conn_rate_limit": "Скорость новых соединений",
+        "conn_rate_limit_placeholder": "Оставьте пустым для безлимита",
         "is_admin": "Админ",
         "is_staff": "Персонал",
         "remarks": "Примечания",
@@ -790,6 +794,16 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
           "label": "Лимит устройств",
           "placeholder": "Введите лимит устройств",
           "unit": "Устройств"
+        },
+        "conn": {
+          "label": "Одновременные соединения",
+          "placeholder": "Оставьте пустым для безлимита",
+          "unit": "шт"
+        },
+        "conn_rate": {
+          "label": "Скорость новых соединений",
+          "placeholder": "Оставьте пустым для безлимита",
+          "unit": "в секунду"
         },
         "capacity": {
           "label": "Лимит пользователей",

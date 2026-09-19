@@ -525,6 +525,10 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
         "speed_limit_placeholder": "Leave empty for no speed limit",
         "device_limit": "Device Limit",
         "device_limit_placeholder": "Leave empty for no device limit",
+        "conn_limit": "Concurrent Connections",
+        "conn_limit_placeholder": "Leave empty for no limit",
+        "conn_rate_limit": "New Connection Rate",
+        "conn_rate_limit_placeholder": "Leave empty for no limit",
         "is_admin": "Is Admin",
         "is_staff": "Is Staff",
         "remarks": "Remarks",
@@ -848,6 +852,16 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
           "label": "Device Limit",
           "placeholder": "Enter device limit",
           "unit": "Devices"
+        },
+        "conn": {
+          "label": "Concurrent Connections",
+          "placeholder": "Leave empty for no limit",
+          "unit": "Conns"
+        },
+        "conn_rate": {
+          "label": "New Connection Rate",
+          "placeholder": "Leave empty for no limit",
+          "unit": "Conns/s"
         },
         "capacity": {
           "label": "Capacity Limit",

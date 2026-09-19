@@ -151,6 +151,7 @@ class OrderService
 
             $this->setSpeedLimit($plan->speed_limit);
             $this->setDeviceLimit($plan->device_limit);
+            $this->setConnLimit($plan->conn_limit, $plan->conn_rate_limit);
 
             if (!$this->user->save()) {
                 throw new \RuntimeException('用户信息保存失败');
@@ -403,6 +404,17 @@ class OrderService
     private function setDeviceLimit($deviceLimit)
     {
         $this->user->device_limit = $deviceLimit;
+    }
+
+    /**
+     * 同步套餐的连接数限制到用户。
+     *
+     * 空或 0 表示不限制，节点侧按不限制处理。
+     */
+    private function setConnLimit($connLimit, $connRateLimit)
+    {
+        $this->user->conn_limit = $connLimit;
+        $this->user->conn_rate_limit = $connRateLimit;
     }
 
     private function buyByPeriod(Order $order, Plan $plan)

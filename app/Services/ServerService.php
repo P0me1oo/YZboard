@@ -177,7 +177,9 @@ class ServerService
                 'id',
                 'uuid',
                 'speed_limit',
-                'device_limit'
+                'device_limit',
+                'conn_limit',
+                'conn_rate_limit'
             ])
             ->get();
         return HookManager::filter('server.users.get', $users, $node);
@@ -345,6 +347,49 @@ class ServerService
             $metricsData,
             $cacheTime
         );
+    }
+
+    /**
+     * 处理节点上报的连接限制超限事件。
+     *
+     * 节点按上报周期汇总，同一用户可能同时上报并发和速率两条。
+     * 面板不落库，只做校验后触发 server.limit.exceeded 钩子，
+     * 由插件决定是否通知以及如何去重。
+     *
+     * @param array $events 节点上报的原始事件列表
+     */
+    public static function processLimitEvents(Server $node, array $events): void
+    {
+        $normalized = [];
+
+        foreach ($events as $event) {
+            if (!is_array($event)) {
+                continue;
+            }
+            $userId = (int) ($event['user_id'] ?? 0);
+            $kind = (string) ($event['kind'] ?? '');
+            if ($userId <= 0 || !in_array($kind, ['conn', 'rate'], true)) {
+                continue;
+            }
+            $normalized[] = [
+                'user_id' => $userId,
+                'kind' => $kind,
+                'limit' => max(0, (int) ($event['limit'] ?? 0)),
+                'observed' => max(0, (int) ($event['observed'] ?? 0)),
+                'count' => max(0, (int) ($event['count'] ?? 0)),
+            ];
+        }
+
+        if (empty($normalized)) {
+            return;
+        }
+
+        HookManager::call('server.limit.exceeded', [
+            'node_id' => (int) $node->id,
+            'node_name' => (string) $node->name,
+            'node_type' => (string) $node->type,
+            'events' => $normalized,
+        ]);
     }
 
     public static function buildNodeConfig(Server $node): array

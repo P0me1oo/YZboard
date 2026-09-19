@@ -27,6 +27,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property int|null $reset_traffic_method 流量重置方式
  * @property int|null $capacity_limit 订阅人数限制
  * @property int|null $device_limit 设备数量限制
+ * @property int|null $conn_limit 并发连接数上限，空或 0 表示不限制
+ * @property int|null $conn_rate_limit 每秒新建连接数上限，空或 0 表示不限制
  * @property int $created_at
  * @property int $updated_at
  * 
@@ -87,6 +89,8 @@ class Plan extends Model
         'capacity_limit',
         'sell',
         'device_limit',
+        'conn_limit',
+        'conn_rate_limit',
         'tags'
     ];
 

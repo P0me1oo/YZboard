@@ -252,6 +252,8 @@ class UserService
         $user->transfer_enable = $plan->transfer_enable * 1073741824;
         $user->speed_limit = $plan->speed_limit;
         $user->device_limit = $plan->device_limit;
+        $user->conn_limit = $plan->conn_limit;
+        $user->conn_rate_limit = $plan->conn_rate_limit;
 
         if ($validityDays > 0) {
             $user = $this->extendSubscription($user, $validityDays);

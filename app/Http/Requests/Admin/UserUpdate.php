@@ -33,7 +33,9 @@ class UserUpdate extends FormRequest
             'commission_balance' => 'numeric',
             'remarks' => 'nullable',
             'speed_limit' => 'nullable|integer',
-            'device_limit' => 'nullable|integer'
+            'device_limit' => 'nullable|integer',
+            'conn_limit' => 'nullable|integer|min:0',
+            'conn_rate_limit' => 'nullable|integer|min:0'
         ];
 
         return HookManager::filter('admin.user.update.rules', $rules, $this);
@@ -66,7 +68,11 @@ class UserUpdate extends FormRequest
             'commission_balance.integer' => '佣金格式不正确',
             'password.min' => '密码长度最小8位',
             'speed_limit.integer' => '限速格式不正确',
-            'device_limit.integer' => '设备数量格式不正确'
+            'device_limit.integer' => '设备数量格式不正确',
+            'conn_limit.integer' => '并发连接数限制格式不正确',
+            'conn_limit.min' => '并发连接数限制不能为负数',
+            'conn_rate_limit.integer' => '新建连接速率限制格式不正确',
+            'conn_rate_limit.min' => '新建连接速率限制不能为负数'
         ];
 
         return HookManager::filter('admin.user.update.messages', $messages, $this);

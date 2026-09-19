@@ -525,6 +525,10 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
         "speed_limit_placeholder": "留空则不限速",
         "device_limit": "设备限制",
         "device_limit_placeholder": "留空则不限制",
+        "conn_limit": "并发连接数",
+        "conn_limit_placeholder": "留空则不限制",
+        "conn_rate_limit": "新建连接速率",
+        "conn_rate_limit_placeholder": "留空则不限制",
         "is_admin": "是否管理员",
         "is_staff": "是否员工",
         "remarks": "备注",
@@ -849,6 +853,16 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
           "label": "设备限制",
           "placeholder": "请输入设备限制",
           "unit": "台"
+        },
+        "conn": {
+          "label": "并发连接数",
+          "placeholder": "留空则不限制",
+          "unit": "条"
+        },
+        "conn_rate": {
+          "label": "新建连接速率",
+          "placeholder": "留空则不限制",
+          "unit": "次/秒"
         },
         "capacity": {
           "label": "容量限制",

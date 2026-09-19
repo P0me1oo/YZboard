@@ -19,7 +19,7 @@ class UserObserver
   {
     // With $afterCommit = true, isDirty() is always false after commit.
     // Use wasChanged() to detect what was actually modified.
-    $syncFields = ['group_id', 'uuid', 'speed_limit', 'device_limit', 'banned', 'expired_at', 'transfer_enable', 'u', 'd', 'plan_id'];
+    $syncFields = ['group_id', 'uuid', 'speed_limit', 'device_limit', 'conn_limit', 'conn_rate_limit', 'banned', 'expired_at', 'transfer_enable', 'u', 'd', 'plan_id'];
     $needsSync = $user->wasChanged($syncFields);
     $oldGroupId = $user->wasChanged('group_id') ? $user->getOriginal('group_id') : null;
 

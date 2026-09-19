@@ -60,6 +60,8 @@ class PlanController extends Controller
                         'transfer_enable' => $params['transfer_enable'] * 1073741824,
                         'speed_limit' => $params['speed_limit'],
                         'device_limit' => $params['device_limit'],
+                        'conn_limit' => $params['conn_limit'] ?? null,
+                        'conn_rate_limit' => $params['conn_rate_limit'] ?? null,
                     ]);
                 }
                 $plan->update($params);

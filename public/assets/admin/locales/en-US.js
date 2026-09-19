@@ -1707,7 +1707,13 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     },
     "toolbar": {
       "searchPlaceholder": "Search groups...",
-      "reset": "Reset"
+      "reset": "Reset",
+      "sort": {
+        "tip": "Drag groups to sort, then click save",
+        "edit": "Edit Sort",
+        "save": "Save Sort",
+        "success": "Sort order saved"
+      }
     },
     "messages": {
       "deleteConfirm": "Confirm Delete",

@@ -1712,7 +1712,13 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     },
     "toolbar": {
       "searchPlaceholder": "搜索权限组...",
-      "reset": "重置"
+      "reset": "重置",
+      "sort": {
+        "tip": "拖拽权限组进行排序，完成后点击保存",
+        "edit": "编辑排序",
+        "save": "保存排序",
+        "success": "排序保存成功"
+      }
     },
     "messages": {
       "deleteConfirm": "确认删除",

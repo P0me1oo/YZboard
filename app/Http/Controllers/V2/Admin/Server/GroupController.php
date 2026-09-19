@@ -9,13 +9,15 @@ use App\Models\ServerGroup;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class GroupController extends Controller
 {
     public function fetch(Request $request): JsonResponse
     {
         $serverGroups = ServerGroup::query()
-            ->orderByDesc('id')
+            ->orderedForDisplay()
             ->withCount('users')
             ->get();
 
@@ -40,7 +42,35 @@ class GroupController extends Controller
         }
 
         $serverGroup->name = $request->input('name');
+        // 新建的组排在末尾；已有的组保持当前排序值。
+        if (!$serverGroup->exists) {
+            $serverGroup->sort = (int) ServerGroup::query()->max('sort') + 1;
+        }
         return $this->success($serverGroup->save());
+    }
+
+    public function sort(Request $request)
+    {
+        ini_set('post_max_size', '1m');
+        $params = $request->validate([
+            '*.id' => 'numeric',
+            '*.order' => 'numeric'
+        ]);
+
+        try {
+            DB::beginTransaction();
+            collect($params)->each(function ($item) {
+                if (isset($item['id']) && isset($item['order'])) {
+                    ServerGroup::where('id', $item['id'])->update(['sort' => $item['order']]);
+                }
+            });
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error($e);
+            return $this->fail([500, '保存失败']);
+        }
+        return $this->success(true);
     }
 
     public function drop(Request $request)

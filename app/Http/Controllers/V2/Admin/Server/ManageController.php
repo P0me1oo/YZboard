@@ -25,7 +25,9 @@ class ManageController extends Controller
         $nameById = $servers->pluck('name', 'id');
 
         $servers = $servers->map(function ($item) use ($nameById) {
-            $item['groups'] = ServerGroup::whereIn('id', $item['group_ids'] ?? [])->get(['name', 'id']);
+            $item['groups'] = ServerGroup::whereIn('id', $item['group_ids'] ?? [])
+                ->orderedForDisplay()
+                ->get(['name', 'id']);
             $item['parent'] = $item->parent;
             // 供节点列表的「前置入口」列直接展示；入口已被删除时为 null，与未设置的显示一致。
             $entryId = $item->relayEntryId();

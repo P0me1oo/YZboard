@@ -72,6 +72,7 @@ class AdminRoute
                 $router->get('/fetch', [GroupController::class, 'fetch']);
                 $router->post('/save', [GroupController::class, 'save']);
                 $router->post('/drop', [GroupController::class, 'drop']);
+                $router->post('/sort', [GroupController::class, 'sort']);
             });
             $router->group([
                 'prefix' => 'server/route'

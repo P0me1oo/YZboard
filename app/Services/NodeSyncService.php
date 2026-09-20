@@ -77,6 +77,10 @@ class NodeSyncService
 
         $servers = Server::whereJsonContains('group_ids', (string) $user->group_id)->get();
         foreach ($servers as $server) {
+            // 落地只使用内部中转凭据，不接收普通用户增量。
+            if ($server->isRelayChild())
+                continue;
+
             if (!self::isNodeOnline($server->id))
                 continue;
 
@@ -112,6 +116,9 @@ class NodeSyncService
             ->get();
 
         foreach ($servers as $server) {
+            if ($server->isRelayChild())
+                continue;
+
             if (!self::isNodeOnline($server->id))
                 continue;
 

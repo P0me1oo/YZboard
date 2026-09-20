@@ -12,6 +12,7 @@ use App\Support\Setting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
 use Mockery\MockInterface;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -197,6 +198,52 @@ class ServerConnLimitTest extends TestCase
 
         $this->assertNull($user->conn_limit);
         $this->assertNull($user->conn_rate_limit);
+    }
+
+    #[DataProvider('createdUserLimits')]
+    public function test_created_user_inherits_plan_limits(bool $trial, ?int $limit): void
+    {
+        $plan = Plan::create([
+            'name' => '测试套餐',
+            'transfer_enable' => 10,
+            'device_limit' => $limit,
+            'conn_limit' => $limit,
+            'conn_rate_limit' => $limit,
+            'prices' => [Plan::PERIOD_MONTHLY => 10],
+        ]);
+        $this->mock(Setting::class, function (MockInterface $mock) use ($trial, $plan): void {
+            $settings = ['try_out_plan_id' => $trial ? $plan->id : 0, 'try_out_hour' => 1];
+            $mock->shouldReceive('get')->andReturnUsing(
+                fn(string $key) => $settings[$key] ?? null
+            );
+        });
+
+        $data = ['email' => 'created-limits@example.invalid'];
+        if (!$trial) {
+            $data['plan_id'] = $plan->id;
+            $data['expired_at'] = time() + 7200;
+        }
+        $user = (new UserService())->createUser($data);
+        $user->save();
+        $user->refresh();
+
+        $this->assertSame($plan->id, $user->plan_id);
+        foreach (['device_limit', 'conn_limit', 'conn_rate_limit'] as $field) {
+            $this->assertSame($limit, $user->{$field}, $field);
+        }
+        $this->assertGreaterThan(time(), $user->expired_at);
+    }
+
+    public static function createdUserLimits(): array
+    {
+        return [
+            '指定套餐有限制' => [false, 3],
+            '试用套餐有限制' => [true, 3],
+            '指定套餐空值' => [false, null],
+            '试用套餐空值' => [true, null],
+            '指定套餐零值' => [false, 0],
+            '试用套餐零值' => [true, 0],
+        ];
     }
 
     private function makeServer(string $type = Server::TYPE_VMESS): Server

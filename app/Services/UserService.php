@@ -231,6 +231,9 @@ class UserService
         $user->group_id = $plan->group_id;
         $user->transfer_enable = $plan->transfer_enable * 1073741824;
         $user->speed_limit = $plan->speed_limit;
+        $user->device_limit = $plan->device_limit;
+        $user->conn_limit = $plan->conn_limit;
+        $user->conn_rate_limit = $plan->conn_rate_limit;
 
         if ($expiredAt) {
             $user->expired_at = $expiredAt;
@@ -295,5 +298,8 @@ class UserService
         $user->group_id = $plan->group_id;
         $user->expired_at = time() + (admin_setting('try_out_hour', 1) * 3600);
         $user->speed_limit = $plan->speed_limit;
+        $user->device_limit = $plan->device_limit;
+        $user->conn_limit = $plan->conn_limit;
+        $user->conn_rate_limit = $plan->conn_rate_limit;
     }
 }

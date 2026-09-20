@@ -17,12 +17,15 @@ use App\Protocols\SingBox;
 use App\Protocols\Stash;
 use App\Protocols\Surge;
 use App\Services\ServerRelayService;
+use App\Services\NodeSyncService;
 use App\Services\ServerService;
 use App\Support\Setting;
 use App\Utils\Helper;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Redis;
 use Illuminate\Validation\ValidationException;
 use Mockery\MockInterface;
 use Symfony\Component\Yaml\Yaml;
@@ -38,6 +41,45 @@ class ServerRelayTest extends TestCase
     private const REALITY_PUBLIC_KEY = 'TESTonlyPUBLICkeyNOTaREALsecret0123456789ab';
     private const REALITY_PRIVATE_KEY = 'TESTonlyPRIVATEkeyNOTaREALsecret0123456789';
     private const LANDING_REALITY_PRIVATE_KEY = 'bBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789abcdef0';
+
+    public function test_user_deltas_skip_landings_but_keep_entry_and_plain_nodes(): void
+    {
+        $entry = $this->makeEntry();
+        $plain = $this->makeEntry(['relay_entry_id' => 0, 'parent_id' => $entry->id]);
+        $landing = $this->makeChild($entry);
+        $user = $this->makeUser();
+        $user->plan_id = 1;
+        foreach ([$entry, $plain, $landing] as $node) {
+            Cache::put("node_ws_alive:{$node->id}", true);
+        }
+        $messages = [];
+        Redis::shouldReceive('publish')->andReturnUsing(function ($channel, $payload) use (&$messages) {
+            $this->assertSame('node:push', $channel);
+            $messages[] = json_decode($payload, true);
+            return 1;
+        });
+        foreach (['add', 'remove', 'group-remove'] as $action) {
+            $messages = [];
+            if ($action === 'group-remove') {
+                NodeSyncService::notifyUserRemovedFromGroup($user->id, 1);
+            } else {
+                $user->banned = $action === 'remove' ? 1 : 0;
+                NodeSyncService::notifyUserChanged($user);
+            }
+            $this->assertEqualsCanonicalizing([$entry->id, $plain->id], array_column($messages, 'node_id'));
+            foreach ($messages as $message) {
+                $this->assertSame('sync.user.delta', $message['event']);
+                $this->assertSame($action === 'add' ? 'add' : 'remove', $message['data']['action']);
+                $this->assertSame($user->id, $message['data']['users'][0]['id']);
+            }
+        }
+        // 全量同步仍发送空列表，以清除历史误推留下的状态。
+        $messages = [];
+        NodeSyncService::notifyUsersUpdatedByGroup(1);
+        $landingMessages = array_values(array_filter($messages, fn ($message) => $message['node_id'] === $landing->id));
+        $this->assertCount(1, $landingMessages);
+        $this->assertSame([], $landingMessages[0]['data']['users']);
+    }
 
     protected function setUp(): void
     {

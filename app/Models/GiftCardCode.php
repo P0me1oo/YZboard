@@ -173,7 +173,8 @@ class GiftCardCode extends Model
     {
         do {
             $safePrefix = (string) $prefix;
-            $code = $safePrefix . strtoupper(substr(md5(uniqid($safePrefix . mt_rand(), true)), 0, 12));
+            // 兑换码可直接兑换权益，必须使用密码学安全随机源，不能用 uniqid/mt_rand 派生
+            $code = $safePrefix . strtoupper(bin2hex(random_bytes(6)));
         } while (self::where('code', $code)->exists());
 
         return $code;

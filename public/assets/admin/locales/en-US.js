@@ -2867,6 +2867,9 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
   },
   "machine": {
     "agent": {
+      "more": "More actions",
+      "confirm": "Confirm",
+      "cancel": "Cancel",
       "submission": "Submission",
       "version": "Running version",
       "publicIp": "Public IP",

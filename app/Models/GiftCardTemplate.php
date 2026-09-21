@@ -181,12 +181,13 @@ class GiftCardTemplate extends Model
         if ($this->type === self::TYPE_MYSTERY && isset($this->rewards['random_rewards'])) {
             $randomRewards = $this->rewards['random_rewards'];
             $totalWeight = array_sum(array_column($randomRewards, 'weight'));
-            $random = mt_rand(1, $totalWeight);
+            // 盲盒结果影响实际发放的权益，用密码学安全随机源避免被预测
+            $random = $totalWeight > 0 ? random_int(1, $totalWeight) : 0;
             $currentWeight = 0;
 
             foreach ($randomRewards as $reward) {
                 $currentWeight += $reward['weight'];
-                if ($random <= $currentWeight) {
+                if ($random > 0 && $random <= $currentWeight) {
                     $actualRewards = array_merge($actualRewards, $reward);
                     unset($actualRewards['weight']);
                     break;

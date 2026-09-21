@@ -2,6 +2,25 @@
 
 本文件记录面板、Node、Xray fork 和 sing-box 的可回滚兼容关系。面板版本与兼容标识必须和对应 Node Release、Xray fork commit 及变更说明一起发布。
 
+## 服务器管理优化（1.20.1，发布准备）
+
+- 管理前端 `0.4.1`，配套 Node 沿用 `v1.16.0`。包含工作区已有的 `1.20.0` 修改，不增加数据库迁移、Node 通信字段或核心依赖变更。
+- 调整服务器列顺序及单台操作菜单；语言资源以内容摘要区分缓存；批量回执缺项明确标为未确认，缺少控制心跳时禁用单台操作。
+- 发布来源包含当前服务器管理优化和下节安全修复；完成发布后补充固定提交、CI、镜像摘要与 `latest` 核验结果。本次未连接真实服务器。
+- 验证：前端源码检查、15 项行为测试、正式构建及产物检查通过，4 项服务器管理浏览器专项通过；PHP `MachineAgentTest|MachineInstallCommandTest|SecurityHardeningTest` 共 20 项、70 个断言通过。浏览器使用模拟接口，真实服务升级与重启未联调。
+- 前端产物已同步至 `public/assets/admin`；面板侧 `node --test tests/admin-dist.test.cjs` 5 项通过，`git diff --check` 通过。
+- 发布前 PHP `8.4.21` 完整回归 267 项、3336 个断言通过；前端 13 项浏览器测试（含 29 个固定路由对照）和源码开发模式检查通过。
+
+## 接口限流与浏览器安全头（1.20.0 开发记录，合入 1.20.1）
+
+- 本节修改随 `1.20.1` 一并发布，不单独发布 `v1.20.0`；最终发布信息以上节为准。
+- 配套 Node 沿用 `v1.16.0`，管理前端沿用 `0.4.0`；不改节点通信字段、订阅内容、数据库结构和核心固定依赖。节点通信、支付回调、Telegram Webhook 未挂限流，节点心跳不受影响。
+- 新增 `config/security.php` 与 `SECURITY_*`、`TRUSTED_PROXIES` 环境变量，全部有默认值，不改 `.env` 即可升级。面板前有非 Cloudflare、非内网地址的反向代理时，需要配置 `TRUSTED_PROXIES`，否则按 IP 的限流额度会被所有用户共用。
+- 管理端页面开始下发带 nonce 的完整 CSP。管理端产物 `0.4.0` 无内联脚本，`admin.blade.php` 中的两处内联脚本已挂 nonce；HTTP 层验证头中 nonce 与页面 nonce 一致，两次请求 nonce 不同。用户前台只下发不限制脚本来源的基础 CSP，现有主题不受影响。
+- 回滚基线为面板 `ghcr.io/p0me1oo/yzboard:1.19.0-26225f5`；回滚不涉及数据。
+- 本地验证：`php -d extension=pdo_sqlite -d extension=sqlite3 vendor/bin/phpunit` 完整回归 266 项测试、3330 个断言通过；新增 `SecurityHardeningTest` 11 项、37 个断言，覆盖限流触发、按 IP 与按邮箱隔离、密码错误计数不再锁死他人、过期令牌拒绝、改密码吊销会话、两步验证挑战不续命、安全头存在、`TRUSTED_PROXIES` 追加、服务端密钥长度、随机串不重复。未连接真实服务器。
+- 机制与配置项见 [接口限流与浏览器安全头](docs/security-hardening.md)。
+
 ## 服务器 agent 管理（1.19.0，已发布）
 
 - 发布核对（2026-09-21）：固定 Tag `v1.19.0`，来源 `26225f502bf0a5785c7c27a21fbd32725a0f94a8`，Release <https://github.com/P0me1oo/YZboard/releases/tag/v1.19.0>，CI `35590750460` 成功。

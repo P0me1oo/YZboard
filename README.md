@@ -49,6 +49,7 @@ docker compose up -d
 - [Mihomo 订阅兼容说明](./docs/mihomo-subscription.md) - 各协议参数核对、ECH / XHTTP 转换、内核版本要求与验证范围
 - [节点防火墙和 HY2 端口跳跃](./docs/firewall-port-hopping.md) - 端口列表、范围、自动放行与停用清理
 - [节点运行开关](./docs/node-runtime-switch.md) - 单节点与批量启停、显隐单向联动、同服务器节点隔离与独立部署说明
+- [接口限流与浏览器安全头](./docs/security-hardening.md) - 各端点限流档位、真实 IP 与 `TRUSTED_PROXIES`、CSP 与安全头配置项
 - [YZboard/Xray Compatibility](./YZ_COMPATIBILITY.md) - Fixed Xray fork, Node build, and report compatibility matrix
 
 ### Deployment Guides

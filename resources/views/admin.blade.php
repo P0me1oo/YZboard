@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{{ $title }}</title>
-  <script>
+  <script @if(!empty($cspNonce)) nonce="{{ $cspNonce }}" @endif>
     window.settings = {
       base_url: "/",
       title: "{{ $title }}",
@@ -53,7 +53,7 @@
     }
 
     foreach (glob(public_path('assets/admin/locales/*.js')) ?: [] as $localeFile) {
-      $locales[] = 'locales/' . basename($localeFile);
+      $locales[] = 'locales/' . basename($localeFile) . '?v=' . hash_file('sha256', $localeFile);
     }
     sort($locales);
   @endphp
@@ -77,7 +77,7 @@
     <script src="/assets/admin/locales/zh-CN.js"></script>
     <script src="/assets/admin/locales/ko-KR.js"></script>
   @endif
-  <script>
+  <script @if(!empty($cspNonce)) nonce="{{ $cspNonce }}" @endif>
     // 在管理端初始化前统一固定上游语言包中的节点程序名称。
     for (const locale of Object.values(window.XBOARD_TRANSLATIONS || {})) {
       for (const section of Object.values(locale?.machine || {})) {

@@ -55,12 +55,38 @@ class AuthService
     public static function findUserByBearerToken(string $bearerToken): ?User
     {
         $token = str_replace('Bearer ', '', $bearerToken);
-        
+
         $accessToken = PersonalAccessToken::findToken($token);
-        
-        $tokenable = $accessToken?->tokenable;
-        
+
+        if (!$accessToken || !self::isValidAccessToken($accessToken)) {
+            return null;
+        }
+
+        $tokenable = $accessToken->tokenable;
+
         return $tokenable instanceof User ? $tokenable : null;
+    }
+
+    /**
+     * 校验令牌是否仍在有效期内。
+     *
+     * PersonalAccessToken::findToken() 只按哈希查记录，不判断过期；
+     * 过期判断平时由 sanctum 守卫完成，这条路径绕过了守卫，必须自己补上，
+     * 否则已过期的令牌仍能换取快速登录链接和后台接口访问权限。
+     */
+    private static function isValidAccessToken(PersonalAccessToken $accessToken): bool
+    {
+        if ($accessToken->expires_at !== null && $accessToken->expires_at->isPast()) {
+            return false;
+        }
+
+        // sanctum 的全局过期配置（分钟），未设置时为 null
+        $expiration = config('sanctum.expiration');
+        if ($expiration && $accessToken->created_at?->lte(now()->subMinutes($expiration))) {
+            return false;
+        }
+
+        return true;
     }
 
     /**

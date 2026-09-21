@@ -616,10 +616,19 @@ class Server extends Model
     {
         return Attribute::make(
             get: function () {
-                if ($this->type === self::TYPE_SHADOWSOCKS) {
-                    return Helper::getServerKey($this->created_at, 16);
+                if ($this->type !== self::TYPE_SHADOWSOCKS) {
+                    return null;
                 }
-                return null;
+
+                // 密钥长度由 cipher 决定，写死 16 会让 256 位套件显示出错误长度的值；
+                // 非 2022 系列的 cipher 本身不使用服务端密钥。
+                $cipher = data_get($this, 'protocol_settings.cipher');
+                $config = self::CIPHER_CONFIGURATIONS[$cipher] ?? null;
+                if (!$config) {
+                    return null;
+                }
+
+                return Helper::getServerKey($this->created_at, $config['serverKeySize']);
             }
         );
     }

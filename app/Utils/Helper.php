@@ -58,7 +58,7 @@ class Helper
 
     public static function generateOrderNo(): string
     {
-        $randomChar = mt_rand(10000, 99999);
+        $randomChar = random_int(10000, 99999);
         return date('YmdHms') . substr(microtime(), 2, 6) . $randomChar;
     }
 
@@ -92,7 +92,7 @@ class Helper
         shuffle($chars);
         $str = '';
         for ($i = 0; $i < $len; $i++) {
-            $str .= $chars[mt_rand(0, $charsLen)];
+            $str .= $chars[random_int(0, $charsLen)];
         }
         return $str;
     }
@@ -201,7 +201,7 @@ class Helper
                 if ($min > $max) {
                     list($min, $max) = [$max, $min];
                 }
-                $randomNumber = rand($min, $max);
+                $randomNumber = random_int($min, $max);
                 return $randomNumber;
             },
             '/\[uuid\]/' => function () {

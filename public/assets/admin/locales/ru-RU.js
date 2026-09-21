@@ -2782,6 +2782,9 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
   },
   "machine": {
     "agent": {
+      "more": "Другие действия",
+      "confirm": "Подтвердить",
+      "cancel": "Отмена",
       "submission": "Отправка",
       "version": "Запущенная версия",
       "publicIp": "Публичный IP",

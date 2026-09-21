@@ -19,9 +19,11 @@ class LoginService
      */
     public function login(string $email, string $password): array
     {
+        $passwordErrorKey = $this->passwordErrorKey($email);
+
         // 检查密码错误限制
         if ((int) admin_setting('password_limit_enable', true)) {
-            $passwordErrorCount = (int) Cache::get(CacheKey::get('PASSWORD_ERROR_LIMIT', $email), 0);
+            $passwordErrorCount = (int) Cache::get($passwordErrorKey, 0);
             if ($passwordErrorCount >= (int) admin_setting('password_limit_count', 5)) {
                 return [
                     false,
@@ -52,9 +54,9 @@ class LoginService
         ) {
             // 增加密码错误计数
             if ((int) admin_setting('password_limit_enable', true)) {
-                $passwordErrorCount = (int) Cache::get(CacheKey::get('PASSWORD_ERROR_LIMIT', $email), 0);
+                $passwordErrorCount = (int) Cache::get($passwordErrorKey, 0);
                 Cache::put(
-                    CacheKey::get('PASSWORD_ERROR_LIMIT', $email),
+                    $passwordErrorKey,
                     (int) $passwordErrorCount + 1,
                     60 * (int) admin_setting('password_limit_expire', 60)
                 );
@@ -67,12 +69,28 @@ class LoginService
             return [false, [400, __('Your account has been suspended')]];
         }
 
+        // 登录成功后清空该来源的错误计数
+        Cache::forget($passwordErrorKey);
+
         // 更新最后登录时间
         $user->last_login_at = time();
         $user->save();
 
         HookManager::call('user.login.after', $user);
         return [true, $user];
+    }
+
+    /**
+     * 密码错误计数的缓存键。
+     *
+     * 同时按邮箱和来源 IP 计数：只按邮箱的话，任何人都能靠故意输错密码
+     * 把别人的账号锁死；只按 IP 则同一出口下的用户会互相影响。
+     */
+    private function passwordErrorKey(string $email): string
+    {
+        $ip = request()?->ip() ?: 'unknown';
+
+        return CacheKey::get('PASSWORD_ERROR_LIMIT', $email . '_' . sha1($ip));
     }
 
     /**
@@ -113,6 +131,12 @@ class LoginService
         if (!$user->save()) {
             return [false, [500, __('Reset failed')]];
         }
+
+        // 吊销该账号所有已签发的登录令牌。
+        // 账号被盗后用户改密码，攻击者已有的会话必须同时失效，否则改密码等于无效。
+        // 订阅 token 不在这里轮换：轮换会让用户所有客户端都要重新导入订阅，
+        // 属于独立的产品决策，需要时应由用户在“重置订阅信息”里主动触发。
+        $user->tokens()->delete();
 
         HookManager::call('user.password.reset.after', $user);
 

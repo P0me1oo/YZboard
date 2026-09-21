@@ -2896,12 +2896,15 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
   },
   "machine": {
     "agent": {
+      "more": "更多操作",
+      "confirm": "确认",
+      "cancel": "取消",
       "submission": "本次提交",
       "version": "运行版本",
       "publicIp": "公网 IP",
       "operation": "操作状态",
-      "upgrade": "更新 agent",
-      "restart": "重启 agent",
+      "upgrade": "升级",
+      "restart": "重启",
       "batch_upgrade": "批量更新",
       "batch_restart": "批量重启",
       "upgradeConfirm": "更新选中的 {{count}} 台服务器？",

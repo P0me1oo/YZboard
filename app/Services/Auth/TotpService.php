@@ -159,7 +159,13 @@ class TotpService
         $challengeId = Str::random(40);
         Cache::put(
             $this->challengeKey($challengeId),
-            ['user_id' => $user->id, 'attempts' => 0],
+            [
+                'user_id' => $user->id,
+                'attempts' => 0,
+                // 记录绝对到期时间，失败重写时据此还原剩余寿命。
+                // 这里用 Carbon 时钟，与缓存驱动判断过期用的时钟保持一致。
+                'expires_at' => now()->getTimestamp() + self::CHALLENGE_TTL,
+            ],
             self::CHALLENGE_TTL
         );
 
@@ -193,9 +199,17 @@ class TotpService
         }
 
         if (!$this->verifyCode($user, $code)) {
-            // 失败计数写回时保留剩余有效期，避免重置挑战寿命
+            // 失败计数写回时只保留剩余有效期。
+            // 按固定 TTL 重写会让每次输错都把挑战续命，等于挑战永不过期，
+            // 攻击者可以在同一个挑战里慢慢穷举 6 位动态码。
+            $remaining = (int) ($payload['expires_at'] ?? 0) - now()->getTimestamp();
+            if ($remaining <= 0) {
+                Cache::forget($key);
+                return [false, [400, __('The verification session has expired, please sign in again')]];
+            }
+
             $payload['attempts'] = $attempts + 1;
-            Cache::put($key, $payload, self::CHALLENGE_TTL);
+            Cache::put($key, $payload, $remaining);
             return [false, [400, __('Incorrect verification code')]];
         }
 

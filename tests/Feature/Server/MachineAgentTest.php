@@ -17,6 +17,17 @@ class MachineAgentTest extends TestCase
         return ServerMachine::create(['name' => '测试服务器', 'token' => Str::random(32), 'is_active' => true]);
     }
 
+    public function test_admin_locale_urls_include_current_content_hash(): void
+    {
+        $html = view('admin', ['title' => '测试面板', 'version' => 'test', 'logo' => '', 'secure_path' => 'test-admin'])->render();
+        foreach (['zh-CN', 'en-US', 'ru-RU'] as $locale) {
+            $file = public_path("assets/admin/locales/{$locale}.js");
+            $url = "/assets/admin/locales/{$locale}.js?v=" . hash_file('sha256', $file);
+            $this->assertStringContainsString($url, $html);
+            $this->assertLessThan(strpos($html, '<script type="module"'), strpos($html, $url));
+        }
+    }
+
     private function report(string $boot = 'first-process', ?array $operation = null): array
     {
         return ['version' => 'v1.16.0', 'boot_id' => $boot, 'manageable' => true, 'operation' => $operation];

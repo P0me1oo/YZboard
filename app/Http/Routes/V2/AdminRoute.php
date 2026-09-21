@@ -29,7 +29,7 @@ class AdminRoute
     {
         $router->group([
             'prefix' => admin_setting('secure_path', admin_setting('frontend_admin_path', hash('crc32b', config('app.key')))),
-            'middleware' => ['admin', 'log'],
+            'middleware' => ['admin', 'log', 'throttle:admin-api'],
         ], function ($router) {
             // Config
             $router->group([

@@ -13,16 +13,16 @@ class PassportRoute
             'prefix' => 'passport'
         ], function ($router) {
             // Auth
-            $router->post('/auth/register', [AuthController::class, 'register']);
-            $router->post('/auth/login', [AuthController::class, 'login']);
-            $router->post('/auth/loginWithTotp', [AuthController::class, 'loginWithTotp']);
-            $router->get ('/auth/token2Login', [AuthController::class, 'token2Login']);
-            $router->post('/auth/forget', [AuthController::class, 'forget']);
-            $router->post('/auth/getQuickLoginUrl', [AuthController::class, 'getQuickLoginUrl']);
-            $router->post('/auth/loginWithMailLink', [AuthController::class, 'loginWithMailLink']);
+            $router->post('/auth/register', [AuthController::class, 'register'])->middleware('throttle:register');
+            $router->post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:login');
+            $router->post('/auth/loginWithTotp', [AuthController::class, 'loginWithTotp'])->middleware('throttle:login');
+            $router->get ('/auth/token2Login', [AuthController::class, 'token2Login'])->middleware('throttle:quick-login');
+            $router->post('/auth/forget', [AuthController::class, 'forget'])->middleware('throttle:forget');
+            $router->post('/auth/getQuickLoginUrl', [AuthController::class, 'getQuickLoginUrl'])->middleware('throttle:quick-login');
+            $router->post('/auth/loginWithMailLink', [AuthController::class, 'loginWithMailLink'])->middleware('throttle:email-verify');
             // Comm
-            $router->post('/comm/sendEmailVerify', [CommController::class, 'sendEmailVerify']);
-            $router->post('/comm/pv', [CommController::class, 'pv']);
+            $router->post('/comm/sendEmailVerify', [CommController::class, 'sendEmailVerify'])->middleware('throttle:email-verify');
+            $router->post('/comm/pv', [CommController::class, 'pv'])->middleware('throttle:guest-api');
         });
     }
 }

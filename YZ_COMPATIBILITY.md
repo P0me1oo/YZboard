@@ -2,14 +2,19 @@
 
 本文件记录面板、Node、Xray fork 和 sing-box 的可回滚兼容关系。面板版本与兼容标识必须和对应 Node Release、Xray fork commit 及变更说明一起发布。
 
-## 服务器管理优化（1.20.1，发布准备）
+## 服务器管理优化（1.20.1，已发布）
 
 - 管理前端 `0.4.1`，配套 Node 沿用 `v1.16.0`。包含工作区已有的 `1.20.0` 修改，不增加数据库迁移、Node 通信字段或核心依赖变更。
 - 调整服务器列顺序及单台操作菜单；语言资源以内容摘要区分缓存；批量回执缺项明确标为未确认，缺少控制心跳时禁用单台操作。
-- 发布来源包含当前服务器管理优化和下节安全修复；完成发布后补充固定提交、CI、镜像摘要与 `latest` 核验结果。本次未连接真实服务器。
+- 发布核对（2026-09-21）：Tag `v1.20.1`，来源 `57c7ceb8dac5778e338b51cb624ee9780b5767df`，Release <https://github.com/P0me1oo/YZboard/releases/tag/v1.20.1>，CI `35617491598` 成功。发布包含下节安全修复；本次未连接真实服务器。
+- 不可变镜像 `ghcr.io/p0me1oo/yzboard:1.20.1-57c7ceb`；`1.20.1` 与 `latest` 均指向 `sha256:2cecb781576ed29f3c14696a91cc7d995e8f6eb376fa78023394c23bd82e42b4`，匿名获取已核验，未调整 Package 可见性。
+- 双架构：`linux/amd64` 清单 `sha256:13440e2c601f335759402c9966fd1039087b050641778d3f1107e4660b356e6e`；`linux/arm64` 清单 `sha256:c77bbb703c58c2db6826231b750e0ab5893507a48705a2c2d5b6695f931e91fb`。两个架构 OCI revision 均为上述完整来源，version 为 `1.20.1-57c7ceb`。
+- 逐字节核验两个架构源码镜像层中的 15 个文件：管理端全部产物、`config/app.php` 与 Blade 入口均与固定来源一致。Release 附件 `release-manifest.json` 记录发布清单，其 SHA-256 为 `613745faafadbeb2dbd936ba40da7ba0e527fc2e29dec1b3b42e59c3feef2008`。
+- 回滚镜像 `ghcr.io/p0me1oo/yzboard:1.19.0-26225f5`，清单 `sha256:bc8518af822631633c39e18348a779fe4c3ad553c1029ef0dfa3058249322ad7`。无需配套升级 Node，无新增数据库迁移；服务器更新由用户执行。
 - 验证：前端源码检查、15 项行为测试、正式构建及产物检查通过，4 项服务器管理浏览器专项通过；PHP `MachineAgentTest|MachineInstallCommandTest|SecurityHardeningTest` 共 20 项、70 个断言通过。浏览器使用模拟接口，真实服务升级与重启未联调。
-- 前端产物已同步至 `public/assets/admin`；面板侧 `node --test tests/admin-dist.test.cjs` 5 项通过，`git diff --check` 通过。
+- 前端产物已同步至 `public/assets/admin`；面板侧 `node --test tests/admin-dist.test.cjs` 5 项通过。源码与文档空白检查通过；压缩产物中第三方模板字符串的行尾空格保持构建原样。
 - 发布前 PHP `8.4.21` 完整回归 267 项、3336 个断言通过；前端 13 项浏览器测试（含 29 个固定路由对照）和源码开发模式检查通过。
+- 正式 CI 的 PHP `8.2` 完整回归同样为 267 项、3336 个断言通过，管理端产物检查 5 项通过，双架构构建及清单检查全部通过。
 
 ## 接口限流与浏览器安全头（1.20.0 开发记录，合入 1.20.1）
 

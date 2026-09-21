@@ -2895,6 +2895,41 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     }
   },
   "machine": {
+    "agent": {
+      "submission": "本次提交",
+      "version": "运行版本",
+      "publicIp": "公网 IP",
+      "operation": "操作状态",
+      "upgrade": "更新 agent",
+      "restart": "重启 agent",
+      "batch_upgrade": "批量更新",
+      "batch_restart": "批量重启",
+      "upgradeConfirm": "更新选中的 {{count}} 台服务器？",
+      "restartConfirm": "重启选中的 {{count}} 台服务器？",
+      "interruption": "操作会短暂中断这些服务器上由 yz-agent 管理的节点。更新将使用最新正式版。",
+      "selectPage": "选择当前页",
+      "selectServer": "选择服务器 {{name}}",
+      "clearSelection": "取消选择（{{count}}）",
+      "queued": "已提交 {{count}} 台，未提交 {{failed}} 台",
+      "states": {
+        "pending": "等待执行",
+        "running": "执行中",
+        "succeeded": "成功",
+        "failed": "失败",
+        "timeout": "超时未确认"
+      },
+      "errors": {
+        "disabled": "服务器已停用",
+        "offline": "服务器离线",
+        "unsupported": "当前 agent 不支持远程操作",
+        "busy": "已有操作执行中",
+        "not_found": "服务器不存在",
+        "launch_failed": "执行器启动失败",
+        "execution_failed": "执行失败",
+        "timeout": "超时未确认，请检查服务状态",
+        "request_failed": "提交结果未确认，请刷新后检查"
+      }
+    },
     "title": "服务器管理",
     "description": "用于查看服务器健康、负载与承载节点，并从运维视角快捷发起节点操作。",
     "columns": {

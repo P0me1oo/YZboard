@@ -73,6 +73,9 @@ test('三种语言资源齐全，并包含两步验证文案', () => {
         assert.ok(translations, `${locale} 未注册翻译`);
         assert.ok(translations.settings?.totp?.title, `${locale} 缺少安全设置两步验证文案`);
         assert.ok(translations.auth?.signIn?.totp?.title, `${locale} 缺少登录页两步验证文案`);
+        for (const key of ['version', 'publicIp', 'batch_upgrade', 'batch_restart']) {
+            assert.ok(translations.machine?.agent?.[key], `${locale} 缺少服务器 agent 文案 ${key}`);
+        }
     }
 });
 
@@ -101,6 +104,10 @@ test('产物包含全部 YZ 定制，避免误用未定制的上游管理端', (
         '插件上传 64 MiB': '67108864',
         '套餐周期价格': 'three_year_price',
         '管理员两步验证': 'loginWithTotp',
+        '服务器 agent 操作': '/server/machine/operate',
+        '服务器运行版本': 'agent_runtime',
+        '服务器任务状态': 'agent_operation',
+        '服务器分页记忆': 'yzboard.machines.pageSize',
     };
     for (const [name, marker] of Object.entries(markers)) {
         assert.ok(bundles.includes(marker), `产物缺少「${name}」定制（标识 ${marker}）`);

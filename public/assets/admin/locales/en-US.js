@@ -2866,6 +2866,41 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     }
   },
   "machine": {
+    "agent": {
+      "submission": "Submission",
+      "version": "Running version",
+      "publicIp": "Public IP",
+      "operation": "Operation",
+      "upgrade": "Update agent",
+      "restart": "Restart agent",
+      "batch_upgrade": "Batch update",
+      "batch_restart": "Batch restart",
+      "upgradeConfirm": "Update {{count}} selected servers?",
+      "restartConfirm": "Restart {{count}} selected servers?",
+      "interruption": "This briefly interrupts nodes managed by yz-agent on these servers. Updates use the latest stable release.",
+      "selectPage": "Select current page",
+      "selectServer": "Select server {{name}}",
+      "clearSelection": "Clear selection ({{count}})",
+      "queued": "Submitted: {{count}}; not submitted: {{failed}}",
+      "states": {
+        "pending": "Pending",
+        "running": "Running",
+        "succeeded": "Succeeded",
+        "failed": "Failed",
+        "timeout": "Unconfirmed timeout"
+      },
+      "errors": {
+        "disabled": "Server disabled",
+        "offline": "Server offline",
+        "unsupported": "Remote operations unavailable",
+        "busy": "Operation already running",
+        "not_found": "Server not found",
+        "launch_failed": "Worker could not start",
+        "execution_failed": "Execution failed",
+        "timeout": "Timed out; check service status",
+        "request_failed": "Submission unconfirmed; refresh and check"
+      }
+    },
     "title": "Server Management",
     "description": "Review server health, load, and hosted nodes, then launch node actions from an operations view.",
     "columns": {

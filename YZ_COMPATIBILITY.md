@@ -2,6 +2,17 @@
 
 本文件记录面板、Node、Xray fork 和 sing-box 的可回滚兼容关系。面板版本与兼容标识必须和对应 Node Release、Xray fork commit 及变更说明一起发布。
 
+## 服务器 agent 管理（1.19.0，未发布）
+
+- 修改基线：`e0dd8a5cbcc5926b8306f277b3792d3a12093351`，分支 `master`。
+- 配套 Node `v1.16.0`、管理前端 `0.4.0`；核心固定依赖不变。
+- 增加数据库迁移 `2026_09_21_000001_add_machine_agent_runtime.php`；旧 Node 继续原有配置与上报，缺少新能力时禁用远程操作。
+- 操作对象为 yz-agent 服务及其全部实例，不重启操作系统；旧 agent 首次升级仍需原有更新方式。
+- 机制与限制见 [服务器 agent 管理](docs/machine-agent-management.md)。本次未创建 Tag、Release 或镜像。
+- 本地验证：相关 PHP 回归 46 项、878 个断言通过；补充批量接口验证后，`MachineAgentTest` 专项 7 项、26 个断言通过。使用 `php -d extension=pdo_sqlite -d extension=sqlite3 vendor/bin/phpunit`，SQLite 仅使用内存测试库。
+- 前端 14 项行为测试、12 项浏览器测试、源码与构建检查、开发模式检查通过；一次原有节点编辑等待失败经单独及整组重跑通过。未连接真实服务器。
+- 管理产物已从前端源码构建并同步，面板 `node --test tests/admin-dist.test.cjs` 5 项通过，验证 Laravel 清单入口、三语文案及本次服务器功能标识。
+
 ## 套餐限制同步修复（1.18.1，已发布）
 
 - 发布核对（2026-09-21）：固定 Tag `v1.18.1`，来源 `3fb3c7cde18eb40d6efeac48be9a830ce4f0f940`，CI `35525200570` 成功。

@@ -31,6 +31,8 @@ class ServerMachine extends Model
         'is_active' => 'boolean',
         'last_seen_at' => 'integer',
         'load_status' => 'array',
+        'agent_runtime' => 'array',
+        'agent_operation' => 'array',
         'created_at' => 'timestamp',
         'updated_at' => 'timestamp',
     ];

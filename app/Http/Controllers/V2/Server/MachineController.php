@@ -15,6 +15,21 @@ use Illuminate\Http\Request;
  */
 class MachineController extends Controller
 {
+    public function control(Request $request): JsonResponse
+    {
+        $report = $request->validate([
+            'version' => 'required|string|max:64',
+            'boot_id' => 'required|string|max:64',
+            'manageable' => 'required|boolean',
+            'operation' => 'nullable|array',
+            'operation.id' => 'required_with:operation|uuid',
+            'operation.status' => 'required_with:operation|in:running,succeeded,failed',
+            'operation.error' => 'nullable|in:busy,launch_failed,execution_failed,unsupported,timeout',
+        ]);
+        $machine = $this->authenticateMachine($request);
+        return response()->json(['command' => \App\Services\MachineAgentService::exchange($machine, $report, $request->ip())]);
+    }
+
     /**
      * get nodes list for machine
      */

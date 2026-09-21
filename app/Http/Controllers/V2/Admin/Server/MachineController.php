@@ -12,6 +12,19 @@ use Illuminate\Http\Request;
 
 class MachineController extends Controller
 {
+    public function operate(Request $request)
+    {
+        $params = $request->validate([
+            'ids' => 'required|array|min:1|max:200',
+            'ids.*' => 'required|integer|min:1|distinct',
+            'action' => 'required|in:upgrade,restart',
+        ]);
+        return $this->success(array_map(
+            fn ($id) => \App\Services\MachineAgentService::queue((int) $id, $params['action']),
+            $params['ids']
+        ));
+    }
+
     private const NODE_INSTALLER_URL = 'https://github.com/P0me1oo/YZ-Agent/releases/latest/download/install.sh';
 
     /**
@@ -30,6 +43,8 @@ class MachineController extends Controller
                     'is_active' => $machine->is_active,
                     'last_seen_at' => $machine->last_seen_at,
                     'load_status' => $machine->load_status,
+                    'agent_runtime' => $machine->agent_runtime,
+                    'agent_operation' => $this->operationState($machine),
                     'servers_count' => $machine->servers_count,
                     'created_at' => $machine->created_at,
                     'updated_at' => $machine->updated_at,
@@ -199,6 +214,17 @@ class MachineController extends Controller
             ->values();
 
         return $this->success($history);
+    }
+
+    private function operationState(ServerMachine $machine): ?array
+    {
+        // 列表只投影超时状态，避免与正在上报的进程争用写入。
+        $operation = $machine->agent_operation;
+        if ($operation && in_array($operation['status'], ['pending', 'running'], true) && $operation['expires_at'] <= time()) {
+            $operation['status'] = 'timeout';
+            $operation['error'] = 'timeout';
+        }
+        return $operation;
     }
 
     private function buildInstallCommand(Request $request, ServerMachine $machine): string

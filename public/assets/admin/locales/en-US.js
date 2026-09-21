@@ -2885,6 +2885,11 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "selectServer": "Select server {{name}}",
       "clearSelection": "Clear selection ({{count}})",
       "queued": "Submitted: {{count}}; not submitted: {{failed}}",
+      "results": {
+        "updated": "Updated and restarted",
+        "up_to_date": "Already up to date",
+        "current_newer": "Current version is newer; automatic downgrade skipped"
+      },
       "states": {
         "pending": "Pending",
         "running": "Running",
@@ -2900,6 +2905,10 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
         "not_found": "Server not found",
         "launch_failed": "Worker could not start",
         "execution_failed": "Execution failed",
+        "release_query_failed": "Could not query the latest stable release; upgrade stopped",
+        "current_version_failed": "Could not read the installed version; upgrade stopped",
+        "current_version_invalid": "Installed version is not recognized; upgrade stopped",
+        "latest_version_invalid": "Latest stable version is not recognized; upgrade stopped",
         "timeout": "Timed out; check service status",
         "request_failed": "Submission unconfirmed; refresh and check"
       }

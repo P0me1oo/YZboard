@@ -24,7 +24,8 @@ class MachineController extends Controller
             'operation' => 'nullable|array',
             'operation.id' => 'required_with:operation|uuid',
             'operation.status' => 'required_with:operation|in:running,succeeded,failed',
-            'operation.error' => 'nullable|in:busy,launch_failed,execution_failed,unsupported,timeout',
+            'operation.error' => 'nullable|in:busy,launch_failed,execution_failed,unsupported,timeout,release_query_failed,current_version_failed,current_version_invalid,latest_version_invalid',
+            'operation.result' => 'nullable|in:updated,up_to_date,current_newer',
         ]);
         $machine = $this->authenticateMachine($request);
         return response()->json(['command' => \App\Services\MachineAgentService::exchange($machine, $report, $request->ip())]);

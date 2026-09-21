@@ -2914,6 +2914,11 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
       "selectServer": "选择服务器 {{name}}",
       "clearSelection": "取消选择（{{count}}）",
       "queued": "已提交 {{count}} 台，未提交 {{failed}} 台",
+      "results": {
+        "updated": "已更新并重启",
+        "up_to_date": "已是最新版本",
+        "current_newer": "当前版本更高，不自动降级"
+      },
       "states": {
         "pending": "等待执行",
         "running": "执行中",
@@ -2929,6 +2934,10 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
         "not_found": "服务器不存在",
         "launch_failed": "执行器启动失败",
         "execution_failed": "执行失败",
+        "release_query_failed": "查询最新正式版失败，已停止升级",
+        "current_version_failed": "读取当前版本失败，已停止升级",
+        "current_version_invalid": "无法识别当前版本，已停止升级",
+        "latest_version_invalid": "无法识别最新正式版，已停止升级",
         "timeout": "超时未确认，请检查服务状态",
         "request_failed": "提交结果未确认，请刷新后检查"
       }

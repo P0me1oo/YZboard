@@ -119,4 +119,58 @@ class MachineAgentTest extends TestCase
             \Illuminate\Http\Request::create('/', 'POST', ['ids' => [1], 'action' => 'reboot'])
         );
     }
+
+    public function test_upgrade_noop_results_finish_without_a_new_process_and_allow_another_operation(): void
+    {
+        foreach (['up_to_date', 'current_newer'] as $code) {
+            $machine = $this->machine();
+            MachineAgentService::exchange($machine, $this->report(), null);
+            $operation = MachineAgentService::queue($machine->id, 'upgrade')['operation'];
+            $result = ['id' => $operation['id'], 'status' => 'succeeded', 'result' => $code];
+            $this->postJson('/api/v2/server/machine/control', [
+                ...$this->report('first-process', $result), 'machine_id' => $machine->id, 'token' => $machine->token,
+            ])->assertOk()->assertJsonPath('command', null);
+            $this->assertSame('succeeded', $machine->fresh()->agent_operation['status']);
+            $this->assertSame($code, $machine->fresh()->agent_operation['result']);
+            // 重复与迟到的失败结果不得改变已确认结果。
+            MachineAgentService::exchange($machine, $this->report('first-process', $result), null);
+            MachineAgentService::exchange($machine, $this->report('first-process', [...$result, 'status' => 'failed']), null);
+            $this->assertSame('succeeded', $machine->fresh()->agent_operation['status']);
+            $next = MachineAgentService::queue($machine->id, 'restart')['operation'];
+            $this->assertSame('pending', $next['status']);
+            $this->assertArrayNotHasKey('result', $next);
+        }
+    }
+
+    public function test_updated_and_restart_results_still_require_a_new_process(): void
+    {
+        foreach ([['upgrade', 'updated'], ['upgrade', null], ['restart', 'up_to_date'], ['restart', 'current_newer']] as [$action, $code]) {
+            $machine = $this->machine();
+            MachineAgentService::exchange($machine, $this->report(), null);
+            $operation = MachineAgentService::queue($machine->id, $action)['operation'];
+            $result = ['id' => $operation['id'], 'status' => 'succeeded', 'result' => $code];
+            $this->assertSame('running', MachineAgentService::exchange($machine, $this->report('first-process', $result), null)['status']);
+            $this->assertNull(MachineAgentService::exchange($machine, $this->report('new-process', $result), null));
+            $this->assertSame('succeeded', $machine->fresh()->agent_operation['status']);
+        }
+    }
+
+    public function test_upgrade_failure_codes_are_validated_and_preserved(): void
+    {
+        foreach (['release_query_failed', 'current_version_failed', 'current_version_invalid', 'latest_version_invalid'] as $code) {
+            $machine = $this->machine();
+            MachineAgentService::exchange($machine, $this->report(), null);
+            $operation = MachineAgentService::queue($machine->id, 'upgrade')['operation'];
+            $result = ['id' => $operation['id'], 'status' => 'failed', 'error' => $code];
+            $this->postJson('/api/v2/server/machine/control', [
+                ...$this->report('first-process', $result), 'machine_id' => $machine->id, 'token' => $machine->token,
+            ])->assertOk()->assertJsonPath('command', null);
+            $this->assertSame($code, $machine->fresh()->agent_operation['error']);
+            $this->assertSame('failed', $machine->fresh()->agent_operation['status']);
+        }
+        $this->postJson('/api/v2/server/machine/control', [
+            ...$this->report('first-process', ['id' => $operation['id'], 'status' => 'succeeded', 'result' => 'arbitrary-result']),
+            'machine_id' => $machine->id, 'token' => $machine->token,
+        ])->assertUnprocessable();
+    }
 }

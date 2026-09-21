@@ -68,9 +68,15 @@ class MachineAgentService
                 if ($result['status'] === 'failed') {
                     $operation['status'] = 'failed';
                     $operation['error'] = $result['error'] ?? 'execution_failed';
-                } elseif ($result['status'] === 'succeeded' && $runtime['boot_id'] !== $operation['boot_id']) {
-                    // 只有独立执行器完成且新进程已回报，才确认成功。
+                } elseif ($result['status'] === 'succeeded'
+                    && ($runtime['boot_id'] !== $operation['boot_id']
+                        || ($operation['action'] === 'upgrade'
+                            && in_array($result['result'] ?? null, ['up_to_date', 'current_newer'], true)))) {
+                    // 无需升级可由原进程确认；实际更新和手动重启仍须新进程回报。
                     $operation['status'] = 'succeeded';
+                    if ($operation['action'] === 'upgrade' && isset($result['result'])) {
+                        $operation['result'] = $result['result'];
+                    }
                 } else {
                     $operation['status'] = 'running';
                 }

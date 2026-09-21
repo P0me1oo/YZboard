@@ -76,6 +76,12 @@ test('三种语言资源齐全，并包含两步验证文案', () => {
         for (const key of ['version', 'publicIp', 'batch_upgrade', 'batch_restart']) {
             assert.ok(translations.machine?.agent?.[key], `${locale} 缺少服务器 agent 文案 ${key}`);
         }
+        for (const key of ['updated', 'up_to_date', 'current_newer']) {
+            assert.ok(translations.machine?.agent?.results?.[key], `${locale} 缺少升级结果 ${key}`);
+        }
+        for (const key of ['release_query_failed', 'current_version_failed', 'current_version_invalid', 'latest_version_invalid']) {
+            assert.ok(translations.machine?.agent?.errors?.[key], `${locale} 缺少升级失败原因 ${key}`);
+        }
     }
 });
 

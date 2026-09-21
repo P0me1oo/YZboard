@@ -2,13 +2,14 @@
 
 本文件记录面板、Node、Xray fork 和 sing-box 的可回滚兼容关系。面板版本与兼容标识必须和对应 Node Release、Xray fork commit 及变更说明一起发布。
 
-## 升级版本检查与结果确认（1.20.3，未发布）
+## 升级版本检查与结果确认（1.20.3，已发布）
 
 - 配套 Node `v1.16.1`、管理前端 `0.4.3`，包含既有 `1.20.2` 的状态栏与单行按钮改动。
 - Node 默认升级先比较版本，只有发现新版本才下载、校验、安装和重启；同版本、更高版本不重启。查询与版本识别失败直接停止。
 - 机器控制接口新增可选 `operation.result` 和四种固定检查失败原因，无数据库迁移。面板只对升级的 `up_to_date`、`current_newer` 成功结果取消新进程要求；实际更新及手动重启仍须新进程回报。
 - 新面板兼容旧 Node 不带结果字段的回报。后续发布部署顺序为面板及前端在先、Node 在后，避免旧面板拒绝新错误码或把无需重启判为超时。
-- 三端均未发布，未操作真实服务器；不能通过线上 `latest` 获取本次修改。
+- 发布核对：Tag `v1.20.3`，来源 `d35fe5c4afaa4ac716ee57282d1ffc19f0dc43e0`，工作流 `35665794157` 成功；未连接真实服务器。
+- 镜像 `ghcr.io/p0me1oo/yzboard:1.20.3-d35fe5c`、版本别名 `1.20.3` 和 `latest` 已发布；manifest digest 为 `sha256:3d142b7c0ded8bc63d4b7ac9fcf275274ee169d8188bb801fc388432a1010c7f`，包含 `linux/amd64`、`linux/arm64`，OCI revision 为上述来源。
 - 本地 PHP 相关回归通过：`php -d extension=pdo_sqlite -d extension=sqlite3 -d extension=sodium vendor/bin/phpunit --filter 'MachineAgentTest|MachineInstallCommandTest|SecurityHardeningTest'`，23 项、113 个断言。默认 PHP 未启用 SQLite，首轮报缺少驱动；显式加载现有扩展后通过，未修改系统配置。
 - 前端源码检查、16 项行为测试、构建、资源检查及 15 项浏览器测试通过，覆盖原 29 个路由对照及新增无需升级结果、错误原因、刷新恢复、手动重启。产物已同步到 `public/assets/admin`，面板 5 项资源检查通过；浏览器使用模拟接口。
 

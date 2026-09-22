@@ -22,6 +22,10 @@
 - 发布核对（2026-09-22）：Tag `v1.20.4`，来源 `49ab27deeca5eaea4cb47a754f159643ef61b528`，工作流 `35685388932` 成功，正式 PHP `8.2` 完整回归与管理端产物检查通过。
 - 镜像 `ghcr.io/p0me1oo/yzboard:1.20.4-49ab27d`、版本别名 `1.20.4` 和 `latest` 已发布，三者指向同一 manifest `sha256:9ae3a046ad3bbff8a792a3a01682c7729a5041d59f6e5fed371e01caa7706dc6`，匿名获取已核验。`linux/amd64` 清单 `sha256:67f32f51d8d6fa30a525eb8015dbc755ea55c31c0ab92d16e1d75ae6d439b711`，`linux/arm64` 清单 `sha256:13cb715f63daeb44dd0924995f23db40a67bf87d99afc7c9aca9d2ad5ba1ab6d`；OCI revision 为上述来源，version 为 `1.20.4-49ab27d`。
 - 回滚镜像 `ghcr.io/p0me1oo/yzboard:1.20.3-d35fe5c`，manifest `sha256:3d142b7c0ded8bc63d4b7ac9fcf275274ee169d8188bb801fc388432a1010c7f`。无数据库迁移，回滚不涉及数据。
+- 生产实测（2026-09-22，2 核 2 GB）：更新到 `1.20.4-49ab27d` 后 Horizon 进程由 15 个 780 MB 降至 5 个 291 MB，宿主可用内存由 323 MB 升至 758 MB；面板 HTTP 200，节点在线数不变。
+- 同日生产数据库由 SQLite 迁至同栈 MariaDB `11.4`（精简配置，`innodb_buffer_pool_size=128M`，驻留约 280 MB）。迁移前 SQLite 文件 387 MB、约 116 万行，当日 `database is locked` 3,537 次；迁移方式为停面板后用 `artisan migrate` 在目标库建表，再逐表拷贝并核对行数，46 张表 1,159,103 行全部一致，停机 2 分 39 秒。迁移后锁错误归零，节点上报正常写入。
+- 迁移中发现 SubscriptionHub 插件迁移 `2026_06_24_000023` 的 `token_fingerprint` 列自动索引名 65 字符，超过 MySQL/MariaDB 的 64 字符上限，SQLite 不受限所以此前未暴露；已在生产 `plugins/` 卷中改为显式短名 `sh_failure_token_fp_idx`，原文件留有备份。该插件不在本仓库内，插件仓库需同步修正。
+- 生产回滚基线：`.env.bak-sqlite-20260922`、`compose.yaml.bak-20260922-v1204`、`.docker/.data/database.sqlite.bak-migration-baseline`（停机后的 SQLite 快照）。
 
 ## 升级版本检查与结果确认（1.20.3，已发布）
 

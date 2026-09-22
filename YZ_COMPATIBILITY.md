@@ -19,7 +19,9 @@
   - 验证：配置解析确认 `primary` 2 worker、`notification` 1 worker、`defaults` 为空；入口脚本 `sh -n` 通过，旧变量兼容 4 个场景在 `set -e` 下均正确；模拟各档位队列进程数为 2 核 6 个、4 核 9 个、8 核 13 个，原先一律 15 个。
   - 本次仅验证配置解析与脚本逻辑，实际内存降幅需发布后在生产实测确认。
 - 生产环境另行设置 `LOG_LEVEL=warning`（`.env` 改动，不随镜像发布）。此前未设该键，Laravel 默认 `debug`，`stack → daily` 通道按 `debug` 落盘，实测 3.5 小时写入 162,548 条 DEBUG，约 305 MB/天；调整后降至约 65 MB/天，且剩余全部为 SQLite 锁错误堆栈。
-- 发布来源 Tag `v1.20.4`，镜像标签与 digest 见发布后补记。
+- 发布核对（2026-09-22）：Tag `v1.20.4`，来源 `49ab27deeca5eaea4cb47a754f159643ef61b528`，工作流 `35685388932` 成功，正式 PHP `8.2` 完整回归与管理端产物检查通过。
+- 镜像 `ghcr.io/p0me1oo/yzboard:1.20.4-49ab27d`、版本别名 `1.20.4` 和 `latest` 已发布，三者指向同一 manifest `sha256:9ae3a046ad3bbff8a792a3a01682c7729a5041d59f6e5fed371e01caa7706dc6`，匿名获取已核验。`linux/amd64` 清单 `sha256:67f32f51d8d6fa30a525eb8015dbc755ea55c31c0ab92d16e1d75ae6d439b711`，`linux/arm64` 清单 `sha256:13cb715f63daeb44dd0924995f23db40a67bf87d99afc7c9aca9d2ad5ba1ab6d`；OCI revision 为上述来源，version 为 `1.20.4-49ab27d`。
+- 回滚镜像 `ghcr.io/p0me1oo/yzboard:1.20.3-d35fe5c`，manifest `sha256:3d142b7c0ded8bc63d4b7ac9fcf275274ee169d8188bb801fc388432a1010c7f`。无数据库迁移，回滚不涉及数据。
 
 ## 升级版本检查与结果确认（1.20.3，已发布）
 

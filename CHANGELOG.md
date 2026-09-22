@@ -15,6 +15,7 @@
 - 环境变量 `HORIZON_DATA_PIPELINE_MAX`、`HORIZON_BUSINESS_MAX` 合并为 `HORIZON_PRIMARY_MAX`。入口脚本保留兼容：已显式设置旧变量的部署取其较大值，并在启动日志给出提示，不会静默降低队列并发。
 - 入口脚本的自动调优上界同步收紧。`balance=false` 后这些值是常驻 worker 数而非弹性上限，沿用旧的 `CPUS * 2` 会让大机器长期占住远超需要的内存；现按核数封顶，通知队列封顶 2。实测各档位队列进程数：2 核 6 个、4 核 9 个、8 核 13 个（原先一律 15 个）。
 - 配套 Node 沿用 `v1.16.1`，无数据库迁移；完整 PHP 回归 289 项、3,552 个断言通过。
+- `v1.20.4` 面板镜像已发布，来源 commit 为 `49ab27deeca5eaea4cb47a754f159643ef61b528`，双架构 manifest digest 为 `sha256:9ae3a046ad3bbff8a792a3a01682c7729a5041d59f6e5fed371e01caa7706dc6`。
 
 ## 1.20.3 - 2026-09-22
 

@@ -407,7 +407,8 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
         "email_prefix": "Префикс аккаунта (оставьте пустым для пакетной генерации)",
         "email_domain": "Домен",
         "password": "Пароль",
-        "password_placeholder": "Оставьте пустым, чтобы использовать email в качестве пароля",
+        "password_placeholder": "Оставьте пустым, чтобы сгенерировать случайный пароль",
+        "random_password": "Случайный",
         "expire_time": "Срок действия",
         "expire_time_placeholder": "Выберите срок действия, оставьте пустым для бессрочного",
         "permanent": "Бессрочно",
@@ -419,6 +420,14 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
         "submit": "Создать",
         "success": "Пользователи созданы",
         "download_csv": "Скачать как CSV"
+      },
+      "result": {
+        "title": "Аккаунты созданы",
+        "copy": "Копировать",
+        "copy_all": "Копировать все",
+        "copied": "Скопировано",
+        "copy_failed": "Не удалось скопировать, выделите и скопируйте вручную",
+        "close": "Закрыть"
       }
     },
     "edit": {
@@ -434,6 +443,10 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
         "inviter_email_placeholder": "Пожалуйста, введите email",
         "password": "Пароль",
         "password_placeholder": "Введите новый пароль, если хотите изменить его",
+        "random_password": "Случайный",
+        "copy_password": "Копировать пароль",
+        "password_copied": "Пароль скопирован",
+        "copy_failed": "Не удалось скопировать, выделите и скопируйте вручную",
         "balance": "Баланс",
         "balance_placeholder": "Пожалуйста, введите баланс",
         "commission_balance": "Баланс комиссии",

@@ -28,6 +28,7 @@ class ServerSwitchTest extends TestCase
         Route::post('/_tests/server-switch', [ManageController::class, 'update']);
         Route::post('/_tests/server-switch/batch', [ManageController::class, 'batchUpdate']);
         Route::post('/_tests/server-switch/save', [ManageController::class, 'save']);
+        Route::post('/_tests/server-switch/copy', [ManageController::class, 'copy']);
         Route::get('/_tests/server-switch/user-nodes', [UserServerController::class, 'fetch']);
         Route::get('/_tests/server-switch/subscribe', [ClientController::class, 'subscribe']);
         Redis::shouldReceive('publish')->byDefault()->andReturnUsing(function (string $channel, string $message): int {
@@ -458,5 +459,86 @@ class ServerSwitchTest extends TestCase
         $this->assertDiscovered($machine, [$node]);
         $this->assertVisible([]);
         $this->assertSame([], $this->pushes);
+    }
+
+    public function test_copied_node_starts_disabled_and_hidden_until_its_port_is_changed(): void
+    {
+        $machine = $this->machine();
+        $source = $this->node($machine, 24443);
+        $sourceAttributes = $source->fresh()->getAttributes();
+        $this->pushes = [];
+
+        for ($repeat = 0; $repeat < 2; $repeat++) {
+            $this->postJson('/_tests/server-switch/copy', ['id' => $source->id])
+                ->assertOk()->assertJsonPath('data', true);
+            $copy = Server::latest('id')->firstOrFail();
+
+            $this->assertNotSame($source->id, $copy->id);
+            $this->assertFalse($copy->enabled);
+            $this->assertFalse($copy->show);
+            $this->assertSame($source->machine_id, $copy->machine_id);
+            $this->assertSame((int) $source->server_port, (int) $copy->server_port);
+            $this->assertSame($sourceAttributes, $source->fresh()->getAttributes());
+            // Node 只拿到源节点，副本不会带着重复端口下发；用户列表和订阅同样看不到副本。
+            $this->assertDiscovered($machine, [$source]);
+            $this->assertVisible([$source]);
+        }
+        // 新增记录仍按既有规则通知机器刷新，但列表里只有源节点。
+        $this->assertCount(2, $this->pushes);
+        foreach ($this->pushes as $push) {
+            $this->assertSame('sync.nodes', $push['event']);
+            $this->assertSame([$source->id], array_column($push['data']['nodes'], 'id'));
+        }
+        $this->pushes = [];
+
+        // 端口未改时直接开启被端口冲突拦下，副本保持关闭并隐藏。
+        $this->postJson('/_tests/server-switch', ['id' => $copy->id, 'enabled' => true])
+            ->assertUnprocessable()->assertJsonValidationErrors('server_port');
+        $this->assertFalse($copy->fresh()->enabled);
+        $this->assertFalse($copy->fresh()->show);
+        $this->assertSame([], $this->pushes);
+
+        // 改成空闲端口后再开启，副本才进入 Node 列表并对用户显示。
+        $this->postJson('/_tests/server-switch/save', array_replace($copy->fresh()->toArray(), [
+            'name' => '改端口后的副本', 'server_port' => 24450, 'port' => '24450',
+        ]))->assertOk()->assertJsonPath('data', true);
+        $this->assertFalse($copy->fresh()->enabled);
+        $this->assertSame([], $this->pushes);
+        $this->postJson('/_tests/server-switch', ['id' => $copy->id, 'enabled' => true])
+            ->assertOk()->assertJsonPath('data', true);
+        $this->assertTrue($copy->fresh()->enabled);
+        $this->assertTrue($copy->fresh()->show);
+        $this->assertDiscovered($machine, [$source, $copy]);
+        $this->assertVisible([$source, $copy]);
+        $this->assertCount(1, $this->pushes);
+        $this->assertSame([$source->id, $copy->id], array_column($this->pushes[0]['data']['nodes'], 'id'));
+    }
+
+    public function test_copying_a_standalone_node_keeps_the_empty_switch_but_hides_the_copy(): void
+    {
+        $standalone = Server::create([
+            'name' => '独立部署节点',
+            'machine_id' => null,
+            'type' => Server::TYPE_VLESS,
+            'host' => 'standalone.example.invalid',
+            'port' => '24460',
+            'server_port' => 24460,
+            'protocol_settings' => ['tls' => 0, 'network' => 'tcp'],
+            'rate' => 1,
+            'group_ids' => ['1'],
+            'enabled' => null,
+            'show' => true,
+        ]);
+
+        $this->postJson('/_tests/server-switch/copy', ['id' => $standalone->id])
+            ->assertOk()->assertJsonPath('data', true);
+        $copy = Server::latest('id')->firstOrFail();
+
+        $this->assertNull($copy->enabled);
+        $this->assertFalse($copy->show);
+        $this->assertNull($copy->machine_id);
+        $this->assertNull($standalone->fresh()->enabled);
+        $this->assertTrue($standalone->fresh()->show);
+        $this->assertVisible([$standalone]);
     }
 }

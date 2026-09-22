@@ -465,7 +465,8 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
         "email_prefix": "帐号(批量生成请留空)",
         "email_domain": "域",
         "password": "密码",
-        "password_placeholder": "留空则密码与邮件相同",
+        "password_placeholder": "留空则自动生成随机密码",
+        "random_password": "随机生成",
         "expire_time": "到期时间",
         "expire_time_placeholder": "请选择用户到期日期，留空为长期有效",
         "permanent": "长期有效",
@@ -477,6 +478,14 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
         "submit": "生成",
         "success": "生成成功",
         "download_csv": "导出为 CSV 文件"
+      },
+      "result": {
+        "title": "账号已创建",
+        "copy": "复制",
+        "copy_all": "复制全部",
+        "copied": "已复制",
+        "copy_failed": "复制失败，请手动选择复制",
+        "close": "关闭"
       }
     },
     "edit": {
@@ -492,6 +501,10 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
         "inviter_email_placeholder": "请输入邮箱",
         "password": "密码",
         "password_placeholder": "如需修改密码请输入",
+        "random_password": "随机生成",
+        "copy_password": "复制密码",
+        "password_copied": "密码已复制",
+        "copy_failed": "复制失败，请手动选择复制",
         "balance": "余额",
         "balance_placeholder": "请输入余额",
         "commission_balance": "佣金余额",

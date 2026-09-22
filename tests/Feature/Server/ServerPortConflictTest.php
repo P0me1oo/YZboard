@@ -168,10 +168,13 @@ class ServerPortConflictTest extends TestCase
             $this->postJson('/_tests/server-port/copy', ['id' => $source->id])->assertOk();
             $copy = Server::latest('id')->firstOrFail();
             $this->assertNotSame($source->id, $copy->id);
-            foreach (['machine_id', 'port', 'server_port', 'enabled'] as $field) {
+            foreach (['machine_id', 'port', 'server_port'] as $field) {
                 $this->assertEquals($source->$field, $copy->$field);
             }
-            $payload = $this->payload(['id' => $copy->id, 'name' => '副本新名称']);
+            // 副本与源节点共用内部端口，因此默认关闭并隐藏；关闭状态下允许修改名称等无关字段。
+            $this->assertFalse($copy->enabled);
+            $this->assertFalse($copy->show);
+            $payload = $this->payload(['id' => $copy->id, 'name' => '副本新名称', 'enabled' => false]);
             $this->postJson('/_tests/server-port/checkPort', $this->preview($payload))
                 ->assertOk()->assertJsonPath('data.valid', true);
             $this->postJson('/_tests/server-port/save', $payload)->assertOk();
@@ -187,6 +190,7 @@ class ServerPortConflictTest extends TestCase
             'id' => $copy->id, 'server_port' => 24445,
         ]))->assertOk();
         $this->assertSame(24445, (int) $copy->fresh()->server_port);
+        $this->assertTrue($copy->fresh()->enabled);
     }
 
     public function test_rebinding_and_changing_transport_recheck_the_port(): void

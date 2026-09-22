@@ -76,7 +76,7 @@ class ServerPortService
         return null;
     }
 
-    /** 调用方在保存事务内执行；复制接口保留原有直接复制行为。 */
+    /** 调用方在保存事务内执行；复制接口生成的副本默认关闭，不在复制时检查，开启时再校验。 */
     public static function validateForSave(Server $server, ?Server $previous = null): void
     {
         $message = self::conflictMessage($server, $previous, lock: true);

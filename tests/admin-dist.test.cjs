@@ -114,6 +114,8 @@ test('产物包含全部 YZ 定制，避免误用未定制的上游管理端', (
         '服务器运行版本': 'agent_runtime',
         '服务器任务状态': 'agent_operation',
         '服务器分页记忆': 'yzboard.machines.pageSize',
+        '用户随机密码': 'data-yz-random-password',
+        '新建用户密码一次性展示': 'data-yz-generated-users',
     };
     for (const [name, marker] of Object.entries(markers)) {
         assert.ok(bundles.includes(marker), `产物缺少「${name}」定制（标识 ${marker}）`);

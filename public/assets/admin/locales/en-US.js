@@ -465,7 +465,8 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
         "email_prefix": "Account (leave empty for batch generation)",
         "email_domain": "Domain",
         "password": "Password",
-        "password_placeholder": "Leave empty to use email as password",
+        "password_placeholder": "Leave empty to generate a random password",
+        "random_password": "Random",
         "expire_time": "Expire Time",
         "expire_time_placeholder": "Select user expire date, leave empty for permanent",
         "permanent": "Permanent",
@@ -477,6 +478,14 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
         "submit": "Generate",
         "success": "Generated successfully",
         "download_csv": "Export as CSV file"
+      },
+      "result": {
+        "title": "Accounts created",
+        "copy": "Copy",
+        "copy_all": "Copy all",
+        "copied": "Copied",
+        "copy_failed": "Copy failed, please select and copy manually",
+        "close": "Close"
       }
     },
     "edit": {
@@ -492,6 +501,10 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
         "inviter_email_placeholder": "Please enter email",
         "password": "Password",
         "password_placeholder": "Enter new password if you want to change it",
+        "random_password": "Random",
+        "copy_password": "Copy password",
+        "password_copied": "Password copied",
+        "copy_failed": "Copy failed, please select and copy manually",
         "balance": "Balance",
         "balance_placeholder": "Please enter balance",
         "commission_balance": "Commission Balance",

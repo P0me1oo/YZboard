@@ -252,6 +252,16 @@ class UserController extends Controller
                 return $this->fail([400202, '订阅计划不存在']);
             }
             $params['group_id'] = $plan->group_id;
+            if ((int) $plan->id !== (int) $user->plan_id) {
+                // 换套餐时流量、限速、设备数和连接数按套餐同步，与订单开通保持一致；同一次编辑里手填的值优先。
+                $params += [
+                    'transfer_enable' => $plan->transfer_enable * 1073741824,
+                    'speed_limit' => $plan->speed_limit,
+                    'device_limit' => $plan->device_limit,
+                    'conn_limit' => $plan->conn_limit,
+                    'conn_rate_limit' => $plan->conn_rate_limit,
+                ];
+            }
         }
         // 处理邀请用户
         if ($request->input('invite_user_email') && $inviteUser = User::byEmail($request->input('invite_user_email'))->first()) {
@@ -391,188 +401,80 @@ class UserController extends Controller
 
     public function generate(UserGenerate $request)
     {
-        if ($request->input('email_prefix')) {
-            // If generate_count is specified with email_prefix, generate multiple users with incremented emails
-            if ($request->input('generate_count')) {
-                return $this->multiGenerateWithPrefix($request);
-            }
-            
-            // Single user generation with email_prefix
-            $email = $request->input('email_prefix') . '@' . $request->input('email_suffix');
+        $prefix = (string) $request->input('email_prefix');
+        $suffix = (string) $request->input('email_suffix');
+        $count = (int) $request->input('generate_count');
 
-            if (User::byEmail($email)->exists()) {
-                return $this->fail([400201, '邮箱已存在于系统中']);
+        if ($prefix !== '') {
+            $emails = $count > 0
+                ? array_map(fn (int $index) => "{$prefix}_{$index}@{$suffix}", range(1, $count))
+                : ["{$prefix}@{$suffix}"];
+            foreach ($emails as $email) {
+                if (User::byEmail($email)->exists()) {
+                    return $this->fail([400201, $count > 0 ? "邮箱 {$email} 已存在于系统中" : '邮箱已存在于系统中']);
+                }
             }
+        } elseif ($count > 0) {
+            $emails = array_map(fn () => Helper::randomChar(6) . '@' . $suffix, range(1, $count));
+        } else {
+            return $this->fail([422, '请填写账号或生成数量']);
+        }
 
-            $userService = app(UserService::class);
-            $user = $userService->createUser([
-                'email' => $email,
-                'password' => $request->input('password') ?? $email,
-                'plan_id' => $request->input('plan_id'),
-                'expired_at' => $request->input('expired_at'),
+        $password = $request->input('password');
+        try {
+            $created = DB::transaction(function () use ($emails, $password, $request) {
+                $userService = app(UserService::class);
+                $created = [];
+                foreach ($emails as $email) {
+                    // 未指定密码时每个账号使用独立的随机密码，明文只在本次响应或导出中返回一次。
+                    $plain = $password ?? Helper::randomChar(12);
+                    $user = $userService->createUser([
+                        'email' => $email,
+                        'password' => $plain,
+                        'plan_id' => $request->input('plan_id'),
+                        'expired_at' => $request->input('expired_at'),
+                    ]);
+                    if (!$user->save()) {
+                        throw new \RuntimeException('生成失败');
+                    }
+                    $created[] = [
+                        'email' => $user->email,
+                        'password' => $plain,
+                        'expired_at' => $user->expired_at === null ? '长期有效' : date('Y-m-d H:i:s', $user->expired_at),
+                        'uuid' => $user->uuid,
+                        'created_at' => date('Y-m-d H:i:s', $user->created_at),
+                        'subscribe_url' => Helper::getSubscribeUrl($user->token),
+                    ];
+                }
+                return $created;
+            });
+        } catch (\Exception $e) {
+            Log::error($e);
+            return $this->fail([500, '生成失败']);
+        }
+
+        if ($request->input('download_csv')) {
+            return response()->streamDownload(function () use ($created) {
+                $handle = fopen('php://output', 'w');
+                fputcsv($handle, ['账号', '密码', '过期时间', 'UUID', '创建时间', '订阅地址']);
+                foreach ($created as $row) {
+                    fputcsv($handle, [
+                        $row['email'],
+                        $row['password'],
+                        $row['expired_at'],
+                        $row['uuid'],
+                        $row['created_at'],
+                        $row['subscribe_url'],
+                    ]);
+                }
+                fclose($handle);
+            }, 'users.csv', [
+                'Content-Type' => 'text/csv',
+                'Content-Disposition' => 'attachment; filename="users.csv"',
             ]);
-
-            if (!$user->save()) {
-                return $this->fail([500, '生成失败']);
-            }
-            return $this->success(true);
         }
 
-        if ($request->input('generate_count')) {
-            return $this->multiGenerate($request);
-        }
-    }
-
-    private function multiGenerate(Request $request)
-    {
-        $userService = app(UserService::class);
-        $usersData = [];
-
-        for ($i = 0; $i < $request->input('generate_count'); $i++) {
-            $email = Helper::randomChar(6) . '@' . $request->input('email_suffix');
-            $usersData[] = [
-                'email' => $email,
-                'password' => $request->input('password') ?? $email,
-                'plan_id' => $request->input('plan_id'),
-                'expired_at' => $request->input('expired_at'),
-            ];
-        }
-
-
-
-        try {
-            DB::beginTransaction();
-            $users = [];
-            foreach ($usersData as $userData) {
-                $user = $userService->createUser($userData);
-                $user->save();
-                $users[] = $user;
-            }
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return $this->fail([500, '生成失败']);
-        }
-
-        // 判断是否导出 CSV
-        if ($request->input('download_csv')) {
-            $headers = [
-                'Content-Type' => 'text/csv',
-                'Content-Disposition' => 'attachment; filename="users.csv"',
-            ];
-            $callback = function () use ($users, $request) {
-                $handle = fopen('php://output', 'w');
-                fputcsv($handle, ['账号', '密码', '过期时间', 'UUID', '创建时间', '订阅地址']);
-                foreach ($users as $user) {
-                    $user = $user->refresh();
-                    $expireDate = $user['expired_at'] === NULL ? '长期有效' : date('Y-m-d H:i:s', $user['expired_at']);
-                    $createDate = date('Y-m-d H:i:s', $user['created_at']);
-                    $password = $request->input('password') ?? $user['email'];
-                    $subscribeUrl = Helper::getSubscribeUrl($user['token']);
-                    fputcsv($handle, [$user['email'], $password, $expireDate, $user['uuid'], $createDate, $subscribeUrl]);
-                }
-                fclose($handle);
-            };
-            return response()->streamDownload($callback, 'users.csv', $headers);
-        }
-
-        // 默认返回 JSON
-        $data = collect($users)->map(function ($user) use ($request) {
-            return [
-                'email' => $user['email'],
-                'password' => $request->input('password') ?? $user['email'],
-                'expired_at' => $user['expired_at'] === NULL ? '长期有效' : date('Y-m-d H:i:s', $user['expired_at']),
-                'uuid' => $user['uuid'],
-                'created_at' => date('Y-m-d H:i:s', $user['created_at']),
-                'subscribe_url' => Helper::getSubscribeUrl($user['token']),
-            ];
-        });
-        return response()->json([
-            'code' => 0,
-            'message' => '批量生成成功',
-            'data' => $data,
-        ]);
-    }
-
-    private function multiGenerateWithPrefix(Request $request)
-    {
-        $userService = app(UserService::class);
-        $usersData = [];
-        $emailPrefix = $request->input('email_prefix');
-        $emailSuffix = $request->input('email_suffix');
-        $generateCount = $request->input('generate_count');
-
-        // Check if any of the emails with prefix already exist
-        for ($i = 1; $i <= $generateCount; $i++) {
-            $email = $emailPrefix . '_' . $i . '@' . $emailSuffix;
-            if (User::where('email', $email)->exists()) {
-                return $this->fail([400201, '邮箱 ' . $email . ' 已存在于系统中']);
-            }
-        }
-
-        // Generate user data for batch creation
-        for ($i = 1; $i <= $generateCount; $i++) {
-            $email = $emailPrefix . '_' . $i . '@' . $emailSuffix;
-            $usersData[] = [
-                'email' => $email,
-                'password' => $request->input('password') ?? $email,
-                'plan_id' => $request->input('plan_id'),
-                'expired_at' => $request->input('expired_at'),
-            ];
-        }
-
-        try {
-            DB::beginTransaction();
-            $users = [];
-            foreach ($usersData as $userData) {
-                $user = $userService->createUser($userData);
-                $user->save();
-                $users[] = $user;
-            }
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return $this->fail([500, '生成失败']);
-        }
-
-        // 判断是否导出 CSV
-        if ($request->input('download_csv')) {
-            $headers = [
-                'Content-Type' => 'text/csv',
-                'Content-Disposition' => 'attachment; filename="users.csv"',
-            ];
-            $callback = function () use ($users, $request) {
-                $handle = fopen('php://output', 'w');
-                fputcsv($handle, ['账号', '密码', '过期时间', 'UUID', '创建时间', '订阅地址']);
-                foreach ($users as $user) {
-                    $user = $user->refresh();
-                    $expireDate = $user['expired_at'] === NULL ? '长期有效' : date('Y-m-d H:i:s', $user['expired_at']);
-                    $createDate = date('Y-m-d H:i:s', $user['created_at']);
-                    $password = $request->input('password') ?? $user['email'];
-                    $subscribeUrl = Helper::getSubscribeUrl($user['token']);
-                    fputcsv($handle, [$user['email'], $password, $expireDate, $user['uuid'], $createDate, $subscribeUrl]);
-                }
-                fclose($handle);
-            };
-            return response()->streamDownload($callback, 'users.csv', $headers);
-        }
-
-        // 默认返回 JSON
-        $data = collect($users)->map(function ($user) use ($request) {
-            return [
-                'email' => $user['email'],
-                'password' => $request->input('password') ?? $user['email'],
-                'expired_at' => $user['expired_at'] === NULL ? '长期有效' : date('Y-m-d H:i:s', $user['expired_at']),
-                'uuid' => $user['uuid'],
-                'created_at' => date('Y-m-d H:i:s', $user['created_at']),
-                'subscribe_url' => Helper::getSubscribeUrl($user['token']),
-            ];
-        });
-        return response()->json([
-            'code' => 0,
-            'message' => '批量生成成功',
-            'data' => $data,
-        ]);
+        return $this->success($created);
     }
 
     public function sendMail(UserSendMail $request)

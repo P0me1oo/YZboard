@@ -387,7 +387,10 @@ class ManageController extends Controller
         }
 
         $copiedServer = $server->replicate();
-        $copiedServer->show = 0;
+        // 副本沿用源节点的绑定服务器和内部端口，默认关闭并隐藏，避免立即向 Node 下发重复监听；
+        // 管理员改完端口再开启，开启时按端口冲突规则重新校验。显式空开关的独立部署保持空值。
+        $copiedServer->enabled = $server->enabled === null ? null : false;
+        $copiedServer->show = false;
         $copiedServer->code = null;
         $copiedServer->u = 0;
         $copiedServer->d = 0;

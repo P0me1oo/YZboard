@@ -84,14 +84,34 @@ clamp() { v=$1; lo=$2; hi=$3; [ "$v" -lt "$lo" ] && v=$lo; [ "$v" -gt "$hi" ] &&
 
 if [ "$OCT_FORCE" = "1" ]; then
     auto_octane=1
-    auto_dp=1; auto_biz=1; auto_notif=1
+    auto_primary=1; auto_notif=1
 else
     auto_octane=$(clamp $(( (SLOTS * OCT_NUM) / OCT_DEN )) 1 "$CPUS")
     remaining=$(( SLOTS - auto_octane - 2 ))
     [ "$remaining" -lt 3 ] && remaining=3
-    auto_dp=$(clamp $(( remaining / 2 )) 1 $(( CPUS * 2 )))
-    auto_biz=$(clamp $(( remaining / 4 )) 1 "$CPUS")
-    auto_notif=$(clamp $(( remaining / 4 )) 1 "$CPUS")
+    # balance=false 之后这两个值是常驻 worker 数而非弹性上限，上界按核数收紧，
+    # 否则大机器上会长期占住远超实际需要的内存。需要更高并发时显式设置环境变量。
+    auto_primary=$(clamp $(( remaining / 2 )) 1 "$CPUS")
+    auto_notif=$(clamp $(( remaining / 8 )) 1 2)
+fi
+
+# 队列 supervisor 已改为 balance=false，这两个值是"常驻 worker 数"而非弹性上限。
+# 旧的 data-pipeline / business 两个 supervisor 已合并为 primary；若用户显式设置过
+# 旧变量，取较大值作为 primary 的默认值，避免升级后静默降低队列并发。
+if [ -z "${HORIZON_PRIMARY_MAX}" ]; then
+    legacy_max=0
+    if [ -n "${HORIZON_DATA_PIPELINE_MAX}" ] && [ "${HORIZON_DATA_PIPELINE_MAX}" -gt "$legacy_max" ]; then
+        legacy_max=${HORIZON_DATA_PIPELINE_MAX}
+    fi
+    if [ -n "${HORIZON_BUSINESS_MAX}" ] && [ "${HORIZON_BUSINESS_MAX}" -gt "$legacy_max" ]; then
+        legacy_max=${HORIZON_BUSINESS_MAX}
+    fi
+    if [ "$legacy_max" -gt 0 ]; then
+        HORIZON_PRIMARY_MAX=${legacy_max}
+        echo "[entrypoint] NOTE: HORIZON_DATA_PIPELINE_MAX / HORIZON_BUSINESS_MAX 已合并为 HORIZON_PRIMARY_MAX，本次取值 ${HORIZON_PRIMARY_MAX}。" >&2
+    else
+        HORIZON_PRIMARY_MAX=${auto_primary}
+    fi
 fi
 
 # User-set ENV always wins.
@@ -100,8 +120,6 @@ fi
 : "${OCTANE_MAX_REQUESTS:=500}"
 : "${OCTANE_GARBAGE_MB:=$auto_octane_gc}"
 : "${OCTANE_MAX_EXECUTION_TIME:=60}"
-: "${HORIZON_DATA_PIPELINE_MAX:=$auto_dp}"
-: "${HORIZON_BUSINESS_MAX:=$auto_biz}"
 : "${HORIZON_NOTIFICATION_MAX:=$auto_notif}"
 : "${HORIZON_WORKER_MEMORY_MB:=$auto_horizon_mem}"
 : "${HORIZON_WORKER_MAX_TIME:=0}"
@@ -109,12 +127,12 @@ fi
 
 export OCTANE_WORKERS OCTANE_TASK_WORKERS OCTANE_MAX_REQUESTS \
        OCTANE_GARBAGE_MB OCTANE_MAX_EXECUTION_TIME \
-       HORIZON_DATA_PIPELINE_MAX HORIZON_BUSINESS_MAX HORIZON_NOTIFICATION_MAX \
+       HORIZON_PRIMARY_MAX HORIZON_NOTIFICATION_MAX \
        HORIZON_WORKER_MEMORY_MB HORIZON_WORKER_MAX_TIME HORIZON_WORKER_MAX_JOBS \
        RESOURCE_PROFILE
 
-echo "[entrypoint] Auto-tune (profile=${RESOURCE_PROFILE}): cpus=${CPUS} mem=${MEM_MIB}MiB slots=${SLOTS} -> octane=${OCTANE_WORKERS} horizon(dp/biz/notif)=${HORIZON_DATA_PIPELINE_MAX}/${HORIZON_BUSINESS_MAX}/${HORIZON_NOTIFICATION_MAX} horizon_worker_mem=${HORIZON_WORKER_MEMORY_MB}MB"
-echo "[entrypoint] Horizon supervisors use balance=auto with minProcesses=1, so they scale up to the cap on demand and back down when idle."
+echo "[entrypoint] Auto-tune (profile=${RESOURCE_PROFILE}): cpus=${CPUS} mem=${MEM_MIB}MiB slots=${SLOTS} -> octane=${OCTANE_WORKERS} horizon(primary/notif)=${HORIZON_PRIMARY_MAX}/${HORIZON_NOTIFICATION_MAX} horizon_worker_mem=${HORIZON_WORKER_MEMORY_MB}MB"
+echo "[entrypoint] Horizon supervisors use balance=false: a fixed small worker pool drains every queue in priority order, instead of keeping one resident worker per queue."
 
 redis_reachable() {
     local host port

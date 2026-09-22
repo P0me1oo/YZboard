@@ -2,7 +2,7 @@
 
 本文件记录面板、Node、Xray fork 和 sing-box 的可回滚兼容关系。面板版本与兼容标识必须和对应 Node Release、Xray fork commit 及变更说明一起发布。
 
-## 复制节点默认关闭、换套餐同步限制与随机密码（1.20.4，未发布）
+## 复制节点默认关闭、换套餐同步限制、随机密码与队列进程收敛（1.20.4，未发布）
 
 - 配套管理前端 `0.4.4`，Node 沿用 `v1.16.1`；无数据库迁移，无 Node 通信字段变更。
 - 复制节点：副本改为默认关闭并隐藏，不再沿用源节点的开启状态。复制接口本就不改内部端口，旧行为会让 Node 立即收到同机同端口的第二份监听；改后需管理员改完端口再开启，开启时按既有端口冲突规则校验。源节点 `enabled` 为空（独立部署）时副本保持空值，只强制隐藏。
@@ -10,6 +10,15 @@
 - 创建用户密码留空时，面板为每个账号各生成 12 位大小写字母加数字的随机密码，不再用邮箱当密码；明文只在本次响应或 CSV 导出中返回一次。密码为 bcrypt 单向散列，面板不具备查看已有用户密码的能力。
 - 本地回归：`php -d extension=sqlite3 -d extension=pdo_sqlite vendor/bin/phpunit` 完整 289 项、3,552 个断言通过，含新增 `tests/Feature/Admin/UserManageTest.php` 9 项及复制节点的开关、隐藏与端口冲突用例。
 - 前端源码检查 3,007 个文件、16 项行为测试、正式构建、资源检查、17 项浏览器测试及开发模式检查通过；产物已同步到 `public/assets/admin`，面板 5 项资源契约检查通过（新增随机密码与一次性展示两项定制标识）。浏览器使用模拟接口，未操作真实服务器。
+- Horizon 队列进程收敛，属于部署行为变更，升级后进程数和环境变量都会变化：
+  - `config/horizon.php` 的 `balance` 由 `auto`/`simple` 改为 `false`。原 `minProcesses => 1` 的语义是「每个队列」至少常驻一个 worker，9 个队列固定占用 10 个 worker；改后由固定小进程池按 `queue` 数组顺序轮询全部队列。已核对 Horizon `v5.33.1` 源码 `SupervisorOptions::balancing()` 仅在 `simple`/`auto` 时分池，`false` 走 `createSingleProcessPool()`。
+  - 显式设置 `'defaults' => []`，避免 Horizon 包自带的 `supervisor-1` 被合并进每个环境而多出一个常驻 worker（其 `default` 队列已由 `primary` 覆盖）。
+  - `data-pipeline` 与 `business` 合并为 `primary`，队列顺序即优先级；`notification` 因超时更长、需要退避重试而保留独立 supervisor。9 个队列全部覆盖，无遗漏。
+  - 环境变量 `HORIZON_DATA_PIPELINE_MAX`、`HORIZON_BUSINESS_MAX` 合并为 `HORIZON_PRIMARY_MAX`；入口脚本对已显式设置旧变量的部署取较大值并在启动日志提示，不会静默降低并发。
+  - 入口脚本自动调优上界按核数封顶（通知队列封顶 2）。`balance=false` 后这些值是常驻 worker 数而非弹性上限，沿用旧的 `CPUS * 2` 会让大机器长期占住远超需要的内存。
+  - 验证：配置解析确认 `primary` 2 worker、`notification` 1 worker、`defaults` 为空；入口脚本 `sh -n` 通过，旧变量兼容 4 个场景在 `set -e` 下均正确；模拟各档位队列进程数为 2 核 6 个、4 核 9 个、8 核 13 个，原先一律 15 个。
+  - 本次仅验证配置解析与脚本逻辑，实际内存降幅需发布后在生产实测确认。
+- 生产环境另行设置 `LOG_LEVEL=warning`（`.env` 改动，不随镜像发布）。此前未设该键，Laravel 默认 `debug`，`stack → daily` 通道按 `debug` 落盘，实测 3.5 小时写入 162,548 条 DEBUG，约 305 MB/天；调整后降至约 65 MB/天，且剩余全部为 SQLite 锁错误堆栈。
 - 尚未打 Tag 或发布镜像，线上 `latest` 仍为 `1.20.3`。
 
 ## 升级版本检查与结果确认（1.20.3，已发布）

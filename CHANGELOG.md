@@ -9,6 +9,11 @@
 - 管理前端升级为 `0.4.4`：创建和编辑用户增加“随机生成”按钮，创建成功后一次性展示账号与明文密码并可复制；关闭后无再次查看入口。密码为 bcrypt 单向散列，面板不保存明文，没有查看已有用户密码的做法。
 - 新增 `tests/Feature/Admin/UserManageTest.php`。
 - 补齐套餐流量归零方式的回归测试 `tests/Feature/Admin/PlanResetMethodTest.php`：改归零方式时 `PlanObserver` 会重算存量用户的下次归零日期，此前该行为没有任何测试覆盖。未改动相关代码。
+- 队列进程收敛：`balance` 由 `auto`/`simple` 改为 `false`。此前 `minProcesses => 1` 的含义是「每个队列」至少常驻一个 worker，9 个队列会固定占用 10 个 worker 进程；实测 2 核 2 GB 部署上，15 个 Horizon 进程常驻约 800 MB，而全部队列长期为空。改后由固定的小进程池按 `queue` 数组顺序轮询全部队列，常驻进程从 15 个降到 6 个。
+- 显式设置 `'defaults' => []`。项目配置此前没有 `defaults` 键，Horizon 包自带的 `supervisor-1` 会被合并进每个环境，多出一个只跑 `default` 队列的常驻 worker，而该队列已由 `primary` 覆盖。
+- 合并 `data-pipeline` 与 `business` 两个 supervisor 为 `primary`，队列顺序即优先级：面板交互和订单优先于流量统计。`notification` 因超时更长、需要退避重试而保留独立 supervisor。
+- 环境变量 `HORIZON_DATA_PIPELINE_MAX`、`HORIZON_BUSINESS_MAX` 合并为 `HORIZON_PRIMARY_MAX`。入口脚本保留兼容：已显式设置旧变量的部署取其较大值，并在启动日志给出提示，不会静默降低队列并发。
+- 入口脚本的自动调优上界同步收紧。`balance=false` 后这些值是常驻 worker 数而非弹性上限，沿用旧的 `CPUS * 2` 会让大机器长期占住远超需要的内存；现按核数封顶，通知队列封顶 2。实测各档位队列进程数：2 核 6 个、4 核 9 个、8 核 13 个（原先一律 15 个）。
 - 配套 Node 沿用 `v1.16.1`，无数据库迁移；完整 PHP 回归 289 项、3,552 个断言通过。
 
 ## 1.20.3 - 2026-09-22

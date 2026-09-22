@@ -168,41 +168,34 @@ return [
     |
     */
 
+    // Horizon 包自带的 defaults 里有一个 supervisor-1（队列 default），若此处不显式置空，
+    // 它会被合并进每个环境，额外常驻一个 worker；而 default 队列已由下面的 primary 覆盖。
+    'defaults' => [],
+
     'environments' => [
+        // 说明：balance=auto / simple 的 minProcesses 是"每个队列"的下限，不是每个 supervisor 的下限。
+        // 9 个队列按原配置会常驻 10 个 worker（约 800 MB），而队列绝大多数时间是空的。
+        // 这里统一改为 balance=false：supervisor 只跑固定数量的 worker，
+        // 由它们按 queue 数组的先后顺序轮询全部队列，不再按队列摊开进程。
         'production' => [
-            'data-pipeline' => [
+            // 顺序即优先级：先处理面板交互和订单，再处理流量统计类任务。
+            'primary' => [
                 'connection' => 'redis',
-                'queue' => ['traffic_fetch', 'stat', 'user_alive_sync'],
-                'balance' => 'auto',
-                'autoScalingStrategy' => 'time',
-                'minProcesses' => 1,
-                'maxProcesses' => (int) env('HORIZON_DATA_PIPELINE_MAX', 8),
-                'memory' => (int) env('HORIZON_WORKER_MEMORY_MB', 128),
-                'maxTime' => (int) env('HORIZON_WORKER_MAX_TIME', 3600),
-                'maxJobs' => (int) env('HORIZON_WORKER_MAX_JOBS', 1000),
-                'balanceCooldown' => 1,
-                'tries' => 3,
-                'timeout' => 30,
-            ],
-            'business' => [
-                'connection' => 'redis',
-                'queue' => ['default', 'order_handle'],
-                'balance' => 'simple',
-                'minProcesses' => 1,
-                'maxProcesses' => (int) env('HORIZON_BUSINESS_MAX', 3),
+                'queue' => ['default', 'order_handle', 'traffic_fetch', 'stat', 'user_alive_sync'],
+                'balance' => false,
+                'maxProcesses' => (int) env('HORIZON_PRIMARY_MAX', 2),
                 'memory' => (int) env('HORIZON_WORKER_MEMORY_MB', 128),
                 'maxTime' => (int) env('HORIZON_WORKER_MAX_TIME', 3600),
                 'maxJobs' => (int) env('HORIZON_WORKER_MAX_JOBS', 1000),
                 'tries' => 3,
                 'timeout' => 30,
             ],
+            // 通知类任务超时更长、需要退避重试，单独留一个 supervisor，避免拖慢上面的队列。
             'notification' => [
                 'connection' => 'redis',
-                'queue' => ['send_email', 'send_telegram', 'send_email_mass', 'node_sync'],
-                'balance' => 'auto',
-                'autoScalingStrategy' => 'size',
-                'minProcesses' => 1,
-                'maxProcesses' => (int) env('HORIZON_NOTIFICATION_MAX', 3),
+                'queue' => ['node_sync', 'send_telegram', 'send_email', 'send_email_mass'],
+                'balance' => false,
+                'maxProcesses' => (int) env('HORIZON_NOTIFICATION_MAX', 1),
                 'memory' => (int) env('HORIZON_WORKER_MEMORY_MB', 128),
                 'maxTime' => (int) env('HORIZON_WORKER_MAX_TIME', 3600),
                 'maxJobs' => (int) env('HORIZON_WORKER_MAX_JOBS', 1000),
@@ -212,6 +205,7 @@ return [
             ],
         ],
         'local' => [
+            // 本地同样避免按队列摊开进程，3 个 worker 轮询全部队列足够开发调试。
             'Xboard' => [
                 'connection' => 'redis',
                 'queue' => [
@@ -219,18 +213,16 @@ return [
                     'order_handle',
                     'traffic_fetch',
                     'stat',
+                    'user_alive_sync',
+                    'node_sync',
+                    'send_telegram',
                     'send_email',
                     'send_email_mass',
-                    'send_telegram',
-                    'user_alive_sync',
-                    'node_sync'
                 ],
-                'balance' => 'auto',
-                'minProcesses' => 1,
-                'maxProcesses' => 5,
+                'balance' => false,
+                'maxProcesses' => 3,
                 'tries' => 1,
                 'timeout' => 60,
-                'balanceCooldown' => 3,
             ],
         ],
     ],

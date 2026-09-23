@@ -174,17 +174,26 @@ class DeviceStateService
      */
     public function getDeviceCount(int $userId): int
     {
-        $data = Redis::hgetall(self::PREFIX . $userId);
-        $now = time();
-        $ips = [];
+        return count($this->getDeviceIPs($userId));
+    }
 
-        foreach ($data as $field => $timestamp) {
-            if ($now - $timestamp <= self::TTL) {
-                $ips[] = substr($field, strpos($field, ':') + 1);
+    /** 获取跨节点去重后的在线公网来源 IP。 */
+    public function getDeviceIPs(int $userId): array
+    {
+        $ips = [];
+        $now = time();
+        foreach (Redis::hgetall(self::PREFIX . $userId) as $field => $timestamp) {
+            if ($now - (int) $timestamp > self::TTL || !str_contains($field, ':')) {
+                continue;
+            }
+            $public = PublicDeviceIp::normalize(substr($field, strpos($field, ':') + 1));
+            if ($public !== null) {
+                $ips[$public] = true;
             }
         }
-
-        return count(array_unique($ips));
+        $result = array_keys($ips);
+        sort($result);
+        return $result;
     }
 
     /**
@@ -213,46 +222,20 @@ class DeviceStateService
     public function getUsersDevices(array $userIds): array
     {
         $result = [];
-        $now = time();
         foreach ($userIds as $userId) {
-            $data = Redis::hgetall(self::PREFIX . $userId);
-            if (!empty($data)) {
-                $ips = [];
-                foreach ($data as $field => $timestamp) {
-                    if ($now - $timestamp <= self::TTL) {
-                        $ips[] = substr($field, strpos($field, ':') + 1);
-                    }
-                }
-                if (!empty($ips)) {
-                    $result[$userId] = array_values(array_unique($ips));
-                }
+            $ips = $this->getDeviceIPs((int) $userId);
+            if ($ips !== []) {
+                $result[$userId] = $ips;
             }
         }
 
         return $result;
     }
 
-    /**
-     * Strip port from IP address: "1.2.3.4:12345" → "1.2.3.4", "[::1]:443" → "::1"
-     */
-    private static function normalizeIP(string $ip): string
-    {
-        // [IPv6]:port
-        if (preg_match('/^\[(.+)\]:\d+$/', $ip, $m)) {
-            return $m[1];
-        }
-        // IPv4:port
-        if (preg_match('/^(\d+\.\d+\.\d+\.\d+):\d+$/', $ip, $m)) {
-            return $m[1];
-        }
-        return $ip;
-    }
-
     private static function normalizeIPs(array $ips): array
     {
         return array_values(array_unique(array_filter(
-            array_map(fn ($ip) => self::normalizeIP((string) $ip), $ips),
-            fn (string $ip) => $ip !== ''
+            array_map(fn ($ip) => PublicDeviceIp::normalize((string) $ip), $ips)
         )));
     }
 

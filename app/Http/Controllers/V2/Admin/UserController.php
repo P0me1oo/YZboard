@@ -13,6 +13,8 @@ use App\Models\User;
 use App\Services\AuthService;
 use App\Services\Plugin\HookManager;
 use App\Services\UserService;
+use App\Services\DeviceStateService;
+use App\Services\DeviceIpLocationService;
 use App\Traits\QueryOperators;
 use App\Utils\Helper;
 use Illuminate\Database\Eloquent\Builder;
@@ -223,6 +225,20 @@ class UserController extends Controller
         $user = User::find($request->input('id'))->load('invite_user');
         $user = HookManager::filter('admin.user.detail', $user, $request);
         return $this->success($user);
+    }
+
+    /** 返回当前实际计数的公网来源 IP 及本地数据库可查到的信息。 */
+    public function devices(Request $request, DeviceStateService $devices, DeviceIpLocationService $locations): JsonResponse
+    {
+        $data = $request->validate(['id' => 'required|integer|min:1']);
+        if (!User::query()->whereKey($data['id'])->exists()) {
+            return response()->json(['message' => '用户不存在'], 404);
+        }
+        $result = [];
+        foreach ($devices->getDeviceIPs((int) $data['id']) as $ip) {
+            $result[] = ['ip' => $ip] + $locations->lookup($ip);
+        }
+        return response()->json(['data' => $result]);
     }
 
     public function update(UserUpdate $request)

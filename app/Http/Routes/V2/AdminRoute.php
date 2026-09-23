@@ -133,6 +133,7 @@ class AdminRoute
                 $router->any('/fetch', [UserController::class, 'fetch']);
                 $router->post('/update', [UserController::class, 'update']);
                 $router->get('/getUserInfoById', [UserController::class, 'getUserInfoById']);
+                $router->get('/devices', [UserController::class, 'devices']);
                 $router->post('/generate', [UserController::class, 'generate']);
                 $router->post('/dumpCSV', [UserController::class, 'dumpCSV']);
                 $router->post('/sendMail', [UserController::class, 'sendMail']);

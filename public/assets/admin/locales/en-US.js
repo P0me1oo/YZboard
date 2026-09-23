@@ -1940,7 +1940,8 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "groups": {
         "title": "Permission Groups",
         "tooltip": "Groups that can subscribe to this node",
-        "empty": "--"
+        "empty": "--",
+        "more": "Show all {{total}} permission groups"
       },
       "loadStatus": {
         "title": "Load Status",
@@ -2442,6 +2443,10 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
           "allow_insecure": "Allow Insecure?"
         },
         "reality_settings": {
+          "anti_abuse": {
+            "label": "Anti-Abuse Mode",
+            "description": "Camouflage fallback goes through a loopback-only inbound on the node; only TLS domains of the camouflage site are allowed, all other traffic is blocked"
+          },
           "server_name": {
             "label": "Destination Site (dest)",
             "placeholder": "e.g., example.com"

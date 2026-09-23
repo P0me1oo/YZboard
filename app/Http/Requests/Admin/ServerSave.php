@@ -55,6 +55,7 @@ class ServerSave extends FormRequest
         'reality_settings.public_key' => 'nullable|string',
         'reality_settings.private_key' => 'nullable|string',
         'reality_settings.short_id' => 'nullable|string',
+        'reality_settings.anti_abuse' => 'nullable|boolean',
     ];
 
     private const PROTOCOL_RULES = [
@@ -324,6 +325,7 @@ class ServerSave extends FormRequest
             'protocol_settings.multiplex.brutal.down_mbps' => 'Brutal下行速率',
             'protocol_settings.utls.enabled' => 'uTLS',
             'protocol_settings.utls.fingerprint' => 'uTLS指纹',
+            'protocol_settings.reality_settings.anti_abuse' => '防盗用模式',
             'protocol_settings.tls_settings.ech.enabled' => 'ECH',
             'protocol_settings.tls_settings.ech.config' => 'ECH配置',
             'protocol_settings.tls_settings.ech.query_server_name' => 'ECH查询域名',

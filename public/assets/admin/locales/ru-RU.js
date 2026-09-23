@@ -1882,7 +1882,8 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
       "groups": {
         "title": "Группы доступа",
         "tooltip": "Группы, которые могут подписаться на этот узел",
-        "empty": "--"
+        "empty": "--",
+        "more": "Показать все группы доступа ({{total}})"
       },
       "loadStatus": {
         "title": "Загрузка",
@@ -2367,6 +2368,10 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
           "allow_insecure": "Allow Insecure?"
         },
         "reality_settings": {
+          "anti_abuse": {
+            "label": "Защита от злоупотреблений",
+            "description": "Маскировочный трафик идёт во внутренний вход на самом узле: пропускаются только TLS-домены маскировочного сайта, остальной трафик блокируется"
+          },
           "server_name": {
             "label": "Destination Site (dest)",
             "placeholder": "e.g., example.com"

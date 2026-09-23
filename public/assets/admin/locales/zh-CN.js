@@ -1920,7 +1920,8 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
       "groups": {
         "title": "权限组",
         "tooltip": "可订阅到该节点的权限组",
-        "empty": "--"
+        "empty": "--",
+        "more": "查看全部 {{total}} 个权限组"
       },
       "loadStatus": {
         "title": "负载状态",
@@ -2437,6 +2438,10 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
           "allow_insecure": "允许不安全?"
         },
         "reality_settings": {
+          "anti_abuse": {
+            "label": "防盗用模式",
+            "description": "伪装回源改走节点本机的专用入口，只放行伪装站点的 TLS 域名，其余流量直接阻断"
+          },
           "server_name": {
             "label": "伪装站点(dest)",
             "placeholder": "例如：example.com"

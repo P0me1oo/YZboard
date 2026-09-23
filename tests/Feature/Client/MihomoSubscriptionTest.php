@@ -600,4 +600,67 @@ class MihomoSubscriptionTest extends TestCase
             $this->assertSame('xhttp', $config['proxies'][0]['network']);
         }
     }
+
+    private function realitySettings(array $extra = []): array
+    {
+        return [
+            'server_name' => 'reality.example',
+            'public_key' => Helper::base64EncodeUrlSafe(random_bytes(32)),
+            'short_id' => bin2hex(random_bytes(4)),
+        ] + $extra;
+    }
+
+    public static function realityProtocols(): array
+    {
+        return ['VLESS' => ['vless'], 'Trojan' => ['trojan']];
+    }
+
+    #[DataProvider('realityProtocols')]
+    public function test_reality_automatically_preserves_hybrid_handshake_support(string $type): void
+    {
+        $reality = $this->realitySettings();
+
+        $off = $this->proxies([$this->node($type, ['tls' => 2, 'reality_settings' => $reality])])[0];
+        $this->assertTrue($off['reality-opts']['support-x25519mlkem768']);
+
+        $on = $this->proxies([
+            $this->node($type, ['tls' => 2, 'reality_settings' => $reality + ['support_x25519mlkem768' => false]]),
+        ])[0];
+        $this->assertTrue($on['reality-opts']['support-x25519mlkem768']);
+
+        // 兼容尚未发布的旧草稿字段，残留值不再影响输出。
+        foreach ([$off, $on] as $proxy) {
+            $this->assertSame($reality['public_key'], $proxy['reality-opts']['public-key']);
+            $this->assertSame($reality['short_id'], $proxy['reality-opts']['short-id']);
+        }
+    }
+
+    public function test_reality_hybrid_option_does_not_leak_into_standard_tls(): void
+    {
+        $proxies = $this->proxies([
+            $this->node('vless', ['tls' => 2, 'reality_settings' => $this->realitySettings()]),
+            $this->node('vless', [
+                'tls' => 1,
+                'reality_settings' => $this->realitySettings(['support_x25519mlkem768' => true]),
+            ]),
+        ]);
+
+        $this->assertCount(2, $proxies);
+        $this->assertTrue($proxies[0]['reality-opts']['support-x25519mlkem768']);
+        $this->assertArrayNotHasKey('reality-opts', $proxies[1]);
+    }
+
+    public function test_vless_reality_share_link_automatically_carries_the_mlkem_flag(): void
+    {
+        $reality = $this->realitySettings();
+        $link = fn(array $extra) => (new \App\Protocols\General($this->subscriptionUser, [
+            $this->node('vless', ['tls' => 2, 'reality_settings' => $reality + $extra]),
+        ]))->handle()->getContent();
+
+        $this->assertStringContainsString('support-x25519mlkem768=true', base64_decode($link([])));
+        $this->assertStringContainsString(
+            'support-x25519mlkem768=true',
+            base64_decode($link(['support_x25519mlkem768' => false]))
+        );
+    }
 }

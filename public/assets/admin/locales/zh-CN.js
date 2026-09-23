@@ -1920,7 +1920,8 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
       "groups": {
         "title": "权限组",
         "tooltip": "可订阅到该节点的权限组",
-        "empty": "--"
+        "empty": "--",
+        "more": "查看全部 {{total}} 个权限组"
       },
       "loadStatus": {
         "title": "负载状态",

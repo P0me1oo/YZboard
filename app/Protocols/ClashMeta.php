@@ -502,10 +502,7 @@ class ClashMeta extends AbstractProtocol
                 $array['tls'] = true;
                 $array['skip-cert-verify'] = (bool) data_get($protocol_settings, 'reality_settings.allow_insecure', false);
                 $array['servername'] = data_get($protocol_settings, 'reality_settings.server_name');
-                $array['reality-opts'] = [
-                    'public-key' => data_get($protocol_settings, 'reality_settings.public_key'),
-                    'short-id' => data_get($protocol_settings, 'reality_settings.short_id')
-                ];
+                $array['reality-opts'] = self::buildRealityOpts($protocol_settings);
                 self::appendUtls($array, $protocol_settings, true);
                 break;
             default:
@@ -582,10 +579,7 @@ class ClashMeta extends AbstractProtocol
                 if ($serverName = data_get($protocol_settings, 'reality_settings.server_name')) {
                     $array['sni'] = $serverName;
                 }
-                $array['reality-opts'] = [
-                    'public-key' => data_get($protocol_settings, 'reality_settings.public_key'),
-                    'short-id' => data_get($protocol_settings, 'reality_settings.short_id'),
-                ];
+                $array['reality-opts'] = self::buildRealityOpts($protocol_settings);
                 break;
             default: // Standard TLS
                 $array['skip-cert-verify'] = (bool) data_get($protocol_settings, 'tls_settings.allow_insecure', false);
@@ -911,6 +905,21 @@ class ClashMeta extends AbstractProtocol
         if ($required && (empty($array['client-fingerprint']) || $array['client-fingerprint'] === 'none')) {
             $array['client-fingerprint'] = 'chrome';
         }
+    }
+
+    /**
+     * 生成 mihomo 的 reality-opts。
+     *
+     * 自动保留混合握手能力，不增加节点开关；实际算法由握手协商决定。
+     * 传统客户端兼容由配套 YZ 核心提供，订阅参数本身不能放宽服务端要求。
+     */
+    protected static function buildRealityOpts($protocol_settings): array
+    {
+        return [
+            'public-key' => data_get($protocol_settings, 'reality_settings.public_key'),
+            'short-id' => data_get($protocol_settings, 'reality_settings.short_id'),
+            'support-x25519mlkem768' => true,
+        ];
     }
 
     protected static function appendEch(&$array, $ech): void

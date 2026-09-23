@@ -189,6 +189,8 @@ class General extends AbstractProtocol
                 $config['sni'] = data_get($protocol_settings, 'reality_settings.server_name');
                 $config['servername'] = data_get($protocol_settings, 'reality_settings.server_name');
                 $config['spx'] = "/";
+                // 支持该参数的客户端保留混合握手能力，实际算法由握手协商决定。
+                $config['support-x25519mlkem768'] = 'true';
                 if ($fp = Helper::getTlsFingerprint(data_get($protocol_settings, 'utls'))) {
                     $config['fp'] = $fp;
                 }

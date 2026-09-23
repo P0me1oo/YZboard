@@ -133,6 +133,18 @@ VLESS、Trojan 的 Reality 要求客户端指纹。未指定指纹或指定 `non
 
 HTTP 代理的 `tls_settings.server_name` 输出为 `sni`。当前 Mihomo 的 HTTP、SOCKS5 出站没有 ECH 选项，SOCKS5 也没有独立 TLS 服务名；开启这些无法表示的参数时过滤对应节点，TLS 关闭时忽略残留 TLS 设置。
 
+## Reality 传统与抗量子握手兼容
+
+面板 `1.21.0` 自动为 VLESS、Trojan 的 Mihomo Reality 节点输出 `reality-opts.support-x25519mlkem768: true`，让客户端保留抗量子混合握手能力。不增加节点开关，普通 TLS 不添加该项；Stash 和 sing-box 订阅不添加 Mihomo 专用字段。
+
+VLESS 分享链接自动附加 `support-x25519mlkem768=true`。链接接收端是否读取该参数取决于其实现，不能保证所有客户端都支持；Mihomo 用户优先使用原生 YAML 订阅。Trojan 分享链接沿用原有输出。
+
+配套 YZ-Xray-core `v26.8.1` 的兼容补丁允许传统 X25519 和混合 X25519MLKEM768 客户端连接同一个节点。支持混合握手的客户端在目标站点同样支持时可以协商该算法；只支持传统握手的客户端继续使用传统算法，不是先尝试失败后再重连降级。认证失败不会因此被放行。
+
+上游 `v26.9.9` 使用的 REALITY 版本强制要求客户端携带混合密钥项，当前已发布 Node `v1.17.0` 仍具有这一限制。新核心源码尚未自动进入已发布 Node，部署时必须使用包含补丁的新 Node 构建，不能仅更新面板。
+
+旧草稿中“老内核开启混合握手必然失败”的结论不成立，不能据此要求所有旧节点关闭参数。当前验证针对兼容补丁和固定客户端版本；未覆盖的历史客户端或核心组合不作连通性保证。具体测试与发布状态见 [兼容矩阵](../YZ_COMPATIBILITY.md)。
+
 ## Shadowsocks 插件
 
 插件存在而选项为空时，仍生成该插件需要的默认客户端选项。支持转换 `obfs` / `obfs-local`、`v2ray-plugin`、`gost-plugin`、`shadow-tls`、`restls`，并保留 `kcptun` 选项。未知插件从订阅中过滤。

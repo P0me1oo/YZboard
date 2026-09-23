@@ -1882,7 +1882,8 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
       "groups": {
         "title": "Группы доступа",
         "tooltip": "Группы, которые могут подписаться на этот узел",
-        "empty": "--"
+        "empty": "--",
+        "more": "Показать все группы доступа ({{total}})"
       },
       "loadStatus": {
         "title": "Загрузка",

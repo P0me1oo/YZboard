@@ -1940,7 +1940,8 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "groups": {
         "title": "Permission Groups",
         "tooltip": "Groups that can subscribe to this node",
-        "empty": "--"
+        "empty": "--",
+        "more": "Show all {{total}} permission groups"
       },
       "loadStatus": {
         "title": "Load Status",

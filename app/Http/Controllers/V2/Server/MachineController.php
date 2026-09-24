@@ -32,6 +32,15 @@ class MachineController extends Controller
     }
 
     /**
+     * agent 分别经 IPv4、IPv6 调用本接口，面板按来源地址族记录公网地址并回显。
+     */
+    public function address(Request $request): JsonResponse
+    {
+        $machine = $this->authenticateMachine($request);
+        return response()->json(['ip' => \App\Services\MachineAgentService::recordAddress($machine, $request->ip())]);
+    }
+
+    /**
      * get nodes list for machine
      */
     public function nodes(Request $request): JsonResponse

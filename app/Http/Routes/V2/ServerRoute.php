@@ -32,6 +32,7 @@ class ServerRoute
             $route->post('nodes', [MachineController::class, 'nodes']);
             $route->post('status', [MachineController::class, 'status']);
             $route->post('control', [MachineController::class, 'control']);
+            $route->post('address', [MachineController::class, 'address']);
         });
     }
 }

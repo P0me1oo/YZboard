@@ -9,7 +9,7 @@ use Illuminate\Support\Str;
 class MachineAgentService
 {
     public const ONLINE_SECONDS = 30;
-    public const OPERATION_SECONDS = 900;
+    public const OPERATION_SECONDS = 600;
     // 某一地址族比另一地址族最近一次回报旧出这么久，视为已失效不再展示。
     public const ADDRESS_STALE_SECONDS = 900;
     private const ADDRESS_FAMILIES = ['ipv4', 'ipv6'];
@@ -44,9 +44,10 @@ class MachineAgentService
             if ($error) {
                 return ['id' => $id, 'error' => $error];
             }
+            $createdAt = time();
             $operation = [
                 'id' => (string) Str::uuid(), 'action' => $action, 'status' => 'pending',
-                'created_at' => time(), 'expires_at' => time() + self::OPERATION_SECONDS,
+                'created_at' => $createdAt, 'expires_at' => $createdAt + self::OPERATION_SECONDS,
                 'boot_id' => $runtime['boot_id'], 'error' => null,
             ];
             $machine->forceFill(['agent_operation' => $operation])->saveQuietly();

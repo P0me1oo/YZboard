@@ -2,6 +2,12 @@
 
 本文件记录面板、Node、Xray fork 和 sing-box 的可回滚兼容关系。面板版本与兼容标识必须和对应 Node Release、Xray fork commit 及变更说明一起发布。
 
+## 服务器管理更新任务时限（1.23.1，未发布）
+
+- 面板远程更新和重启任务的有效期为 10 分钟；到期后面板将未确认的任务标为超时。旧 Node 接收面板下发的到期时间，无协议或数据库结构变化。
+- 配套 YZ-Agent `v1.19.1`：Release 文件先从 GitHub 下载，单次 2 分钟超时后由 Agent 通过 `gh-proxy.org` 重试，仍按同一 Release 校验值核验。两端可分别升级；要同时获得 10 分钟任务有效期和下载切换功能，需部署两端的新版本。
+- 当前仅为本地修改，尚未发布或进行真实服务器验证。回滚基线为面板 `v1.23.0`。
+
 ## 服务器管理页优化与双栈公网地址（1.23.0，已发布）
 
 - 发布来源：面板 `v1.23.0` / `85b1441a23a1fad8a195acb367ed4bb9a56725c2`，Node `v1.19.0` / `e642f5966d74adeab6dd59db91d120e1530fdb18`。面板镜像 `ghcr.io/p0me1oo/yzboard:1.23.0-85b1441` 的 manifest 为 `sha256:757369e5f6c1202c7d92520da087859773bd9ce26d2e36644154a1af4987873f`，与 `1.23.0`、`latest` 一致；已核对 `linux/amd64`、`linux/arm64`。Node 镜像 `ghcr.io/p0me1oo/yz-agent:v1.19.0` 的 manifest 为 `sha256:6e5f72f97fbf417f406bd25e6f03bcbb9db3dbcb9d9d226622e2b361cd455291`，与其 `latest` 一致，包含相同两个目标架构。面板和 Node 的标签工作流均通过。

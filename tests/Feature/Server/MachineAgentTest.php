@@ -50,6 +50,7 @@ class MachineAgentTest extends TestCase
         $machine = $this->machine();
         MachineAgentService::exchange($machine, $this->report(), null);
         $operation = MachineAgentService::queue($machine->id, 'restart')['operation'];
+        $this->assertSame(600, $operation['expires_at'] - $operation['created_at']);
         $this->assertSame('busy', MachineAgentService::queue($machine->id, 'upgrade')['error']);
         $this->assertSame($operation['id'], MachineAgentService::exchange($machine, $this->report(), null)['id']);
         $result = ['id' => $operation['id'], 'status' => 'succeeded'];

@@ -352,7 +352,7 @@ class ServerService
     /**
      * 处理节点上报的连接限制超限事件。
      *
-     * 节点按上报周期汇总，同一用户可能同时上报并发和速率两条。
+     * 节点按上报周期汇总，同一用户可能同时上报并发、速率和设备数三条。
      * 面板不落库，只做校验后触发 server.limit.exceeded 钩子，
      * 由插件决定是否通知以及如何去重。
      *
@@ -368,16 +368,21 @@ class ServerService
             }
             $userId = (int) ($event['user_id'] ?? 0);
             $kind = (string) ($event['kind'] ?? '');
-            if ($userId <= 0 || !in_array($kind, ['conn', 'rate'], true)) {
+            if ($userId <= 0 || !in_array($kind, ['conn', 'rate', 'device'], true)) {
                 continue;
             }
-            $normalized[] = [
+            $item = [
                 'user_id' => $userId,
                 'kind' => $kind,
                 'limit' => max(0, (int) ($event['limit'] ?? 0)),
                 'observed' => max(0, (int) ($event['observed'] ?? 0)),
                 'count' => max(0, (int) ($event['count'] ?? 0)),
             ];
+            // 被拒来源只属于设备数超限，并发和速率事件保持原有字段。
+            if ($kind === 'device') {
+                $item['ips'] = self::normalizeLimitEventIps($event['ips'] ?? null);
+            }
+            $normalized[] = $item;
         }
 
         if (empty($normalized)) {
@@ -390,6 +395,29 @@ class ServerService
             'node_type' => (string) $node->type,
             'events' => $normalized,
         ]);
+    }
+
+    /**
+     * 设备数超限事件携带的被拒来源：只保留合法 IP，去重后最多 5 个，与 Node 上报口径一致。
+     */
+    private static function normalizeLimitEventIps(mixed $ips): array
+    {
+        if (!is_array($ips)) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($ips as $ip) {
+            if (!is_string($ip) || filter_var($ip, FILTER_VALIDATE_IP) === false || in_array($ip, $result, true)) {
+                continue;
+            }
+            $result[] = $ip;
+            if (count($result) >= 5) {
+                break;
+            }
+        }
+
+        return $result;
     }
 
     public static function buildNodeConfig(Server $node): array

@@ -101,7 +101,7 @@ class ServerConnLimitTest extends TestCase
                 'not-an-array',
                 ['kind' => 'conn', 'limit' => 1],                      // 缺用户
                 ['user_id' => 0, 'kind' => 'conn'],                    // 用户非法
-                ['user_id' => 7, 'kind' => 'device'],                  // 类型非法
+                ['user_id' => 7, 'kind' => 'speed'],                   // 类型非法
                 ['user_id' => 7, 'kind' => 'conn', 'limit' => -1, 'observed' => -5, 'count' => -3],
             ],
         ])->assertOk();
@@ -109,6 +109,33 @@ class ServerConnLimitTest extends TestCase
         $this->assertCount(1, $this->received);
         $this->assertSame([
             ['user_id' => 7, 'kind' => 'conn', 'limit' => 0, 'observed' => 0, 'count' => 0],
+        ], $this->received[0]['events']);
+    }
+
+    public function test_report_forwards_device_limit_events_with_rejected_sources(): void
+    {
+        Bus::fake();
+
+        $node = $this->makeServer();
+
+        $this->postJson('/api/v2/server/report', [
+            'token' => 'server-token',
+            'node_id' => $node->id,
+            'limit_events' => [
+                ['user_id' => 5, 'kind' => 'conn', 'limit' => 8, 'observed' => 8, 'count' => 1, 'ips' => ['8.8.8.8']],
+                ['user_id' => 5, 'kind' => 'device', 'limit' => 2, 'observed' => 2, 'count' => 6,
+                    'ips' => ['8.8.8.8', '2001:db8::1', 'not-an-ip', 8, '8.8.8.8', '1.1.1.1', '1.0.0.1', '9.9.9.9', '4.4.4.4']],
+                ['user_id' => 6, 'kind' => 'device', 'limit' => -1, 'observed' => -1, 'count' => 2, 'ips' => 'bad'],
+            ],
+        ])->assertOk();
+
+        $this->assertCount(1, $this->received);
+        $this->assertSame([
+            // 并发和速率事件不带来源字段，旧插件看到的格式不变。
+            ['user_id' => 5, 'kind' => 'conn', 'limit' => 8, 'observed' => 8, 'count' => 1],
+            ['user_id' => 5, 'kind' => 'device', 'limit' => 2, 'observed' => 2, 'count' => 6,
+                'ips' => ['8.8.8.8', '2001:db8::1', '1.1.1.1', '1.0.0.1', '9.9.9.9']],
+            ['user_id' => 6, 'kind' => 'device', 'limit' => 0, 'observed' => 0, 'count' => 2, 'ips' => []],
         ], $this->received[0]['events']);
     }
 

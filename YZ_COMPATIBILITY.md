@@ -2,6 +2,19 @@
 
 本文件记录面板、Node、Xray fork 和 sing-box 的可回滚兼容关系。面板版本与兼容标识必须和对应 Node Release、Xray fork commit 及变更说明一起发布。
 
+## REALITY 防盗用模式（1.22.0，未发布）
+
+- 配套管理前端 `0.5.0`、Node `v1.18.0`；无数据库迁移。Xray fork 和 sing-box fork 未改动。
+- 新增开关存放在节点的 `protocol_settings.reality_settings.anti_abuse`（布尔，默认 `false`），由 `Server::REALITY_CONFIGURATION` 声明。该结构按字段表转换，未声明的键会被静默丢弃，因此必须在模型里声明后才能落库。
+- 校验规则在 `ServerSave::REALITY_RULES` 中为 `nullable|boolean`；非法取值返回 422 且不覆盖已存值。
+- 下发路径没有新增代码：`ServerService::buildNodeConfig()` 在 `tls === 2` 时本就把整个 `reality_settings` 作为 `tls_settings` 下发给 vless 和 trojan，新字段随之到达 Node。两个节点配置接口 `/api/v2/server/config` 和 `/api/v1/server/UniProxy/config` 均已验证包含该字段。
+- 兼容性：旧 Node（`v1.17.1` 及更早）收到该字段会忽略，行为不变；旧面板不会下发该字段，新 Node 按关闭处理。面板与 Node 可分别升级，但只有两边都升级后开关才实际生效。建议先升级面板再升级 Node。
+- 本地回归：`php -d extension=sqlite3 -d extension=pdo_sqlite vendor/bin/phpunit` 完整 293 项、3,577 个断言通过，含新增 `tests/Feature/Server/ServerRealityAntiAbuseTest.php` 4 项、25 个断言。
+- 同版本一并修复了管理前端两个弹窗缺陷，都只涉及产物、不涉及面板 PHP 代码与接口：一是服务器管理页编辑弹窗自己关闭（该页 5 秒轮询，原先每次渲染都重建表格列定义，单元格子树被卸载重建，弹窗状态与已输入内容随之丢失，修法是把列定义按依赖缓存）；二是节点编辑弹窗点“提交”后保存被静默丢弃（弹窗打开 300 毫秒后的后台端口检查会把提交自己那次判成过期，修法是提交的检查进行期间跳过后台检查）。
+- 前端合入分页记忆改动后，源码检查 3,010 个文件、20 项行为测试、正式构建、资源检查、28 项浏览器测试及开发模式检查全部通过，29 页对照无差异。产物已重新同步到 `public/assets/admin`，5 项资源契约测试通过。浏览器使用模拟接口，未操作真实服务器。
+- 未验证真实节点上的 REALITY 握手效果：本次只验证了面板存取下发、Node 生成的配置内容以及内核能否解析该配置，未连接服务器做实际探测对照。
+- 回滚基线为面板 `1.21.1`（管理前端 `0.4.6`、Node `v1.17.1`）。回滚后已保存的开关值保留在数据库中但不再下发，节点恢复原来的伪装回源行为。
+
 ## 公网来源设备计数与管理详情（1.21.2，已发布）
 
 - 面板保存 Node 快照时只保留公网来源地址，读取旧 Redis 记录时也过滤非公网地址，并按规范化 IP 跨节点去重。旧内网记录在后续节点快照中清理；用户在线设备数和下发给 Node 的跨节点快照使用同一套公网地址。

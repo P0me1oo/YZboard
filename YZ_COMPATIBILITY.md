@@ -2,7 +2,9 @@
 
 本文件记录面板、Node、Xray fork 和 sing-box 的可回滚兼容关系。面板版本与兼容标识必须和对应 Node Release、Xray fork commit 及变更说明一起发布。
 
-## 不计入设备数的来源名单（1.24.0，未发布）
+## 不计入设备数的来源名单（1.24.0，已发布）
+
+- 发布来源：面板 `v1.24.0` / `26c545e34de1f5ae45f487cf1b95ed67b6829351`，Node `v1.20.0` / `2ea9ece0b1ce9e0da044273b487c9d07e27ebf9a`。面板镜像 `ghcr.io/p0me1oo/yzboard:1.24.0-26c545e` 的 manifest 为 `sha256:db24f05dfedd67c6f02896e67d9af4a5201f2d491cb124d23217c1c27d19d270`，与 `1.24.0`、`latest` 一致，两个架构的 OCI 来源提交相同。Node 镜像 `ghcr.io/p0me1oo/yz-agent:v1.20.0` 与其 `latest` 为 `sha256:5fc352f414f522d01b4f8f90a4d88587e5dc031b89520c98114c97868e46d18f`；Node Release 12 个附件的 SHA256 全部匹配，构建信息为上述提交且 `vcs.modified=false`。面板镜像工作流和 Node 标签工作流均通过。
 
 - 修改起点为已发布的面板 `v1.23.0`（`85b1441a23a1fad8a195acb367ed4bb9a56725c2`，发布记录提交 `d6e938369ee1af69dfc12bee2ad60ae7b133b6c6`）。配套 Node `v1.20.0`、管理前端 `0.7.0`；无数据库迁移，Xray fork 和 sing-box fork 未改动。
 - 新增系统设置 `device_ip_exclude`（“节点配置”页），保存时规范化并校验：IPv4、IPv6 地址或网段，最多 256 项，网段最宽 IPv4 `/16`、IPv6 `/48`。名单非空时随节点配置下发同名字段，为空时节点配置与 `1.23.0` 相同；名单内容变化时向 WebSocket 在线节点推送 `sync.config`，只调换顺序不推送。

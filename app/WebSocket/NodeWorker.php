@@ -7,6 +7,7 @@ use App\Models\ServerMachine;
 use App\Services\DeviceStateService;
 use App\Services\NodeRegistry;
 use App\Services\ServerService;
+use App\Support\Setting;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;
@@ -72,6 +73,15 @@ class NodeWorker
         $this->setupTimers();
     }
 
+    /**
+     * 常驻进程不会像请求和队列任务那样重置系统设置实例，需要主动丢弃，
+     * 否则管理员修改的设置要等进程重启才会生效。
+     */
+    public static function refreshSettings(): void
+    {
+        app()->forgetInstance(Setting::class);
+    }
+
     private function setupTimers(): void
     {
         Cache::put(self::HEARTBEAT_CACHE_KEY, time(), self::HEARTBEAT_TTL);
@@ -106,6 +116,7 @@ class NodeWorker
         });
 
         Timer::add(10, function () {
+            self::refreshSettings();
             $pendingNodeIds = Redis::spop('device:push_pending_nodes', 100);
             if (empty($pendingNodeIds)) {
                 return;
@@ -147,6 +158,9 @@ class NodeWorker
         if (isset($conn->authTimer)) {
             Timer::del($conn->authTimer);
         }
+
+        // 认证和首次同步都使用最新的通讯密钥与节点配置设置。
+        self::refreshSettings();
 
         // 判断认证模式
         if (!empty($params['machine_id'])) {

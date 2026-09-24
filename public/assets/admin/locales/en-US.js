@@ -973,6 +973,15 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
         "description": "The WebSocket address nodes use to connect to the panel. Leave empty to use the site URL.",
         "placeholder": "Leave empty to use site URL"
       },
+      "device_ip_exclude": {
+        "title": "Source IPs excluded from device count",
+        "placeholder": "One IP or CIDR per line, e.g. 203.0.113.10 or 203.0.113.0/24",
+        "errors": {
+          "invalid": "Line {{line}} is not a valid IP address or CIDR",
+          "too_broad": "Line {{line}} is too broad: IPv4 must be at least /16, IPv6 at least /48",
+          "too_many": "At most {{max}} entries"
+        }
+      },
       "saving": "Saving..."
     },
     "invite": {

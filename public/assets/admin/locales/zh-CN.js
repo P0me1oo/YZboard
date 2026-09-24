@@ -1567,6 +1567,15 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
         "description": "节点连接面板的 WebSocket 地址，留空则自动使用站点网址。",
         "placeholder": "留空则使用站点网址"
       },
+      "device_ip_exclude": {
+        "title": "不计入设备数的来源 IP",
+        "placeholder": "每行一个 IP 或网段，例如 203.0.113.10 或 203.0.113.0/24",
+        "errors": {
+          "invalid": "第 {{line}} 行不是有效的 IP 地址或网段",
+          "too_broad": "第 {{line}} 行网段过宽，IPv4 至少 /16，IPv6 至少 /48",
+          "too_many": "最多填写 {{max}} 项"
+        }
+      },
       "saving": "保存中...",
       "manage": {
         "title": "节点管理",

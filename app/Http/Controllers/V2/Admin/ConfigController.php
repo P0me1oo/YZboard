@@ -5,7 +5,9 @@ namespace App\Http\Controllers\V2\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ConfigSave;
 use App\Models\SubscribeTemplate;
+use App\Services\DeviceIpExclusion;
 use App\Services\MailService;
+use App\Services\NodeSyncService;
 use App\Services\TelegramService;
 use App\Services\ThemeService;
 use App\Utils\Dict;
@@ -145,6 +147,7 @@ class ConfigController extends Controller
                 'device_limit_mode' => (int) admin_setting('device_limit_mode', 0),
                 'server_ws_enable' => (bool) admin_setting('server_ws_enable', 1),
                 'server_ws_url' => admin_setting('server_ws_url', ''),
+                'device_ip_exclude' => DeviceIpExclusion::entries(),
             ],
             'email' => [
                 'email_host' => admin_setting('email_host'),
@@ -212,6 +215,17 @@ class ConfigController extends Controller
     {
         $data = $request->validated();
 
+        // 设置页整组自动保存，只有名单内容实际变化时才向节点推送新配置，只调换顺序不算变化。
+        $deviceIpExcludeChanged = false;
+        if (array_key_exists(DeviceIpExclusion::SETTING, $data)) {
+            $data[DeviceIpExclusion::SETTING] = DeviceIpExclusion::parse((array) ($data[DeviceIpExclusion::SETTING] ?? []))[0];
+            $next = $data[DeviceIpExclusion::SETTING];
+            $current = DeviceIpExclusion::entries();
+            sort($next);
+            sort($current);
+            $deviceIpExcludeChanged = $next !== $current;
+        }
+
         $templateKeys = [
             'subscribe_template_singbox' => 'singbox',
             'subscribe_template_clash' => 'clash',
@@ -231,6 +245,10 @@ class ConfigController extends Controller
                 $themeService->switch($v);
             }
             admin_setting([$k => $v]);
+        }
+
+        if ($deviceIpExcludeChanged) {
+            NodeSyncService::notifyAllConfigUpdated();
         }
 
         return $this->success(true);

@@ -51,6 +51,7 @@ docker compose up -d
 - [节点运行开关](./docs/node-runtime-switch.md) - 单节点与批量启停、显隐单向联动、同服务器节点隔离与独立部署说明
 - [服务器 agent 管理](./docs/machine-agent-management.md) - 远程更新与重启、运行版本、IPv4 与 IPv6 公网地址、状态与结果显示
 - [REALITY 防盗用模式](./docs/reality-anti-abuse.md) - 伪装回源只放行伪装站点域名，避免节点被当成通用 TLS 转发入口
+- [不计入设备数的来源 IP](./docs/device-ip-exclude.md) - 排除 flux 等转发机出口地址，填写规则、生效方式与版本要求
 - [接口限流与浏览器安全头](./docs/security-hardening.md) - 各端点限流档位、真实 IP 与 `TRUSTED_PROXIES`、CSP 与安全头配置项
 - [YZboard/Xray Compatibility](./YZ_COMPATIBILITY.md) - Fixed Xray fork, Node build, and report compatibility matrix
 

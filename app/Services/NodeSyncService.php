@@ -35,6 +35,16 @@ class NodeSyncService
     }
 
     /**
+     * 全局设置影响所有节点配置时，向全部在线节点推送最新配置。
+     */
+    public static function notifyAllConfigUpdated(): void
+    {
+        foreach (Server::query()->pluck('id') as $nodeId) {
+            self::notifyConfigUpdated((int) $nodeId);
+        }
+    }
+
+    /**
      * Push all users to all nodes in the group
      */
     public static function notifyUsersUpdatedByGroup(int $groupId): void

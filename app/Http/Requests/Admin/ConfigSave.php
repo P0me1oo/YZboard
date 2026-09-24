@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Services\DeviceIpExclusion;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ConfigSave extends FormRequest
@@ -53,6 +55,8 @@ class ConfigSave extends FormRequest
         'device_limit_mode' => 'integer',
         'server_ws_enable' => 'boolean',
         'server_ws_url' => 'nullable|url',
+        'device_ip_exclude' => 'nullable|array',
+        'device_ip_exclude.*' => 'nullable|string|max:64',
         // frontend
         'frontend_theme' => '',
         'frontend_theme_sidebar' => 'nullable|in:dark,light',
@@ -121,6 +125,20 @@ class ConfigSave extends FormRequest
     public function rules()
     {
         return self::RULES;
+    }
+
+    /** 校验不计入设备数的来源名单，逐项给出错误。 */
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator) {
+            $entries = $this->input(DeviceIpExclusion::SETTING);
+            if (!is_array($entries)) {
+                return;
+            }
+            foreach (DeviceIpExclusion::parse($entries)[1] as $error) {
+                $validator->errors()->add(DeviceIpExclusion::SETTING, $error);
+            }
+        });
     }
 
     public function messages()

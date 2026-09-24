@@ -177,7 +177,7 @@ class DeviceStateService
         return count($this->getDeviceIPs($userId));
     }
 
-    /** 获取跨节点去重后的在线公网来源 IP。 */
+    /** 获取跨节点去重后占用设备名额的在线来源 IP：公网且不在排除名单内。 */
     public function getDeviceIPs(int $userId): array
     {
         $ips = [];
@@ -186,7 +186,7 @@ class DeviceStateService
             if ($now - (int) $timestamp > self::TTL || !str_contains($field, ':')) {
                 continue;
             }
-            $public = PublicDeviceIp::normalize(substr($field, strpos($field, ':') + 1));
+            $public = DeviceIpExclusion::countKey(substr($field, strpos($field, ':') + 1));
             if ($public !== null) {
                 $ips[$public] = true;
             }
@@ -235,7 +235,7 @@ class DeviceStateService
     private static function normalizeIPs(array $ips): array
     {
         return array_values(array_unique(array_filter(
-            array_map(fn ($ip) => PublicDeviceIp::normalize((string) $ip), $ips)
+            array_map(fn ($ip) => DeviceIpExclusion::countKey((string) $ip), $ips)
         )));
     }
 

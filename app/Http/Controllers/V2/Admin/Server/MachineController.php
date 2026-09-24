@@ -43,7 +43,7 @@ class MachineController extends Controller
                     'is_active' => $machine->is_active,
                     'last_seen_at' => $machine->last_seen_at,
                     'load_status' => $machine->load_status,
-                    'agent_runtime' => $machine->agent_runtime,
+                    'agent_runtime' => \App\Services\MachineAgentService::runtimeView($machine->agent_runtime),
                     'agent_operation' => $this->operationState($machine),
                     'servers_count' => $machine->servers_count,
                     'created_at' => $machine->created_at,

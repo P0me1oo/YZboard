@@ -192,6 +192,9 @@ class Server extends Model
                 'private_key' => ['type' => 'string', 'default' => null],
                 'short_id' => ['type' => 'string', 'default' => null],
                 'allow_insecure' => ['type' => 'boolean', 'default' => false],
+                // 防盗用模式：Node 把 REALITY 伪装回源改接到只监听本机的专用入口，
+                // 只放行伪装域名的 TLS 流量，避免节点被当成通用 TLS 转发入口。
+                'anti_abuse' => ['type' => 'boolean', 'default' => false],
             ]
         ]
     ];

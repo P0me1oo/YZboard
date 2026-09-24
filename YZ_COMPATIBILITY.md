@@ -2,8 +2,9 @@
 
 本文件记录面板、Node、Xray fork 和 sing-box 的可回滚兼容关系。面板版本与兼容标识必须和对应 Node Release、Xray fork commit 及变更说明一起发布。
 
-## 服务器管理页优化与双栈公网地址（1.23.0，未发布）
+## 服务器管理页优化与双栈公网地址（1.23.0，已发布）
 
+- 发布来源：面板 `v1.23.0` / `85b1441a23a1fad8a195acb367ed4bb9a56725c2`，Node `v1.19.0` / `e642f5966d74adeab6dd59db91d120e1530fdb18`。面板镜像 `ghcr.io/p0me1oo/yzboard:1.23.0-85b1441` 的 manifest 为 `sha256:757369e5f6c1202c7d92520da087859773bd9ce26d2e36644154a1af4987873f`，与 `1.23.0`、`latest` 一致；已核对 `linux/amd64`、`linux/arm64`。Node 镜像 `ghcr.io/p0me1oo/yz-agent:v1.19.0` 的 manifest 为 `sha256:6e5f72f97fbf417f406bd25e6f03bcbb9db3dbcb9d9d226622e2b361cd455291`，与其 `latest` 一致，包含相同两个目标架构。面板和 Node 的标签工作流均通过。
 - 本版一并合入设备数超限上报：Node `v1.19.0` 拒绝新的公网来源时上报 `device` 类型事件，面板转交插件钩子；旧 Node 不上报，旧面板忽略该类型事件，同批其他事件不受影响。无数据库迁移，核心依赖不变。
 - 配套管理前端 `0.6.0`、Node `v1.19.0`；无数据库迁移，Xray fork 和 sing-box fork 未改动。本版合入尚未发布的 `1.22.0`（下节），下节记录的配套和回滚版本以本节为准。
 - 新增 Node 接口 `POST /api/v2/server/machine/address`，沿用机器鉴权。面板按请求来源的地址族，把公网地址及回报时间写入 `agent_runtime` 的 `public_ipv4`、`public_ipv6` 及对应时间字段；控制请求的来源地址同样按地址族记录，不覆盖另一种。管理列表以两种地址中较新的回报为基准，旧 15 分钟以上的一种返回空值；服务器整体离线时保留最后一次地址。原有 `public_ip` 字段继续返回控制请求的来源地址。

@@ -2438,6 +2438,10 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
           "allow_insecure": "允许不安全?"
         },
         "reality_settings": {
+          "anti_abuse": {
+            "label": "防盗用模式",
+            "description": "伪装回源改走节点本机的专用入口，只放行伪装站点的 TLS 域名，其余流量直接阻断"
+          },
           "server_name": {
             "label": "伪装站点(dest)",
             "placeholder": "例如：example.com"
@@ -2928,6 +2932,10 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
       "selectServer": "选择服务器 {{name}}",
       "clearSelection": "取消选择（{{count}}）",
       "queued": "已提交 {{count}} 台，未提交 {{failed}} 台",
+      "inProgress": {
+        "upgrade": "升级中",
+        "restart": "重启中"
+      },
       "results": {
         "updated": "已更新并重启",
         "up_to_date": "已是最新版本",
@@ -2987,7 +2995,6 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
       "high_load": "高负载",
       "online_ratio": "在线",
       "high_load_count": "高负载",
-      "tip": "适合集中查看服务器在线情况、承载节点数量与资源压力。",
       "reset": "重置"
     },
     "overview": {

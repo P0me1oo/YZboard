@@ -2443,6 +2443,10 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
           "allow_insecure": "Allow Insecure?"
         },
         "reality_settings": {
+          "anti_abuse": {
+            "label": "Anti-Abuse Mode",
+            "description": "Camouflage fallback goes through a loopback-only inbound on the node; only TLS domains of the camouflage site are allowed, all other traffic is blocked"
+          },
           "server_name": {
             "label": "Destination Site (dest)",
             "placeholder": "e.g., example.com"
@@ -2899,6 +2903,10 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "selectServer": "Select server {{name}}",
       "clearSelection": "Clear selection ({{count}})",
       "queued": "Submitted: {{count}}; not submitted: {{failed}}",
+      "inProgress": {
+        "upgrade": "Updating",
+        "restart": "Restarting"
+      },
       "results": {
         "updated": "Updated and restarted",
         "up_to_date": "Already up to date",
@@ -2960,7 +2968,6 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "high_load": "High load",
       "online_ratio": "Online",
       "high_load_count": "High load",
-      "tip": "Use this page to quickly review server health, hosted node count, and resource pressure.",
       "reset": "Reset"
     },
     "overview": {

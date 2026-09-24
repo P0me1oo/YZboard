@@ -2,7 +2,17 @@
 
 本文件记录面板、Node、Xray fork 和 sing-box 的可回滚兼容关系。面板版本与兼容标识必须和对应 Node Release、Xray fork commit 及变更说明一起发布。
 
-## REALITY 防盗用模式（1.22.0，未发布）
+## 服务器管理页优化与双栈公网地址（1.23.0，未发布）
+
+- 配套管理前端 `0.6.0`、Node `v1.19.0`；无数据库迁移，Xray fork 和 sing-box fork 未改动。本版合入尚未发布的 `1.22.0`（下节），下节记录的配套和回滚版本以本节为准。
+- 新增 Node 接口 `POST /api/v2/server/machine/address`，沿用机器鉴权。面板按请求来源的地址族，把公网地址及回报时间写入 `agent_runtime` 的 `public_ipv4`、`public_ipv6` 及对应时间字段；控制请求的来源地址同样按地址族记录，不覆盖另一种。管理列表以两种地址中较新的回报为基准，旧 15 分钟以上的一种返回空值；服务器整体离线时保留最后一次地址。原有 `public_ip` 字段继续返回控制请求的来源地址。
+- 兼容性：旧 Node 只发控制请求，面板只能看到它默认使用的那种地址；Node `v1.19.0` 配合旧面板时地址接口返回 404，Node 每小时重试一次，控制通道和节点不受影响。两边可以分别升级，建议先升级面板。
+- 管理前端 `0.6.0` 的界面变化见 [变更记录](CHANGELOG.md)。升级、重启结果只在当前打开的页面里显示，面板保存的任务记录和管理接口不变。
+- 本地验证：`php -d extension=sqlite3 -d extension=pdo_sqlite -d extension=sodium vendor/bin/phpunit` 完整 301 项、3,636 个断言通过，含新增 3 项地址用例；同步管理前端 `0.6.0` 产物后，`node --test tests/admin-dist.test.cjs` 5 项通过。管理前端完整 `npm run verify` 通过（26 项行为测试、31 项浏览器测试，含 29 页对照）；Node `go test ./...` 全部包通过。
+- 未验证：真实双栈服务器上的地址回报效果；未连接任何服务器，也未进行真实后端联调。
+- 回滚基线为已发布的面板 `1.21.2`（管理前端 `0.4.7`）。回滚后旧版本在下一次控制请求时改写 `agent_runtime`，多出的地址字段随之消失，列表回到只显示控制请求来源地址；已保存的 REALITY 防盗用开关值保留在数据库中但不再下发。
+
+## REALITY 防盗用模式（1.22.0，未发布，并入 1.23.0）
 
 - 配套管理前端 `0.5.0`、Node `v1.18.0`；无数据库迁移。Xray fork 和 sing-box fork 未改动。
 - 新增开关存放在节点的 `protocol_settings.reality_settings.anti_abuse`（布尔，默认 `false`），由 `Server::REALITY_CONFIGURATION` 声明。该结构按字段表转换，未声明的键会被静默丢弃，因此必须在模型里声明后才能落库。

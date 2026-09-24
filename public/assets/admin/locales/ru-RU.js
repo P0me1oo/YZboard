@@ -2368,6 +2368,10 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
           "allow_insecure": "Allow Insecure?"
         },
         "reality_settings": {
+          "anti_abuse": {
+            "label": "Защита от злоупотреблений",
+            "description": "Маскировочный трафик идёт во внутренний вход на самом узле: пропускаются только TLS-домены маскировочного сайта, остальной трафик блокируется"
+          },
           "server_name": {
             "label": "Destination Site (dest)",
             "placeholder": "e.g., example.com"
@@ -2814,6 +2818,10 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
       "selectServer": "Выбрать сервер {{name}}",
       "clearSelection": "Снять выбор ({{count}})",
       "queued": "Отправлено: {{count}}; не отправлено: {{failed}}",
+      "inProgress": {
+        "upgrade": "Обновление",
+        "restart": "Перезапуск"
+      },
       "results": {
         "updated": "Обновлено и перезапущено",
         "up_to_date": "Уже установлена последняя версия",
@@ -2875,7 +2883,6 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
       "high_load": "Высокая нагрузка",
       "online_ratio": "Онлайн",
       "high_load_count": "Высокая нагрузка",
-      "tip": "Страница помогает быстро оценить состояние серверов, число размещённых узлов и нагрузку ресурсов.",
       "reset": "Сбросить"
     },
     "overview": {

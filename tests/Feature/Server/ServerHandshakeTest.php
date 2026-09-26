@@ -269,6 +269,41 @@ class ServerHandshakeTest extends TestCase
         $this->assertSame(1, StatServer::count());
     }
 
+    public function test_report_replay_after_seven_days_keeps_deduplication_key(): void
+    {
+        Bus::fake();
+        $server = $this->makeServer(Server::TYPE_HYSTERIA);
+        $user = User::create([
+            'email' => 'hysteria-old-report@example.invalid',
+            'password' => 'unused',
+            'uuid' => '33333333-2222-2222-2222-333333333333',
+            'token' => str_repeat('e', 32),
+            'group_id' => 1,
+            'transfer_enable' => 1024 * 1024 * 1024,
+            'expired_at' => time() + 3600,
+        ]);
+        $payload = [
+            'token' => 'server-token',
+            'node_id' => $server->id,
+            'report_id' => 'old-report-replay-1',
+            'traffic' => [(string) $user->id => [100, 200]],
+        ];
+        $this->postJson('/api/v2/server/report', $payload)->assertOk();
+        $batch = NodeReportBatch::firstOrFail();
+        Redis::shouldReceive('sadd')->once()->andReturn(1);
+        (new ProcessNodeReportBatch($batch->id))->handle();
+
+        $this->travel(8)->days();
+        $this->artisan('node:retry-reports')->assertExitCode(0);
+        $batch->refresh();
+        $this->assertSame(NodeReportBatch::STATUS_PROCESSED, $batch->status);
+        $this->assertNull($batch->traffic);
+        $this->postJson('/api/v2/server/report', $payload)->assertOk();
+        Bus::assertDispatchedTimes(ProcessNodeReportBatch::class, 1);
+        $this->assertSame(1, NodeReportBatch::count());
+        $this->assertSame(100, (int) $user->fresh()->u);
+    }
+
     public function test_empty_online_snapshot_clears_stale_online_state(): void
     {
         Bus::fake();

@@ -31,7 +31,7 @@ class DeviceStateService
 
         $this->removeNodeDevices($nodeId, $userId);
 
-        // Normalize: strip port suffix and deduplicate
+        // 保留完整公网来源，读取设备数时才过滤名单并合并 IPv6 网段。
         $ips = self::normalizeIPs($ips);
 
         if (!empty($ips)) {
@@ -235,7 +235,7 @@ class DeviceStateService
     private static function normalizeIPs(array $ips): array
     {
         return array_values(array_unique(array_filter(
-            array_map(fn ($ip) => DeviceIpExclusion::countKey((string) $ip), $ips)
+            array_map(fn ($ip) => PublicDeviceIp::normalize((string) $ip), $ips)
         )));
     }
 

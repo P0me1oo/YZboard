@@ -42,9 +42,28 @@ class DeviceStateServiceTest extends TestCase
         $devices = (new DeviceStateService())->getUsersDevices([15]);
 
         $this->assertSame(
-            ['2001:4860:4860::8888', '8.8.8.8'],
+            ['2001:4860:4860::', '8.8.8.8'],
             $devices[15]
         );
         $this->assertTrue(array_is_list($devices[15]));
     }
+
+    public function test_ipv6_temporary_addresses_and_old_node_records_share_one_prefix(): void
+    {
+        Redis::shouldReceive('hgetall')->once()->with('user_devices:15')->andReturn([
+            '121:2400:cb00:1:2::10' => time(),
+            '122:2400:cb00:1:2::abcd' => time(),
+            '123:2400:cb00:1:2::' => time(),
+            '124:2400:cb00:1:3::1' => time(),
+            '125:::ffff:8.8.8.8' => time(),
+            '126:8.8.8.8' => time(),
+            '127:2400:cb00:1:4::1' => time() - 301,
+        ]);
+
+        $this->assertSame(
+            ['2400:cb00:1:2::', '2400:cb00:1:3::', '8.8.8.8'],
+            (new DeviceStateService())->getDeviceIPs(15)
+        );
+    }
+
 }

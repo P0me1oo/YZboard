@@ -1568,7 +1568,8 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
         "placeholder": "留空则使用站点网址"
       },
       "device_ip_exclude": {
-        "title": "不计入设备数的来源 IP",
+        "title": "前置服务器 IP",
+        "description": "只填自己的转发机、链式代理前置服务器的出口地址：这些地址不计入设备数；Xray 的 TCP 连接附带真实 IP 时，按真实 IP 计数。",
         "placeholder": "每行一个 IP 或网段，例如 203.0.113.10 或 203.0.113.0/24",
         "errors": {
           "invalid": "第 {{line}} 行不是有效的 IP 地址或网段",

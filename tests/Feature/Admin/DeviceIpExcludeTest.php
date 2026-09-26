@@ -126,7 +126,7 @@ class DeviceIpExcludeTest extends TestCase
         ]);
 
         $service = new DeviceStateService();
-        $this->assertSame(['2606:4700::1111', '8.8.8.8'], $service->getDeviceIPs(15));
+        $this->assertSame(['2606:4700::', '8.8.8.8'], $service->getDeviceIPs(15));
         $this->assertSame(2, $service->getDeviceCount(15));
 
         // 名单变化后按新名单重新判断，无需等待记录过期。
@@ -146,6 +146,34 @@ class DeviceIpExcludeTest extends TestCase
 
         NodeWorker::refreshSettings();
         $this->assertSame(['203.0.114.8'], DeviceIpExclusion::entries());
+    }
+
+    public function test_ipv6_exclusion_checks_full_address_before_grouping(): void
+    {
+        admin_setting(['device_ip_exclude' => ['2400:cb00:1:2::53']]);
+        $this->assertNull(DeviceIpExclusion::countKey('2400:cb00:1:2::53'));
+        $this->assertSame('2400:cb00:1:2::', DeviceIpExclusion::countKey('2400:cb00:1:2::54'));
+        $this->assertSame('2400:cb00:1:2::', DeviceIpExclusion::countKey('[2400:cb00:1:2::54]:443'));
+        $this->assertSame('8.8.8.8', DeviceIpExclusion::countKey('::ffff:8.8.8.8'));
+        admin_setting(['device_ip_exclude' => ['2400:cb00:1:2::/64']]);
+        $this->assertNull(DeviceIpExclusion::countKey('2400:cb00:1:2::54'));
+    }
+
+    public function test_device_snapshot_keeps_full_ipv6_address_before_exclusion(): void
+    {
+        admin_setting(['device_ip_exclude' => ['2400:cb00:1:2::53']]);
+        Redis::shouldReceive('hkeys')->once()->with('user_devices:15')->andReturn([]);
+        Redis::shouldReceive('srem')->once();
+        Redis::shouldReceive('hMset')->once()->withArgs(function ($key, $fields): bool {
+            return $key === 'user_devices:15'
+                && array_keys($fields) === ['121:2400:cb00:1:2::53', '121:2400:cb00:1:2::54'];
+        });
+        Redis::shouldReceive('expire')->twice();
+        Redis::shouldReceive('sadd')->once();
+        Redis::shouldReceive('setex')->once();
+        Redis::shouldReceive('setnx')->once()->andReturn(false);
+
+        (new DeviceStateService())->setDevices(15, 121, ['2400:cb00:1:2::53', '2400:cb00:1:2::54']);
     }
 
     private function makeServer(): Server

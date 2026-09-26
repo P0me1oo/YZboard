@@ -974,7 +974,8 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
         "placeholder": "Leave empty to use site URL"
       },
       "device_ip_exclude": {
-        "title": "Source IPs excluded from device count",
+        "title": "Front server IPs",
+        "description": "Only enter the exit addresses of your own forwarders or proxy chain front servers. These addresses do not count as devices; Xray TCP connections carrying a real client IP count that IP instead.",
         "placeholder": "One IP or CIDR per line, e.g. 203.0.113.10 or 203.0.113.0/24",
         "errors": {
           "invalid": "Line {{line}} is not a valid IP address or CIDR",

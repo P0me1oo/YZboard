@@ -3,7 +3,7 @@
 namespace App\Services;
 
 /**
- * 不计入设备数的来源名单，用于排除转发机出口等共享地址。
+ * 前置服务器名单，用于排除转发机、链式前置机出口等共享地址。
  *
  * 名单保存在系统设置中，随节点配置下发；面板保存和读取设备记录时也按名单过滤，
  * 兼容尚未升级的 Node 和名单修改前留下的记录。
@@ -53,7 +53,7 @@ class DeviceIpExclusion
         return self::parse(self::rawSetting())[0];
     }
 
-    /** 返回占用设备名额的规范化地址；非公网或在名单内时返回 null。 */
+    /** 先按原始地址过滤名单，再将公网 IPv6 合并到 /64；IPv4 仍按单个地址计数。 */
     public static function countKey(string $raw): ?string
     {
         $public = PublicDeviceIp::normalize($raw);
@@ -62,7 +62,7 @@ class DeviceIpExclusion
         }
         $rules = self::rules();
         if ($rules['exact'] === [] && $rules['prefixes'] === []) {
-            return $public;
+            return self::deviceKey($public);
         }
         $binary = inet_pton($public);
         if (isset($rules['exact'][$binary])) {
@@ -74,7 +74,15 @@ class DeviceIpExclusion
             }
         }
 
-        return $public;
+        return self::deviceKey($public);
+    }
+
+    private static function deviceKey(string $public): string
+    {
+        $binary = inet_pton($public);
+        return strlen($binary) === 16
+            ? inet_ntop(substr($binary, 0, 8) . str_repeat("\0", 8))
+            : $public;
     }
 
     private static function rawSetting(): array

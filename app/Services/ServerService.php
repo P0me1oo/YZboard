@@ -437,6 +437,63 @@ class ServerService
         return $result;
     }
 
+    /**
+     * 处理中转入口按实际出网节点拆分的在线来源快照。
+     *
+     * 节点键 0 表示连接由入口自身出网，归到入口节点；其余键只接受以本节点为入口的逻辑子节点。
+     * 面板不落库、不参与设备数限制，只做校验后触发 server.relay_alive.reported 钩子，供插件统计连接。
+     *
+     * @param array<string|int, mixed> $alive 用户 ID => 节点 ID => 来源 IP 列表
+     */
+    public static function processRelayUserAlive(Server $entry, array $alive): void
+    {
+        $children = Server::query()
+            ->where('relay_entry_id', $entry->id)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->flip()
+            ->all();
+
+        $nodes = [];
+        foreach ($alive as $userKey => $userNodes) {
+            $userId = filter_var($userKey, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+            if ($userId === false || !is_array($userNodes)) {
+                continue;
+            }
+            foreach ($userNodes as $nodeKey => $ips) {
+                $nodeId = filter_var($nodeKey, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
+                if ($nodeId === false || !is_array($ips)) {
+                    continue;
+                }
+                $serverId = $nodeId === 0 ? (int) $entry->id : (int) $nodeId;
+                if ($serverId !== (int) $entry->id && !isset($children[$serverId])) {
+                    continue;
+                }
+                $list = $nodes[$serverId][(int) $userId] ?? [];
+                foreach ($ips as $ip) {
+                    if (count($list) >= 64) {
+                        break;
+                    }
+                    if (is_string($ip) && filter_var($ip, FILTER_VALIDATE_IP) !== false && !in_array($ip, $list, true)) {
+                        $list[] = $ip;
+                    }
+                }
+                if ($list !== []) {
+                    $nodes[$serverId][(int) $userId] = $list;
+                }
+            }
+        }
+
+        if ($nodes === []) {
+            return;
+        }
+
+        HookManager::call('server.relay_alive.reported', [
+            'entry_server_id' => (int) $entry->id,
+            'nodes' => $nodes,
+        ]);
+    }
+
     public static function buildNodeConfig(Server $node): array
     {
         $nodeType = $node->type;

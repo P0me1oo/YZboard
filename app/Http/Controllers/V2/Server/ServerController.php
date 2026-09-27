@@ -83,6 +83,11 @@ class ServerController extends Controller
             ServerService::processLimitEvents($node, $limitEvents);
         }
 
+        $relayUserAlive = $request->input('relay_user_alive');
+        if (is_array($relayUserAlive) && !empty($relayUserAlive)) {
+            ServerService::processRelayUserAlive($node, $relayUserAlive);
+        }
+
         return response()->json(['data' => true]);
     }
 }

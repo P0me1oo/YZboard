@@ -16,6 +16,7 @@ use App\Protocols\Shadowrocket;
 use App\Protocols\SingBox;
 use App\Protocols\Stash;
 use App\Protocols\Surge;
+use App\Services\Plugin\HookManager;
 use App\Services\ServerRelayService;
 use App\Services\NodeSyncService;
 use App\Services\ServerService;
@@ -1146,6 +1147,43 @@ class ServerRelayTest extends TestCase
         ]);
 
         Bus::assertNotDispatched(RelayNodeTrafficJob::class);
+    }
+
+    public function test_relay_user_alive_maps_direct_to_entry_and_keeps_only_own_children(): void
+    {
+        Bus::fake();
+
+        $entry = $this->makeEntry();
+        $child = $this->makeChild($entry);
+        $other = $this->makeEntry(['name' => '别的入口', 'port' => '25443', 'server_port' => 25443]);
+        $received = [];
+        HookManager::register('server.relay_alive.reported', function ($payload) use (&$received): void {
+            $received[] = $payload;
+        });
+
+        $this->postJson('/api/v2/server/report', [
+            'token' => 'relay-test-token',
+            'node_id' => $entry->id,
+            'relay_user_alive' => [
+                '7' => [
+                    '0' => ['198.51.100.8', '198.51.100.8', 'not-ip'],
+                    (string) $child->id => ['198.51.100.7', 12],
+                    (string) $other->id => ['198.51.100.9'],
+                ],
+                'bad' => ['0' => ['198.51.100.10']],
+                '8' => ['-1' => ['198.51.100.11'], '0' => 'not-a-list'],
+            ],
+        ])->assertOk()->assertJson(['data' => true]);
+
+        $this->assertCount(1, $received);
+        $this->assertSame($entry->id, $received[0]['entry_server_id']);
+        $this->assertSame([
+            $entry->id => [7 => ['198.51.100.8']],
+            $child->id => [7 => ['198.51.100.7']],
+        ], $received[0]['nodes']);
+
+        ServerService::processRelayUserAlive($entry->fresh(), ['9' => [(string) $other->id => ['198.51.100.12']]]);
+        $this->assertCount(1, $received, '全部条目无效时不触发钩子');
     }
 
     public function test_relay_node_traffic_job_records_node_stats_without_rate(): void

@@ -19,16 +19,18 @@ class UserObserver
   {
     // With $afterCommit = true, isDirty() is always false after commit.
     // Use wasChanged() to detect what was actually modified.
-    $syncFields = ['group_id', 'uuid', 'speed_limit', 'device_limit', 'conn_limit', 'conn_rate_limit', 'banned', 'expired_at', 'transfer_enable', 'u', 'd', 'plan_id'];
+    $syncFields = ['group_id', 'group_ids', 'uuid', 'speed_limit', 'device_limit', 'conn_limit', 'conn_rate_limit', 'banned', 'expired_at', 'transfer_enable', 'u', 'd', 'plan_id'];
     $needsSync = $user->wasChanged($syncFields);
-    $oldGroupId = $user->wasChanged('group_id') ? $user->getOriginal('group_id') : null;
+    $oldGroups = $user->wasChanged(['group_id', 'group_ids'])
+      ? (new User(['group_id' => $user->getOriginal('group_id'), 'group_ids' => $user->getOriginal('group_ids')]))->effectiveGroupIds()
+      : [];
 
     if ($user->wasChanged(['plan_id', 'expired_at'])) {
       $this->recalculateNextResetAt($user);
     }
 
     if ($needsSync) {
-      NodeUserSyncJob::dispatch($user->id, 'updated', $oldGroupId);
+      NodeUserSyncJob::dispatch($user->id, 'updated', $oldGroups);
     }
   }
 
@@ -40,8 +42,8 @@ class UserObserver
 
   public function deleted(User $user): void
   {
-    if ($user->group_id) {
-      NodeUserSyncJob::dispatch($user->id, 'deleted', $user->group_id);
+    if ($user->effectiveGroupIds() !== []) {
+      NodeUserSyncJob::dispatch($user->id, 'deleted', $user->effectiveGroupIds());
     }
   }
 

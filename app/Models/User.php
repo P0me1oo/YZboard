@@ -23,6 +23,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int|null $invite_user_id 邀请人
  * @property int|null $plan_id 订阅ID
  * @property int|null $group_id 权限组ID
+ * @property array|null $group_ids 权限组ID列表
  * @property int|null $transfer_enable 流量(KB)
  * @property int|null $speed_limit 限速Mbps
  * @property int|null $u 上行流量
@@ -80,6 +81,7 @@ class User extends Authenticatable
         'remind_traffic' => 'boolean',
         'commission_auto_check' => 'boolean',
         'commission_rate' => 'float',
+        'group_ids' => 'array',
         'next_reset_at' => 'timestamp',
         'last_reset_at' => 'timestamp',
         // 密钥与恢复码按 APP_KEY 加密存储，数据库泄露时无法直接用于登录
@@ -126,6 +128,13 @@ class User extends Authenticatable
     public function group(): BelongsTo
     {
         return $this->belongsTo(ServerGroup::class, 'group_id', 'id');
+    }
+
+    /** 旧用户仍以单个权限组为准。 */
+    public function effectiveGroupIds(): array
+    {
+        $ids = $this->group_ids ?? ($this->group_id ? [$this->group_id] : []);
+        return array_values(array_unique(array_map('intval', array_filter($ids, fn ($id) => (int) $id > 0))));
     }
 
     // 获取用户邀请码列表

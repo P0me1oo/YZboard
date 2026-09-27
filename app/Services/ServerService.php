@@ -65,7 +65,16 @@ class ServerService
      */
     public static function getAvailableServers(User $user): array
     {
-        $servers = Server::whereJsonContains('group_ids', (string) $user->group_id)
+        $groupIds = $user->effectiveGroupIds();
+        if ($groupIds === []) {
+            return [];
+        }
+        $servers = Server::where(function ($query) use ($groupIds) {
+                foreach ($groupIds as $groupId) {
+                    $query->orWhereJsonContains('group_ids', (string) $groupId)
+                        ->orWhereJsonContains('group_ids', (int) $groupId);
+                }
+            })
             ->where('show', true)
             ->where(function ($query) {
                 $query->whereNull('transfer_enable')
@@ -166,7 +175,12 @@ class ServerService
             return collect();
         }
         $users = User::toBase()
-            ->whereIn('group_id', $groupIds)
+            ->where(function ($query) use ($groupIds) {
+                $query->whereIn('group_id', $groupIds);
+                foreach ($groupIds as $groupId) {
+                    $query->orWhereJsonContains('group_ids', (int) $groupId);
+                }
+            })
             ->whereRaw('u + d < transfer_enable')
             ->where(function ($query) {
                 $query->where('expired_at', '>=', time())

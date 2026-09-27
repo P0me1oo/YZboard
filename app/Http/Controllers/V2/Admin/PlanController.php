@@ -31,12 +31,22 @@ class PlanController extends Controller
             ])
             ->get();
 
+        $groups = \App\Models\ServerGroup::query()->get(['id', 'name'])->keyBy('id');
+        $plans->each(function (Plan $plan) use ($groups): void {
+            $plan->setAttribute('groups', collect($plan->effectiveGroupIds())
+                ->map(fn (int $id) => $groups->get($id))
+                ->filter()
+                ->values());
+        });
+
         return $this->success($plans);
     }
 
     public function save(PlanSave $request)
     {
         $params = $request->validated();
+        $params['group_ids'] = array_values(array_map('intval', $params['group_ids']));
+        $params['group_id'] = $params['group_ids'][0] ?? null;
         
         if ($request->input('id')) {
             $plan = Plan::find($request->input('id'));
@@ -48,18 +58,17 @@ class PlanController extends Controller
             DB::beginTransaction();
             try {
                 if ($request->input('force_update')) {
-                    $syncGroupIds = User::query()
-                        ->where('plan_id', $plan->id)
-                        ->whereNotNull('group_id')
-                        ->distinct()
-                        ->pluck('group_id')
-                        ->map(fn ($groupId) => (int) $groupId)
-                        ->all();
+                    User::query()->where('plan_id', $plan->id)
+                        ->get(['group_id', 'group_ids'])
+                        ->each(function (User $user) use (&$syncGroupIds) {
+                            $syncGroupIds = array_merge($syncGroupIds, $user->effectiveGroupIds());
+                        });
                     User::where('plan_id', $plan->id)->update([
                         'group_id' => $params['group_id'],
+                        'group_ids' => json_encode($params['group_ids']),
                         'transfer_enable' => $params['transfer_enable'] * 1073741824,
-                        'speed_limit' => $params['speed_limit'],
-                        'device_limit' => $params['device_limit'],
+                        'speed_limit' => $params['speed_limit'] ?? null,
+                        'device_limit' => $params['device_limit'] ?? null,
                         'conn_limit' => $params['conn_limit'] ?? null,
                         'conn_rate_limit' => $params['conn_rate_limit'] ?? null,
                     ]);
@@ -73,7 +82,7 @@ class PlanController extends Controller
             }
 
             if ($request->input('force_update')) {
-                $syncGroupIds[] = (int) $params['group_id'];
+                $syncGroupIds = array_merge($syncGroupIds, $params['group_ids']);
                 NodeGroupSyncJob::dispatch(array_values(array_unique(array_filter($syncGroupIds))));
             }
             return $this->success(true);

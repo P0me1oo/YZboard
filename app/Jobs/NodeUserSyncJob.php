@@ -17,11 +17,20 @@ class NodeUserSyncJob implements ShouldQueue
     public $tries = 2;
     public $timeout = 10;
 
+    // 保留旧属性，兼容升级前已排队的任务。
+    private ?int $oldGroupId = null;
+    private array $oldGroupIds = [];
+
     public function __construct(
         private readonly int $userId,
         private readonly string $action,
-        private readonly ?int $oldGroupId = null
+        array|int|null $oldGroups = null
     ) {
+        if (is_array($oldGroups)) {
+            $this->oldGroupIds = $oldGroups;
+        } else {
+            $this->oldGroupId = $oldGroups;
+        }
         $this->onQueue('node_sync');
     }
 
@@ -30,15 +39,17 @@ class NodeUserSyncJob implements ShouldQueue
         $user = User::find($this->userId);
 
         if ($this->action === 'updated' || $this->action === 'created') {
-            if ($this->oldGroupId) {
-                NodeSyncService::notifyUserRemovedFromGroup($this->userId, $this->oldGroupId);
+            $oldGroups = $this->oldGroupIds ?: ($this->oldGroupId ? [$this->oldGroupId] : []);
+            if ($oldGroups !== []) {
+                NodeSyncService::notifyUserRemovedFromGroups($this->userId, $oldGroups);
             }
             if ($user) {
                 NodeSyncService::notifyUserChanged($user);
             }
         } elseif ($this->action === 'deleted') {
-            if ($this->oldGroupId) {
-                NodeSyncService::notifyUserRemovedFromGroup($this->userId, $this->oldGroupId);
+            $oldGroups = $this->oldGroupIds ?: ($this->oldGroupId ? [$this->oldGroupId] : []);
+            if ($oldGroups !== []) {
+                NodeSyncService::notifyUserRemovedFromGroups($this->userId, $oldGroups);
             }
         }
     }

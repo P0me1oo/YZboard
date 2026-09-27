@@ -9,12 +9,23 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 
 class PlanSave extends FormRequest
 {
+    private bool $legacyGroupInput = false;
+
     /**
      * Determine if the user is authorized to make this request.
      */
     public function authorize(): bool
     {
         return true;
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if (!$this->exists('group_ids')) {
+            $this->legacyGroupInput = true;
+            $groupId = $this->input('group_id');
+            $this->merge(['group_ids' => $groupId ? [(int) $groupId] : []]);
+        }
     }
 
     /**
@@ -31,6 +42,8 @@ class PlanSave extends FormRequest
             'prices' => 'nullable|array',
             'prices.*' => 'nullable|numeric|min:0',
             'group_id' => 'integer|nullable',
+            'group_ids' => 'array',
+            'group_ids.*' => 'required|integer|distinct' . ($this->legacyGroupInput ? '' : '|exists:v2_server_group,id'),
             'speed_limit' => 'integer|nullable|min:0',
             'device_limit' => 'integer|nullable|min:0',
             'conn_limit' => 'integer|nullable|min:0',
@@ -133,6 +146,7 @@ class PlanSave extends FormRequest
             'prices.*.numeric' => '价格必须是数字',
             'prices.*.min' => '价格不能为负数',
             'group_id.integer' => '权限组ID必须是整数',
+            'group_ids.array' => '权限组格式错误',
             'speed_limit.integer' => '速度限制必须是整数',
             'speed_limit.min' => '速度限制不能为负数',
             'device_limit.integer' => '设备限制必须是整数',

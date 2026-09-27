@@ -66,14 +66,11 @@ class NodeSyncService
      */
     public static function notifyUsersUpdatedByGroups(array $groupIds): void
     {
-        $groupIds = collect($groupIds)
-            ->map(fn ($groupId) => (int) $groupId)
-            ->filter(fn ($groupId) => $groupId > 0)
-            ->unique()
-            ->values();
-
-        foreach ($groupIds as $groupId) {
-            self::notifyUsersUpdatedByGroup($groupId);
+        foreach (self::serversInGroups($groupIds) as $server) {
+            if (!self::isNodeOnline($server->id)) continue;
+            self::push($server->id, 'sync.users', [
+                'users' => ServerService::getAvailableUsers($server)->toArray(),
+            ]);
         }
     }
 
@@ -82,10 +79,11 @@ class NodeSyncService
      */
     public static function notifyUserChanged(User $user): void
     {
-        if (!$user->group_id)
+        $groupIds = $user->effectiveGroupIds();
+        if ($groupIds === [])
             return;
 
-        $servers = Server::whereJsonContains('group_ids', (string) $user->group_id)->get();
+        $servers = self::serversInGroups($groupIds);
         foreach ($servers as $server) {
             // 落地只使用内部中转凭据，不接收普通用户增量。
             if ($server->isRelayChild())
@@ -122,8 +120,12 @@ class NodeSyncService
      */
     public static function notifyUserRemovedFromGroup(int $userId, int $groupId): void
     {
-        $servers = Server::whereJsonContains('group_ids', (string) $groupId)
-            ->get();
+        self::notifyUserRemovedFromGroups($userId, [$groupId]);
+    }
+
+    public static function notifyUserRemovedFromGroups(int $userId, array $groupIds): void
+    {
+        $servers = self::serversInGroups($groupIds);
 
         foreach ($servers as $server) {
             if ($server->isRelayChild())
@@ -137,6 +139,19 @@ class NodeSyncService
                 'users' => [['id' => $userId]],
             ]);
         }
+    }
+
+    private static function serversInGroups(array $groupIds)
+    {
+        if (array_filter($groupIds, fn ($id) => (int) $id > 0) === []) {
+            return collect();
+        }
+        return Server::where(function ($query) use ($groupIds) {
+            foreach (array_unique(array_filter(array_map('intval', $groupIds))) as $groupId) {
+                $query->orWhereJsonContains('group_ids', (string) $groupId)
+                    ->orWhereJsonContains('group_ids', (int) $groupId);
+            }
+        })->get();
     }
 
     /**

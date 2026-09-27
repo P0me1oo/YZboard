@@ -14,7 +14,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  *
  * @property int $id
  * @property string $name 套餐名称
- * @property int|null $group_id 权限组ID
+     * @property int|null $group_id 权限组ID
+ * @property array|null $group_ids 权限组ID列表
  * @property int $transfer_enable 流量(KB)
  * @property int|null $speed_limit 速度限制Mbps
  * @property bool $show 是否显示
@@ -77,6 +78,7 @@ class Plan extends Model
 
     protected $fillable = [
         'group_id',
+        'group_ids',
         'transfer_enable',
         'name',
         'speed_limit',
@@ -100,6 +102,7 @@ class Plan extends Model
         'created_at' => 'timestamp',
         'updated_at' => 'timestamp',
         'group_id' => 'integer',
+        'group_ids' => 'array',
         'prices' => 'array',
         'tags' => 'array',
         'reset_traffic_method' => 'integer',
@@ -314,6 +317,13 @@ class Plan extends Model
     public function group(): HasOne
     {
         return $this->hasOne(ServerGroup::class, 'id', 'group_id');
+    }
+
+    /** 旧套餐仍以单个权限组为准。 */
+    public function effectiveGroupIds(): array
+    {
+        $ids = $this->group_ids ?? ($this->group_id ? [$this->group_id] : []);
+        return array_values(array_unique(array_map('intval', array_filter($ids, fn ($id) => (int) $id > 0))));
     }
 
     public function orders(): HasMany

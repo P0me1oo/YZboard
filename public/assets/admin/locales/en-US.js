@@ -833,9 +833,9 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
           "placeholder": "Enter plan name"
         },
         "group": {
-          "label": "Server Group",
+          "label": "Permission Groups",
           "add": "Add Group",
-          "placeholder": "Select server group"
+          "placeholder": "Select permission groups"
         },
         "transfer": {
           "label": "Traffic",

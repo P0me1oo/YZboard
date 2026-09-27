@@ -775,9 +775,9 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
           "placeholder": "Введите название тарифа"
         },
         "group": {
-          "label": "Группа серверов",
+          "label": "Группы доступа",
           "add": "Добавить группу",
-          "placeholder": "Выберите группу серверов"
+          "placeholder": "Выберите группы доступа"
         },
         "transfer": {
           "label": "Трафик",

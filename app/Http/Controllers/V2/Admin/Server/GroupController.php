@@ -18,12 +18,13 @@ class GroupController extends Controller
     {
         $serverGroups = ServerGroup::query()
             ->orderedForDisplay()
-            ->withCount('users')
             ->get();
 
         // 只在需要时手动加载server_count
         $serverGroups->each(function ($group) {
             $group->setAttribute('server_count', $group->server_count);
+            $group->setAttribute('users_count', User::where('group_id', $group->id)
+                ->orWhereJsonContains('group_ids', (int) $group->id)->count());
         });
 
         return $this->success($serverGroups);
@@ -81,14 +82,15 @@ class GroupController extends Controller
         if (!$serverGroup) {
             return $this->fail([400202, '组不存在']);
         }
-        if (Server::whereJsonContains('group_ids', $groupId)->exists()) {
+        if (Server::whereJsonContains('group_ids', (string) $groupId)
+            ->orWhereJsonContains('group_ids', (int) $groupId)->exists()) {
             return $this->fail([400, '该组已被节点所使用，无法删除']);
         }
 
-        if (Plan::where('group_id', $groupId)->exists()) {
+        if (Plan::where('group_id', $groupId)->orWhereJsonContains('group_ids', (int) $groupId)->exists()) {
             return $this->fail([400, '该组已被订阅所使用，无法删除']);
         }
-        if (User::where('group_id', $groupId)->exists()) {
+        if (User::where('group_id', $groupId)->orWhereJsonContains('group_ids', (int) $groupId)->exists()) {
             return $this->fail([400, '该组已被用户所使用，无法删除']);
         }
         return $this->success($serverGroup->delete());

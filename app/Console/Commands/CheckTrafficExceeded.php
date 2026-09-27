@@ -22,40 +22,45 @@ class CheckTrafficExceeded extends Command
 
         $pendingUserIds = array_map('intval', Redis::spop('traffic:pending_check', $count));
 
-        $exceededUsers = User::toBase()
+        $exceededUsers = User::query()
             ->whereIn('id', $pendingUserIds)
             ->whereRaw('u + d >= transfer_enable')
             ->where('transfer_enable', '>', 0)
             ->where('banned', 0)
-            ->select(['id', 'group_id'])
+            ->select(['id', 'group_id', 'group_ids'])
             ->get();
 
         if ($exceededUsers->isEmpty()) {
             return;
         }
 
-        $groupedUsers = $exceededUsers->groupBy('group_id');
+        $usersByGroup = [];
+        foreach ($exceededUsers as $user) {
+            foreach ($user->effectiveGroupIds() as $groupId) {
+                $usersByGroup[$groupId][$user->id] = ['id' => $user->id];
+            }
+        }
+        if ($usersByGroup === []) return;
+
+        $servers = Server::where(function ($query) use ($usersByGroup) {
+            foreach (array_keys($usersByGroup) as $groupId) {
+                $query->orWhereJsonContains('group_ids', (string) $groupId)
+                    ->orWhereJsonContains('group_ids', (int) $groupId);
+            }
+        })->get(['id', 'group_ids']);
         $notifiedCount = 0;
-
-        foreach ($groupedUsers as $groupId => $users) {
-            if (!$groupId) {
-                continue;
+        foreach ($servers as $server) {
+            if (!NodeSyncService::isNodeOnline($server->id)) continue;
+            $users = [];
+            foreach ($server->group_ids ?? [] as $groupId) {
+                $users += $usersByGroup[(int) $groupId] ?? [];
             }
-
-            $userIdsInGroup = $users->pluck('id')->toArray();
-            $servers = Server::whereJsonContains('group_ids', (string) $groupId)->get();
-
-            foreach ($servers as $server) {
-                if (!NodeSyncService::isNodeOnline($server->id)) {
-                    continue;
-                }
-
-                NodeSyncService::push($server->id, 'sync.user.delta', [
-                    'action' => 'remove',
-                    'users' => array_map(fn($id) => ['id' => $id], $userIdsInGroup),
-                ]);
-                $notifiedCount++;
-            }
+            if ($users === []) continue;
+            NodeSyncService::push($server->id, 'sync.user.delta', [
+                'action' => 'remove',
+                'users' => array_values($users),
+            ]);
+            $notifiedCount++;
         }
 
         $this->info("Checked " . count($pendingUserIds) . " users, notified {$notifiedCount} nodes for " . $exceededUsers->count() . " exceeded users.");

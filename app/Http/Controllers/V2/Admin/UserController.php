@@ -103,7 +103,16 @@ class UserController extends Controller
 
         // 处理数组值的 'in' 操作
         if (is_array($value)) {
-            $query->whereIn($field === 'group_ids' ? 'group_id' : $field, $value);
+            if ($field === 'group_ids') {
+                $query->where(function ($query) use ($value) {
+                    $query->whereIn('group_id', $value);
+                    foreach ($value as $groupId) {
+                        $query->orWhereJsonContains('group_ids', (int) $groupId);
+                    }
+                });
+            } else {
+                $query->whereIn($field, $value);
+            }
             return;
         }
 
@@ -197,7 +206,10 @@ class UserController extends Controller
         $users = $userModel->orderBy('id', 'desc')
             ->paginate($pageSize, ['*'], 'page', $current);
 
-        $users->getCollection()->transform(function ($user): array {
+        $groups = \App\Models\ServerGroup::query()->get(['id', 'name'])->keyBy('id');
+        $users->getCollection()->transform(function ($user) use ($groups): array {
+            $user->setAttribute('groups', collect($user->effectiveGroupIds())
+                ->map(fn (int $id) => $groups->get($id))->filter()->values());
             return self::transformUserData($user);
         });
 
@@ -268,6 +280,7 @@ class UserController extends Controller
                 return $this->fail([400202, '订阅计划不存在']);
             }
             $params['group_id'] = $plan->group_id;
+            $params['group_ids'] = $plan->effectiveGroupIds();
             if ((int) $plan->id !== (int) $user->plan_id) {
                 // 换套餐时流量、限速、设备数和连接数按套餐同步，与订单开通保持一致；同一次编辑里手填的值优先。
                 $params += [
@@ -590,13 +603,9 @@ class UserController extends Controller
         } // all: ignore filter/sort
 
         try {
-            $groupIds = (clone $builder)
-                ->reorder()
-                ->whereNotNull('group_id')
-                ->distinct()
-                ->pluck('group_id')
-                ->map(fn ($groupId) => (int) $groupId)
-                ->all();
+            $groupIds = (clone $builder)->reorder()->get(['group_id', 'group_ids'])
+                ->flatMap(fn (User $user) => $user->effectiveGroupIds())
+                ->unique()->all();
             $builder->update([
                 'banned' => 1
             ]);

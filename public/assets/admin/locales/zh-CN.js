@@ -834,9 +834,9 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
           "placeholder": "请输入套餐名称"
         },
         "group": {
-          "label": "服务器分组",
+          "label": "权限组",
           "add": "添加分组",
-          "placeholder": "请选择服务器分组"
+          "placeholder": "请选择权限组（可多选）"
         },
         "transfer": {
           "label": "流量",

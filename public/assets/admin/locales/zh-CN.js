@@ -2810,6 +2810,13 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
       "action": "动作",
       "actions": "操作",
       "matchRules": "匹配{{count}}条规则",
+      "portTag": "端口 {{value}}",
+      "networkTag": {
+        "tcp": "仅 TCP",
+        "udp": "仅 UDP"
+      },
+      "nodes": "{{count}} 个节点",
+      "applyToNewNodes": "新增节点默认应用",
       "action_value": {
         "title": "动作值",
         "dns": "DNS: {{value}}",
@@ -2830,8 +2837,22 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
       "create": "创建路由",
       "remarks": "备注",
       "remarksPlaceholder": "请输入备注",
-      "match": "匹配规则",
+      "match": "匹配值（域名或 IP）",
       "matchPlaceholder": "example.com\n*.example.com",
+      "protocol": "协议",
+      "protocolAny": "不限",
+      "port": "目标端口",
+      "portPlaceholder": "25,465,6881-6889",
+      "network": "网络类型",
+      "networkAny": "TCP 和 UDP",
+      "networkTcp": "仅 TCP",
+      "networkUdp": "仅 UDP",
+      "nodes": "应用节点",
+      "nodesPlaceholder": "选择节点",
+      "nodesEmpty": "暂无节点",
+      "selectAllNodes": "全选",
+      "clearNodes": "清空",
+      "applyToNewNodes": "新增节点默认应用",
       "action": "动作",
       "actionPlaceholder": "请选择动作",
       "dns": "DNS服务器",
@@ -2841,7 +2862,9 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
       "cancel": "取消",
       "submit": "提交",
       "validation": {
-        "remarks": "请输入有效的备注"
+        "remarks": "请输入有效的备注",
+        "condition": "请至少填写一个匹配条件",
+        "port": "目标端口“{{value}}”格式不正确，应为 1-65535 的端口或范围"
       }
     },
     "toolbar": {

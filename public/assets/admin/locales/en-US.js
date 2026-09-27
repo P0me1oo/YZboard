@@ -2781,6 +2781,13 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "action": "Action",
       "actions": "Actions",
       "matchRules": "Match {{count}} rules",
+      "portTag": "Port {{value}}",
+      "networkTag": {
+        "tcp": "TCP only",
+        "udp": "UDP only"
+      },
+      "nodes": "{{count}} nodes",
+      "applyToNewNodes": "Default for new nodes",
       "action_value": {
         "title": "Action Value",
         "dns": "DNS: {{value}}",
@@ -2801,8 +2808,22 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "create": "Create Route",
       "remarks": "Remarks",
       "remarksPlaceholder": "Please enter remarks",
-      "match": "Match Rules",
+      "match": "Match (domain or IP)",
       "matchPlaceholder": "example.com\n*.example.com",
+      "protocol": "Protocol",
+      "protocolAny": "Any",
+      "port": "Destination Port",
+      "portPlaceholder": "25,465,6881-6889",
+      "network": "Network",
+      "networkAny": "TCP and UDP",
+      "networkTcp": "TCP only",
+      "networkUdp": "UDP only",
+      "nodes": "Nodes",
+      "nodesPlaceholder": "Select nodes",
+      "nodesEmpty": "No nodes",
+      "selectAllNodes": "Select all",
+      "clearNodes": "Clear",
+      "applyToNewNodes": "Apply to new nodes by default",
       "action": "Action",
       "actionPlaceholder": "Please select action",
       "dns": "DNS Server",
@@ -2812,7 +2833,9 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "cancel": "Cancel",
       "submit": "Submit",
       "validation": {
-        "remarks": "Please enter valid remarks"
+        "remarks": "Please enter valid remarks",
+        "condition": "Fill in at least one match condition",
+        "port": "Invalid destination port \"{{value}}\": use a port or range within 1-65535"
       }
     },
     "toolbar": {

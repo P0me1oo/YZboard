@@ -5,6 +5,7 @@ namespace App\Http\Requests\Admin;
 
 use App\Models\Server;
 use App\Services\ServerRelayService;
+use App\Services\ServerRouteService;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -21,6 +22,14 @@ class ServerSave extends FormRequest
         // 编辑时保留已有值，包括仍按 Xray 解释的历史空值。
         if (!$this->input('id') && !$this->filled('kernel_type')) {
             $this->merge(['kernel_type' => Server::defaultKernelType($this->input('type'))]);
+        }
+
+        // 新建节点未提交路由时，选中“新增节点默认应用”的路由；显式提交（包括空列表）以提交值为准。
+        if (!$this->input('id') && !$this->has('route_ids')) {
+            $defaultRouteIds = ServerRouteService::defaultRouteIdsForNewNode();
+            if ($defaultRouteIds !== []) {
+                $this->merge(['route_ids' => $defaultRouteIds]);
+            }
         }
     }
 

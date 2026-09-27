@@ -2696,6 +2696,13 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
       "action": "Действие",
       "actions": "Действия",
       "matchRules": "Правил совпадения: {{count}}",
+      "portTag": "Порт {{value}}",
+      "networkTag": {
+        "tcp": "Только TCP",
+        "udp": "Только UDP"
+      },
+      "nodes": "Узлов: {{count}}",
+      "applyToNewNodes": "По умолчанию для новых узлов",
       "action_value": {
         "title": "Значение действия",
         "dns": "DNS: {{value}}",
@@ -2716,8 +2723,22 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
       "create": "Создать маршрут",
       "remarks": "Примечание",
       "remarksPlaceholder": "Введите примечание",
-      "match": "Правила совпадения",
+      "match": "Совпадение (домен или IP)",
       "matchPlaceholder": "example.com\n*.example.com",
+      "protocol": "Протокол",
+      "protocolAny": "Любой",
+      "port": "Порт назначения",
+      "portPlaceholder": "25,465,6881-6889",
+      "network": "Сеть",
+      "networkAny": "TCP и UDP",
+      "networkTcp": "Только TCP",
+      "networkUdp": "Только UDP",
+      "nodes": "Узлы",
+      "nodesPlaceholder": "Выберите узлы",
+      "nodesEmpty": "Нет узлов",
+      "selectAllNodes": "Выбрать все",
+      "clearNodes": "Очистить",
+      "applyToNewNodes": "Применять к новым узлам по умолчанию",
       "action": "Действие",
       "actionPlaceholder": "Выберите действие",
       "dns": "DNS Сервер",
@@ -2727,7 +2748,9 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
       "cancel": "Отмена",
       "submit": "Отправить",
       "validation": {
-        "remarks": "Введите корректное примечание"
+        "remarks": "Введите корректное примечание",
+        "condition": "Укажите хотя бы одно условие совпадения",
+        "port": "Неверный порт назначения «{{value}}»: укажите порт или диапазон 1-65535"
       }
     },
     "toolbar": {

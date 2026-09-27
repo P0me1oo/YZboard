@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Http\Client\Pool;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
@@ -10,8 +12,62 @@ class DeviceIpLocationService
 {
     public function lookup(string $ip): array
     {
-        $location = $this->localLocation($ip);
-        return $location + $this->lookupAsn($ip);
+        return $this->lookupMany([$ip])[$ip];
+    }
+
+    /** 同一用户的公网 IP 并发查询，避免逐个等待外部接口超时。 */
+    public function lookupMany(array $ips): array
+    {
+        $unknown = ['asn' => null, 'as_name' => null];
+        $result = [];
+        $pending = [];
+        foreach (array_unique($ips) as $ip) {
+            $result[$ip] = $this->localLocation($ip) + $unknown;
+            if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                continue;
+            }
+            $key = 'device_asn:v1:' . hash('sha256', $ip);
+            try {
+                $cached = Cache::get($key);
+                if (is_array($cached)) {
+                    $result[$ip] = array_replace($result[$ip], $cached);
+                } else {
+                    $pending[$ip] = $key;
+                }
+            } catch (\Throwable) {
+                // 缓存故障不影响本地 IP 信息。
+            }
+        }
+        if ($pending === []) return $result;
+
+        try {
+            $date = CarbonImmutable::now('UTC');
+            $allowed = Cache::lock('device_asn:quota_lock', 5)->block(1, function () use ($date, $pending): array {
+                if (Cache::get('device_asn:backoff')) return [];
+                $quotaKey = 'device_asn:quota:' . $date->toDateString();
+                $used = (int) Cache::get($quotaKey, 0);
+                $ips = array_slice(array_keys($pending), 0, max(0, 1000 - $used));
+                if ($ips === [] || !Cache::put($quotaKey, $used + count($ips), $date->addDay()->startOfDay())) {
+                    return [];
+                }
+                return $ips;
+            });
+            if ($allowed === []) return $result;
+
+            $responses = Http::pool(function (Pool $pool) use ($allowed): void {
+                foreach ($allowed as $ip) {
+                    $pool->as($ip)->acceptJson()->connectTimeout(1)->timeout(2)
+                        ->withOptions(['allow_redirects' => false])
+                        ->get('https://api.ip2location.io/', ['ip' => $ip, 'format' => 'json']);
+                }
+            }, 8);
+            foreach ($allowed as $ip) {
+                $result[$ip] = array_replace($result[$ip], $this->parseAsn($ip, $responses[$ip] ?? null, $pending[$ip]));
+            }
+        } catch (\Throwable) {
+            try { Cache::put('device_asn:backoff', true, 300); } catch (\Throwable) {}
+        }
+        return $result;
     }
 
     private function localLocation(string $ip): array
@@ -33,31 +89,18 @@ class DeviceIpLocationService
         }
     }
 
-    private function lookupAsn(string $ip): array
+    private function parseAsn(string $ip, mixed $response, string $key): array
     {
         $unknown = ['asn' => null, 'as_name' => null];
-        if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-            return $unknown;
-        }
-        $key = 'device_asn:v1:' . hash('sha256', $ip);
         try {
-            $cached = Cache::get($key);
-            if (is_array($cached)) return $cached;
-
-            $date = CarbonImmutable::now('UTC');
-            $allowed = Cache::lock('device_asn:quota_lock', 5)->block(1, function () use ($date): bool {
-                $quotaKey = 'device_asn:quota:' . $date->toDateString();
-                $used = (int) Cache::get($quotaKey, 0);
-                if ($used >= 1000 || Cache::get('device_asn:backoff')) return false;
-                return Cache::put($quotaKey, $used + 1, $date->addDay()->startOfDay());
-            });
-            if (!$allowed) return $unknown;
-
-            $response = Http::acceptJson()->connectTimeout(2)->timeout(4)
-                ->withOptions(['allow_redirects' => false])
-                ->get('https://api.ip2location.io/', ['ip' => $ip, 'format' => 'json']);
+            if (!$response instanceof Response) {
+                Cache::put('device_asn:backoff', true, 300);
+                Cache::put($key, $unknown, 300);
+                return $unknown;
+            }
             if ($response->status() === 429) {
                 Cache::put('device_asn:backoff', true, CarbonImmutable::tomorrow('UTC'));
+                Cache::put($key, $unknown, 300);
                 return $unknown;
             }
             if (!$response->successful() || strlen($response->body()) > 65536) {

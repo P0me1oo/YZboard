@@ -38,4 +38,25 @@ class DeviceIpLocationServiceTest extends TestCase
         $this->assertNull($service->lookup('1.1.1.1')['asn']);
         Http::assertSentCount(1);
     }
+
+    public function test_multiple_addresses_are_queried_once_and_cached_separately(): void
+    {
+        Cache::flush();
+        Http::fake(function ($request) {
+            $ip = $request->data()['ip'];
+            return Http::response(['ip' => $ip, 'asn' => $ip === '8.8.8.8' ? 15169 : 13335, 'as' => '测试网络']);
+        });
+
+        $service = app(DeviceIpLocationService::class);
+        $result = $service->lookupMany(['8.8.8.8', '1.1.1.1', '8.8.8.8', '192.168.1.1']);
+
+        $this->assertSame(['8.8.8.8', '1.1.1.1', '192.168.1.1'], array_keys($result));
+        $this->assertSame('AS15169', $result['8.8.8.8']['asn']);
+        $this->assertSame('AS13335', $result['1.1.1.1']['asn']);
+        $this->assertNull($result['192.168.1.1']['asn']);
+        Http::assertSentCount(2);
+
+        $this->assertSame($result, $service->lookupMany(['8.8.8.8', '1.1.1.1', '192.168.1.1']));
+        Http::assertSentCount(2);
+    }
 }

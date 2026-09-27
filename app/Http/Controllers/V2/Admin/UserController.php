@@ -247,8 +247,8 @@ class UserController extends Controller
             return response()->json(['message' => '用户不存在'], 404);
         }
         $result = [];
-        foreach ($devices->getDeviceIPs((int) $data['id']) as $ip) {
-            $result[] = ['ip' => $ip] + $locations->lookup($ip);
+        foreach ($locations->lookupMany($devices->getDeviceIPs((int) $data['id'])) as $ip => $location) {
+            $result[] = ['ip' => $ip] + $location;
         }
         return response()->json(['data' => $result]);
     }

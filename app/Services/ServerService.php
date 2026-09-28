@@ -285,6 +285,62 @@ class ServerService
         );
     }
 
+    /** 将节点上报的真实用户连接数交给插件，旧版节点不提供时不推断。 */
+    public static function processConnectionCounts(Server $node, array $counts): void
+    {
+        $normalized = [];
+        foreach ($counts as $userKey => $value) {
+            $userId = filter_var($userKey, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+            if ($userId !== false && filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) !== false) {
+                $normalized[(int) $userId] = (int) $value;
+            }
+        }
+        if ($normalized !== []) {
+            HookManager::call('server.connection_counts.reported', [
+                'node_id' => (int) $node->id,
+                'counts' => $normalized,
+            ]);
+        }
+    }
+
+    /** 中转入口的真实连接数按实际出网节点拆分；节点 0 代表入口直连。 */
+    public static function processRelayConnectionCounts(Server $entry, array $counts): bool
+    {
+        if ($counts === []) {
+            return false;
+        }
+        $children = Server::query()
+            ->where('relay_entry_id', $entry->id)
+            ->pluck('id')->map(fn ($id) => (int) $id)->flip()->all();
+        $nodes = [];
+        foreach ($counts as $userKey => $userNodes) {
+            $userId = filter_var($userKey, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+            if ($userId === false || !is_array($userNodes)) {
+                continue;
+            }
+            foreach ($userNodes as $nodeKey => $value) {
+                $nodeId = filter_var($nodeKey, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
+                $count = filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+                if ($nodeId === false || $count === false) {
+                    continue;
+                }
+                $serverId = $nodeId === 0 ? (int) $entry->id : (int) $nodeId;
+                if ($serverId !== (int) $entry->id && !isset($children[$serverId])) {
+                    continue;
+                }
+                $nodes[$serverId][(int) $userId] = (int) $count;
+            }
+        }
+        if ($nodes === []) {
+            return false;
+        }
+        HookManager::call('server.relay_connection_counts.reported', [
+            'entry_server_id' => (int) $entry->id,
+            'nodes' => $nodes,
+        ]);
+        return true;
+    }
+
     /**
      * 处理节点负载状态汇报
      */

@@ -1213,6 +1213,43 @@ class ServerRelayTest extends TestCase
         $this->assertSame(['relay_alive', 'alive'], $order, '插件处理整入口设备快照前必须已收到拆分数据');
     }
 
+    public function test_real_connection_counts_are_validated_and_relay_counts_take_precedence(): void
+    {
+        Bus::fake();
+        $entry = $this->makeEntry();
+        $child = $this->makeChild($entry);
+        $other = $this->makeEntry(['name' => '别的入口', 'port' => '25443', 'server_port' => 25443]);
+        $received = [];
+        HookManager::register('server.connection_counts.reported', function ($payload) use (&$received): void {
+            $received[] = ['aggregate', $payload];
+        });
+        HookManager::register('server.relay_connection_counts.reported', function ($payload) use (&$received): void {
+            $received[] = ['relay', $payload];
+        });
+
+        $this->postJson('/api/v2/server/report', [
+            'token' => 'relay-test-token',
+            'node_id' => $entry->id,
+            'connection_counts' => ['7' => 18],
+            'relay_connection_counts' => [
+                '7' => ['0' => 3, (string) $child->id => 15, (string) $other->id => 9, '-1' => 2],
+                'bad' => ['0' => 5],
+                '8' => ['0' => 0],
+            ],
+        ])->assertOk();
+        $this->assertSame([['relay', [
+            'entry_server_id' => $entry->id,
+            'nodes' => [$entry->id => [7 => 3], $child->id => [7 => 15]],
+        ]]], $received);
+
+        $this->postJson('/api/v2/server/report', [
+            'token' => 'relay-test-token',
+            'node_id' => $entry->id,
+            'connection_counts' => ['7' => 18, '8' => 0, 'bad' => 4],
+        ])->assertOk();
+        $this->assertSame(['aggregate', ['node_id' => $entry->id, 'counts' => [7 => 18]]], $received[1]);
+    }
+
     public function test_relay_node_traffic_job_records_node_stats_without_rate(): void
     {
         $entry = $this->makeEntry();

@@ -64,6 +64,14 @@ class ServerController extends Controller
             ServerService::processRelayUserAlive($node, $relayUserAlive);
         }
 
+        $relayCounts = $request->input('relay_connection_counts');
+        $hasRelayCounts = is_array($relayCounts)
+            && ServerService::processRelayConnectionCounts($node, $relayCounts);
+        $counts = $request->input('connection_counts');
+        if (!$hasRelayCounts && is_array($counts)) {
+            ServerService::processConnectionCounts($node, $counts);
+        }
+
         $alive = $request->input('alive');
         if (is_array($alive)) {
             ServerService::processAlive($node->id, $alive);

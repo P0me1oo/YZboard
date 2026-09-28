@@ -58,6 +58,12 @@ class ServerController extends Controller
             is_array($request->input('relay_user_traffic')) ? $request->input('relay_user_traffic') : []
         );
 
+        // 先交出按实际节点拆分的在线来源，插件处理整入口设备快照时已能识别该入口。
+        $relayUserAlive = $request->input('relay_user_alive');
+        if (is_array($relayUserAlive) && !empty($relayUserAlive)) {
+            ServerService::processRelayUserAlive($node, $relayUserAlive);
+        }
+
         $alive = $request->input('alive');
         if (is_array($alive)) {
             ServerService::processAlive($node->id, $alive);
@@ -81,11 +87,6 @@ class ServerController extends Controller
         $limitEvents = $request->input('limit_events');
         if (is_array($limitEvents) && !empty($limitEvents)) {
             ServerService::processLimitEvents($node, $limitEvents);
-        }
-
-        $relayUserAlive = $request->input('relay_user_alive');
-        if (is_array($relayUserAlive) && !empty($relayUserAlive)) {
-            ServerService::processRelayUserAlive($node, $relayUserAlive);
         }
 
         return response()->json(['data' => true]);

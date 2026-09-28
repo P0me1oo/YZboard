@@ -16,6 +16,7 @@ use App\Protocols\Shadowrocket;
 use App\Protocols\SingBox;
 use App\Protocols\Stash;
 use App\Protocols\Surge;
+use App\Services\DeviceStateService;
 use App\Services\Plugin\HookManager;
 use App\Services\ServerRelayService;
 use App\Services\NodeSyncService;
@@ -1184,6 +1185,32 @@ class ServerRelayTest extends TestCase
 
         ServerService::processRelayUserAlive($entry->fresh(), ['9' => [(string) $other->id => ['198.51.100.12']]]);
         $this->assertCount(1, $received, '全部条目无效时不触发钩子');
+    }
+
+    public function test_relay_user_alive_is_handed_over_before_entry_devices(): void
+    {
+        Bus::fake();
+
+        $entry = $this->makeEntry();
+        $order = [];
+        HookManager::register('server.relay_alive.reported', function () use (&$order): void {
+            $order[] = 'relay_alive';
+        });
+        $this->mock(DeviceStateService::class, function (MockInterface $mock) use (&$order): void {
+            $mock->shouldReceive('replaceNodeDevices')->once()->andReturnUsing(function () use (&$order): void {
+                $order[] = 'alive';
+            });
+        });
+        Redis::shouldReceive('sadd')->andReturn(1);
+
+        $this->postJson('/api/v2/server/report', [
+            'token' => 'relay-test-token',
+            'node_id' => $entry->id,
+            'alive' => ['7' => ['198.51.100.8']],
+            'relay_user_alive' => ['7' => ['0' => ['198.51.100.8']]],
+        ])->assertOk();
+
+        $this->assertSame(['relay_alive', 'alive'], $order, '插件处理整入口设备快照前必须已收到拆分数据');
     }
 
     public function test_relay_node_traffic_job_records_node_stats_without_rate(): void

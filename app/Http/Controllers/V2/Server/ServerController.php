@@ -36,7 +36,17 @@ class ServerController extends Controller
         }
 
         return response()->json([
-            'websocket' => $websocket
+            'websocket' => $websocket,
+            'settings' => [
+                'push_interval' => (int) admin_setting('server_push_interval', 60),
+                'pull_interval' => (int) admin_setting('server_pull_interval', 60),
+            ],
+            'realtime' => [
+                'version' => 1,
+                'state_interval' => 1,
+                'fallback_interval' => 10,
+                'traffic_ack' => true,
+            ],
         ]);
     }
 
@@ -46,6 +56,11 @@ class ServerController extends Controller
     public function report(Request $request): JsonResponse
     {
         $node = $request->attributes->get('node_info');
+
+        if ($request->boolean('realtime')) {
+            $receipt = app(NodeReportService::class)->acceptRealtime($node, $request->all());
+            return response()->json(['data' => true, 'receipt' => $receipt]);
+        }
 
         ServerService::touchNode($node);
         ServerService::touchPush($node);
@@ -68,6 +83,9 @@ class ServerController extends Controller
         $hasRelayCounts = is_array($relayCounts)
             && ServerService::processRelayConnectionCounts($node, $relayCounts);
         $counts = $request->input('connection_counts');
+        if (is_array($counts)) {
+            app(\App\Services\UserConnectionService::class)->replace($node, $counts);
+        }
         if (!$hasRelayCounts && is_array($counts)) {
             ServerService::processConnectionCounts($node, $counts);
         }

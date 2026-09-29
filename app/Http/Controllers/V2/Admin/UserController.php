@@ -207,9 +207,13 @@ class UserController extends Controller
             ->paginate($pageSize, ['*'], 'page', $current);
 
         $groups = \App\Models\ServerGroup::query()->get(['id', 'name'])->keyBy('id');
-        $users->getCollection()->transform(function ($user) use ($groups): array {
+        $connections = app(\App\Services\UserConnectionService::class)->forUsers($users->getCollection());
+        $users->getCollection()->transform(function ($user) use ($groups, $connections): array {
             $user->setAttribute('groups', collect($user->effectiveGroupIds())
                 ->map(fn (int $id) => $groups->get($id))->filter()->values());
+            foreach ($connections[$user->id] as $key => $value) {
+                $user->setAttribute($key, $value);
+            }
             return self::transformUserData($user);
         });
 
@@ -239,7 +243,7 @@ class UserController extends Controller
         return $this->success($user);
     }
 
-    /** 返回当前实际计数的公网来源 IP 及本地数据库可查到的信息。 */
+    /** 返回当前实际计数的公网来源 IP，位置优先外部查询、失败回退本地。 */
     public function devices(Request $request, DeviceStateService $devices, DeviceIpLocationService $locations): JsonResponse
     {
         $data = $request->validate(['id' => 'required|integer|min:1']);

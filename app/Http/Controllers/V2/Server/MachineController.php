@@ -15,6 +15,19 @@ use Illuminate\Http\Request;
  */
 class MachineController extends Controller
 {
+    public function runtimeBegin(Request $request): JsonResponse
+    {
+        $data = $request->validate(['run' => ['required', 'string', 'regex:/\A[a-f0-9]{32,64}\z/']]);
+        $machine = $this->authenticateMachine($request);
+        return response()->json(['data' => app(\App\Services\RealtimeStateStore::class)->begin('machine:' . $machine->id, $data['run'])]);
+    }
+
+    public function runtimeState(Request $request): JsonResponse
+    {
+        $machine = $this->authenticateMachine($request);
+        return response()->json(['data' => app(\App\Services\MachineStateService::class)->accept($machine, $request->all())]);
+    }
+
     public function control(Request $request): JsonResponse
     {
         $report = $request->validate([

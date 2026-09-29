@@ -6,6 +6,9 @@ use App\Models\Server;
 use App\Services\DeviceStateService;
 use App\Services\NodeRegistry;
 use App\Services\ServerService;
+use App\Services\NodeControlStateService;
+use App\Services\NodeReportService;
+use App\Services\NodeStateService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;
@@ -26,6 +29,7 @@ class NodeEventHandlers
      */
     public static function handleNodeStatus(TcpConnection $conn, int $nodeId, array $data): void
     {
+        if (!empty($conn->realtime)) return;
         $node = Server::find($nodeId);
         if (!$node) return;
 
@@ -43,6 +47,7 @@ class NodeEventHandlers
      */
     public static function handleDeviceReport(TcpConnection $conn, int $nodeId, array $data): void
     {
+        if (!empty($conn->realtime)) return;
         $service = app(DeviceStateService::class);
 
         if (isset($data['devices']) && is_array($data['devices'])) {
@@ -86,6 +91,10 @@ class NodeEventHandlers
     {
         $node = Server::find($nodeId);
         if (!$node) return;
+        if (!empty(NodeRegistry::get($nodeId)?->realtime)) {
+            NodeRegistry::send($nodeId, 'sync.devices', app(NodeControlStateService::class)->devices($node));
+            return;
+        }
 
         $users = ServerService::getAvailableUsers($node);
         $userIds = $users->pluck('id')->toArray();
@@ -98,12 +107,39 @@ class NodeEventHandlers
         Log::debug("[WS] Pushed device state to node#{$nodeId}: " . count($devices) . " users");
     }
 
+    public static function handleRuntimeState(TcpConnection $conn, int $nodeId, array $data): void
+    {
+        if (empty($conn->realtime)) return;
+        $node = Server::findOrFail($nodeId);
+        $receipt = app(NodeStateService::class)->accept($node, $data);
+        $conn->send(json_encode(['event' => 'state.ack', 'data' => ['node_id' => $nodeId, 'request_id' => $data['request_id'] ?? null] + $receipt]));
+    }
+
+    public static function handleTrafficReport(TcpConnection $conn, int $nodeId, array $data): void
+    {
+        if (empty($conn->realtime)) return;
+        $receipt = app(NodeReportService::class)->acceptRealtime(Server::findOrFail($nodeId), $data);
+        $conn->send(json_encode(['event' => 'traffic.ack', 'data' => ['node_id' => $nodeId, 'request_id' => $data['request_id'] ?? null] + $receipt]));
+    }
+
+    public static function handleSyncRequest(TcpConnection $conn, int $nodeId, array $data = []): void
+    {
+        $node = Server::find($nodeId);
+        if ($node) self::pushFullSync($conn, $node);
+    }
+
     /**
      * Push full config + users to newly connected node
      */
     public static function pushFullSync(TcpConnection $conn, Server $node): void
     {
         $nodeId = (int) $node->id;
+        if (!empty($conn->realtime)) {
+            $control = app(NodeControlStateService::class);
+            NodeRegistry::send($nodeId, 'sync.snapshot', $control->snapshot($node));
+            NodeRegistry::send($nodeId, 'sync.devices', $control->devices($node));
+            return;
+        }
 
         // Push config
         $config = ServerService::buildNodeConfig($node);

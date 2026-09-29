@@ -18,19 +18,24 @@ use Workerman\Worker;
 class NodeWorker
 {
     private const AUTH_TIMEOUT = 10;
-    private const PING_INTERVAL = 55;
+    private const PING_INTERVAL = 5;
+    private const IDLE_TIMEOUT = 20;
 
     public const HEARTBEAT_CACHE_KEY = 'ws_server:heartbeat';
     private const HEARTBEAT_INTERVAL = 10;
     private const HEARTBEAT_TTL = 30;
 
     private Worker $worker;
+    private ?AdminRealtimeWorker $admin = null;
 
     private array $handlers = [
         'pong' => [NodeEventHandlers::class, 'handlePong'],
         'node.status' => [NodeEventHandlers::class, 'handleNodeStatus'],
         'report.devices' => [NodeEventHandlers::class, 'handleDeviceReport'],
         'request.devices' => [NodeEventHandlers::class, 'handleDeviceRequest'],
+        'runtime.state' => [NodeEventHandlers::class, 'handleRuntimeState'],
+        'report.traffic' => [NodeEventHandlers::class, 'handleTrafficReport'],
+        'request.sync' => [NodeEventHandlers::class, 'handleSyncRequest'],
     ];
 
     public function __construct(string $host, int $port)
@@ -38,6 +43,7 @@ class NodeWorker
         $this->worker = new Worker("websocket://{$host}:{$port}");
         $this->worker->count = 1;
         $this->worker->name = 'xboard-ws-server';
+        $this->admin = app(AdminRealtimeWorker::class);
     }
 
     public function run(): void
@@ -84,6 +90,7 @@ class NodeWorker
 
     private function setupTimers(): void
     {
+        Timer::add(0.1, function () { $this->admin?->tick(); });
         Cache::put(self::HEARTBEAT_CACHE_KEY, time(), self::HEARTBEAT_TTL);
         Timer::add(self::HEARTBEAT_INTERVAL, function () {
             Cache::put(self::HEARTBEAT_CACHE_KEY, time(), self::HEARTBEAT_TTL);
@@ -113,13 +120,21 @@ class NodeWorker
                     }
                 }
             }
+            foreach ($this->worker->connections as $connection) {
+                if (!empty($connection->realtime) && time() - ($connection->lastMessageAt ?? time()) > self::IDLE_TIMEOUT) {
+                    $connection->close();
+                }
+            }
         });
 
-        Timer::add(10, function () {
+        Timer::add(1, function () {
             self::refreshSettings();
             $pendingNodeIds = Redis::spop('device:push_pending_nodes', 100);
             if (empty($pendingNodeIds)) {
                 return;
+            }
+            if (in_array(0, array_map('intval', $pendingNodeIds), true)) {
+                $pendingNodeIds = array_unique(array_merge($pendingNodeIds, NodeRegistry::getConnectedNodeIds()));
             }
 
             $service = app(DeviceStateService::class);
@@ -154,6 +169,15 @@ class NodeWorker
         }
 
         parse_str($queryString, $params);
+        $conn->realtime = ($params['realtime'] ?? '') === '1';
+        $conn->lastMessageAt = time();
+        if (($params['client'] ?? '') === 'admin') {
+            $conn->adminPending = true;
+            $conn->realtime = false;
+            $conn->maxSendBufferSize = 2 * 1024 * 1024;
+            $conn->onBufferFull = function ($connection) { $connection->close(); };
+            return;
+        }
 
         if (isset($conn->authTimer)) {
             Timer::del($conn->authTimer);
@@ -200,7 +224,7 @@ class NodeWorker
         NodeRegistry::add($nodeId, $conn);
         Cache::put("node_ws_alive:{$nodeId}", true, 86400);
 
-        app(DeviceStateService::class)->clearAllNodeDevices($nodeId);
+        // 通道连接变化不代表代理连接变化，保留最后快照直至新快照或过期。
 
         Log::debug("[WS] Node#{$nodeId} connected", [
             'remote' => $conn->getRemoteIp(),
@@ -213,6 +237,9 @@ class NodeWorker
         ]));
 
         NodeEventHandlers::pushFullSync($conn, $node);
+        if ($conn->realtime) {
+            $conn->send(json_encode(['event' => 'sync.ready']));
+        }
     }
 
     /**
@@ -242,11 +269,9 @@ class NodeWorker
 
         // 把同一个连接注册到该机器下所有节点
         $nodeIds = [];
-        $deviceService = app(DeviceStateService::class);
         foreach ($nodes as $node) {
             NodeRegistry::add($node->id, $conn);
             Cache::put("node_ws_alive:{$node->id}", true, 86400);
-            $deviceService->clearAllNodeDevices($node->id);
             $nodeIds[] = $node->id;
         }
 
@@ -272,89 +297,88 @@ class NodeWorker
         foreach ($nodes as $node) {
             NodeEventHandlers::pushFullSync($conn, $node);
         }
+        if ($conn->realtime) {
+            $conn->send(json_encode(['event' => 'sync.ready']));
+        }
     }
 
     public function onMessage(TcpConnection $conn, $data): void
     {
         $msg = json_decode($data, true);
-        if (!is_array($msg)) {
+        if (!is_array($msg) || !is_string($msg['event'] ?? null)) return;
+        if (!empty($conn->adminPending) || !empty($conn->adminAuthenticated)) {
+            try {
+                $this->admin?->handle($conn, $msg);
+            } catch (\Throwable) {
+                $conn->close(json_encode(['event' => 'state.error']));
+            }
             return;
         }
+        $event = $msg['event'];
+        $body = $msg['data'] ?? [];
+        if (!is_array($body)) return;
+        $machineState = $event === 'machine.state' && !empty($conn->machineId) && !empty($conn->realtime);
+        $conn->lastMessageAt = time();
 
-        $event = $msg['event'] ?? '';
-
-        // 机器连接：从消息中读取 node_id 来分派到具体节点
-        if (!empty($conn->machineNodeIds)) {
+        if (!empty($conn->machineId)) {
+            if (NodeRegistry::getMachine((int) $conn->machineId) !== $conn) return;
             if ($event === 'pong') {
-                foreach ($conn->machineNodeIds as $nid) {
+                foreach ($conn->machineNodeIds ?? [] as $nid) {
                     Cache::put("node_ws_alive:{$nid}", true, 86400);
                 }
                 return;
             }
-
-            $nodeId = (int) ($msg['data']['node_id'] ?? 0);
-            if ($nodeId <= 0 || !in_array($nodeId, $conn->machineNodeIds, true)) {
+            $nodeId = $machineState ? 0 : (int) ($body['node_id'] ?? 0);
+            if (!$machineState && ($nodeId <= 0 || !in_array($nodeId, $conn->machineNodeIds ?? [], true))) return;
+        } else {
+            $nodeId = (int) ($conn->nodeId ?? 0);
+        }
+        if (!$machineState && (!$nodeId || NodeRegistry::get($nodeId) !== $conn || !isset($this->handlers[$event]))) return;
+        try {
+            if ($machineState) {
+                $receipt = app(\App\Services\MachineStateService::class)->accept(ServerMachine::findOrFail($conn->machineId), $body);
+                $conn->send(json_encode(['event' => 'state.ack', 'data' => ['node_id' => 0, 'request_id' => $body['request_id'] ?? null] + $receipt]));
+                $this->admin?->changed();
                 return;
             }
-            if (isset($this->handlers[$event])) {
-                $handler = $this->handlers[$event];
-                $handler($conn, $nodeId, $msg['data'] ?? []);
-            }
-            return;
-        }
-
-        // 旧模式：单节点
-        $nodeId = $conn->nodeId ?? null;
-        if (isset($this->handlers[$event]) && $nodeId) {
-            $handler = $this->handlers[$event];
-            $handler($conn, $nodeId, $msg['data'] ?? []);
+            ($this->handlers[$event])($conn, $nodeId, $body);
+            if (in_array($event, ['runtime.state', 'report.traffic'], true)) $this->admin?->changed();
+        } catch (\Throwable $exception) {
+            $code = $exception instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface
+                ? $exception->getStatusCode()
+                : ($exception instanceof \Illuminate\Validation\ValidationException ? 422 : 500);
+            $errorEvent = match ($event) {
+                'runtime.state', 'machine.state' => 'state.error',
+                'report.traffic' => 'traffic.error',
+                default => 'error',
+            };
+            $conn->send(json_encode(['event' => $errorEvent, 'data' => [
+                'node_id' => $nodeId,
+                'request_id' => $body['request_id'] ?? null,
+                'report_id' => is_string($body['report_id'] ?? null) ? $body['report_id'] : null,
+                'sequence' => $body['sequence'] ?? null,
+                'code' => $code,
+            ]]));
+            Log::warning('[WS] Node request failed', ['node_id' => $nodeId, 'event' => $event, 'code' => $code]);
         }
     }
 
     public function onClose(TcpConnection $conn): void
     {
-        $service = app(DeviceStateService::class);
-
-        // 机器模式：清理所有关联节点
-        if (!empty($conn->machineNodeIds)) {
-            $machineId = $conn->machineId ?? 'unknown';
-            foreach ($conn->machineNodeIds as $nodeId) {
-                if (NodeRegistry::get($nodeId) !== $conn) {
-                    continue;
-                }
+        $this->admin?->close($conn);
+        // 只移除通道登记。代理连接仍可能存在，设备状态由新快照或有效期管理。
+        if (!empty($conn->machineId)) {
+            foreach ($conn->machineNodeIds ?? [] as $nodeId) {
+                if (NodeRegistry::get($nodeId) !== $conn) continue;
                 NodeRegistry::remove($nodeId, $conn);
                 Cache::forget("node_ws_alive:{$nodeId}");
-
-                $service->clearAllNodeDevices($nodeId);
             }
-
-            if (!empty($conn->machineId)) {
-                NodeRegistry::removeMachine((int) $conn->machineId, $conn);
-            }
-
-            Log::debug("[WS] Machine#{$machineId} disconnected", [
-                'nodes' => $conn->machineNodeIds,
-                'total' => NodeRegistry::count(),
-                'machines' => NodeRegistry::machineCount(),
-            ]);
+            NodeRegistry::removeMachine((int) $conn->machineId, $conn);
             return;
         }
-
-        // 旧模式：单节点
-        if (!empty($conn->nodeId)) {
-            $nodeId = $conn->nodeId;
-            if (NodeRegistry::get($nodeId) !== $conn) {
-                return;
-            }
-            NodeRegistry::remove($nodeId, $conn);
-            Cache::forget("node_ws_alive:{$nodeId}");
-
-            $affectedUserIds = $service->clearAllNodeDevices($nodeId);
-
-            Log::debug("[WS] Node#{$nodeId} disconnected", [
-                'total' => NodeRegistry::count(),
-                'affected_users' => count($affectedUserIds),
-            ]);
+        if (!empty($conn->nodeId) && NodeRegistry::get($conn->nodeId) === $conn) {
+            NodeRegistry::remove($conn->nodeId, $conn);
+            Cache::forget("node_ws_alive:{$conn->nodeId}");
         }
     }
 
@@ -378,8 +402,13 @@ class NodeWorker
 
         $prefix = config('database.redis.options.prefix', '');
         $channel = $prefix . 'node:push';
+        $stateChannel = $prefix . 'realtime:changed';
 
-        $redis->subscribe([$channel], function ($chan, $message) {
+        $redis->subscribe([$channel, $stateChannel], function ($chan, $message) use ($stateChannel) {
+            if ($chan === $stateChannel) {
+                $this->admin?->changed();
+                return;
+            }
             $payload = json_decode($message, true);
             if (!is_array($payload)) {
                 return;
@@ -410,6 +439,12 @@ class NodeWorker
                 return;
             }
 
+            $connection = NodeRegistry::get((int) $nodeId);
+            if ($connection && !empty($connection->realtime) && in_array($event, ['sync.config', 'sync.users', 'sync.user.delta'], true)) {
+                $node = Server::find((int) $nodeId);
+                if ($node) NodeEventHandlers::pushFullSync($connection, $node);
+                return;
+            }
             $sent = NodeRegistry::send((int) $nodeId, $event, $data);
             if ($sent) {
                 Log::debug("[WS] Pushed {$event} to node#{$nodeId}");

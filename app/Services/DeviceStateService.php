@@ -128,6 +128,7 @@ class DeviceStateService
         }
 
         $oldDevices = $this->getNodeDevices($nodeId);
+        $changed = array_diff(array_keys($oldDevices), array_keys($normalized)) !== [];
         foreach (array_diff(array_keys($oldDevices), array_keys($normalized)) as $userId) {
             $this->removeNodeDevices($nodeId, (int) $userId);
             $this->notifyUpdate((int) $userId, true);
@@ -138,6 +139,7 @@ class DeviceStateService
             $oldIps = $oldDevices[$userId] ?? [];
             sort($newIps);
             sort($oldIps);
+            $changed = $changed || $newIps !== $oldIps;
             $this->setDevices($userId, $nodeId, $newIps, $newIps !== $oldIps);
         }
 
@@ -145,6 +147,11 @@ class DeviceStateService
             Redis::del(self::NODE_INDEX_PREFIX . $nodeId);
         }
         Redis::setex(self::NODE_INDEX_SEEN_PREFIX . $nodeId, self::TTL * 2, 1);
+        if ($changed) {
+            // 零是全体在线节点的通知标记，兼容 HTTP 与长连接处于不同进程。
+            // 集合自动合并高频变化，接收时仍按各节点的可用用户范围生成快照。
+            Redis::sadd('device:push_pending_nodes', 0);
+        }
     }
 
     /**
@@ -178,11 +185,22 @@ class DeviceStateService
     }
 
     /** 获取跨节点去重后占用设备名额的在线来源 IP：公网且不在排除名单内。 */
-    public function getDeviceIPs(int $userId): array
+    public function getDeviceIPs(int $userId, bool $legacyOnly = false): array
     {
         $ips = [];
         $now = time();
-        foreach (Redis::hgetall(self::PREFIX . $userId) as $field => $timestamp) {
+        $records = Redis::hgetall(self::PREFIX . $userId);
+        $sources = [];
+        foreach ($records as $field => $timestamp) {
+            $nodeId = (int) strstr((string) $field, ':', true);
+            if ($nodeId > 0) $sources['node:' . $nodeId] = true;
+        }
+        $states = app(RealtimeStateStore::class)->readMany(array_keys($sources));
+        foreach ($records as $field => $timestamp) {
+            $nodeId = (int) strstr((string) $field, ':', true);
+            $state = $states['node:' . $nodeId] ?? null;
+            if ($legacyOnly && $state !== null) continue;
+            if ($state !== null && !$state['fresh']) continue;
             if ($now - (int) $timestamp > self::TTL || !str_contains($field, ':')) {
                 continue;
             }

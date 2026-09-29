@@ -9,6 +9,28 @@ use Illuminate\Support\Str;
 
 class NodeReportService
 {
+    /** 长连接接收确认只在原有持久化入口成功返回后发出。 */
+    public function acceptRealtime(Server $node, array $payload): array
+    {
+        $data = \Illuminate\Support\Facades\Validator::make($payload, [
+            'report_id' => 'required|string|max:128',
+            'traffic' => 'sometimes|array',
+            'relay_traffic' => 'sometimes|array',
+            'relay_user_traffic' => 'sometimes|array',
+            'limit_events' => 'sometimes|array',
+        ])->validate();
+        $batch = $this->accept(
+            $node, $data['report_id'], $data['traffic'] ?? [],
+            $data['relay_traffic'] ?? [], $data['relay_user_traffic'] ?? []
+        );
+        ServerService::touchNode($node);
+        ServerService::touchPush($node);
+        if (!empty($data['limit_events']) && (!$batch || $batch->wasRecentlyCreated)) {
+            ServerService::processLimitEvents($node, $data['limit_events']);
+        }
+        return ['report_id' => $data['report_id'], 'accepted' => true];
+    }
+
     public function accept(
         Server $node,
         ?string $reportId,

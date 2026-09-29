@@ -18,6 +18,9 @@ class ServerRoute
         ], function ($route) {
             $route->match(['GET', 'POST'], 'handshake', [ServerController::class, 'handshake']);
             $route->post('report', [ServerController::class, 'report']);
+            $route->post('realtime/begin', [\App\Http\Controllers\V2\Server\RealtimeController::class, 'begin']);
+            $route->post('realtime/state', [\App\Http\Controllers\V2\Server\RealtimeController::class, 'state']);
+            $route->get('realtime/sync', [\App\Http\Controllers\V2\Server\RealtimeController::class, 'sync']);
             $route->get('config', [UniProxyController::class, 'config']);
             $route->get('user', [UniProxyController::class, 'user']);
             $route->post('push', [UniProxyController::class, 'push']);
@@ -33,6 +36,8 @@ class ServerRoute
             $route->post('status', [MachineController::class, 'status']);
             $route->post('control', [MachineController::class, 'control']);
             $route->post('address', [MachineController::class, 'address']);
+            $route->post('realtime/begin', [MachineController::class, 'runtimeBegin']);
+            $route->post('realtime/state', [MachineController::class, 'runtimeState']);
         });
     }
 }

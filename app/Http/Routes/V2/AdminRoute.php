@@ -31,6 +31,8 @@ class AdminRoute
             'prefix' => admin_setting('secure_path', admin_setting('frontend_admin_path', hash('crc32b', config('app.key')))),
             'middleware' => ['admin', 'log', 'throttle:admin-api'],
         ], function ($router) {
+            $router->post('/realtime/ticket', [\App\Http\Controllers\V2\Admin\RealtimeController::class, 'ticket']);
+            $router->post('/realtime/snapshot', [\App\Http\Controllers\V2\Admin\RealtimeController::class, 'snapshot']);
             // Config
             $router->group([
                 'prefix' => 'config'

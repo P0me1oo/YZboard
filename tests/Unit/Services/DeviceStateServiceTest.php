@@ -8,6 +8,22 @@ use Tests\TestCase;
 
 class DeviceStateServiceTest extends TestCase
 {
+    public function test_device_changes_notify_other_nodes_but_repeated_snapshot_does_not(): void
+    {
+        $service = \Mockery::mock(DeviceStateService::class)->makePartial();
+        $service->shouldReceive('getNodeDevices')->andReturn([15 => ['8.8.8.8']]);
+        $service->shouldReceive('setDevices')->twice();
+        $service->shouldReceive('removeNodeDevices')->once()->with(1, 15);
+        $service->shouldReceive('notifyUpdate')->once()->with(15, true);
+        Redis::shouldReceive('setex')->times(3)->with('node_devices_seen:1', 600, 1);
+        Redis::shouldReceive('del')->once()->with('node_devices:1');
+        // 换 IP 和最后一个设备下线各通知一次；重复的相同快照不广播。
+        Redis::shouldReceive('sadd')->twice()->with('device:push_pending_nodes', 0)->andReturn(1);
+        $service->replaceNodeDevices(1, [15 => ['8.8.8.8']]);
+        $service->replaceNodeDevices(1, [15 => ['1.1.1.1']]);
+        $service->replaceNodeDevices(1, []);
+    }
+
     public function test_device_count_ignores_private_relay_and_deduplicates_public_ips_across_nodes(): void
     {
         Redis::shouldReceive('hgetall')

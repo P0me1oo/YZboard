@@ -22,11 +22,11 @@ class DeviceIpLocationService
         $result = [];
         $pending = [];
         foreach (array_unique($ips) as $ip) {
-            $result[$ip] = $this->localLocation($ip) + $unknown;
+            $result[$ip] = $this->localLocation($ip) + $unknown + ['location_source' => 'local'];
             if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
                 continue;
             }
-            $key = 'device_asn:v1:' . hash('sha256', $ip);
+            $key = 'device_location:v2:' . hash('sha256', $ip);
             try {
                 $cached = Cache::get($key);
                 if (is_array($cached)) {
@@ -62,7 +62,7 @@ class DeviceIpLocationService
                 }
             }, 8);
             foreach ($allowed as $ip) {
-                $result[$ip] = array_replace($result[$ip], $this->parseAsn($ip, $responses[$ip] ?? null, $pending[$ip]));
+                $result[$ip] = array_replace($result[$ip], $this->parseLocation($ip, $responses[$ip] ?? null, $pending[$ip]));
             }
         } catch (\Throwable) {
             try { Cache::put('device_asn:backoff', true, 300); } catch (\Throwable) {}
@@ -89,7 +89,7 @@ class DeviceIpLocationService
         }
     }
 
-    private function parseAsn(string $ip, mixed $response, string $key): array
+    private function parseLocation(string $ip, mixed $response, string $key): array
     {
         $unknown = ['asn' => null, 'as_name' => null];
         try {
@@ -122,7 +122,18 @@ class DeviceIpLocationService
                 'asn' => $number !== false ? 'AS' . $number : null,
                 'as_name' => is_string($name) ? mb_substr(trim($name), 0, 200) : null,
             ];
-            Cache::put($key, $result, 7 * 86400);
+            $places = [];
+            foreach (['country_name', 'region_name', 'city_name'] as $field) {
+                $place = $body[$field] ?? null;
+                if (is_string($place) && trim($place) !== '' && trim($place) !== '-') {
+                    $places[] = mb_substr(trim($place), 0, 200);
+                }
+            }
+            if ($places !== []) {
+                $result['region'] = implode(' ', array_unique($places));
+                $result['location_source'] = 'ip2location';
+            }
+            Cache::put($key, $result, $places !== [] ? 7 * 86400 : 300);
             return $result;
         } catch (\Throwable) {
             try { Cache::put('device_asn:backoff', true, 300); } catch (\Throwable) {}

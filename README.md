@@ -1,5 +1,7 @@
 # Xboard
 
+YZboard 当前开发目标为 `1.31.0`，配套管理端 `0.12.0`、Node `v1.25.0`，尚未发布。实时状态、断线回退和验证范围见 [实时通信](docs/realtime.md)；正式来源与历史版本见 [兼容矩阵](YZ_COMPATIBILITY.md)。
+
 <div align="center">
 
 [![Telegram](https://img.shields.io/badge/Telegram-Channel-blue)](https://t.me/XboardOfficial)

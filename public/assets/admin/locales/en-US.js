@@ -1,5 +1,25 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['en-US'] = {
+  "telegramBot": {
+    "operationFailed": "The operation failed. Check the settings and retry.",
+    "title": "Telegram Bot", "settings": "Bot settings", "bindings": "Linked accounts",
+    "loading": "Loading", "loadFailed": "Could not load data. Please retry.", "retry": "Retry",
+    "enabledState": "Status", "enabled": "Enabled", "disabled": "Disabled",
+    "connectionState": "Message connection", "username": "Bot account", "notChecked": "Not checked",
+    "lastReceived": "Last message received", "neverReceived": "No messages received yet",
+    "token": "Bot token", "tokenRequired": "Enter a bot token",
+    "tokenSaved": "Saved; leave blank to keep it", "tokenPlaceholder": "Enter the bot token",
+    "webhookUrl": "Message receiver URL", "urlRequired": "Enter the message receiver URL",
+    "save": "Save", "processing": "Processing", "check": "Check connection", "refresh": "Refresh status",
+    "enable": "Enable", "disable": "Disable", "cancel": "Cancel", "confirm": "Confirm",
+    "enableConfirm": "Enable Telegram Bot?", "enableDescription": "The bot will start receiving messages and linking accounts.",
+    "disableConfirm": "Disable Telegram Bot?", "disableDescription": "Message processing stops. Existing account links are kept.",
+    "email": "Account email", "telegramId": "Telegram ID", "boundAt": "Linked at",
+    "searchPlaceholder": "Search email or Telegram ID", "search": "Search",
+    "total": "{{count}} linked accounts", "previous": "Previous", "next": "Next", "page": "Page {{current}} / {{total}}",
+    "status": { "unconfigured": "Not configured", "unchecked": "Not checked", "error": "Connection error", "connected": "Connected", "disconnected": "Not connected" },
+    "success": { "save": "Settings saved", "check": "Connection check completed", "enable": "Bot enabled", "disable": "Bot disabled" }
+  },
   "giftCard": {
     "title": "Gift Card Management",
     "description": "Manage gift card templates, redemption codes, and usage records.",
@@ -759,6 +779,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     }
   },
   "nav": {
+    "telegramBot": "Telegram Bot",
     "dashboard": "Dashboard",
     "systemManagement": "System Management",
     "systemConfig": "System Configuration",

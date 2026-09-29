@@ -24,13 +24,18 @@ class RequestLog
             }
 
             $action = $this->resolveAction($request->path());
-            $data = collect($request->all())->except(self::SENSITIVE_KEYS)->toArray();
+            $isTelegramBot = $request->route()?->getControllerClass()
+                === \App\Http\Controllers\V2\Admin\TelegramBotController::class;
+            // 独立机器人只审计操作与配置变更标志，不能记录密钥或任意嵌套输入。
+            $data = $isTelegramBot
+                ? ['token_updated' => $request->filled('token')]
+                : collect($request->all())->except(self::SENSITIVE_KEYS)->toArray();
 
             AdminAuditLog::insert([
                 'admin_id' => $admin->id,
                 'action' => $action,
                 'method' => $request->method(),
-                'uri' => $request->getRequestUri(),
+                'uri' => $isTelegramBot ? $request->getPathInfo() : $request->getRequestUri(),
                 'request_data' => json_encode($data, JSON_UNESCAPED_UNICODE),
                 'ip' => $request->getClientIp(),
                 'created_at' => time(),

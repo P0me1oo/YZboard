@@ -1,5 +1,25 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['ru-RU'] = {
+  "telegramBot": {
+    "operationFailed": "Операция не выполнена. Проверьте настройки и повторите попытку.",
+    "title": "Telegram Bot", "settings": "Настройки бота", "bindings": "Привязанные аккаунты",
+    "loading": "Загрузка", "loadFailed": "Не удалось загрузить данные. Повторите попытку.", "retry": "Повторить",
+    "enabledState": "Состояние", "enabled": "Включён", "disabled": "Выключен",
+    "connectionState": "Приём сообщений", "username": "Аккаунт бота", "notChecked": "Не проверено",
+    "lastReceived": "Последнее сообщение", "neverReceived": "Сообщений пока нет",
+    "token": "Токен бота", "tokenRequired": "Введите токен бота",
+    "tokenSaved": "Сохранён; оставьте пустым без изменения", "tokenPlaceholder": "Введите токен бота",
+    "webhookUrl": "Адрес приёма сообщений", "urlRequired": "Введите адрес приёма сообщений",
+    "save": "Сохранить", "processing": "Обработка", "check": "Проверить соединение", "refresh": "Обновить состояние",
+    "enable": "Включить", "disable": "Выключить", "cancel": "Отмена", "confirm": "Подтвердить",
+    "enableConfirm": "Включить Telegram Bot?", "enableDescription": "Бот начнёт принимать сообщения и привязывать аккаунты.",
+    "disableConfirm": "Выключить Telegram Bot?", "disableDescription": "Обработка сообщений прекратится. Привязки аккаунтов сохранятся.",
+    "email": "Почта аккаунта", "telegramId": "Telegram ID", "boundAt": "Дата привязки",
+    "searchPlaceholder": "Поиск по почте или Telegram ID", "search": "Поиск",
+    "total": "Привязок: {{count}}", "previous": "Назад", "next": "Далее", "page": "Страница {{current}} / {{total}}",
+    "status": { "unconfigured": "Не настроено", "unchecked": "Не проверено", "error": "Ошибка соединения", "connected": "Подключено", "disconnected": "Не подключено" },
+    "success": { "save": "Настройки сохранены", "check": "Проверка завершена", "enable": "Бот включён", "disable": "Бот выключен" }
+  },
   "giftCard": {
     "title": "Управление подарочными картами",
     "description": "Управление шаблонами подарочных карт, кодами активации и записями об использовании.",
@@ -701,6 +721,7 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
     }
   },
   "nav": {
+    "telegramBot": "Telegram Bot",
     "dashboard": "Панель управления",
     "systemManagement": "Управление системой",
     "systemConfig": "Настройки системы",

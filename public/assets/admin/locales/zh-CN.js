@@ -1,5 +1,25 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['zh-CN'] = {
+  "telegramBot": {
+    "operationFailed": "操作失败，请检查设置后重试。",
+    "title": "Telegram Bot", "settings": "机器人设置", "bindings": "绑定记录",
+    "loading": "加载中", "loadFailed": "读取失败，请重试。", "retry": "重试",
+    "enabledState": "运行状态", "enabled": "已启用", "disabled": "已停用",
+    "connectionState": "消息接入", "username": "机器人账号", "notChecked": "未检查",
+    "lastReceived": "最近收到消息", "neverReceived": "尚未收到消息",
+    "token": "机器人密钥", "tokenRequired": "请输入机器人密钥",
+    "tokenSaved": "已保存，留空表示不修改", "tokenPlaceholder": "输入机器人密钥",
+    "webhookUrl": "消息接收地址", "urlRequired": "请输入消息接收地址",
+    "save": "保存", "processing": "处理中", "check": "验证连接", "refresh": "刷新状态",
+    "enable": "启用", "disable": "停用", "cancel": "取消", "confirm": "确认",
+    "enableConfirm": "启用 Telegram Bot？", "enableDescription": "启用后，机器人会开始接收消息并处理账号绑定。",
+    "disableConfirm": "停用 Telegram Bot？", "disableDescription": "停止处理消息，已有账号绑定保留。",
+    "email": "账号邮箱", "telegramId": "Telegram ID", "boundAt": "绑定时间",
+    "searchPlaceholder": "搜索邮箱或 Telegram ID", "search": "查询",
+    "total": "共 {{count}} 条绑定", "previous": "上一页", "next": "下一页", "page": "第 {{current}} / {{total}} 页",
+    "status": { "unconfigured": "未配置", "unchecked": "未检查", "error": "连接异常", "connected": "已接入", "disconnected": "未接入" },
+    "success": { "save": "配置已保存", "check": "连接检查完成", "enable": "机器人已启用", "disable": "机器人已停用" }
+  },
   "giftCard": {
     "title": "礼品卡管理",
     "description": "在这里可以管理礼品卡模板、兑换码和使用记录等功能。",
@@ -759,6 +779,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     }
   },
   "nav": {
+    "telegramBot": "Telegram Bot",
     "dashboard": "仪表盘",
     "systemManagement": "系统管理",
     "systemConfig": "系统配置",

@@ -5,6 +5,7 @@ use App\Http\Controllers\V1\Guest\CommController;
 use App\Http\Controllers\V1\Guest\PaymentController;
 use App\Http\Controllers\V1\Guest\PlanController;
 use App\Http\Controllers\V1\Guest\TelegramController;
+use App\Http\Controllers\V1\Guest\TelegramBotController;
 use Illuminate\Contracts\Routing\Registrar;
 
 class GuestRoute
@@ -19,6 +20,7 @@ class GuestRoute
             // Telegram
             // Webhook 与支付回调由第三方主动调用且会重试，限流会直接丢通知，这里不加。
             $router->post('/telegram/webhook', [TelegramController::class, 'webhook']);
+            $router->post('/telegram-bot/webhook', [TelegramBotController::class, 'webhook']);
             // Payment
             $router->match(['get', 'post'], '/payment/notify/{method}/{uuid}', [PaymentController::class, 'notify']);
             // Comm

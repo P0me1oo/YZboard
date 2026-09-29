@@ -75,6 +75,10 @@ test('三种语言资源齐全，并包含两步验证文案', () => {
         assert.ok(translations.auth?.signIn?.totp?.title, `${locale} 缺少登录页两步验证文案`);
         assert.ok(translations.user?.edit?.form?.expire_time_1hour, `${locale} 缺少一小时时长文案`);
         assert.ok(translations.user?.columns?.connection_count, `${locale} 缺少当前连接数文案`);
+        assert.equal(translations.nav?.telegramBot, 'Telegram Bot', `${locale} 缺少独立机器人侧栏入口`);
+        for (const key of ['settings', 'bindings', 'token', 'webhookUrl', 'enableConfirm', 'disableConfirm']) {
+            assert.ok(translations.telegramBot?.[key], `${locale} 缺少机器人管理文案 ${key}`);
+        }
         for (const key of ['version', 'publicIp', 'batch_upgrade', 'batch_restart']) {
             assert.ok(translations.machine?.agent?.[key], `${locale} 缺少服务器 agent 文案 ${key}`);
         }
@@ -120,6 +124,9 @@ test('产物包含全部 YZ 定制，避免误用未定制的上游管理端', (
         '新建用户密码一次性展示': 'data-yz-generated-users',
         '用户到期时长预设': 'data-yz-expiry-presets',
         '用户当前连接数': 'data-yz-user-connections',
+        '独立 Telegram Bot 侧栏入口': '/config/telegram-bot',
+        '独立机器人配置接口': '/telegram-bot/config',
+        '独立机器人绑定查询': '/telegram-bot/bindings',
     };
     for (const [name, marker] of Object.entries(markers)) {
         assert.ok(bundles.includes(marker), `产物缺少「${name}」定制（标识 ${marker}）`);

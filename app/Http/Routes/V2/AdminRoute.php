@@ -21,6 +21,7 @@ use App\Http\Controllers\V2\Admin\SystemController;
 use App\Http\Controllers\V2\Admin\ThemeController;
 use App\Http\Controllers\V2\Admin\TotpController;
 use App\Http\Controllers\V2\Admin\TrafficResetController;
+use App\Http\Controllers\V2\Admin\TelegramBotController;
 use Illuminate\Contracts\Routing\Registrar;
 
 class AdminRoute
@@ -43,6 +44,16 @@ class AdminRoute
                 $router->get('/getThemeTemplate', [ConfigController::class, 'getThemeTemplate']);
                 $router->post('/setTelegramWebhook', [ConfigController::class, 'setTelegramWebhook']);
                 $router->post('/testSendMail', [ConfigController::class, 'testSendMail']);
+            });
+
+            // 独立 Telegram Bot
+            $router->group(['prefix' => 'telegram-bot'], function ($router) {
+                $router->get('/config', [TelegramBotController::class, 'config']);
+                $router->post('/save', [TelegramBotController::class, 'save']);
+                $router->post('/check', [TelegramBotController::class, 'check']);
+                $router->post('/enable', [TelegramBotController::class, 'enable']);
+                $router->post('/disable', [TelegramBotController::class, 'disable']);
+                $router->get('/bindings', [TelegramBotController::class, 'bindings']);
             });
 
             // Mail Templates

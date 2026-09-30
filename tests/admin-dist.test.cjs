@@ -75,6 +75,9 @@ test('三种语言资源齐全，并包含两步验证文案', () => {
         assert.ok(translations.auth?.signIn?.totp?.title, `${locale} 缺少登录页两步验证文案`);
         assert.ok(translations.user?.edit?.form?.expire_time_1hour, `${locale} 缺少一小时时长文案`);
         assert.ok(translations.user?.columns?.connection_count, `${locale} 缺少当前连接数文案`);
+        for (const key of ['title', 'selected', 'days', 'cancel', 'confirm', 'pending', 'result', 'failed']) {
+            assert.ok(translations.user?.extend_duration?.[key], `${locale} 缺少增加时长文案 ${key}`);
+        }
         assert.equal(translations.nav?.telegramBot, 'Telegram Bot', `${locale} 缺少独立机器人侧栏入口`);
         for (const key of ['settings', 'bindings', 'token', 'webhookUrl', 'enableConfirm', 'disableConfirm']) {
             assert.ok(translations.telegramBot?.[key], `${locale} 缺少机器人管理文案 ${key}`);
@@ -124,6 +127,7 @@ test('产物包含全部 YZ 定制，避免误用未定制的上游管理端', (
         '新建用户密码一次性展示': 'data-yz-generated-users',
         '用户到期时长预设': 'data-yz-expiry-presets',
         '用户当前连接数': 'data-yz-user-connections',
+        '用户单人及批量增加时长': '/user/extendDuration',
         '独立 Telegram Bot 侧栏入口': '/config/telegram-bot',
         '独立机器人配置接口': '/telegram-bot/config',
         '独立机器人绑定查询': '/telegram-bot/bindings',

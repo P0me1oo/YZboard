@@ -363,6 +363,16 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     }
   },
   "user": {
+    "extend_duration": {
+      "title": "Extend duration",
+      "selected": "{{count}} users selected",
+      "days": "Days to add",
+      "cancel": "Cancel",
+      "confirm": "Confirm extension",
+      "pending": "Processing",
+      "result": "Extended {{updated}} users, skipped {{skipped}}",
+      "failed": "Extension failed. Refresh and check before retrying"
+    },
     "manage": {
       "title": "User Management",
       "description": "Here you can manage users, including adding, deleting, editing, and querying operations."

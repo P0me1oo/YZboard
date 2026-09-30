@@ -145,6 +145,7 @@ class AdminRoute
             ], function ($router) {
                 $router->any('/fetch', [UserController::class, 'fetch']);
                 $router->post('/update', [UserController::class, 'update']);
+                $router->post('/extendDuration', [UserController::class, 'extendDuration']);
                 $router->get('/getUserInfoById', [UserController::class, 'getUserInfoById']);
                 $router->get('/devices', [UserController::class, 'devices']);
                 $router->post('/generate', [UserController::class, 'generate']);

@@ -363,6 +363,16 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     }
   },
   "user": {
+    "extend_duration": {
+      "title": "增加时长",
+      "selected": "已选中 {{count}} 个用户",
+      "days": "增加天数",
+      "cancel": "取消",
+      "confirm": "确认增加",
+      "pending": "处理中",
+      "result": "已增加 {{updated}} 人，跳过 {{skipped}} 人",
+      "failed": "增加失败，请刷新核对后重试"
+    },
     "manage": {
       "title": "用户管理",
       "description": "在这里可以管理用户，包括增加、删除、编辑、查询等操作。"

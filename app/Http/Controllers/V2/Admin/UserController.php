@@ -338,6 +338,42 @@ class UserController extends Controller
         return $this->success(true);
     }
 
+    /** 只延长明确选中且尚未到期的用户，保留永久有效状态。 */
+    public function extendDuration(Request $request)
+    {
+        $data = $request->validate([
+            'user_ids' => 'required|array|min:1|max:1000',
+            'user_ids.*' => 'required|integer|min:1',
+            'days' => 'required|integer|min:1|max:36500',
+        ]);
+        $ids = array_values(array_unique($data['user_ids']));
+        $seconds = (int) $data['days'] * 86400;
+
+        $updated = DB::transaction(function () use ($ids, $seconds) {
+            // 固定加锁顺序，读取锁内最新到期时间，避免并发续期丢失。
+            $users = User::query()->whereIn('id', $ids)->orderBy('id')->lockForUpdate()->get();
+            $now = now()->timestamp;
+            $updated = 0;
+            foreach ($users as $user) {
+                if ($user->expired_at === null || $user->expired_at <= $now) {
+                    continue;
+                }
+                if ($user->expired_at > 253402300799 - $seconds) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'days' => '增加后到期时间超出支持范围',
+                    ]);
+                }
+                $user->expired_at += $seconds;
+                // 保留模型观察器的流量重置日期重算及节点用户同步。
+                $user->saveOrFail();
+                $updated++;
+            }
+            return $updated;
+        });
+
+        return $this->success(['updated' => $updated, 'skipped' => count($ids) - $updated]);
+    }
+
     // Export users to CSV.
     public function dumpCSV(Request $request)
     {

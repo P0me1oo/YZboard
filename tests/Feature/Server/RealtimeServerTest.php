@@ -58,6 +58,25 @@ class RealtimeServerTest extends TestCase
         ]);
     }
 
+    public function test_config_sync_recovers_both_corrupt_version_records(): void
+    {
+        foreach (['control', 'devices'] as $part) {
+            Cache::forever('realtime:control:' . $part . ':' . $this->node->id, [
+                'app_name' => '缓存恢复测试', 'sequence' => 3, 'hash' => str_repeat('a', 64),
+            ]);
+        }
+
+        $url = '/api/v2/server/realtime/sync?' . http_build_query($this->auth());
+        $response = $this->getJson($url)->assertOk()->json('data');
+        foreach (['control', 'devices'] as $part) {
+            $this->assertSame($this->node->id, $response[$part]['node_id']);
+            $this->assertMatchesRegularExpression('/\A[a-f0-9]{32}\z/', $response[$part]['epoch']);
+            $this->assertSame(1, $response[$part]['sequence']);
+            $this->assertArrayNotHasKey('app_name', $response[$part]);
+        }
+        $this->assertSame($response, $this->getJson($url)->assertOk()->json('data'));
+    }
+
     public function test_http_state_cannot_replace_a_newer_websocket_snapshot(): void
     {
         $session = $this->begin();

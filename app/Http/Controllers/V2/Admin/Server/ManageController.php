@@ -218,6 +218,7 @@ class ManageController extends Controller
 
         try {
             $deleted = Server::whereIn('id', $ids)->delete();
+            \App\Services\NodeRuntimeMetadata::invalidate(Server::class);
             if ($deleted === false) {
                 return $this->fail([500, '批量删除失败']);
             }

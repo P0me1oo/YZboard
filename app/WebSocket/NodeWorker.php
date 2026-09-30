@@ -6,6 +6,7 @@ use App\Models\Server;
 use App\Models\ServerMachine;
 use App\Services\DeviceStateService;
 use App\Services\NodeRegistry;
+use App\Services\NodeRuntimeMetadata;
 use App\Services\ServerService;
 use App\Support\Setting;
 use Illuminate\Support\Facades\Cache;
@@ -336,7 +337,7 @@ class NodeWorker
         if (!$machineState && (!$nodeId || NodeRegistry::get($nodeId) !== $conn || !isset($this->handlers[$event]))) return;
         try {
             if ($machineState) {
-                $receipt = app(\App\Services\MachineStateService::class)->accept(ServerMachine::findOrFail($conn->machineId), $body);
+                $receipt = app(\App\Services\MachineStateService::class)->accept(app(NodeRuntimeMetadata::class)->machineOrFail((int) $conn->machineId), $body);
                 $conn->send(json_encode(['event' => 'state.ack', 'data' => ['node_id' => 0, 'request_id' => $body['request_id'] ?? null] + $receipt]));
                 $this->admin?->changed();
                 return;

@@ -153,6 +153,7 @@ class MachineController extends Controller
 
         // Detach nodes first (sets machine_id = null), then delete and notify
         Server::where('machine_id', $machineId)->update(['machine_id' => null]);
+        \App\Services\NodeRuntimeMetadata::invalidate(Server::class);
         $machine->delete();
 
         // Notify with empty node list so WS process cleans up registry

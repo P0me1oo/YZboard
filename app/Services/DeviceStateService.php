@@ -187,15 +187,27 @@ class DeviceStateService
     /** 获取跨节点去重后占用设备名额的在线来源 IP：公网且不在排除名单内。 */
     public function getDeviceIPs(int $userId, bool $legacyOnly = false): array
     {
-        $ips = [];
-        $now = time();
         $records = Redis::hgetall(self::PREFIX . $userId);
+        $states = app(RealtimeStateStore::class)->readMany($this->deviceSources([$records]));
+        return $this->filterDeviceIPs($records, $states, time(), $legacyOnly);
+    }
+
+    /** 同批用户共享节点状态，避免每个用户重复读取和解码同一份完整快照。 */
+    private function deviceSources(array $users): array
+    {
         $sources = [];
-        foreach ($records as $field => $timestamp) {
-            $nodeId = (int) strstr((string) $field, ':', true);
-            if ($nodeId > 0) $sources['node:' . $nodeId] = true;
+        foreach ($users as $records) {
+            foreach ($records as $field => $timestamp) {
+                $nodeId = (int) strstr((string) $field, ':', true);
+                if ($nodeId > 0) $sources['node:' . $nodeId] = true;
+            }
         }
-        $states = app(RealtimeStateStore::class)->readMany(array_keys($sources));
+        return array_keys($sources);
+    }
+
+    private function filterDeviceIPs(array $records, array $states, int $now, bool $legacyOnly = false): array
+    {
+        $ips = [];
         foreach ($records as $field => $timestamp) {
             $nodeId = (int) strstr((string) $field, ':', true);
             $state = $states['node:' . $nodeId] ?? null;
@@ -239,9 +251,47 @@ class DeviceStateService
      */
     public function getUsersDevices(array $userIds): array
     {
+        // 保留扩展服务对单用户读取的定制，不能用批量路径绕过插件覆盖的方法。
+        if (get_class($this) !== self::class
+            && (new \ReflectionMethod($this, 'getDeviceIPs'))->getDeclaringClass()->getName() !== self::class) {
+            $result = [];
+            foreach ($userIds as $userId) {
+                $ips = $this->getDeviceIPs((int) $userId);
+                if ($ips !== []) $result[$userId] = $ips;
+            }
+            return $result;
+        }
+        $userIds = array_values(array_unique(array_map('intval', $userIds)));
+        if ($userIds === []) return [];
+        if (count($userIds) === 1) {
+            $ips = $this->getDeviceIPs($userIds[0]);
+            return $ips === [] ? [] : [$userIds[0] => $ips];
+        }
+
+        $records = [];
+        foreach (array_chunk($userIds, 256) as $chunk) {
+            $rows = Redis::pipeline(function ($pipe) use ($chunk): void {
+                foreach ($chunk as $userId) {
+                    $pipe->hgetall(self::PREFIX . $userId);
+                }
+            });
+            if (!is_array($rows) || count($rows) !== count($chunk)) {
+                throw new \RuntimeException('批量读取设备状态失败');
+            }
+            foreach ($chunk as $index => $userId) {
+                if (!is_array($rows[$index])) {
+                    throw new \RuntimeException('设备状态读取结果无效');
+                }
+                $records[$userId] = $rows[$index];
+            }
+        }
+
+        // 只在本次调用中复用，下一次同步仍读取最新状态，并按当前时间检查过期。
+        $states = app(RealtimeStateStore::class)->readMany($this->deviceSources($records));
+        $now = time();
         $result = [];
-        foreach ($userIds as $userId) {
-            $ips = $this->getDeviceIPs((int) $userId);
+        foreach ($records as $userId => $userRecords) {
+            $ips = $this->filterDeviceIPs($userRecords, $states, $now);
             if ($ips !== []) {
                 $result[$userId] = $ips;
             }

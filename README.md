@@ -1,6 +1,6 @@
 # Xboard
 
-YZboard 当前源码版本为 `1.33.1`，修复 [节点版本缓存异常导致持续启动失败](docs/node-cache-recovery.md)，配套管理端 `0.14.0`、Node `v1.26.1`。保留 [WireGuard 中转落地](docs/wireguard-relay.md)，支持 VLESS／HY2 前置及 Xray、sing-box 混用，以及独立 [Telegram Bot](docs/telegram-bot.md)、[实时通信](docs/realtime.md)及用户管理功能。正式发布状态、来源与历史版本见 [兼容矩阵](YZ_COMPATIBILITY.md)。
+YZboard 当前源码版本为 `1.33.2`，优化 [节点状态与设备同步的重复读取](docs/runtime-performance.md)，配套管理端 `0.14.0`、Node `v1.26.1`。保留 [节点版本缓存恢复](docs/node-cache-recovery.md)、[WireGuard 中转落地](docs/wireguard-relay.md)，支持 VLESS／HY2 前置及 Xray、sing-box 混用，以及独立 [Telegram Bot](docs/telegram-bot.md)、[实时通信](docs/realtime.md)及用户管理功能。正式发布状态、来源与历史版本见 [兼容矩阵](YZ_COMPATIBILITY.md)。
 
 <div align="center">
 

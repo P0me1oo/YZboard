@@ -9,6 +9,7 @@ use App\Services\ServerService;
 use App\Services\NodeControlStateService;
 use App\Services\NodeReportService;
 use App\Services\NodeStateService;
+use App\Services\NodeRuntimeMetadata;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;
@@ -89,7 +90,7 @@ class NodeEventHandlers
      */
     public static function pushDeviceStateToNode(int $nodeId, DeviceStateService $service): void
     {
-        $node = Server::find($nodeId);
+        $node = app(NodeRuntimeMetadata::class)->nodeForDevices($nodeId);
         if (!$node) return;
         if (!empty(NodeRegistry::get($nodeId)?->realtime)) {
             NodeRegistry::send($nodeId, 'sync.devices', app(NodeControlStateService::class)->devices($node));
@@ -110,7 +111,7 @@ class NodeEventHandlers
     public static function handleRuntimeState(TcpConnection $conn, int $nodeId, array $data): void
     {
         if (empty($conn->realtime)) return;
-        $node = Server::findOrFail($nodeId);
+        $node = app(NodeRuntimeMetadata::class)->nodeOrFail($nodeId);
         $receipt = app(NodeStateService::class)->accept($node, $data);
         $conn->send(json_encode(['event' => 'state.ack', 'data' => ['node_id' => $nodeId, 'request_id' => $data['request_id'] ?? null] + $receipt]));
     }

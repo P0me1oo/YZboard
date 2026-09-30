@@ -41,9 +41,13 @@ class ServerKernelDefaultsTest extends TestCase
 
     public function test_new_nodes_persist_protocol_default_and_allow_explicit_choice(): void
     {
+        $entry = Server::create($this->payload(Server::TYPE_VLESS, ['host' => '10.0.0.1', 'kernel_type' => 'xray']));
         foreach (Server::VALID_TYPES as $type) {
             $expected = $type === Server::TYPE_VLESS ? 'xray' : 'singbox';
             foreach ([[], ['kernel_type' => null], ['kernel_type' => '']] as $override) {
+                if ($type === Server::TYPE_WIREGUARD) {
+                    $override['relay_entry_id'] = $entry->id;
+                }
                 $this->postJson('/_tests/kernel-defaults/save', $this->payload($type, $override))->assertOk();
                 $this->assertSame($expected, Server::latest('id')->firstOrFail()->kernel_type, $type);
             }

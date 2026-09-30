@@ -1,6 +1,6 @@
 # Xboard
 
-YZboard 当前版本为 `1.32.0`，配套管理端 `0.13.0`、Node `v1.25.1`。本版合并独立 [Telegram Bot](docs/telegram-bot.md)、[实时通信](docs/realtime.md)及用户管理改动；正式发布状态、来源与历史版本见 [兼容矩阵](YZ_COMPATIBILITY.md)。
+YZboard 当前版本为 `1.33.0`，配套管理端 `0.14.0`、Node `v1.26.0`。本版新增 [WireGuard 中转落地](docs/wireguard-relay.md)，支持 VLESS／HY2 前置及 Xray、sing-box 混用，保留独立 [Telegram Bot](docs/telegram-bot.md)、[实时通信](docs/realtime.md)及用户管理功能。正式发布状态、来源与历史版本见 [兼容矩阵](YZ_COMPATIBILITY.md)。
 
 <div align="center">
 

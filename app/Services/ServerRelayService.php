@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\DB;
  *
  * 约定：节点的前置入口非空时，该节点是“中转逻辑节点”，前置入口是客户端真实连接的入口。
  * 逻辑节点自身的协议、地址、端口描述的是入口到落地服务器之间的内部链路，不会出现在用户订阅中。
- * 当前只支持“一个真实入口 + 一层落地”，内部链路可使用 Shadowsocks 或 VLESS。
+ * 当前只支持“一个真实入口 + 一层落地”，内部链路可使用 Shadowsocks、VLESS 或 WireGuard。
  */
 class ServerRelayService
 {
@@ -194,7 +194,18 @@ class ServerRelayService
 
     public static function hasRelayChildren(Server $entry): bool
     {
-        return self::childrenOf($entry)->isNotEmpty();
+        return self::childrenOf($entry)->isNotEmpty() || self::blockedWireGuardRoutes($entry) !== [];
+    }
+
+    /** 保留停用 WG 的编号，拒绝缓存订阅继续从前置直连出网。 */
+    public static function blockedWireGuardRoutes(Server $entry): array
+    {
+        if (!self::isSupportedEntry($entry)) {
+            return [];
+        }
+        return Server::where('relay_entry_id', $entry->id)->where('type', Server::TYPE_WIREGUARD)
+            ->where('enabled', false)->orderBy('id')->get()
+            ->map(fn (Server $child) => self::ensureRouteId($child))->all();
     }
 
     /** 入口按实际内核校验，且自身不能再连接其它前置入口。 */
@@ -450,6 +461,17 @@ class ServerRelayService
     public static function validateTransitSettings(?string $type, array $settings, ?string $host, ?string $kernelType = null): ?string
     {
         $type = Server::normalizeType($type);
+        if ($type === Server::TYPE_WIREGUARD) {
+            $mtu = $settings['mtu'] ?? 1380;
+            $keepalive = $settings['keepalive'] ?? 25;
+            if (filter_var($mtu, FILTER_VALIDATE_INT) === false || $mtu < 1280 || $mtu > 1420) {
+                return 'WireGuard MTU 必须在 1280–1420 之间';
+            }
+            if (filter_var($keepalive, FILTER_VALIDATE_INT) === false || $keepalive < 0 || $keepalive > 65535) {
+                return 'WireGuard 保活间隔必须在 0–65535 秒之间';
+            }
+            return null;
+        }
         if ($type === Server::TYPE_SHADOWSOCKS) {
             $cipher = data_get($settings, 'cipher');
             return self::isSupportedTransitCipher($cipher)
@@ -458,7 +480,7 @@ class ServerRelayService
         }
 
         if ($type !== Server::TYPE_VLESS) {
-            return '中转逻辑节点只支持 Shadowsocks 或 VLESS 协议作为入口到落地之间的中转';
+            return '中转逻辑节点只支持 Shadowsocks、VLESS 或 WireGuard 协议作为入口到落地之间的中转';
         }
 
         $rawNetwork = strtolower(trim((string) data_get($settings, 'network')));
@@ -617,6 +639,9 @@ class ServerRelayService
     {
         // 0 与 null 都表示“不使用中转”，管理端会把“无”提交为 0。
         if (!$entryId) {
+            if (Server::normalizeType($type) === Server::TYPE_WIREGUARD) {
+                return 'WireGuard 落地必须绑定前置入口';
+            }
             // 已被落地引用的入口必须保持支持路由编号的协议和内核。
             if ($selfId !== null && Server::where('relay_entry_id', $selfId)->exists()) {
                 if ($error = self::validateEntrySettings($type, $protocolSettings, $host, $kernelType)) {
@@ -667,5 +692,24 @@ class ServerRelayService
         }
 
         return null;
+    }
+
+    /** 每条链路独立派生两端密钥，只下发本端私钥和对端公钥，不进入订阅或数据库。 */
+    public static function wireGuardConfig(Server $child, bool $landing): array
+    {
+        $entryKey = self::deriveMaterial($child, 'yz-relay-wireguard-entry');
+        $landingKey = self::deriveMaterial($child, 'yz-relay-wireguard-landing');
+        $peerKey = $landing ? $entryKey : $landingKey;
+        $publicKey = \ParagonIE_Sodium_Compat::crypto_scalarmult_base($peerKey);
+
+        // 每个节点运行独立的用户态网络栈，地址不占用服务器接口或系统路由。
+        return [
+            'private_key' => base64_encode($landing ? $landingKey : $entryKey),
+            'peer_public_key' => base64_encode($publicKey),
+            'address' => $landing ? ['10.253.0.2/32', 'fd7a:797a::2/128'] : ['10.253.0.1/32', 'fd7a:797a::1/128'],
+            'allowed_ips' => $landing ? ['10.253.0.1/32', 'fd7a:797a::1/128'] : ['0.0.0.0/0', '::/0'],
+            'mtu' => (int) data_get($child->protocol_settings, 'mtu', 1380),
+            'keepalive' => $landing ? 0 : (int) data_get($child->protocol_settings, 'keepalive', 25),
+        ];
     }
 }

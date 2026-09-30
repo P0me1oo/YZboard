@@ -68,6 +68,10 @@ class ServerSave extends FormRequest
     ];
 
     private const PROTOCOL_RULES = [
+        'wireguard' => [
+            'mtu' => 'nullable|integer|min:1280|max:1420',
+            'keepalive' => 'nullable|integer|min:0|max:65535',
+        ],
         'shadowsocks' => [
             'cipher' => 'required|string',
             'obfs' => 'nullable|string',

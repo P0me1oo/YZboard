@@ -21,7 +21,7 @@ class ServerPortService
         $stream = in_array($network, ['kcp', 'mkcp', 'quic', 'hysteria'], true) ? ['udp'] : ['tcp'];
 
         return match ($server->type) {
-            Server::TYPE_HYSTERIA, Server::TYPE_TUIC => ['udp'],
+            Server::TYPE_HYSTERIA, Server::TYPE_TUIC, Server::TYPE_WIREGUARD => ['udp'],
             Server::TYPE_SHADOWSOCKS, Server::TYPE_NAIVE => ['tcp', 'udp'],
             // sing-box 的 SOCKS UDP 转发使用临时端口，Xray 则同时监听固定 UDP 端口。
             Server::TYPE_SOCKS => $kernel === 'singbox' ? ['tcp'] : ['tcp', 'udp'],

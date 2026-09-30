@@ -79,6 +79,7 @@ class Server extends Model
     public const TYPE_NAIVE = 'naive';
     public const TYPE_HTTP = 'http';
     public const TYPE_MIERU = 'mieru';
+    public const TYPE_WIREGUARD = 'wireguard';
     public const STATUS_OFFLINE = 0;
     public const STATUS_ONLINE_NO_PUSH = 1;
     public const STATUS_ONLINE = 2;
@@ -94,6 +95,7 @@ class Server extends Model
 
     /** 入口到落地之间可使用的内部中转协议。 */
     public const RELAY_TRANSIT_TYPES = [
+        self::TYPE_WIREGUARD,
         self::TYPE_SHADOWSOCKS,
         self::TYPE_VLESS,
     ];
@@ -119,6 +121,7 @@ class Server extends Model
     ];
 
     public const VALID_TYPES = [
+        self::TYPE_WIREGUARD,
         self::TYPE_HYSTERIA,
         self::TYPE_VLESS,
         self::TYPE_TROJAN,
@@ -242,6 +245,10 @@ class Server extends Model
     ];
 
     private const PROTOCOL_CONFIGURATIONS = [
+        self::TYPE_WIREGUARD => [
+            'mtu' => ['type' => 'integer', 'default' => 1380],
+            'keepalive' => ['type' => 'integer', 'default' => 25],
+        ],
         self::TYPE_TROJAN => [
             'tls' => ['type' => 'integer', 'default' => 1],
             'network' => ['type' => 'string', 'default' => null],

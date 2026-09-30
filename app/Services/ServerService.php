@@ -86,6 +86,9 @@ class ServerService
             ->append(['last_check_at', 'last_push_at', 'online', 'is_online', 'available_status', 'cache_key', 'server_key']);
 
         $servers = collect($servers)->map(function ($server) use ($user) {
+            if ($server->type === Server::TYPE_WIREGUARD && !$server->isRelayChild()) {
+                return null;
+            }
             if ($server->isRelayChild()) {
                 $entry = ServerRelayService::entryFor($server);
                 // 拓扑不完整或节点被禁用时直接丢弃，绝不把落地服务器的内部连接信息下发给客户端。
@@ -670,6 +673,7 @@ class ServerService
                 'transport' => data_get($protocolSettings, 'transport', 'TCP'),
                 'traffic_pattern' => $protocolSettings['traffic_pattern'],
             ],
+            'wireguard' => [...$baseConfig, 'server_port' => (int) $serverPort],
             default => [],
         };
 
@@ -733,7 +737,9 @@ class ServerService
                 'entry_node_id' => (int) $node->relayEntryId(),
             ];
 
-            if ($node->type === Server::TYPE_SHADOWSOCKS) {
+            if ($node->type === Server::TYPE_WIREGUARD) {
+                $relay['wireguard'] = ServerRelayService::wireGuardConfig($node, true);
+            } elseif ($node->type === Server::TYPE_SHADOWSOCKS) {
                 $credential = ServerRelayService::transitCredential($node);
                 $relay['cipher'] = $credential['cipher'];
                 $relay['password'] = $credential['password'];
@@ -755,7 +761,8 @@ class ServerService
         }
 
         $children = ServerRelayService::childrenOf($node);
-        if ($children->isEmpty()) {
+        $blockedRoutes = ServerRelayService::blockedWireGuardRoutes($node);
+        if ($children->isEmpty() && $blockedRoutes === []) {
             return null;
         }
 
@@ -769,7 +776,9 @@ class ServerService
                 'port' => (int) $child->port,
             ];
 
-            if ($child->type === Server::TYPE_SHADOWSOCKS) {
+            if ($child->type === Server::TYPE_WIREGUARD) {
+                $outbound['wireguard'] = ServerRelayService::wireGuardConfig($child, false);
+            } elseif ($child->type === Server::TYPE_SHADOWSOCKS) {
                 $credential = ServerRelayService::transitCredential($child);
                 $outbound['cipher'] = $credential['cipher'];
                 $outbound['password'] = $credential['password'];
@@ -784,6 +793,7 @@ class ServerService
             'mode' => 'entry',
             'route_id' => ServerRelayService::ensureRouteId($node),
             'children' => $outbounds,
+            ...($blockedRoutes !== [] ? ['blocked_route_ids' => $blockedRoutes] : []),
         ];
     }
 

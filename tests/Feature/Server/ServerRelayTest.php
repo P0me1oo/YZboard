@@ -44,6 +44,60 @@ class ServerRelayTest extends TestCase
     private const REALITY_PRIVATE_KEY = 'TESTonlyPRIVATEkeyNOTaREALsecret0123456789';
     private const LANDING_REALITY_PRIVATE_KEY = 'bBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789abcdef0';
 
+    public function test_wireguard_configs_subscriptions_and_lifecycle_for_both_kernels(): void
+    {
+        $user = $this->makeUser();
+        foreach (['xray', 'singbox'] as $entryKernel) {
+            foreach (['vless', 'hysteria'] as $protocol) {
+                $entry = $protocol === 'vless'
+                    ? $this->makeEntry(['kernel_type' => $entryKernel])
+                    : $this->makeHysteriaEntry(['kernel_type' => $entryKernel]);
+                foreach (['xray', 'singbox'] as $landingKernel) {
+                    $child = $this->makeChild($entry, [
+                        'type' => Server::TYPE_WIREGUARD, 'kernel_type' => $landingKernel,
+                        'protocol_settings' => ['mtu' => 1360, 'keepalive' => 30],
+                    ]);
+                    $this->assertNull(ServerRelayService::validateEntry($child->id, $entry->id, $child->type, $child->protocol_settings, $child->host, $landingKernel));
+                    $landing = ServerService::buildNodeConfig($child);
+                    $this->assertSame('wireguard', $landing['protocol']);
+                    $this->assertSame($landingKernel, $landing['kernel_type']);
+                    $this->assertSame($child->server_port, $landing['server_port']);
+                    $children = collect(data_get(ServerService::buildNodeConfig($entry->fresh()), 'relay.children'))->keyBy('node_id');
+                    $sender = $children[$child->id]['wireguard'];
+                    $receiver = $landing['relay']['wireguard'];
+                    $this->assertSame(1360, $sender['mtu']);
+                    $this->assertSame(30, $sender['keepalive']);
+                    $this->assertSame(0, $receiver['keepalive']);
+                    $this->assertSame(base64_encode(\ParagonIE_Sodium_Compat::crypto_scalarmult_base(base64_decode($sender['private_key']))), $receiver['peer_public_key']);
+                    $this->assertSame(base64_encode(\ParagonIE_Sodium_Compat::crypto_scalarmult_base(base64_decode($receiver['private_key']))), $sender['peer_public_key']);
+                    $this->assertNotSame($sender['private_key'], $receiver['private_key']);
+                    $this->assertSame($landing, ServerService::buildNodeConfig($child->fresh()));
+                    $this->assertCount(0, ServerService::getAvailableUsers($child));
+                    $servers = ServerService::getAvailableServers($user);
+                    $projected = collect($servers)->keyBy('id')[$child->id];
+                    $this->assertSame($entry->type, $projected['type']);
+                    $this->assertSame($entry->host, $projected['host']);
+                    $this->assertSame(Helper::applyVlessRoute($user->uuid, $child->vless_route), $projected['password']);
+                    $this->assertSame($entry->getCurrentRate(), (float) $projected['rate']);
+                    $encoded = json_encode($projected);
+                    foreach ([$sender['private_key'], $receiver['private_key'], $child->host, 'wireguard'] as $secret) {
+                        $this->assertStringNotContainsString($secret, $encoded);
+                    }
+                    $child->update(['enabled' => false]);
+                    $this->assertContains($child->vless_route, data_get(ServerService::buildNodeConfig($entry->fresh()), 'relay.blocked_route_ids'));
+                    $this->assertFalse(collect(data_get(ServerService::buildNodeConfig($entry->fresh()), 'relay.children', []))->contains('node_id', $child->id));
+                    $this->assertFalse(collect(ServerService::getAvailableServers($user))->contains('id', $child->id));
+                    $child->update(['enabled' => true]);
+                    $this->assertSame($receiver, data_get(ServerService::buildNodeConfig($child->fresh()), 'relay.wireguard'));
+                }
+            }
+        }
+        $this->assertNotNull(ServerRelayService::validateEntry(null, null, 'wireguard'));
+        $this->assertNotNull(ServerRelayService::validateTransitSettings('wireguard', ['mtu' => 1000], '203.0.113.7'));
+        $this->assertNotNull(ServerRelayService::validateTransitSettings('wireguard', ['keepalive' => -1], '203.0.113.7'));
+        $this->assertSame('singbox', Server::defaultKernelType('wireguard'));
+    }
+
     public function test_user_deltas_skip_landings_but_keep_entry_and_plain_nodes(): void
     {
         $entry = $this->makeEntry();

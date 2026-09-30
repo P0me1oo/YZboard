@@ -1,5 +1,13 @@
 # YZboard 兼容矩阵
 
+## WireGuard 落地（1.33.0）
+
+配套 Node `v1.26.0`、管理端 `0.14.0`。前置和落地均支持 Xray、sing-box；Node 增加用户态 WG 构建条件及匹配的 gVisor 依赖，两个核心 fork 引用不变，无数据库迁移。面板完整回归 387 项、4368 个断言及最新 WG 专项通过，管理端完整验证与面板资源检查通过；本地八种链路组合及 Linux 双架构构建通过。DGN-HK／YT-HK 上两种客户端、八种链路组合的 HTTPS 出口与 UDP DNS、停用恢复、核心切换与 Node 重启恢复完成验证，实例已清理。切换期间可能短暂超时；Node 计时测试首次失败与复测、跨机测试限制见 [WG 落地](docs/wireguard-relay.md) 和 [验收记录](docs/wireguard-acceptance.md)。
+
+- 发布前复核：本机 PHP 8.4.21 加载 SQLite 与 sodium 扩展后，完整回归 387 项、4376 个断言通过，管理端产物 5 项检查通过。首次命令未加载 SQLite 扩展，因缺少数据库驱动中止；未修改业务代码或测试断言。
+- 管理端固定源码为 `113bcd96418efb05d4e73f63b0acc6700021b3bd`。重新执行完整验证顺序，3023 个源码文件检查、50 项行为测试、构建与资源检查、56 项浏览器测试、开发模式检查全部通过；新构建与面板的 13 个资源文件逐字节一致。主脚本 `admin-COkmNnD6.js` 的 SHA256 为 `90b24172469120cdeed06299710ec9beb7308ef9c2add55a03fe514faefbfd36`，入口 `index-MB6XP0Qh.js` 为 `f331d674a1013dc537cd5332f3b316736084959dc81f40ffcfe548879ebd6e65`。
+- 发布状态：准备中，正式来源与镜像核验结果在发布完成后追加。回滚基线为面板 `1.32.0`、Node `v1.25.1`；回滚前停用新增 WG 线路，保留数据库及待上报流量批次。
+
 本文件记录面板、Node、Xray fork 和 sing-box 的可回滚兼容关系。面板版本与兼容标识必须和对应 Node Release、Xray fork commit 及变更说明一起发布。
 
 ## Telegram Bot 与实时通信合并（1.32.0）

@@ -6,7 +6,10 @@
 
 - 发布前复核：本机 PHP 8.4.21 加载 SQLite 与 sodium 扩展后，完整回归 387 项、4376 个断言通过，管理端产物 5 项检查通过。首次命令未加载 SQLite 扩展，因缺少数据库驱动中止；未修改业务代码或测试断言。
 - 管理端固定源码为 `113bcd96418efb05d4e73f63b0acc6700021b3bd`。重新执行完整验证顺序，3023 个源码文件检查、50 项行为测试、构建与资源检查、56 项浏览器测试、开发模式检查全部通过；新构建与面板的 13 个资源文件逐字节一致。主脚本 `admin-COkmNnD6.js` 的 SHA256 为 `90b24172469120cdeed06299710ec9beb7308ef9c2add55a03fe514faefbfd36`，入口 `index-MB6XP0Qh.js` 为 `f331d674a1013dc537cd5332f3b316736084959dc81f40ffcfe548879ebd6e65`。
-- 发布状态：准备中，正式来源与镜像核验结果在发布完成后追加。回滚基线为面板 `1.32.0`、Node `v1.25.1`；回滚前停用新增 WG 线路，保留数据库及待上报流量批次。
+- 发布核验（2026-09-30）：正式来源 `bcda4e1f90eab7a3ed12b434961a34e7088e939d`；[标签工作流 36666933315](https://github.com/P0me1oo/YZboard/actions/runs/36666933315) 的 PHP 回归、管理端资源检查、双架构构建和清单检查全部通过。镜像 `ghcr.io/p0me1oo/yzboard:1.33.0-bcda4e1`、`1.33.0` 和 `latest` 均为 manifest `sha256:d7dbdb3b6d13e23afa666b54339f72199524b296b3cdfc052a1401687409d7b1`，amd64 为 `sha256:7fedb3aca8a2ab63f2f18a8410216d1e2b07f2b43c447d534effebaeec7bc926`，arm64 为 `sha256:af82253a00006ae80345f58bbf00093f2a1beb676ca53931451df2eb1e4737b8`。匿名获取、两架构 OCI 来源提交和版本 `1.33.0-bcda4e1` 均已核对。
+- [Release v1.33.0](https://github.com/P0me1oo/YZboard/releases/tag/v1.33.0) 交付物为上述 GHCR 镜像，无独立附件。前端构建源码为 `113bcd96418efb05d4e73f63b0acc6700021b3bd`（`0.14.0`），13 个资源文件与独立构建逐字节一致。此前 `1.33.0-5473b3a` 仅为预构建；正式来源增加了正确的 Node／核心版本说明，未改变应用代码和前端资源。
+- 配套 Node [v1.26.1](https://github.com/P0me1oo/YZ-Agent/releases/tag/v1.26.1) 已完成完整竞态检测、12 个附件和镜像核验，来源为 `1ab30205c95cca8d89cedd9e597d819eb73851c8`，镜像 manifest 为 `sha256:4e85d61ecdf74658d058ecb7a3fafab853dcf708dd753d3a12f24e58f64d7ccf`。先升级前置与落地 Node，再更新面板。核心随 Node 交付，无需单独部署。
+- 回滚基线为面板 `ghcr.io/p0me1oo/yzboard:1.32.0-bc2fc99`（`sha256:74f17a03d78ed87b853998a2e68fd358937077a3b05250ec91a5381ea18d29c7`）、Node `v1.25.1`；回滚前停用新增 WG 线路，保留数据库及待上报流量批次。本次没有更新生产服务器。
 
 本文件记录面板、Node、Xray fork 和 sing-box 的可回滚兼容关系。面板版本与兼容标识必须和对应 Node Release、Xray fork commit 及变更说明一起发布。
 

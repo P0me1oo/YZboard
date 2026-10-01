@@ -1,6 +1,6 @@
 # Xboard
 
-YZboard 当前源码版本为 `1.33.2`，优化 [节点状态与设备同步的重复读取](docs/runtime-performance.md)，配套管理端 `0.14.0`、Node `v1.26.1`。保留 [节点版本缓存恢复](docs/node-cache-recovery.md)、[WireGuard 中转落地](docs/wireguard-relay.md)，支持 VLESS／HY2 前置及 Xray、sing-box 混用，以及独立 [Telegram Bot](docs/telegram-bot.md)、[实时通信](docs/realtime.md)及用户管理功能。正式发布状态、来源与历史版本见 [兼容矩阵](YZ_COMPATIBILITY.md)。
+YZboard 当前源码版本为 `1.36.0`（待发布），配套管理端 `0.17.0`。[用户管理](docs/user-management.md) 支持表头左对齐、自定义显示列，以及连接数和上传、下载速度排序。实时网速不保存历史，需要 Node `v2.2.0` 或兼容上报版本；旧 Node 显示未知，其他管理功能继续可用。保留中转来源限制、用户增加时长、WireGuard、Telegram Bot 和现有实时通信功能。正式发布状态、来源与历史版本见 [兼容矩阵](YZ_COMPATIBILITY.md)。
 
 <div align="center">
 

@@ -75,6 +75,9 @@ test('三种语言资源齐全，并包含两步验证文案', () => {
         assert.ok(translations.auth?.signIn?.totp?.title, `${locale} 缺少登录页两步验证文案`);
         assert.ok(translations.user?.edit?.form?.expire_time_1hour, `${locale} 缺少一小时时长文案`);
         assert.ok(translations.user?.columns?.connection_count, `${locale} 缺少当前连接数文案`);
+        for (const key of ['upload_speed', 'download_speed', 'speed_unknown', 'speed_partial']) {
+            assert.ok(translations.user?.columns?.[key], `${locale} 缺少用户网速文案 ${key}`);
+        }
         for (const key of ['title', 'selected', 'days', 'cancel', 'confirm', 'pending', 'result', 'failed']) {
             assert.ok(translations.user?.extend_duration?.[key], `${locale} 缺少增加时长文案 ${key}`);
         }

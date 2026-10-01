@@ -25,6 +25,19 @@ class NodeStateService
             'state.online.*' => 'integer|min:0',
             'state.connection_counts' => 'sometimes|array',
             'state.connection_counts.*' => 'integer|min:0',
+            'state.user_speeds' => ['sometimes', 'array', function ($attribute, $value, $fail) {
+                if (!is_array($value)) return;
+                foreach ($value as $userId => $speeds) {
+                    if (filter_var($userId, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) === false
+                        || !is_array($speeds) || array_keys($speeds) !== [0, 1]
+                        || !is_int($speeds[0]) || !is_int($speeds[1])
+                        || $speeds[0] < 0 || $speeds[1] < 0
+                        || $speeds[0] > 9007199254740991 || $speeds[1] > 9007199254740991) {
+                        $fail('用户网速必须包含有效用户编号及非负整数上传、下载速度。');
+                        return;
+                    }
+                }
+            }],
             'state.relay_user_alive' => 'sometimes|array',
             'state.relay_user_alive.*' => 'array',
             'state.relay_user_alive.*.*' => 'array',
@@ -37,7 +50,7 @@ class NodeStateService
         ])->validate();
         // 验证器可能省略没有子项的空数组；原始空快照必须保留，才能清除在线状态。
         $state = array_intersect_key($message['state'], array_flip([
-            'alive', 'online', 'connection_counts', 'relay_user_alive',
+            'alive', 'online', 'connection_counts', 'user_speeds', 'relay_user_alive',
             'relay_connection_counts', 'status', 'metrics',
         ]));
         $source = 'node:' . $node->id;

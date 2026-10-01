@@ -363,6 +363,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     }
   },
   "user": {
+    "column_settings": "Columns",
     "extend_duration": {
       "title": "Extend duration",
       "selected": "{{count}} users selected",
@@ -383,7 +384,11 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "id": "ID",
       "email": "Email",
       "online_count": "Online Devices",
-      "connection_count": "Current Connections",
+      "connection_count": "Connections",
+      "upload_speed": "Upload Speed",
+      "download_speed": "Download Speed",
+      "speed_unknown": "Unknown",
+      "speed_partial": "Some nodes are unavailable; showing confirmed speed only",
       "connections_unknown": "No recent connection report",
       "connections_partial": "Some nodes have not reported; showing confirmed connections only",
       "status": "Status",

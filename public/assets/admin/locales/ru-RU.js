@@ -305,6 +305,7 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
     }
   },
   "user": {
+    "column_settings": "Столбцы",
     "extend_duration": {
       "title": "Продлить срок",
       "selected": "Выбрано пользователей: {{count}}",
@@ -325,7 +326,11 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
       "id": "ID",
       "email": "Email",
       "online_count": "Устройства онлайн",
-      "connection_count": "Текущие соединения",
+      "connection_count": "Соединения",
+      "upload_speed": "Скорость отдачи",
+      "download_speed": "Скорость загрузки",
+      "speed_unknown": "Неизвестно",
+      "speed_partial": "Данные части узлов недоступны; показана подтверждённая скорость",
       "connections_unknown": "Нет свежих данных о соединениях",
       "connections_partial": "Не все узлы передали данные; показаны только подтверждённые соединения",
       "status": "Статус",

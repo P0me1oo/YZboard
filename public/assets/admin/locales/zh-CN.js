@@ -363,6 +363,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     }
   },
   "user": {
+    "column_settings": "显示列",
     "extend_duration": {
       "title": "增加时长",
       "selected": "已选中 {{count}} 个用户",
@@ -383,7 +384,11 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
       "id": "ID",
       "email": "邮箱",
       "online_count": "在线设备",
-      "connection_count": "当前连接数",
+      "connection_count": "连接数",
+      "upload_speed": "上传速度",
+      "download_speed": "下载速度",
+      "speed_unknown": "未知",
+      "speed_partial": "部分节点数据缺失，仅显示已确认速度",
       "connections_unknown": "暂无有效的连接数上报",
       "connections_partial": "部分节点未上报，仅显示已确认的连接数",
       "status": "状态",

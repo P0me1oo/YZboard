@@ -50,6 +50,7 @@ class RealtimeSnapshotService
             })->get(['id', 'group_ids', 'enabled']);
             $sources = $this->states->readMany($nodes->map(fn ($node) => 'node:' . $node->id)->all());
             $connections = app(UserConnectionService::class)->forUsers($users, $sources);
+            $speeds = app(UserSpeedService::class)->forUsers($users, $sources, $nodes);
             foreach ($users as $user) {
                 $groups = $user->effectiveGroupIds();
                 $known = false;
@@ -78,7 +79,7 @@ class RealtimeSnapshotService
                 $ips = array_keys($currentIPs);
                 sort($ips);
                 if (in_array((int) $user->id, $subscription['users'], true)) {
-                    $result['users'][$user->id] = $connections[$user->id] + [
+                    $result['users'][$user->id] = $connections[$user->id] + $speeds[$user->id] + [
                         'id' => (int) $user->id,
                         'online_count' => $known ? count($ips) : null,
                         'online_count_partial' => $known && $missing,

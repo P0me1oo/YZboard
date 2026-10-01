@@ -149,6 +149,8 @@ class UserController extends Controller
 
         collect($request->input('sort'))->each(function ($sort) use ($builder) {
             $field = $sort['id'];
+            // 运行快照不在用户表中，由列表在分页前排序。
+            if (in_array($field, ['connection_count', 'upload_speed', 'download_speed'], true)) return;
             $direction = $sort['desc'] ? 'DESC' : 'ASC';
             $builder->orderBy($field, $direction);
         });
@@ -203,15 +205,49 @@ class UserController extends Controller
 
         $this->applyFiltersAndSorts($request, $userModel);
 
-        $users = $userModel->orderBy('id', 'desc')
-            ->paginate($pageSize, ['*'], 'page', $current);
+        $runtimeSorts = collect($request->input('sort', []))->filter(fn ($sort) =>
+            in_array($sort['id'], ['connection_count', 'upload_speed', 'download_speed'], true));
+        $connections = $speeds = null;
+        if ($runtimeSorts->isNotEmpty()) {
+            // 仅加载排序需要的用户资料；复用同一批快照，避免排序与返回值跨采样周期。
+            $candidates = (clone $userModel)->withoutEagerLoads()
+                ->select(['id', 'group_id', 'group_ids'])->selectRaw('(u + d) as total_used')
+                ->orderBy('id', 'desc')->get();
+            $connections = app(\App\Services\UserConnectionService::class)->forUsers($candidates);
+            $speeds = app(\App\Services\UserSpeedService::class)->forUsers($candidates);
+            $ranked = $candidates->sort(function ($left, $right) use ($runtimeSorts, $connections, $speeds) {
+                foreach ($runtimeSorts as $sort) {
+                    $field = $sort['id'];
+                    $values = $field === 'connection_count' ? $connections : $speeds;
+                    $a = $values[$left->id][$field];
+                    $b = $values[$right->id][$field];
+                    // 未知永远放在末尾，不能冒充零值参与升降序。
+                    if ($a === null || $b === null) {
+                        if ($a !== $b) return $a === null ? 1 : -1;
+                    } elseif ($a !== $b) {
+                        return ($a <=> $b) * ($sort['desc'] ? -1 : 1);
+                    }
+                }
+                return 0; // 保留数据库的次级排序和编号顺序。
+            })->values();
+            $pageIds = $ranked->forPage(max(1, (int) $current), max(1, (int) $pageSize))->pluck('id');
+            $pageUsers = (clone $userModel)->whereIn('id', $pageIds)->get()->keyBy('id');
+            $users = new \Illuminate\Pagination\LengthAwarePaginator(
+                $pageIds->map(fn ($id) => $pageUsers->get($id))->filter()->values(),
+                $ranked->count(), max(1, (int) $pageSize), max(1, (int) $current)
+            );
+        } else {
+            $users = $userModel->orderBy('id', 'desc')
+                ->paginate($pageSize, ['*'], 'page', $current);
+        }
 
         $groups = \App\Models\ServerGroup::query()->get(['id', 'name'])->keyBy('id');
-        $connections = app(\App\Services\UserConnectionService::class)->forUsers($users->getCollection());
-        $users->getCollection()->transform(function ($user) use ($groups, $connections): array {
+        $connections ??= app(\App\Services\UserConnectionService::class)->forUsers($users->getCollection());
+        $speeds ??= app(\App\Services\UserSpeedService::class)->forUsers($users->getCollection());
+        $users->getCollection()->transform(function ($user) use ($groups, $connections, $speeds): array {
             $user->setAttribute('groups', collect($user->effectiveGroupIds())
                 ->map(fn (int $id) => $groups->get($id))->filter()->values());
-            foreach ($connections[$user->id] as $key => $value) {
+            foreach ($connections[$user->id] + $speeds[$user->id] as $key => $value) {
                 $user->setAttribute($key, $value);
             }
             return self::transformUserData($user);

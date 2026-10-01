@@ -99,7 +99,6 @@ class AdminRoute
                 'prefix' => 'server/manage'
             ], function ($router) {
                 $router->get('/getNodes', [ManageController::class, 'getNodes']);
-                $router->post('/confirmRelayFirewall', [ManageController::class, 'confirmRelayFirewall']);
                 $router->post('/checkPort', [ManageController::class, 'checkPort']);
                 $router->post('/update', [ManageController::class, 'update']);
                 $router->post('/save', [ManageController::class, 'save']);

@@ -394,7 +394,6 @@ class ServerService
      */
     public static function updateMetrics(Server $node, array $metrics): void
     {
-        RelayFirewallService::recordEgress($node, $metrics['relay_egress'] ?? null);
         $nodeType = strtoupper($node->type);
         $nodeId = $node->id;
         $cacheTime = max(300, (int) admin_setting('server_push_interval', 60) * 3);
@@ -417,8 +416,6 @@ class ServerService
             'limits' => $metrics['limits'] ?? [],
             'updated_at' => now()->timestamp,
             'kernel_status' => (bool) ($metrics['kernel_status'] ?? false),
-            'firewall_warning' => is_string($metrics['firewall_warning'] ?? null)
-                ? mb_substr($metrics['firewall_warning'], 0, 500) : null,
         ];
 
         Cache::put(
@@ -738,7 +735,6 @@ class ServerService
                 'protocol' => $node->type,
                 'listen_port' => (int) $node->server_port,
                 'entry_node_id' => (int) $node->relayEntryId(),
-                'firewall' => RelayFirewallService::policy($node),
             ];
 
             if ($node->type === Server::TYPE_WIREGUARD) {

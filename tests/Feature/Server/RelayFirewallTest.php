@@ -5,15 +5,10 @@ namespace Tests\Feature\Server;
 use App\Http\Controllers\V2\Admin\Server\ManageController;
 use App\Models\Server;
 use App\Models\ServerMachine;
-use App\Services\MachineAgentService;
-use App\Services\NodeControlStateService;
-use App\Services\RelayFirewallService;
 use App\Services\ServerService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class RelayFirewallTest extends TestCase
@@ -35,114 +30,20 @@ class RelayFirewallTest extends TestCase
         return [$entry, $landing, $machine];
     }
 
-    private function report(Server $entry, Server $landing, array $sources, ?int $time = null): void
+    public function test_bound_landing_no_longer_requires_source_confirmation(): void
     {
-        ServerService::updateMetrics($entry, ['relay_egress' => ['checked_at' => $time ?? time(), 'children' => [[
-            'node_id' => $landing->id, 'address' => $landing->host, 'port' => (int) $landing->port, 'sources' => $sources,
-        ]]]]);
-    }
-
-    public function test_only_bound_landing_receives_policy_and_public_address_alone_is_not_proof(): void
-    {
-        [$entry, $landing, $machine] = $this->topology();
-        MachineAgentService::recordAddress($machine, '8.8.8.8');
-        $this->assertSame('pending', RelayFirewallService::policy($landing)['status']);
-        $this->report($entry, $landing, ['8.8.8.8']);
-        $this->assertSame(['8.8.8.8'], ServerService::buildNodeConfig($landing)['relay']['firewall']['sources']);
-        $this->assertArrayNotHasKey('firewall', ServerService::buildNodeConfig($entry)['relay']);
-        $landing->relay_entry_id = null;
-        $this->assertArrayNotHasKey('relay', ServerService::buildNodeConfig($landing));
-    }
-
-    public function test_address_change_and_binding_change_replace_config_and_old_sources(): void
-    {
-        [$entry, $landing, $machine] = $this->topology();
-        MachineAgentService::recordAddress($machine, '8.8.8.8');
-        $this->report($entry, $landing, ['8.8.8.8']);
-        $old = app(NodeControlStateService::class)->snapshot($landing);
-        MachineAgentService::recordAddress($machine, '8.8.4.4');
-        $this->assertSame('pending', RelayFirewallService::policy($landing)['status']);
-        $this->report($entry, $landing, ['8.8.4.4']);
-        $new = app(NodeControlStateService::class)->snapshot($landing);
-        $this->assertGreaterThan($old['sequence'], $new['sequence']);
-        $this->assertSame(['8.8.4.4'], $new['config']['relay']['firewall']['sources']);
-        $replacement = $entry->replicate();
-        $replacement->name = '新前置';
-        $replacement->save();
-        $landing->update(['relay_entry_id' => $replacement->id]);
-        $this->assertSame('pending', RelayFirewallService::policy($landing)['status']);
-        $this->report($replacement, $landing, ['8.8.4.4']);
-        $this->assertSame('ready', RelayFirewallService::policy($landing)['status']);
-    }
-
-    public function test_dual_stack_deduplicates_and_does_not_allow_unobserved_or_private_routes(): void
-    {
-        [$entry, $landing, $machine] = $this->topology();
-        MachineAgentService::recordAddress($machine, '8.8.8.8');
-        MachineAgentService::recordAddress($machine, '2606:4700:4700::1111');
-        $this->report($entry, $landing, ['8.8.8.8', '2606:4700:4700::1111', '8.8.8.8']);
-        $this->assertSame(['2606:4700:4700::1111', '8.8.8.8'], RelayFirewallService::policy($landing)['sources']);
-        foreach ([['8.8.8.8', '10.0.0.2'], ['8.8.4.4'], ['0.0.0.0/0'], [], [null], [['bad']]] as $sources) {
-            $this->report($entry, $landing, $sources);
-            $this->assertSame('pending', RelayFirewallService::policy($landing)['status']);
+        [$entry, $landing] = $this->topology();
+        foreach ([true, false] as $enabled) {
+            $entry->enabled = $enabled;
+            $entry->save();
+            $config = ServerService::buildNodeConfig($landing);
+            $this->assertArrayNotHasKey('firewall', $config['relay']);
         }
-    }
-
-    public function test_stale_report_changed_destination_and_shared_port_require_confirmation(): void
-    {
-        [$entry, $landing, $machine] = $this->topology();
-        MachineAgentService::recordAddress($machine, '8.8.8.8');
-        $this->report($entry, $landing, ['8.8.8.8'], time() - 300);
-        $this->assertSame('pending', RelayFirewallService::policy($landing)['status']);
-        $this->report($entry, $landing, ['8.8.8.8']);
-        $landing->host = '192.0.2.9';
-        $this->assertSame('pending', RelayFirewallService::policy($landing)['status']);
-        $landing->refresh();
-        $duplicate = $landing->replicate();
-        $duplicate->name = '共用端口';
-        $duplicate->save();
-        $policy = RelayFirewallService::policy($landing);
-        $this->assertSame('pending', $policy['status']);
-        $this->assertStringContainsString('共用端口', $policy['message']);
-        $this->assertArrayNotHasKey('confirmation_key', $policy, '人工地址确认不能绕过端口冲突');
-    }
-
-    public function test_admin_confirmation_is_scoped_and_invalidated_when_public_ip_changes(): void
-    {
-        [$entry, $landing, $machine] = $this->topology();
-        MachineAgentService::recordAddress($machine, '8.8.8.8');
-        $policy = RelayFirewallService::policy($landing);
-        $request = Request::create('/', 'POST', ['id' => $landing->id, 'confirmation_key' => $policy['confirmation_key'], 'sources' => ['8.8.4.4']]);
-        app(ManageController::class)->confirmRelayFirewall($request);
-        $this->assertSame(['8.8.4.4'], RelayFirewallService::policy($landing->fresh())['sources']);
-        MachineAgentService::recordAddress($machine, '1.1.1.1');
-        $this->assertSame('pending', RelayFirewallService::policy($landing->fresh())['status']);
-        $this->expectException(ValidationException::class);
-        app(ManageController::class)->confirmRelayFirewall($request);
-    }
-
-    public function test_runtime_warning_is_visible_and_cleared_by_successful_report(): void
-    {
-        [, $landing] = $this->topology();
-        ServerService::updateMetrics($landing, ['firewall_warning' => '端口冲突，请确认']);
-        $this->assertSame('端口冲突，请确认', $landing->metrics['firewall_warning']);
-        ServerService::updateMetrics($landing, []);
-        $this->assertNull($landing->fresh()->metrics['firewall_warning']);
-    }
-
-    public function test_only_explicit_confirmation_can_use_a_private_transit_source(): void
-    {
-        [$entry, $landing, $machine] = $this->topology();
-        MachineAgentService::recordAddress($machine, '8.8.8.8');
-        $this->report($entry, $landing, ['10.0.0.8']);
-        $policy = RelayFirewallService::policy($landing);
-        $this->assertSame('pending', $policy['status']);
-        app(ManageController::class)->confirmRelayFirewall(Request::create('/', 'POST', [
-            'id' => $landing->id, 'confirmation_key' => $policy['confirmation_key'], 'sources' => ['10.0.0.8'],
-        ]));
-        $this->assertSame(['10.0.0.8'], RelayFirewallService::policy($landing->fresh())['sources']);
-        $this->assertFalse(RelayFirewallService::validSources(['0.0.0.0/0']));
-        $this->assertFalse(RelayFirewallService::validSources(['224.0.0.1']));
-        $this->assertFalse(RelayFirewallService::validSources(['ff02::1']));
+        ServerService::updateMetrics($landing, ['firewall_warning' => '旧程序告警', 'relay_egress' => []]);
+        $this->assertArrayNotHasKey('firewall_warning', $landing->fresh()->metrics);
+        $response = app(ManageController::class)->getNodes(Request::create('/', 'GET'));
+        foreach ($response->getData(true)['data'] as $node) {
+            $this->assertArrayNotHasKey('relay_firewall', $node);
+        }
     }
 }

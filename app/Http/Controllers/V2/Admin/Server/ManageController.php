@@ -33,9 +33,6 @@ class ManageController extends Controller
             $entryId = $item->relayEntryId();
             $item['relay_entry_name'] = $entryId === null ? null : $nameById->get($entryId);
             $item['relay_entry_supported'] = ServerRelayService::isSupportedEntry($item);
-            if ($entryId !== null) {
-                $item['relay_firewall'] = \App\Services\RelayFirewallService::policy($item);
-            }
             return $item;
         });
 
@@ -68,34 +65,6 @@ class ManageController extends Controller
     }
 
     /** 只有管理员明确确认时才保存无法自动核对的来源，绑定或机器出口变化后自动失效。 */
-    public function confirmRelayFirewall(Request $request)
-    {
-        $params = $request->validate([
-            'id' => 'required|integer',
-            'confirmation_key' => ['required', 'string', 'regex:/\A[a-f0-9]{64}\z/'],
-            'sources' => 'required|array|min:1|max:16',
-            'sources.*' => 'required|ip|distinct',
-        ]);
-        if (!\App\Services\RelayFirewallService::validSources($params['sources'])) {
-            throw ValidationException::withMessages(['sources' => '请填写前置实际使用的具体出口 IP，不接受网段或保留地址']);
-        }
-        return DB::transaction(function () use ($params) {
-            $node = Server::whereKey($params['id'])->lockForUpdate()->firstOrFail();
-            $policy = $node->isRelayChild() ? \App\Services\RelayFirewallService::policy($node) : [];
-            if (($policy['confirmation_key'] ?? null) !== $params['confirmation_key']) {
-                throw ValidationException::withMessages(['sources' => '中转绑定、出口或端口状态已变化，请刷新后重新确认']);
-            }
-            $sources = array_values(array_unique(array_map(fn ($ip) => inet_ntop(inet_pton($ip)), $params['sources'])));
-            sort($sources, SORT_STRING);
-            $settings = $node->protocol_settings ?? [];
-            $settings['relay_source_confirmation'] = ['key' => $params['confirmation_key'], 'sources' => $sources];
-            $node->protocol_settings = $settings;
-            $node->save();
-            DB::afterCommit(fn () => \App\Services\NodeSyncService::notifyConfigUpdated((int) $node->id));
-            return $this->success(true);
-        });
-    }
-
     public function save(ServerSave $request)
     {
         $params = $request->validated();

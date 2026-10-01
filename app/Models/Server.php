@@ -399,9 +399,6 @@ class Server extends Model
         $settings = json_decode($value, true) ?? [];
         $configs = self::PROTOCOL_CONFIGURATIONS[$this->type] ?? [];
         $result = $this->castSettingsWithConfig($settings, $configs);
-        if (is_array($settings['relay_source_confirmation'] ?? null)) {
-            $result['relay_source_confirmation'] = $settings['relay_source_confirmation'];
-        }
         return $result;
     }
 
@@ -413,9 +410,6 @@ class Server extends Model
 
         $configs = self::PROTOCOL_CONFIGURATIONS[$this->type] ?? [];
         $castedSettings = $this->castSettingsWithConfig($value ?? [], $configs);
-        if (is_array($value['relay_source_confirmation'] ?? null)) {
-            $castedSettings['relay_source_confirmation'] = $value['relay_source_confirmation'];
-        }
 
         $this->attributes['protocol_settings'] = json_encode($castedSettings);
     }

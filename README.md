@@ -1,5 +1,7 @@
 # Xboard
 
+当前开发版 `1.37.0` 已移除中转来源 IP 白名单与确认提示，保留自动端口放行；清理旧来源规则需配套新版 Node。配套管理端 `0.18.0` 同时修复服务器升级期间状态过期导致列表崩溃的问题，修复产物已同步。当前修改尚未发布，详见 CHANGELOG.md。
+
 YZboard 当前版本为 [`1.36.0`](https://github.com/P0me1oo/YZboard/releases/tag/v1.36.0)，配套管理端 `0.17.0`。[用户管理](docs/user-management.md) 支持表头左对齐、自定义显示列，以及连接数和上传、下载速度排序。实时网速不保存历史，需要 Node `v2.2.0` 或兼容上报版本；旧 Node 显示未知，其他管理功能继续可用。保留中转来源限制、用户增加时长、WireGuard、Telegram Bot 和现有实时通信功能。正式发布状态、来源与历史版本见 [兼容矩阵](YZ_COMPATIBILITY.md)。
 
 <div align="center">

@@ -7,7 +7,10 @@
 - 面板完整回归 430 项、4,598 次断言通过；随后补充私网确认校验，最终来源专项 7 项、31 次断言通过。管理端源码检查、50 项行为测试、正式构建和 7 项相关浏览器测试通过；面板资源检查 5 项通过。
 - 管理端 13 个资源文件已集成，主脚本 `admin-CR-uemqY.js` 的 SHA256 为 `71a842d4f3b9aeeebb2fd1261eeb12e2eb13a0e516397a658500829d7ad88eda`。
 - 管理端固定源码 `0494375baf17aac54f80e1f8cd112fd5986c1506`，本地标签 `v0.16.0`；无独立远程仓库，产物随本版面板发布。
-- 已进入发布验证；固定发布来源、流水线结果及镜像摘要在核验完成后补录。
+- 面板发布核验（2026-10-01）：[Release v1.35.0](https://github.com/P0me1oo/YZboard/releases/tag/v1.35.0) 已发布，交付物为 GHCR 镜像，无独立附件。固定来源 `08b93e15aa1b43d3c29a97523678760a0fcc2682`；[正式工作流 36792023229](https://github.com/P0me1oo/YZboard/actions/runs/36792023229) 的 PHP 8.2 完整回归 431 项、4,603 次断言，管理端资源检查 5 项、双架构构建与清单检查全部通过。
+- 镜像 `ghcr.io/p0me1oo/yzboard:1.35.0-08b93e1`、`1.35.0` 和 `latest` 均指向 manifest `sha256:a9946d4d23ee9eff2e3bb65a911e2bb17b37775a15a8b30934886eeaa9dbdedc`；amd64 为 `sha256:9b4458c550a9e0168105da5af3bec16d309783f54ffec6836224a6c1a4a6ee13`，arm64 为 `sha256:f56eb4931722d56e227aec277f027480e994616c5491a02496a33b90b0b5ecbb`。匿名获取、两个架构的 OCI 来源及版本均已核验。
+- 配套 [Node v2.1.0](https://github.com/P0me1oo/YZ-Agent/releases/tag/v2.1.0) 已发布，固定来源 `f687dbfd8fc2c4f2940f9cbb4d0affc2795a405b`。[正式流水线 36792771602](https://github.com/P0me1oo/YZ-Agent/actions/runs/36792771602) 的完整 Linux 竞态、双核心兼容、安装器、Mihomo WG 联调、四组原生防火墙、双架构构建与镜像运行校验全部通过；12 个附件已下载核验，11 条校验清单全部匹配。Node 镜像 manifest 为 `sha256:ee2221870645e670fb0eb6806593421e93c0438d4661c04c71c5913ca6901a88`，版本别名、完整来源标签和 `latest` 一致。
+- 回滚镜像 `1.34.0-4e7e491` 及 manifest `sha256:4096d7f1dbc9b368f67667309e6e19d8661edc324e5412d3d4539bb87d51cccf` 已复核可获取；Node 回滚基线 `v2.0.0`，先由新版正常停止并清理来源规则。升级顺序为面板、前置、落地，更新落地前处理待确认来源；WG `1.x` 到 `2.x` 仍须双端迁移。未更新生产服务器。
 
 ## 用户增加时长（1.34.0）
 

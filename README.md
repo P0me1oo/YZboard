@@ -1,8 +1,8 @@
 # Xboard
 
-版本 `1.37.1` 修复中转线路撤权后旧配置仍可使用的问题，需配套 Node `v2.3.1`。行为与兼容要求见 [中转线路权限](docs/relay-route-permissions.md)，发布进度见 [兼容矩阵](YZ_COMPATIBILITY.md)。
+当前正式版本为 [`1.37.1`](https://github.com/P0me1oo/YZboard/releases/tag/v1.37.1)，配套管理端 `0.18.0`、节点程序 `v2.3.1`。修复中转线路撤权后旧配置仍可使用的问题；必须先更新节点程序，再更新面板。行为与兼容要求见 [中转线路权限](docs/relay-route-permissions.md)，发布核验见 [兼容矩阵](YZ_COMPATIBILITY.md)。
 
-当前正式版本为 [`1.37.0`](https://github.com/P0me1oo/YZboard/releases/tag/v1.37.0)，配套管理端 `0.18.0`、节点程序 [`v2.3.0`](https://github.com/P0me1oo/YZ-Agent/releases/tag/v2.3.0)。修复服务器升级期间状态过期导致列表崩溃的问题；移除中转来源 IP 白名单与确认提示，保留自动端口放行。先升级节点程序清理旧来源规则，再更新面板。
+保留服务器状态过期时的列表修复、用户实时网速和此前修改；不再使用中转来源 IP 白名单与确认提示，仍保留自动端口放行。
 
 [用户管理](docs/user-management.md) 支持表头左对齐、自定义显示列，以及连接数和上传、下载速度排序。实时网速不保存历史，所需的节点上报已随 Node `v2.3.0` 发布；旧 Node 显示未知，其他管理功能继续可用。保留用户增加时长、WireGuard、Telegram Bot 和现有实时通信功能。正式发布状态、来源与历史版本见 [兼容矩阵](YZ_COMPATIBILITY.md)。
 

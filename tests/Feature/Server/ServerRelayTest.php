@@ -120,10 +120,21 @@ class ServerRelayTest extends TestCase
                 NodeSyncService::notifyUserRemovedFromGroup($user->id, 1);
             } else {
                 $user->banned = $action === 'remove' ? 1 : 0;
+                User::withoutEvents(fn () => $user->save());
                 NodeSyncService::notifyUserChanged($user);
             }
             $this->assertEqualsCanonicalizing([$entry->id, $plain->id], array_column($messages, 'node_id'));
             foreach ($messages as $message) {
+                if ($message['node_id'] === $entry->id) {
+                    $this->assertSame('sync.users', $message['event']);
+                    if ($action === 'add') {
+                        $this->assertSame($user->id, $message['data']['users'][0]['id']);
+                        $this->assertEqualsCanonicalizing([$entry->fresh()->vless_route, $landing->fresh()->vless_route], $message['data']['users'][0]['relay_routes']);
+                    } else {
+                        $this->assertSame([], $message['data']['users']);
+                    }
+                    continue;
+                }
                 $this->assertSame('sync.user.delta', $message['event']);
                 $this->assertSame($action === 'add' ? 'add' : 'remove', $message['data']['action']);
                 $this->assertSame($user->id, $message['data']['users'][0]['id']);

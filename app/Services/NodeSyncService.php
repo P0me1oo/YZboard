@@ -49,16 +49,7 @@ class NodeSyncService
      */
     public static function notifyUsersUpdatedByGroup(int $groupId): void
     {
-        $servers = Server::whereJsonContains('group_ids', (string) $groupId)
-            ->get();
-
-        foreach ($servers as $server) {
-            if (!self::isNodeOnline($server->id))
-                continue;
-
-            $users = ServerService::getAvailableUsers($server)->toArray();
-            self::push($server->id, 'sync.users', ['users' => $users]);
-        }
+        self::notifyUsersUpdatedByGroups([$groupId]);
     }
 
     /**
@@ -91,6 +82,11 @@ class NodeSyncService
 
             if (!self::isNodeOnline($server->id))
                 continue;
+
+            if (ServerRelayService::hasRelayChildren($server)) {
+                self::push($server->id, 'sync.users', ['users' => ServerService::getAvailableUsers($server)->toArray()]);
+                continue;
+            }
 
             if ($user->isAvailable()) {
                 self::push($server->id, 'sync.user.delta', [
@@ -134,6 +130,12 @@ class NodeSyncService
             if (!self::isNodeOnline($server->id))
                 continue;
 
+            // 旧组撤权可能只移除一条线路，不能误删该用户仍有权使用的其他线路。
+            if (ServerRelayService::hasRelayChildren($server)) {
+                self::push($server->id, 'sync.users', ['users' => ServerService::getAvailableUsers($server)->toArray()]);
+                continue;
+            }
+
             self::push($server->id, 'sync.user.delta', [
                 'action' => 'remove',
                 'users' => [['id' => $userId]],
@@ -146,12 +148,15 @@ class NodeSyncService
         if (array_filter($groupIds, fn ($id) => (int) $id > 0) === []) {
             return collect();
         }
-        return Server::where(function ($query) use ($groupIds) {
+        $servers = Server::where(function ($query) use ($groupIds) {
             foreach (array_unique(array_filter(array_map('intval', $groupIds))) as $groupId) {
                 $query->orWhereJsonContains('group_ids', (string) $groupId)
                     ->orWhereJsonContains('group_ids', (int) $groupId);
             }
         })->get();
+        // 落地不保存面板用户，线路权限变化必须通知承载认证的前置入口。
+        $entryIds = $servers->pluck('relay_entry_id')->filter()->unique();
+        return $servers->concat(Server::whereIn('id', $entryIds)->get())->unique('id')->values();
     }
 
     /**

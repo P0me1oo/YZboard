@@ -22,6 +22,7 @@ class ServerObserver
         'enabled',
         'kernel_type',
         'vless_route',
+        'group_ids',
     ];
 
     public function created(Server $server): void
@@ -72,7 +73,7 @@ class ServerObserver
     private function notifyRelayEntry(?int $entryId): void
     {
         if ($entryId) {
-            NodeSyncService::notifyConfigUpdated((int) $entryId);
+            NodeSyncService::notifyFullSync((int) $entryId);
         }
     }
 

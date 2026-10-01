@@ -173,10 +173,13 @@ class ServerService
             return collect();
         }
 
-        $groupIds = $node->group_ids ?? [];
+        $routeGroups = self::relayRouteGroups($node);
+        $groupIds = $routeGroups === null ? ($node->group_ids ?? [])
+            : array_values(array_unique(array_merge(...array_values($routeGroups))));
         if (empty($groupIds)) {
             return collect();
         }
+        $fields = ['id', 'uuid', 'speed_limit', 'device_limit', 'conn_limit', 'conn_rate_limit'];
         $users = User::toBase()
             ->where(function ($query) use ($groupIds) {
                 $query->whereIn('group_id', $groupIds);
@@ -190,16 +193,38 @@ class ServerService
                     ->orWhere('expired_at', NULL);
             })
             ->where('banned', 0)
-            ->select([
-                'id',
-                'uuid',
-                'speed_limit',
-                'device_limit',
-                'conn_limit',
-                'conn_rate_limit'
-            ])
+            ->select($routeGroups === null ? $fields : [...$fields, 'group_id', 'group_ids'])
+            ->orderBy('id')
             ->get();
+        if ($routeGroups !== null) {
+            $users = $users->filter(function ($user) use ($routeGroups) {
+                $groups = $user->group_ids === null ? [$user->group_id] : json_decode($user->group_ids, true);
+                $user->relay_routes = [];
+                foreach ($routeGroups as $route => $allowedGroups) {
+                    if (array_intersect($groups ?? [], $allowedGroups) !== []) {
+                        $user->relay_routes[] = (int) $route;
+                    }
+                }
+                sort($user->relay_routes, SORT_NUMERIC);
+                unset($user->group_id, $user->group_ids);
+                return $user->relay_routes !== [];
+            })->values();
+        }
         return HookManager::filter('server.users.get', $users, $node);
+    }
+
+    /** 入口认证接收各线路用户的并集，每个用户只获得与自身权限组相交的线路。 */
+    private static function relayRouteGroups(Server $node): ?array
+    {
+        $children = ServerRelayService::childrenOf($node);
+        if ($children->isEmpty() && ServerRelayService::blockedWireGuardRoutes($node) === []) {
+            return null;
+        }
+        $routes = [ServerRelayService::ensureRouteId($node) => $node->group_ids ?? []];
+        foreach ($children as $child) {
+            $routes[ServerRelayService::ensureRouteId($child)] = $child->group_ids ?? [];
+        }
+        return $routes;
     }
 
     // 获取路由规则

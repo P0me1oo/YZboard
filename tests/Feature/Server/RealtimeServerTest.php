@@ -165,4 +165,18 @@ class RealtimeServerTest extends TestCase
         ])->assertStatus(422);
         $this->assertSame(0, NodeReportBatch::count());
     }
+
+    public function test_online_updates_clear_departed_users_and_empty_state_then_recover(): void
+    {
+        $session = $this->begin();
+        $service = app(NodeStateService::class);
+        $userKey = fn ($id) => \App\Utils\CacheKey::get('USER_ONLINE_CONN_vmess_' . $this->node->id, $id);
+        foreach ([1 => [1 => 2, 2 => 3], 2 => [2 => 4], 3 => [], 4 => [1 => 5]] as $sequence => $online) {
+            $service->accept($this->node, ['epoch' => $session['epoch'], 'sequence' => $sequence, 'state' => ['online' => $online]]);
+            foreach ([1, 2] as $id) $this->assertSame($online[$id] ?? null, Cache::get($userKey($id)));
+        }
+        $this->travel(301)->seconds();
+        $this->assertNull(Cache::get($userKey(1)));
+    }
+
 }

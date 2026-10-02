@@ -103,4 +103,20 @@ class RealtimeStateStoreTest extends TestCase
         $this->assertNull($states['node:2']);
         $this->assertArrayNotHasKey('run', $states['node:1']);
     }
+
+    public function test_projection_read_keeps_version_isolation_freshness_and_cache_recovery(): void
+    {
+        $session = $this->store->begin('node:1', str_repeat('a', 32));
+        $this->store->accept('node:1', $session['epoch'], 2, []);
+        Cache::forever('realtime:projection:node:1', $session['epoch'] . ':1');
+        $projection = $this->store->readForProjection('node:1');
+        $this->assertSame($session['epoch'] . ':1', $projection['version']);
+        $this->assertSame(2, $projection['snapshot']['sequence']);
+        $this->assertArrayNotHasKey('run', $projection['snapshot']);
+        $this->assertSame(['snapshot' => null, 'version' => null], $this->store->readForProjection('node:2'));
+        $this->travel(RealtimeStateStore::FRESH_SECONDS + 1)->seconds();
+        $this->assertFalse($this->store->readForProjection('node:1')['snapshot']['fresh']);
+        Cache::flush();
+        $this->assertSame(['snapshot' => null, 'version' => null], $this->store->readForProjection('node:1'));
+    }
 }

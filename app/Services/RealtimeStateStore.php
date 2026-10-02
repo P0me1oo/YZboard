@@ -75,7 +75,20 @@ class RealtimeStateStore
 
     public function read(string $source): ?array
     {
-        $current = Cache::get($this->key($source));
+        return $this->snapshot(Cache::get($this->key($source)));
+    }
+
+    /** 投影锁内一次读取当前状态和已应用版本，保持迟到包与失败重试的原有顺序。 */
+    public function readForProjection(string $source): array
+    {
+        $stateKey = $this->key($source);
+        $versionKey = 'realtime:projection:' . $source;
+        $records = Cache::many([$stateKey, $versionKey]);
+        return ['snapshot' => $this->snapshot($records[$stateKey] ?? null), 'version' => $records[$versionKey] ?? null];
+    }
+
+    private function snapshot(mixed $current): ?array
+    {
         if (!is_array($current)) {
             return null;
         }

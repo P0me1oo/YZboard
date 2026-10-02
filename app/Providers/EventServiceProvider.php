@@ -22,6 +22,7 @@ class EventServiceProvider extends ServiceProvider
     {
         parent::register();
         $this->app->scoped(NodeRuntimeMetadata::class);
+        $this->app->scoped(\App\Services\TelemetryDemand::class);
     }
 
     /**

@@ -193,6 +193,7 @@ class UserController extends Controller
     // Fetch paginated user list (filters + sorting).
     public function fetch(Request $request)
     {
+        app(\App\Services\TelemetryDemand::class)->renew(['users']);
         $current = $request->input('current', 1);
         $pageSize = $request->input('pageSize', 10);
 

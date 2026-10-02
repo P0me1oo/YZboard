@@ -34,6 +34,12 @@ class RealtimeSnapshotService
 
     public function snapshot(array $subscription): array
     {
+        $demand = app(TelemetryDemand::class);
+        $demand->renew(array_merge(
+            $subscription['users'] !== [] ? ['users'] : [],
+            array_map(fn ($id) => 'node:' . $id, $subscription['nodes']),
+            array_map(fn ($id) => 'machine:' . $id, $subscription['machines']),
+        ));
         // HTTP 和 WebSocket 共用捕获顺序，慢请求不能越过后发起的快照。
         $version = Cache::lock('realtime:admin:version:lock', 5)->block(2, function (): array {
             $version = Cache::get('realtime:admin:version') ?? ['epoch' => bin2hex(random_bytes(16)), 'sequence' => 0];
@@ -97,6 +103,7 @@ class RealtimeSnapshotService
 
         if ($subscription['nodes'] !== []) {
             $nodes = Server::query()->whereIn('id', $subscription['nodes'])->get(['id', 'type', 'parent_id', 'enabled', 'u', 'd']);
+            $demand->renew($nodes->map(fn ($node) => 'node:' . ($node->parent_id ?: $node->id))->all());
             $sources = $this->states->readMany($nodes->map(fn ($node) => 'node:' . ($node->parent_id ?: $node->id))->unique()->all());
             foreach ($nodes as $node) {
                 $data = ['id' => (int) $node->id, 'u' => (int) $node->u, 'd' => (int) $node->d];

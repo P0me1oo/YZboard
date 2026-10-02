@@ -56,7 +56,7 @@ class NodeStateService
         $source = 'node:' . $node->id;
         $receipt = $this->store->accept($source, $validated['epoch'], (int) $validated['sequence'], $state);
         $this->projectLatest($node);
-        return $receipt;
+        return $receipt + ['telemetry' => app(TelemetryDemand::class)->forSource($source)];
     }
 
     /** 只投影最新快照；迟到请求和投影重试不能重新应用已经过时的内容。 */

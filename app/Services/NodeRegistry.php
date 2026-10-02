@@ -41,6 +41,8 @@ class NodeRegistry
         if ($conn !== null && isset(self::$connections[$nodeId]) && self::$connections[$nodeId] !== $conn) {
             return; // already replaced by a newer connection
         }
+        $current = self::$connections[$nodeId] ?? null;
+        if ($current) unset($current->deviceSyncVersions[$nodeId]);
         unset(self::$connections[$nodeId]);
     }
 
@@ -84,7 +86,20 @@ class NodeRegistry
             'timestamp' => time(),
         ]);
 
-        $conn->send($payload);
+        return $conn->send($payload) !== false;
+    }
+
+    /** 相同版本只向同一连接发送一次；新连接及主动完整同步必须重新发送。 */
+    public static function sendDevices(int $nodeId, array $snapshot, bool $force = false): bool
+    {
+        $conn = self::get($nodeId);
+        if (!$conn) return false;
+        $version = [$snapshot['epoch'], $snapshot['sequence']];
+        if (!$force && ($conn->deviceSyncVersions[$nodeId] ?? null) === $version) {
+            return true;
+        }
+        if (!self::send($nodeId, 'sync.devices', $snapshot)) return false;
+        $conn->deviceSyncVersions[$nodeId] = $version;
         return true;
     }
 

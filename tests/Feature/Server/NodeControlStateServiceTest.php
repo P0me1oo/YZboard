@@ -3,10 +3,14 @@
 namespace Tests\Feature\Server;
 
 use App\Models\Server;
+use App\Models\User;
+use App\Services\DeviceSyncScheduler;
 use App\Services\NodeControlStateService;
+use App\Services\RealtimeStateStore;
 use App\Support\Setting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Redis;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
@@ -133,5 +137,42 @@ class NodeControlStateServiceTest extends TestCase
         }
         $this->assertSame($before, Cache::get($key));
         $this->assertSame($before['epoch'], $this->service->snapshot($this->node)['epoch']);
+    }
+
+    public function test_periodic_reconciliation_clears_stale_sources_and_rechecks_user_eligibility(): void
+    {
+        $this->node->update(['group_ids' => [1]]);
+        $user = User::withoutEvents(fn () => User::create([
+            'email' => 'devices@performance.example.invalid', 'password' => 'test-only',
+            'uuid' => \App\Utils\Helper::guid(true), 'token' => \App\Utils\Helper::guid(),
+            'group_id' => 1, 'group_ids' => [1], 'u' => 0, 'd' => 0,
+            'transfer_enable' => 1000, 'banned' => false, 'expired_at' => null,
+        ]));
+        Redis::shouldReceive('hgetall')->with('user_devices:' . $user->id)->andReturn([
+            $this->node->id . ':8.8.8.8' => time(),
+        ]);
+        $store = app(RealtimeStateStore::class);
+        $source = 'node:' . $this->node->id;
+        $epoch = $store->begin($source, str_repeat('d', 32))['epoch'];
+        $store->accept($source, $epoch, 1, ['alive' => [$user->id => ['8.8.8.8']]]);
+        $scheduler = new DeviceSyncScheduler();
+        $scheduler->targets([], [$this->node->id]);
+        $first = $this->service->devices($this->node);
+        $this->assertSame([$user->id => ['8.8.8.8']], $first['users']);
+
+        // 即使没有变化通知，周期检查仍读取最新有效期并生成清空快照。
+        $this->travel(36)->seconds();
+        $this->assertSame([$this->node->id], $scheduler->targets([], [$this->node->id]));
+        $stale = $this->service->devices($this->node);
+        $this->assertSame([], $stale['users']);
+        $this->assertSame($first['sequence'] + 1, $stale['sequence']);
+        $store->accept($source, $epoch, 2, ['alive' => [$user->id => ['8.8.8.8']]]);
+        $this->assertSame($first['users'], $this->service->devices($this->node)['users']);
+
+        foreach ([['banned' => true], ['banned' => false, 'expired_at' => time() - 1],
+            ['expired_at' => null, 'u' => 1000], ['u' => 0, 'group_id' => 2, 'group_ids' => [2]]] as $attributes) {
+            User::withoutEvents(fn () => $user->forceFill($attributes)->save());
+            $this->assertSame([], $this->service->devices($this->node)['users']);
+        }
     }
 }

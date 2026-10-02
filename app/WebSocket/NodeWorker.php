@@ -5,6 +5,7 @@ namespace App\WebSocket;
 use App\Models\Server;
 use App\Models\ServerMachine;
 use App\Services\DeviceStateService;
+use App\Services\DeviceSyncScheduler;
 use App\Services\NodeRegistry;
 use App\Services\NodeRuntimeMetadata;
 use App\Services\ServerService;
@@ -128,21 +129,27 @@ class NodeWorker
             }
         });
 
-        Timer::add(1, function () {
+        $deviceSync = new DeviceSyncScheduler();
+        Timer::add(1, function () use ($deviceSync) {
             self::refreshSettings();
-            $pendingNodeIds = Redis::spop('device:push_pending_nodes', 100);
-            if (empty($pendingNodeIds)) {
-                return;
-            }
-            if (in_array(0, array_map('intval', $pendingNodeIds), true)) {
-                $pendingNodeIds = array_unique(array_merge($pendingNodeIds, NodeRegistry::getConnectedNodeIds()));
-            }
+            $pendingNodeIds = $deviceSync->targets(
+                Redis::spop('device:push_pending_nodes', 100) ?: [],
+                NodeRegistry::getConnectedNodeIds(),
+            );
 
             $service = app(DeviceStateService::class);
             foreach ($pendingNodeIds as $nodeId) {
                 $nodeId = (int) $nodeId;
                 if (NodeRegistry::get($nodeId) !== null) {
-                    NodeEventHandlers::pushDeviceStateToNode($nodeId, $service);
+                    try {
+                        NodeEventHandlers::pushDeviceStateToNode($nodeId, $service);
+                    } catch (\Throwable $exception) {
+                        // 单个节点失败不丢弃同批其它节点，下一轮重试最新内容。
+                        Redis::sadd('device:push_pending_nodes', $nodeId);
+                        Log::warning('[WS] 设备同步失败，等待重试', [
+                            'node_id' => $nodeId, 'exception' => get_class($exception),
+                        ]);
+                    }
                 }
             }
         });

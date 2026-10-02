@@ -275,7 +275,6 @@ class ServerService
     public static function processAlive(int $nodeId, array $alive): void
     {
         app(DeviceStateService::class)->replaceNodeDevices($nodeId, $alive);
-        Redis::sadd('device:push_pending_nodes', $nodeId);
     }
 
     /**

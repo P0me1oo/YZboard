@@ -134,14 +134,22 @@ class DeviceStateService
             $this->notifyUpdate((int) $userId, true);
         }
 
+        $unchanged = [];
+        // 扩展服务覆盖单用户写入时，继续调用其方法，保留插件行为。
+        $canRefresh = (new \ReflectionMethod($this, 'setDevices'))->getDeclaringClass()->getName() === self::class;
         foreach ($normalized as $userId => $ips) {
             $newIps = self::normalizeIPs($ips);
             $oldIps = $oldDevices[$userId] ?? [];
             sort($newIps);
             sort($oldIps);
             $changed = $changed || $newIps !== $oldIps;
-            $this->setDevices($userId, $nodeId, $newIps, $newIps !== $oldIps);
+            if ($canRefresh && $newIps !== [] && $newIps === $oldIps) {
+                $unchanged[$userId] = $newIps;
+            } else {
+                $this->setDevices($userId, $nodeId, $newIps, $newIps !== $oldIps);
+            }
         }
+        $this->refreshUnchangedDevices($nodeId, $unchanged);
 
         if ($normalized === []) {
             Redis::del(self::NODE_INDEX_PREFIX . $nodeId);
@@ -151,6 +159,31 @@ class DeviceStateService
             // 零是全体在线节点的通知标记，兼容 HTTP 与长连接处于不同进程。
             // 集合自动合并高频变化，接收时仍按各节点的可用用户范围生成快照。
             Redis::sadd('device:push_pending_nodes', 0);
+        }
+    }
+
+    /** 未变化的设备只续期，不删除重建；来源时间和数据库更新节流保持原样。 */
+    private function refreshUnchangedDevices(int $nodeId, array $users): void
+    {
+        $timestamp = time();
+        foreach (array_chunk($users, 128, true) as $chunk) {
+            $results = Redis::pipeline(function ($pipe) use ($nodeId, $chunk, $timestamp): void {
+                foreach ($chunk as $userId => $ips) {
+                    $fields = [];
+                    foreach ($ips as $ip) $fields["{$nodeId}:{$ip}"] = $timestamp;
+                    $key = self::PREFIX . $userId;
+                    $pipe->hMset($key, $fields);
+                    $pipe->expire($key, self::TTL);
+                    $pipe->sadd(self::NODE_INDEX_PREFIX . $nodeId, $userId);
+                }
+                $pipe->expire(self::NODE_INDEX_PREFIX . $nodeId, self::TTL * 2);
+            });
+            if (!is_array($results) || count($results) !== count($chunk) * 3 + 1 || in_array(false, $results, true)) {
+                throw new \RuntimeException('设备有效期更新失败');
+            }
+            foreach ($chunk as $userId => $_) {
+                $this->notifyUpdate((int) $userId);
+            }
         }
     }
 

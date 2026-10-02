@@ -106,7 +106,10 @@ class AdminRealtimeWorker
                 $entry['captured_at'] = $now;
                 $key = json_encode($entry['subscription'], JSON_THROW_ON_ERROR);
                 $frame = $frames[$key] ??= $this->snapshots->snapshot($entry['subscription']);
-                $hash = hash('sha256', json_encode($frame, JSON_THROW_ON_ERROR));
+                // 捕获版本只用于新旧排序，不能让未变化的展示内容每次都被视为变化。
+                $content = $frame;
+                unset($content['version']);
+                $hash = hash('sha256', json_encode($content, JSON_THROW_ON_ERROR));
                 if ($hash === $entry['hash']) continue;
                 $entry['hash'] = $hash;
                 $entry['sequence']++;

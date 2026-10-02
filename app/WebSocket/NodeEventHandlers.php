@@ -72,6 +72,11 @@ class NodeEventHandlers
         $node = Server::find($nodeId);
         if (!$node) return;
 
+        if (!empty($conn->realtime)) {
+            NodeRegistry::sendDevices($nodeId, app(NodeControlStateService::class)->devices($node), true);
+            return;
+        }
+
         $users = ServerService::getAvailableUsers($node);
         $userIds = $users->pluck('id')->toArray();
 
@@ -93,7 +98,9 @@ class NodeEventHandlers
         $node = app(NodeRuntimeMetadata::class)->nodeForDevices($nodeId);
         if (!$node) return;
         if (!empty(NodeRegistry::get($nodeId)?->realtime)) {
-            NodeRegistry::send($nodeId, 'sync.devices', app(NodeControlStateService::class)->devices($node));
+            if (!NodeRegistry::sendDevices($nodeId, app(NodeControlStateService::class)->devices($node))) {
+                throw new \RuntimeException('设备快照发送失败');
+            }
             return;
         }
 
@@ -138,7 +145,7 @@ class NodeEventHandlers
         if (!empty($conn->realtime)) {
             $control = app(NodeControlStateService::class);
             NodeRegistry::send($nodeId, 'sync.snapshot', $control->snapshot($node));
-            NodeRegistry::send($nodeId, 'sync.devices', $control->devices($node));
+            NodeRegistry::sendDevices($nodeId, $control->devices($node), true);
             return;
         }
 

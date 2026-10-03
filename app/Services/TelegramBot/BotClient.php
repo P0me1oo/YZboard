@@ -27,7 +27,13 @@ class BotClient
             Log::warning('Telegram Bot 请求被拒绝', ['method' => $method, 'status' => $response->status()]);
             $status = is_int($data['error_code'] ?? null) ? $data['error_code'] : $response->status();
             $message = match ($status) {
+                400 => $method === 'sendMessage'
+                    ? '无法发送消息，请核对接收人的 Telegram 数字 ID，并先私聊机器人发送 /start。'
+                    : 'Telegram 未接受请求，请检查机器人设置后重试。',
                 401 => '机器人密钥无效，请检查设置。',
+                403 => $method === 'sendMessage'
+                    ? '机器人无法向该账号发送消息，请先私聊机器人发送 /start，并确认没有屏蔽机器人。'
+                    : 'Telegram 未接受请求，请检查机器人设置后重试。',
                 429 => 'Telegram 请求过于频繁，请稍后重试。',
                 default => 'Telegram 未接受请求，请检查机器人设置后重试。',
             };

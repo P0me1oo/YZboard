@@ -35,6 +35,17 @@ class TelegramBotController extends Controller
         return response()->json(['data' => $this->config->enable()]);
     }
 
+    public function testMessage(Request $request): JsonResponse
+    {
+        $input = $request->validate([
+            'telegram_id' => ['required', 'integer', 'min:1', 'max:4503599627370495', 'regex:/\A[1-9][0-9]{0,15}\z/'],
+        ], [
+            'telegram_id.*' => '请输入接收人的 Telegram 数字 ID，不支持用户名或群组。',
+        ]);
+        $this->config->sendTestMessage((string) $input['telegram_id']);
+        return response()->json(['data' => ['sent' => true]]);
+    }
+
     public function disable(): JsonResponse
     {
         return response()->json(['data' => $this->config->disable()]);

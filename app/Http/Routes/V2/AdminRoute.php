@@ -51,6 +51,7 @@ class AdminRoute
                 $router->get('/config', [TelegramBotController::class, 'config']);
                 $router->post('/save', [TelegramBotController::class, 'save']);
                 $router->post('/check', [TelegramBotController::class, 'check']);
+                $router->post('/test-message', [TelegramBotController::class, 'testMessage']);
                 $router->post('/enable', [TelegramBotController::class, 'enable']);
                 $router->post('/disable', [TelegramBotController::class, 'disable']);
                 $router->get('/bindings', [TelegramBotController::class, 'bindings']);

@@ -7,6 +7,10 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     "enabledState": "Status", "enabled": "Enabled", "disabled": "Disabled",
     "connectionState": "Message connection", "username": "Bot account", "notChecked": "Not checked",
     "lastReceived": "Last message received", "neverReceived": "No messages received yet",
+    "pendingMessages": "Messages awaiting delivery", "checkWarning": "The check found a message connection issue",
+    "testMessage": "Send test message", "testRecipient": "Test recipient (numeric Telegram ID)",
+    "recipientPlaceholder": "The recipient must first send /start in a private chat with the bot",
+    "recipientRequired": "Enter a valid numeric Telegram ID; usernames and groups are not supported",
     "token": "Bot token", "tokenRequired": "Enter a bot token",
     "tokenSaved": "Saved; leave blank to keep it", "tokenPlaceholder": "Enter the bot token",
     "webhookUrl": "Message receiver URL", "urlRequired": "Enter the message receiver URL",
@@ -17,8 +21,8 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     "email": "Account email", "telegramId": "Telegram ID", "boundAt": "Linked at",
     "searchPlaceholder": "Search email or Telegram ID", "search": "Search",
     "total": "{{count}} linked accounts", "previous": "Previous", "next": "Next", "page": "Page {{current}} / {{total}}",
-    "status": { "unconfigured": "Not configured", "unchecked": "Not checked", "error": "Connection error", "connected": "Connected", "disconnected": "Not connected" },
-    "success": { "save": "Settings saved", "check": "Connection check completed", "enable": "Bot enabled", "disable": "Bot disabled" }
+    "status": { "unconfigured": "Not configured", "unchecked": "Not checked", "error": "Connection error", "connected": "Receiver URL registered", "disconnected": "Receiver URL not registered" },
+    "success": { "save": "Settings saved", "check": "Telegram API check completed", "enable": "Bot enabled", "disable": "Bot disabled", "testMessage": "Test message sent. Check Telegram." }
   },
   "giftCard": {
     "title": "Gift Card Management",

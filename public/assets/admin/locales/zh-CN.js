@@ -7,6 +7,10 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     "enabledState": "运行状态", "enabled": "已启用", "disabled": "已停用",
     "connectionState": "消息接入", "username": "机器人账号", "notChecked": "未检查",
     "lastReceived": "最近收到消息", "neverReceived": "尚未收到消息",
+    "pendingMessages": "待投递消息", "checkWarning": "检查发现消息接入异常",
+    "testMessage": "发送测试消息", "testRecipient": "测试接收人（Telegram 数字 ID）",
+    "recipientPlaceholder": "接收人需先私聊机器人发送 /start",
+    "recipientRequired": "请输入有效的 Telegram 数字 ID，不支持用户名或群组",
     "token": "机器人密钥", "tokenRequired": "请输入机器人密钥",
     "tokenSaved": "已保存，留空表示不修改", "tokenPlaceholder": "输入机器人密钥",
     "webhookUrl": "消息接收地址", "urlRequired": "请输入消息接收地址",
@@ -17,8 +21,8 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     "email": "账号邮箱", "telegramId": "Telegram ID", "boundAt": "绑定时间",
     "searchPlaceholder": "搜索邮箱或 Telegram ID", "search": "查询",
     "total": "共 {{count}} 条绑定", "previous": "上一页", "next": "下一页", "page": "第 {{current}} / {{total}} 页",
-    "status": { "unconfigured": "未配置", "unchecked": "未检查", "error": "连接异常", "connected": "已接入", "disconnected": "未接入" },
-    "success": { "save": "配置已保存", "check": "连接检查完成", "enable": "机器人已启用", "disable": "机器人已停用" }
+    "status": { "unconfigured": "未配置", "unchecked": "未检查", "error": "连接异常", "connected": "接收地址已登记", "disconnected": "接收地址未登记" },
+    "success": { "save": "配置已保存", "check": "Telegram 接口检查完成", "enable": "机器人已启用", "disable": "机器人已停用", "testMessage": "测试消息已发送，请到 Telegram 查看" }
   },
   "giftCard": {
     "title": "礼品卡管理",

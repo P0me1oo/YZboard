@@ -31,6 +31,9 @@ class TelegramBotTest extends TestCase
     private bool $failReply = false;
     private bool $failRegistration = false;
     private bool $failAuthentication = false;
+    private array $webhookInfo = [];
+    private int $replyStatus = 0;
+    private bool $invalidReply = false;
     private const BOT_ID = 123456789;
     private const TELEGRAM_ID = 900000001;
     private const SITE = 'https://panel.example.test';
@@ -57,6 +60,10 @@ class TelegramBotTest extends TestCase
             if ($method === 'getMe' && $this->failAuthentication) {
                 return Http::response(['ok' => false, 'error_code' => 401], 401);
             }
+            if ($method === 'sendMessage' && $this->replyStatus) {
+                return Http::response(['ok' => false, 'error_code' => $this->replyStatus,
+                    'description' => '模拟错误 ' . $this->token], $this->replyStatus);
+            }
             if ($this->failReply && in_array($method, ['sendMessage', 'editMessageText'], true)) {
                 $this->failReply = false;
                 return Http::response(['ok' => false, 'description' => '模拟发送失败'], 500);
@@ -72,7 +79,10 @@ class TelegramBotTest extends TestCase
             }
             $result = match ($method) {
                 'getMe' => ['id' => self::BOT_ID, 'is_bot' => true, 'username' => 'yz_test_bot'],
-                'getWebhookInfo' => ['url' => $this->remoteUrl, 'pending_update_count' => 0],
+                'getWebhookInfo' => array_merge(['url' => $this->remoteUrl, 'pending_update_count' => 0], $this->webhookInfo),
+                'sendMessage' => $this->invalidReply ? true : [
+                    'message_id' => 1, 'chat' => ['id' => (int) $data['chat_id'], 'type' => 'private'],
+                ],
                 default => true,
             };
             return Http::response(['ok' => true, 'result' => $result]);
@@ -154,6 +164,146 @@ class TelegramBotTest extends TestCase
         $this->assertStringContainsString('订阅链接', $this->lastReply()['text']);
         $this->assertDatabaseCount('v2_telegram_bot_bindings', 0);
         $this->assertDatabaseMissing('v2_plugins', ['code' => 'telegram', 'is_enabled' => 1]);
+    }
+
+    public function test_connection_check_exposes_delivery_failure_even_when_registration_matches(): void
+    {
+        $this->asAdmin();
+        $this->remoteUrl = self::SITE . ConfigService::WEBHOOK_PATH;
+        $this->webhookInfo = [
+            'pending_update_count' => 3, 'last_error_date' => time(),
+            'last_error_message' => 'Wrong response from the webhook: 403 Forbidden ' . $this->token,
+        ];
+        $response = $this->postJson($this->adminPath('check'))->assertOk()
+            ->assertJsonPath('data.webhook_matches', true)->assertJsonPath('data.pending_update_count', 3)
+            ->assertJsonPath('data.last_received_at', null);
+        $this->assertStringContainsString('HTTP 403', $response->json('data.last_error'));
+        $this->assertStringNotContainsString($this->token, $response->getContent());
+        $this->assertStringNotContainsString($this->token, TelegramBotConfig::first()->last_error);
+        $this->getJson($this->adminPath('config'))->assertJsonPath('data.last_error', $response->json('data.last_error'));
+    }
+
+    public function test_delivery_errors_are_classified_without_storing_remote_text(): void
+    {
+        $this->asAdmin();
+        $this->remoteUrl = self::SITE . ConfigService::WEBHOOK_PATH;
+        foreach ([
+            'Wrong response from the webhook: 404 Not Found' => 'HTTP 404',
+            'Wrong response from the webhook: 503 Service Unavailable' => 'HTTP 503',
+            'SSL error: certificate verify failed' => '证书',
+            'Failed to resolve host' => '域名解析失败',
+            'Connection timed out' => '超时',
+            'Connection refused' => '连接被拒绝',
+            'Unrecognized failure' => '面板入口和服务日志',
+        ] as $remote => $expected) {
+            $this->webhookInfo = ['last_error_message' => $remote . ' ' . $this->secret];
+            $response = $this->postJson($this->adminPath('check'))->assertOk();
+            $this->assertStringContainsString($expected, $response->json('data.last_error'));
+            $this->assertStringNotContainsString($this->secret, $response->getContent());
+        }
+    }
+
+    public function test_received_messages_clear_historical_errors_only_when_no_messages_are_pending(): void
+    {
+        $this->asAdmin();
+        $this->remoteUrl = self::SITE . ConfigService::WEBHOOK_PATH;
+        $this->webhookInfo = ['last_error_date' => time() - 60, 'last_error_message' => 'Connection timed out'];
+        $this->postJson($this->adminPath('check'))->assertOk();
+        $this->assertNotNull(TelegramBotConfig::first()->last_error);
+        $this->webhook($this->message('/start'))->assertOk();
+        $this->postJson($this->adminPath('check'))->assertOk()->assertJsonPath('data.last_error', null);
+        $this->webhookInfo['pending_update_count'] = 1;
+        $this->postJson($this->adminPath('check'))->assertOk();
+        $this->assertNotNull(TelegramBotConfig::first()->last_error);
+        $this->webhookInfo = [];
+        $this->postJson($this->adminPath('check'))->assertOk()->assertJsonPath('data.last_error', null);
+    }
+
+    public function test_foreign_receiver_errors_are_not_reported_as_this_panels_delivery_failure(): void
+    {
+        $this->asAdmin();
+        $this->remoteUrl = 'https://other.example.test/webhook';
+        $this->webhookInfo = ['last_error_message' => 'Connection refused'];
+        $this->postJson($this->adminPath('check'))->assertOk()
+            ->assertJsonPath('data.webhook_matches', false)->assertJsonPath('data.last_error', null);
+    }
+
+    public function test_test_message_requires_admin_and_a_valid_private_recipient(): void
+    {
+        $path = $this->adminPath('test-message');
+        $this->postJson($path, ['telegram_id' => self::TELEGRAM_ID])->assertStatus(403);
+        Sanctum::actingAs($this->user());
+        $this->postJson($path, ['telegram_id' => self::TELEGRAM_ID])->assertStatus(403);
+        $this->asAdmin();
+        foreach ([null, '', '0', '-100000001', '@example', '1.5', '1e9', '4503599627370496', ['123']] as $invalid) {
+            $this->postJson($path, ['telegram_id' => $invalid])->assertStatus(422);
+        }
+        Http::assertNothingSent();
+    }
+
+    public function test_test_message_works_without_binding_or_webhook_and_does_not_change_receiving_state(): void
+    {
+        $this->asAdmin();
+        TelegramBotConfig::first()->update(['enabled' => false, 'last_error' => '现有投递错误']);
+        $before = TelegramBotConfig::first()->getRawOriginal();
+        $this->postJson($this->adminPath('test-message'), [
+            'telegram_id' => (string) self::TELEGRAM_ID, 'text' => '不允许自定义内容',
+        ])->assertOk()->assertJsonPath('data.sent', true);
+        $this->assertSame(['sendMessage'], array_column($this->calls, 'method'));
+        $this->assertSame((string) self::TELEGRAM_ID, $this->lastReply()['chat_id']);
+        $this->assertStringContainsString('测试消息', $this->lastReply()['text']);
+        $this->assertStringNotContainsString('不允许自定义内容', $this->lastReply()['text']);
+        $this->assertSame($before, TelegramBotConfig::first()->getRawOriginal());
+        $this->assertDatabaseCount('v2_telegram_bot_bindings', 0);
+        $this->assertDatabaseCount('v2_telegram_bot_updates', 0);
+        $this->assertStringNotContainsString((string) self::TELEGRAM_ID, AdminAuditLog::latest('id')->first()->request_data);
+    }
+
+    public function test_successful_test_sends_are_limited_and_can_resume_after_ten_seconds(): void
+    {
+        $this->asAdmin();
+        $path = $this->adminPath('test-message');
+        $input = ['telegram_id' => (string) self::TELEGRAM_ID];
+        $this->postJson($path, $input)->assertOk();
+        $this->postJson($path, $input)->assertStatus(429);
+        $this->assertCount(1, $this->calls);
+        $this->travel(11)->seconds();
+        $this->postJson($path, $input)->assertOk();
+        $this->assertCount(2, $this->calls);
+    }
+
+    public function test_failed_test_send_is_actionable_and_can_be_retried_without_clearing_delivery_errors(): void
+    {
+        $this->asAdmin();
+        TelegramBotConfig::first()->update(['last_error' => '现有投递错误']);
+        foreach ([400, 403, 401, 429] as $status) {
+            $this->replyStatus = $status;
+            $response = $this->postJson($this->adminPath('test-message'), ['telegram_id' => self::TELEGRAM_ID])->assertStatus(502);
+            $this->assertStringNotContainsString($this->token, $response->getContent());
+            if (in_array($status, [400, 403], true)) {
+                $this->assertStringContainsString('/start', $response->json('message'));
+            }
+        }
+        $this->replyStatus = 0;
+        $this->postJson($this->adminPath('test-message'), ['telegram_id' => self::TELEGRAM_ID])->assertOk();
+        $this->assertNull(TelegramBotConfig::first()->last_received_at);
+        $this->assertSame('现有投递错误', TelegramBotConfig::first()->last_error);
+    }
+
+    public function test_test_send_does_not_report_success_without_a_telegram_message_receipt(): void
+    {
+        $this->asAdmin();
+        $this->invalidReply = true;
+        $this->postJson($this->adminPath('test-message'), ['telegram_id' => self::TELEGRAM_ID])->assertStatus(502);
+        $this->assertNull(TelegramBotConfig::first()->last_received_at);
+    }
+
+    public function test_test_send_without_saved_credentials_does_not_call_telegram(): void
+    {
+        $this->asAdmin();
+        TelegramBotConfig::first()->update(['token' => null]);
+        $this->postJson($this->adminPath('test-message'), ['telegram_id' => self::TELEGRAM_ID])->assertStatus(400);
+        Http::assertNothingSent();
     }
 
     public function test_binding_displays_exactly_three_inline_menu_actions(): void

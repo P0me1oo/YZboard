@@ -7,6 +7,10 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
     "enabledState": "Состояние", "enabled": "Включён", "disabled": "Выключен",
     "connectionState": "Приём сообщений", "username": "Аккаунт бота", "notChecked": "Не проверено",
     "lastReceived": "Последнее сообщение", "neverReceived": "Сообщений пока нет",
+    "pendingMessages": "Сообщения в очереди", "checkWarning": "Проверка выявила проблему приёма сообщений",
+    "testMessage": "Отправить тестовое сообщение", "testRecipient": "Получатель теста (числовой Telegram ID)",
+    "recipientPlaceholder": "Получатель должен сначала отправить боту /start в личном чате",
+    "recipientRequired": "Введите числовой Telegram ID; имена пользователей и группы не поддерживаются",
     "token": "Токен бота", "tokenRequired": "Введите токен бота",
     "tokenSaved": "Сохранён; оставьте пустым без изменения", "tokenPlaceholder": "Введите токен бота",
     "webhookUrl": "Адрес приёма сообщений", "urlRequired": "Введите адрес приёма сообщений",
@@ -17,8 +21,8 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
     "email": "Почта аккаунта", "telegramId": "Telegram ID", "boundAt": "Дата привязки",
     "searchPlaceholder": "Поиск по почте или Telegram ID", "search": "Поиск",
     "total": "Привязок: {{count}}", "previous": "Назад", "next": "Далее", "page": "Страница {{current}} / {{total}}",
-    "status": { "unconfigured": "Не настроено", "unchecked": "Не проверено", "error": "Ошибка соединения", "connected": "Подключено", "disconnected": "Не подключено" },
-    "success": { "save": "Настройки сохранены", "check": "Проверка завершена", "enable": "Бот включён", "disable": "Бот выключен" }
+    "status": { "unconfigured": "Не настроено", "unchecked": "Не проверено", "error": "Ошибка соединения", "connected": "Адрес приёма зарегистрирован", "disconnected": "Адрес приёма не зарегистрирован" },
+    "success": { "save": "Настройки сохранены", "check": "Проверка API Telegram завершена", "enable": "Бот включён", "disable": "Бот выключен", "testMessage": "Тестовое сообщение отправлено. Проверьте Telegram." }
   },
   "giftCard": {
     "title": "Управление подарочными картами",

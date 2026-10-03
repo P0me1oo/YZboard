@@ -6,6 +6,7 @@ use App\Exceptions\ApiException;
 use App\Models\TelegramBotConfig;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 
 class ConfigService
@@ -76,7 +77,6 @@ class ConfigService
             $config = $this->configured();
             try {
                 $this->inspect($config);
-                $config->last_error = null;
                 $config->save();
             } catch (ApiException $e) {
                 $this->recordError($config, $e);
@@ -123,6 +123,28 @@ class ConfigService
                 throw $e;
             }
             return $this->view($config);
+        });
+    }
+
+    public function sendTestMessage(string $recipient): void
+    {
+        $this->locked(function () use ($recipient) {
+            $config = $this->configured();
+            $limit = 'telegram-bot:test-message';
+            if (RateLimiter::tooManyAttempts($limit, 1)) {
+                throw new ApiException('请等待十秒后再发送测试消息。', 429);
+            }
+            $message = $this->client->request($config->token, 'sendMessage', [
+                'chat_id' => $recipient,
+                'text' => "这是一条 YZboard 测试消息。\n面板已成功发送消息到 Telegram。\n请回复 /start 检查消息接收。",
+                'link_preview_options' => ['is_disabled' => true],
+            ]);
+            if (!is_array($message) || !is_int($message['message_id'] ?? null) || $message['message_id'] <= 0
+                || ($message['chat']['id'] ?? null) !== (int) $recipient
+                || ($message['chat']['type'] ?? null) !== 'private') {
+                throw new ApiException('Telegram 未确认测试消息发送成功，请重新检查连接。', 502);
+            }
+            RateLimiter::hit($limit, 10);
         });
     }
 
@@ -187,7 +209,44 @@ class ConfigService
         $config->webhook_matches = hash_equals($this->webhookUrl($config), $webhook['url']);
         $config->pending_update_count = max(0, (int) ($webhook['pending_update_count'] ?? 0));
         $config->last_checked_at = time();
+        $config->last_error = $this->deliveryError($config, $webhook);
         return $webhook['url'];
+    }
+
+    private function deliveryError(TelegramBotConfig $config, array $webhook): ?string
+    {
+        // 其他接收地址的错误不能归因于本面板；成功接收后的历史错误不再提示。
+        if (!$config->webhook_matches || !is_string($webhook['last_error_message'] ?? null)
+            || $webhook['last_error_message'] === '') {
+            return null;
+        }
+        $errorAt = $webhook['last_error_date'] ?? null;
+        if ($config->pending_update_count === 0 && is_int($errorAt)
+            && $config->last_received_at !== null && $config->last_received_at > $errorAt) {
+            return null;
+        }
+
+        // 只展示可识别的错误类别，远端原文可能含地址或认证信息，不能直接保存或回显。
+        $error = $webhook['last_error_message'];
+        if (preg_match('/\AWrong response from the webhook: ([1-5][0-9]{2})(?:\s|$)/i', $error, $match)) {
+            $status = (int) $match[1];
+            $hint = match (true) {
+                $status === 403 => '请检查网站拦截规则或机器人来源校验。',
+                $status === 404 => '请检查消息接收地址路径和反向代理配置。',
+                $status === 429 => '请检查消息接收地址是否被限流。',
+                $status >= 500 => '请检查面板服务和错误日志。',
+                default => '请检查消息接收地址的跳转、访问验证和反向代理配置。',
+            };
+            return "Telegram 最近一次投递失败：接收地址返回 HTTP {$status}。{$hint}";
+        }
+        $hint = match (true) {
+            preg_match('/SSL|TLS|certificate/i', $error) === 1 => 'HTTPS 握手或证书校验失败，请检查证书和 HTTPS 配置。',
+            preg_match('/resolve|DNS/i', $error) === 1 => '域名解析失败，请检查消息接收域名。',
+            preg_match('/timed?\s*out|timeout/i', $error) === 1 => '连接或响应超时，请检查面板入口和服务响应。',
+            preg_match('/connection refused/i', $error) === 1 => '连接被拒绝，请检查 HTTPS 监听和防火墙。',
+            default => '请检查面板入口和服务日志。',
+        };
+        return 'Telegram 最近一次投递失败：' . $hint;
     }
 
     private function validateUrl(string $url): void

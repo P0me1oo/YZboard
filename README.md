@@ -1,5 +1,7 @@
 # Xboard
 
+开发中版本 `1.39.0` 尚未发布，配套管理端 `0.19.0`：新增 Telegram 测试发送与消息投递诊断，无数据库迁移。用法见 [Telegram Bot](docs/telegram-bot.md)。
+
 当前正式版本为 [`1.38.1`](https://github.com/P0me1oo/YZboard/releases/tag/v1.38.1)，配套管理端 `0.18.1`、节点程序 `v2.4.0`。本版减少节点状态校验和缓存读取开销，页面刷新、心跳及按需上报频率不变，只需更新面板，无数据库迁移。详见 [状态处理优化](docs/state-processing-performance.md)、[按需上报](docs/telemetry-demand.md) 和 [兼容矩阵](YZ_COMPATIBILITY.md)。
 
 保留服务器状态过期时的列表修复、用户实时网速和此前修改；不再使用中转来源 IP 白名单与确认提示，仍保留自动端口放行。

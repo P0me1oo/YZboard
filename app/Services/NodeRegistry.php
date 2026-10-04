@@ -10,6 +10,9 @@ use Workerman\Connection\TcpConnection;
  */
 class NodeRegistry
 {
+    // 节点超过三十五秒未收到设备快照会过期；稳定名单也必须提前续期。
+    public const DEVICE_RENEW_SECONDS = 10;
+
     /** @var array<int, TcpConnection> nodeId → connection */
     private static array $connections = [];
 
@@ -42,7 +45,7 @@ class NodeRegistry
             return; // already replaced by a newer connection
         }
         $current = self::$connections[$nodeId] ?? null;
-        if ($current) unset($current->deviceSyncVersions[$nodeId]);
+        if ($current) unset($current->deviceSyncVersions[$nodeId], $current->deviceSyncSentAt[$nodeId]);
         unset(self::$connections[$nodeId]);
     }
 
@@ -89,17 +92,22 @@ class NodeRegistry
         return $conn->send($payload) !== false;
     }
 
-    /** 相同版本只向同一连接发送一次；新连接及主动完整同步必须重新发送。 */
+    /** 相同版本十秒内去重，之后重新发送以续期；新连接及主动完整同步立即发送。 */
     public static function sendDevices(int $nodeId, array $snapshot, bool $force = false): bool
     {
         $conn = self::get($nodeId);
         if (!$conn) return false;
         $version = [$snapshot['epoch'], $snapshot['sequence']];
-        if (!$force && ($conn->deviceSyncVersions[$nodeId] ?? null) === $version) {
+        $now = now()->getTimestampMs();
+        $lastSentAt = $conn->deviceSyncSentAt[$nodeId] ?? null;
+        if (!$force && ($conn->deviceSyncVersions[$nodeId] ?? null) === $version
+            && $lastSentAt !== null && $now >= $lastSentAt
+            && $now - $lastSentAt < self::DEVICE_RENEW_SECONDS * 1000) {
             return true;
         }
         if (!self::send($nodeId, 'sync.devices', $snapshot)) return false;
         $conn->deviceSyncVersions[$nodeId] = $version;
+        $conn->deviceSyncSentAt[$nodeId] = $now;
         return true;
     }
 

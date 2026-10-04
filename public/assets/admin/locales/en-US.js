@@ -12,6 +12,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     "recipientPlaceholder": "The recipient must first send /start in a private chat with the bot",
     "recipientRequired": "Enter a valid numeric Telegram ID; usernames and groups are not supported",
     "token": "Bot token", "tokenRequired": "Enter a bot token",
+    "showToken": "Show bot token", "hideToken": "Hide bot token",
     "tokenSaved": "Saved; leave blank to keep it", "tokenPlaceholder": "Enter the bot token",
     "webhookUrl": "Message receiver URL", "urlRequired": "Enter the message receiver URL",
     "save": "Save", "processing": "Processing", "check": "Check connection", "refresh": "Refresh status",

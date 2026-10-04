@@ -20,6 +20,13 @@ class TelegramBotController extends Controller
         return response()->json(['data' => $this->config->view()]);
     }
 
+    public function token(): JsonResponse
+    {
+        return response()->json(['data' => ['token' => $this->config->current()->token]])
+            ->header('Cache-Control', 'no-store, private')
+            ->header('Pragma', 'no-cache');
+    }
+
     public function save(TelegramBotConfigRequest $request): JsonResponse
     {
         return response()->json(['data' => $this->config->save($request->validated())]);

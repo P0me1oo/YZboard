@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\TelegramBot;
 
+use App\Jobs\NodeUserSyncJob;
 use App\Models\AdminAuditLog;
 use App\Models\TelegramBotBinding;
 use App\Models\TelegramBotConfig;
@@ -14,7 +15,10 @@ use App\Utils\Helper;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -306,12 +310,12 @@ class TelegramBotTest extends TestCase
         Http::assertNothingSent();
     }
 
-    public function test_binding_displays_exactly_three_inline_menu_actions(): void
+    public function test_binding_displays_four_inline_menu_actions(): void
     {
         $user = $this->user(['telegram_id' => 800000001]);
         $this->bind($user);
         $buttons = $this->lastReply()['reply_markup']['inline_keyboard'];
-        $this->assertSame(['订阅信息', '订阅链接', '账户信息'], array_map(fn ($row) => $row[0]['text'], $buttons));
+        $this->assertSame(['订阅信息', '订阅链接', '重置订阅', '账户信息'], array_map(fn ($row) => $row[0]['text'], $buttons));
         $this->assertSame(800000001, $user->fresh()->telegram_id);
         $this->assertDatabaseCount('v2_telegram_bot_bindings', 1);
     }
@@ -360,6 +364,257 @@ class TelegramBotTest extends TestCase
         $this->webhook($this->message($oldLink, self::TELEGRAM_ID + 1))->assertOk();
         $this->assertStringContainsString('无效', $this->lastReply()['text']);
         $this->assertDatabaseCount('v2_telegram_bot_bindings', 1);
+    }
+
+    public function test_subscription_reset_requires_confirmation_and_preserves_account_and_binding(): void
+    {
+        $user = $this->user(['telegram_id' => 800000001, 'u' => 123, 'd' => 456, 'balance' => 789]);
+        $this->bind($user);
+        $before = $user->fresh()->getRawOriginal();
+        $binding = TelegramBotBinding::first();
+        $oldLink = $this->link($user);
+        Queue::fake([NodeUserSyncJob::class]);
+
+        $this->webhook($this->buttonUpdate('reset_subscription'))->assertOk();
+        $this->assertSame($before, $user->fresh()->getRawOriginal());
+        Queue::assertNothingPushed();
+        $confirmation = $this->lastReply()['reply_markup']['inline_keyboard'][0][0]['callback_data'];
+        $this->assertStringContainsString('绑定会保留', $this->lastReply()['text']);
+        $this->webhook($this->buttonUpdate($confirmation))->assertOk();
+
+        $fresh = $user->fresh();
+        $this->assertNotSame($before['token'], $fresh->token);
+        $this->assertNotSame($before['uuid'], $fresh->uuid);
+        $unchanged = array_diff_key($before, array_flip(['token', 'uuid', 'updated_at']));
+        $this->assertSame($unchanged, array_intersect_key($fresh->getRawOriginal(), $unchanged));
+        $binding->refresh();
+        $this->assertSame($user->id, $binding->user_id);
+        $this->assertSame(self::TELEGRAM_ID, $binding->telegram_id);
+        $this->assertNull($binding->reset_token);
+        $this->assertNull($binding->reset_expires_at);
+        $this->assertDatabaseCount('v2_telegram_bot_bindings', 1);
+        $reply = $this->lastReply();
+        $this->assertStringContainsString('订阅已重置', $reply['text']);
+        $this->assertStringContainsString(Helper::getSubscribeUrl($fresh->token), $reply['text']);
+        $this->assertStringNotContainsString($oldLink, $reply['text']);
+        $this->assertStringNotContainsString($fresh->uuid, $reply['text']);
+        $this->assertTrue($reply['link_preview_options']['is_disabled']);
+        Queue::assertPushed(NodeUserSyncJob::class, 1);
+
+        $this->webhook($this->buttonUpdate('account'))->assertOk();
+        $this->assertStringContainsString($user->email, $this->lastReply()['text']);
+        $this->webhook($this->buttonUpdate('link'))->assertOk();
+        $this->assertStringContainsString($fresh->token, $this->lastReply()['text']);
+        $this->webhook($this->message($oldLink, self::TELEGRAM_ID + 1))->assertOk();
+        $this->assertStringContainsString('无效', $this->lastReply()['text']);
+        $this->assertSame($binding->id, TelegramBotBinding::first()->id);
+        $records = TelegramBotUpdate::all()->toJson();
+        $this->assertStringNotContainsString($fresh->token, $records);
+        $this->assertStringNotContainsString($fresh->uuid, $records);
+    }
+
+    public function test_subscription_reset_confirmation_is_encrypted_and_hidden(): void
+    {
+        $this->bind($this->user());
+        $this->webhook($this->buttonUpdate('reset_subscription'))->assertOk();
+        $binding = TelegramBotBinding::first();
+        $this->assertNotSame($binding->reset_token, $binding->getRawOriginal('reset_token'));
+        $this->assertArrayNotHasKey('reset_token', $binding->toArray());
+        $this->assertLessThanOrEqual(64, strlen($this->lastReply()['reply_markup']['inline_keyboard'][0][0]['callback_data']));
+    }
+
+    public function test_duplicate_reset_confirmation_only_rotates_credentials_once(): void
+    {
+        $user = $this->user();
+        $this->bind($user);
+        Queue::fake([NodeUserSyncJob::class]);
+        $this->webhook($this->buttonUpdate('reset_subscription'))->assertOk();
+        $confirmation = $this->lastReply()['reply_markup']['inline_keyboard'][0][0]['callback_data'];
+        $update = $this->buttonUpdate($confirmation);
+        $this->webhook($update)->assertOk();
+        $after = $user->fresh()->getRawOriginal();
+        $count = count($this->calls);
+        $this->webhook($update)->assertOk();
+        $this->assertCount($count + 1, $this->calls);
+        $this->webhook($this->buttonUpdate($confirmation))->assertOk();
+        $this->assertStringContainsString('失效', $this->lastReply()['text']);
+        $this->assertSame($after, $user->fresh()->getRawOriginal());
+        Queue::assertPushed(NodeUserSyncJob::class, 1);
+
+        $this->webhook($this->buttonUpdate('reset_subscription'))->assertOk();
+        $confirmation = $this->lastReply()['reply_markup']['inline_keyboard'][0][0]['callback_data'];
+        $this->webhook($this->buttonUpdate($confirmation))->assertOk();
+        $this->assertNotSame($after['token'], $user->fresh()->token);
+        Queue::assertPushed(NodeUserSyncJob::class, 2);
+    }
+
+    public function test_failed_reset_reply_retries_current_link_without_rotating_again(): void
+    {
+        $user = $this->user();
+        $this->bind($user);
+        $this->webhook($this->buttonUpdate('reset_subscription'))->assertOk();
+        $confirmation = $this->lastReply()['reply_markup']['inline_keyboard'][0][0]['callback_data'];
+        $update = $this->buttonUpdate($confirmation);
+        Queue::fake([NodeUserSyncJob::class]);
+        $this->failReply = true;
+        $this->webhook($update)->assertStatus(503);
+        $after = $user->fresh()->getRawOriginal();
+        $record = TelegramBotUpdate::where('update_id', $update['update_id'])->firstOrFail();
+        $this->assertSame('subscription_reset', $record->action);
+        $this->assertNull($record->sent_at);
+        Cache::flush();
+        $this->webhook($update)->assertOk();
+        $this->assertSame($after, $user->fresh()->getRawOriginal());
+        $this->assertNotNull($record->fresh()->sent_at);
+        $this->assertStringContainsString(Helper::getSubscribeUrl($after['token']), $this->lastReply()['text']);
+        $this->assertDatabaseCount('v2_telegram_bot_bindings', 1);
+        Queue::assertPushed(NodeUserSyncJob::class, 1);
+    }
+
+    public function test_cancelled_expired_and_replaced_reset_confirmations_do_not_change_credentials(): void
+    {
+        $user = $this->user();
+        $this->bind($user);
+        $before = $user->fresh()->getRawOriginal();
+        $this->webhook($this->buttonUpdate('reset_subscription'))->assertOk();
+        $cancelled = $this->lastReply()['reply_markup']['inline_keyboard'][0][0]['callback_data'];
+        $this->webhook($this->buttonUpdate('reset_cancel'))->assertOk();
+        $this->webhook($this->buttonUpdate($cancelled))->assertOk();
+        $this->assertSame($before, $user->fresh()->getRawOriginal());
+
+        $this->webhook($this->buttonUpdate('reset_subscription'))->assertOk();
+        $expired = $this->lastReply()['reply_markup']['inline_keyboard'][0][0]['callback_data'];
+        TelegramBotBinding::query()->update(['reset_expires_at' => time()]);
+        $this->webhook($this->buttonUpdate($expired))->assertOk();
+        $this->assertSame($before, $user->fresh()->getRawOriginal());
+
+        $this->webhook($this->buttonUpdate('reset_subscription'))->assertOk();
+        $replaced = $this->lastReply()['reply_markup']['inline_keyboard'][0][0]['callback_data'];
+        $this->webhook($this->buttonUpdate('reset_subscription'))->assertOk();
+        $current = $this->lastReply()['reply_markup']['inline_keyboard'][0][0]['callback_data'];
+        $this->webhook($this->buttonUpdate($replaced))->assertOk();
+        $this->assertSame($before, $user->fresh()->getRawOriginal());
+        $this->webhook($this->buttonUpdate($current))->assertOk();
+        $this->assertNotSame($before['token'], $user->fresh()->token);
+        $this->assertDatabaseCount('v2_telegram_bot_bindings', 1);
+    }
+
+    public function test_reset_confirmation_cannot_target_another_sender_or_a_group(): void
+    {
+        $first = $this->user();
+        $second = $this->user();
+        $this->bind($first);
+        $this->bind($second, self::TELEGRAM_ID + 1);
+        $before = [$first->fresh()->token, $second->fresh()->token];
+        $this->webhook($this->buttonUpdate('reset_subscription'))->assertOk();
+        $confirmation = $this->lastReply()['reply_markup']['inline_keyboard'][0][0]['callback_data'];
+        $this->webhook($this->buttonUpdate($confirmation, self::TELEGRAM_ID + 1))->assertOk();
+        $this->assertStringContainsString('失效', $this->lastReply()['text']);
+        $update = $this->buttonUpdate($confirmation);
+        $update['callback_query']['message']['chat'] = ['id' => -100000001, 'type' => 'supergroup'];
+        $this->webhook($update)->assertOk();
+        $this->assertStringContainsString('私聊', $this->lastReply()['text']);
+        $this->webhook($this->buttonUpdate('reset:' . Str::random(24)))->assertOk();
+        $this->assertSame($before, [$first->fresh()->token, $second->fresh()->token]);
+        $this->webhook($this->buttonUpdate($confirmation))->assertOk();
+        $this->assertNotSame($before[0], $first->fresh()->token);
+        $this->assertSame($before[1], $second->fresh()->token);
+    }
+
+    public function test_unbound_and_deleted_users_cannot_reset_subscription(): void
+    {
+        $user = $this->user();
+        $before = $user->fresh()->getRawOriginal();
+        $this->webhook($this->buttonUpdate('reset_subscription'))->assertOk();
+        $this->webhook($this->buttonUpdate('reset:' . Str::random(24)))->assertOk();
+        $this->assertSame($before, $user->fresh()->getRawOriginal());
+        $this->assertDatabaseCount('v2_telegram_bot_bindings', 0);
+        $this->bind($user);
+        $this->webhook($this->buttonUpdate('reset_subscription'))->assertOk();
+        $confirmation = $this->lastReply()['reply_markup']['inline_keyboard'][0][0]['callback_data'];
+        $user->delete();
+        $this->webhook($this->buttonUpdate($confirmation))->assertOk();
+        $this->assertDatabaseCount('v2_telegram_bot_bindings', 0);
+        $this->assertStringNotContainsString($before['token'], $this->lastReply()['text']);
+    }
+
+    public function test_old_reset_confirmations_cannot_reset_a_rebound_account(): void
+    {
+        $first = $this->user();
+        $second = $this->user();
+        $this->bind($first);
+        $this->webhook($this->buttonUpdate('reset_subscription'))->assertOk();
+        $confirmation = $this->lastReply()['reply_markup']['inline_keyboard'][0][0]['callback_data'];
+        $this->webhook($this->buttonUpdate('unbind'))->assertOk();
+        $unbind = $this->lastReply()['reply_markup']['inline_keyboard'][0][0]['callback_data'];
+        $this->webhook($this->buttonUpdate($unbind))->assertOk();
+        $this->bind($second);
+        $before = [$first->fresh()->token, $second->fresh()->token];
+        $this->webhook($this->buttonUpdate($confirmation))->assertOk();
+        $this->assertSame($before, [$first->fresh()->token, $second->fresh()->token]);
+        $this->assertDatabaseHas('v2_telegram_bot_bindings', ['user_id' => $second->id, 'telegram_id' => self::TELEGRAM_ID]);
+    }
+
+    public function test_retrying_reset_reply_after_rebinding_does_not_expose_the_new_account(): void
+    {
+        $first = $this->user();
+        $second = $this->user();
+        $this->bind($first);
+        $this->webhook($this->buttonUpdate('reset_subscription'))->assertOk();
+        $confirmation = $this->lastReply()['reply_markup']['inline_keyboard'][0][0]['callback_data'];
+        $update = $this->buttonUpdate($confirmation);
+        $this->failReply = true;
+        $this->webhook($update)->assertStatus(503);
+        $this->webhook($this->buttonUpdate('unbind'))->assertOk();
+        $unbind = $this->lastReply()['reply_markup']['inline_keyboard'][0][0]['callback_data'];
+        $this->webhook($this->buttonUpdate($unbind))->assertOk();
+        $this->bind($second);
+        $before = [$first->fresh()->token, $second->fresh()->token];
+        $this->webhook($update)->assertOk();
+        $this->assertStringContainsString('失效', $this->lastReply()['text']);
+        $this->assertStringNotContainsString($second->token, $this->lastReply()['text']);
+        $this->assertSame($before, [$first->fresh()->token, $second->fresh()->token]);
+    }
+
+    public function test_failed_reset_transaction_keeps_credentials_and_confirmation_for_retry(): void
+    {
+        $user = $this->user();
+        $this->bind($user);
+        $before = $user->fresh()->getRawOriginal();
+        $this->webhook($this->buttonUpdate('reset_subscription'))->assertOk();
+        $confirmation = $this->lastReply()['reply_markup']['inline_keyboard'][0][0]['callback_data'];
+        $bindingBefore = TelegramBotBinding::first()->getRawOriginal();
+        $update = $this->buttonUpdate($confirmation);
+        $fail = true;
+        Event::listen('eloquent.updating: ' . TelegramBotBinding::class, function ($binding) use (&$fail) {
+            if ($fail && $binding->isDirty('reset_token') && $binding->reset_token === null) {
+                throw new \RuntimeException('模拟确认保存失败');
+            }
+        });
+        Queue::fake([NodeUserSyncJob::class]);
+        $this->webhook($update)->assertStatus(503);
+        $this->assertSame($before, $user->fresh()->getRawOriginal());
+        $this->assertSame($bindingBefore, TelegramBotBinding::first()->getRawOriginal());
+        $this->assertDatabaseMissing('v2_telegram_bot_updates', ['update_id' => $update['update_id']]);
+        Queue::assertNothingPushed();
+        $fail = false;
+        $this->webhook($update)->assertOk();
+        $this->assertNotSame($before['token'], $user->fresh()->token);
+        Queue::assertPushed(NodeUserSyncJob::class, 1);
+    }
+
+    public function test_reset_confirmation_migration_keeps_existing_binding_data(): void
+    {
+        $this->bind($this->user());
+        $migration = require database_path('migrations/2026_10_05_000001_add_subscription_reset_confirmation_to_telegram_bot_bindings.php');
+        $migration->down();
+        $this->assertFalse(Schema::hasColumn('v2_telegram_bot_bindings', 'reset_token'));
+        $before = DB::table('v2_telegram_bot_bindings')->first();
+        $migration->up();
+        $after = DB::table('v2_telegram_bot_bindings')->first();
+        $this->assertSame((array) $before, array_intersect_key((array) $after, (array) $before));
+        $this->assertNull($after->reset_token);
+        $this->assertNull($after->reset_expires_at);
     }
 
     public function test_callbacks_are_scoped_to_sender_and_do_not_accept_target_user_ids(): void
@@ -542,6 +797,31 @@ class TelegramBotTest extends TestCase
         $this->assertNotNull($audit);
         $this->assertStringNotContainsString($token, json_encode($audit));
         $this->assertSame($path, $audit->uri);
+    }
+
+    public function test_saved_token_is_available_only_through_the_admin_reveal_endpoint(): void
+    {
+        $this->getJson($this->adminPath('token'))->assertStatus(403);
+        Sanctum::actingAs($this->user());
+        $this->getJson($this->adminPath('token'))->assertStatus(403);
+        $this->asAdmin();
+        $encrypted = DB::table('v2_telegram_bot_configs')->value('token');
+
+        $this->getJson($this->adminPath('config'))->assertOk()->assertJsonMissingPath('data.token');
+        $this->getJson($this->adminPath('token'))->assertOk()
+            ->assertJsonPath('data.token', $this->token)
+            ->assertHeader('Cache-Control', 'no-store, private')
+            ->assertHeader('Pragma', 'no-cache');
+        $this->assertSame($encrypted, DB::table('v2_telegram_bot_configs')->value('token'));
+        $this->assertStringNotContainsString($this->token, AdminAuditLog::all()->toJson());
+        Http::assertNothingSent();
+    }
+
+    public function test_saved_token_reveal_returns_empty_when_no_token_is_configured(): void
+    {
+        $this->asAdmin();
+        TelegramBotConfig::first()->update(['token' => null]);
+        $this->getJson($this->adminPath('token'))->assertOk()->assertJsonPath('data.token', null);
     }
 
     public function test_enabling_registers_private_commands_and_header_secret(): void

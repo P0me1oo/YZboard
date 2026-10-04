@@ -82,7 +82,7 @@ test('三种语言资源齐全，并包含两步验证文案', () => {
             assert.ok(translations.user?.extend_duration?.[key], `${locale} 缺少增加时长文案 ${key}`);
         }
         assert.equal(translations.nav?.telegramBot, 'Telegram Bot', `${locale} 缺少独立机器人侧栏入口`);
-        for (const key of ['settings', 'bindings', 'token', 'webhookUrl', 'enableConfirm', 'disableConfirm']) {
+        for (const key of ['settings', 'bindings', 'token', 'showToken', 'hideToken', 'webhookUrl', 'enableConfirm', 'disableConfirm']) {
             assert.ok(translations.telegramBot?.[key], `${locale} 缺少机器人管理文案 ${key}`);
         }
         for (const key of ['version', 'publicIp', 'batch_upgrade', 'batch_restart']) {
@@ -133,6 +133,7 @@ test('产物包含全部 YZ 定制，避免误用未定制的上游管理端', (
         '用户单人及批量增加时长': '/user/extendDuration',
         '独立 Telegram Bot 侧栏入口': '/config/telegram-bot',
         '独立机器人配置接口': '/telegram-bot/config',
+        '独立机器人密钥显示接口': '/telegram-bot/token',
         '独立机器人绑定查询': '/telegram-bot/bindings',
     };
     for (const [name, marker] of Object.entries(markers)) {

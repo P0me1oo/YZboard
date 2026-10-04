@@ -96,6 +96,18 @@ class UpdateDispatcher
                 return [$e->getMessage(), null];
             }
         }
+        if ($action === 'reset_subscription') {
+            $binding = $this->bindings->prepareReset($sender);
+            return ['confirm_reset', $binding?->id];
+        }
+        if ($action === 'reset_confirm') {
+            $binding = $this->bindings->confirmReset($sender, $context['confirmation']);
+            return [$binding ? 'subscription_reset' : 'stale', $binding?->id];
+        }
+        if ($action === 'reset_cancel') {
+            $this->bindings->cancelReset($sender);
+            return ['menu', $binding?->id];
+        }
         if ($action === 'unbind') {
             $binding = $this->bindings->prepareUnbind($sender);
             return ['confirm_unbind', $binding?->id];
@@ -141,8 +153,11 @@ class UpdateDispatcher
                 || ($message['from']['id'] ?? null) !== $config->bot_id) {
                 return null;
             }
-            if (in_array($text, ['menu', 'subscription', 'link', 'account', 'unbind', 'unbind_cancel'], true)) {
+            if (in_array($text, ['menu', 'subscription', 'link', 'account', 'reset_subscription', 'reset_cancel', 'unbind', 'unbind_cancel'], true)) {
                 $action = $text;
+            } elseif (preg_match('/\Areset:([A-Za-z0-9]{24})\z/', $text, $matches)) {
+                $action = 'reset_confirm';
+                $confirmation = $matches[1];
             } elseif (preg_match('/\Aunbind:([A-Za-z0-9]{24})\z/', $text, $matches)) {
                 $action = 'unbind_confirm';
                 $confirmation = $matches[1];

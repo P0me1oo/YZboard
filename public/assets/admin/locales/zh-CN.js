@@ -12,6 +12,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     "recipientPlaceholder": "接收人需先私聊机器人发送 /start",
     "recipientRequired": "请输入有效的 Telegram 数字 ID，不支持用户名或群组",
     "token": "机器人密钥", "tokenRequired": "请输入机器人密钥",
+    "showToken": "显示机器人密钥", "hideToken": "隐藏机器人密钥",
     "tokenSaved": "已保存，留空表示不修改", "tokenPlaceholder": "输入机器人密钥",
     "webhookUrl": "消息接收地址", "urlRequired": "请输入消息接收地址",
     "save": "保存", "processing": "处理中", "check": "验证连接", "refresh": "刷新状态",

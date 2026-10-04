@@ -12,6 +12,7 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
     "recipientPlaceholder": "Получатель должен сначала отправить боту /start в личном чате",
     "recipientRequired": "Введите числовой Telegram ID; имена пользователей и группы не поддерживаются",
     "token": "Токен бота", "tokenRequired": "Введите токен бота",
+    "showToken": "Показать токен бота", "hideToken": "Скрыть токен бота",
     "tokenSaved": "Сохранён; оставьте пустым без изменения", "tokenPlaceholder": "Введите токен бота",
     "webhookUrl": "Адрес приёма сообщений", "urlRequired": "Введите адрес приёма сообщений",
     "save": "Сохранить", "processing": "Обработка", "check": "Проверить соединение", "refresh": "Обновить состояние",

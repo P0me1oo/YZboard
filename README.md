@@ -1,6 +1,6 @@
 # Xboard
 
-当前正式版本为 [`1.39.0`](https://github.com/P0me1oo/YZboard/releases/tag/v1.39.0)，配套管理端 `0.19.0`，节点程序沿用 `v2.4.0`。本版新增 Telegram 测试消息发送与投递诊断，刷新显示待投递数量和投递失败原因，只需更新面板，无数据库迁移。详见 [Telegram Bot](docs/telegram-bot.md) 和 [兼容矩阵](YZ_COMPATIBILITY.md)。
+当前版本为 `1.41.0`，配套管理端 `0.20.1`。Telegram Bot 私聊菜单新增「重置订阅」，确认后发送新链接，保留原有绑定；旧链接和节点连接凭据失效，需更新客户端订阅。保留套餐权限组选择提示修复，以及 Telegram 页面自动检查、精简统计和密钥显示。Node 沿用 `v2.4.1`；新增短期重置确认字段的数据库迁移，不删除已有绑定。正式镜像与发布核验见 [兼容矩阵](YZ_COMPATIBILITY.md)，功能说明见 [Telegram Bot](docs/telegram-bot.md)。
 
 保留服务器状态过期时的列表修复、用户实时网速和此前修改；不再使用中转来源 IP 白名单与确认提示，仍保留自动端口放行。
 

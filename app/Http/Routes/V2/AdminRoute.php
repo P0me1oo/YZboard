@@ -49,6 +49,7 @@ class AdminRoute
             // 独立 Telegram Bot
             $router->group(['prefix' => 'telegram-bot'], function ($router) {
                 $router->get('/config', [TelegramBotController::class, 'config']);
+                $router->get('/token', [TelegramBotController::class, 'token']);
                 $router->post('/save', [TelegramBotController::class, 'save']);
                 $router->post('/check', [TelegramBotController::class, 'check']);
                 $router->post('/test-message', [TelegramBotController::class, 'testMessage']);

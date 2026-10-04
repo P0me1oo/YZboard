@@ -31,6 +31,18 @@ class MessagePresenter
             return ['text' => "欢迎使用 Telegram Bot。\n请发送你的 XBoard 订阅链接以绑定账号。"];
         }
         $user = $binding->user;
+        if ($action === 'confirm_reset') {
+            if (!$binding->reset_token || ($binding->reset_expires_at ?? 0) <= time()) {
+                return ['text' => '重置确认已过期，请重新操作。', 'keyboard' => $this->back()];
+            }
+            return [
+                'text' => "确定重置订阅吗？\n旧订阅链接和节点连接凭据将失效，请用新链接更新客户端订阅。Telegram 绑定会保留。",
+                'keyboard' => [[
+                    ['text' => '确认重置', 'callback_data' => 'reset:' . $binding->reset_token],
+                    ['text' => '取消', 'callback_data' => 'reset_cancel'],
+                ]],
+            ];
+        }
         if ($action === 'confirm_unbind') {
             if (!$binding->unbind_token || ($binding->unbind_expires_at ?? 0) <= time()) {
                 return ['text' => '解绑确认已过期，请重新操作。', 'keyboard' => $this->back()];
@@ -60,6 +72,12 @@ class MessagePresenter
         if ($action === 'link') {
             return ['text' => "订阅链接\n" . Helper::getSubscribeUrl($user->token), 'keyboard' => $this->back()];
         }
+        if ($action === 'subscription_reset') {
+            return [
+                'text' => "订阅已重置，Telegram 绑定已保留。\n请用新链接更新客户端订阅：\n" . Helper::getSubscribeUrl($user->token),
+                'keyboard' => $this->back(),
+            ];
+        }
         if ($action === 'account') {
             return [
                 'text' => implode("\n", [
@@ -77,6 +95,7 @@ class MessagePresenter
             'keyboard' => [
                 [['text' => '订阅信息', 'callback_data' => 'subscription']],
                 [['text' => '订阅链接', 'callback_data' => 'link']],
+                [['text' => '重置订阅', 'callback_data' => 'reset_subscription']],
                 [['text' => '账户信息', 'callback_data' => 'account']],
             ],
         ];

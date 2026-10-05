@@ -2,6 +2,10 @@
 
 ## 1.46.1 节点类型筛选与 Telegram Bot 文案
 
+- 2026-10-05：[Release v1.46.1](https://github.com/P0me1oo/YZboard/releases/tag/v1.46.1) 已正式发布并核对为最新正式版，发布时间 `2026-10-05T08:19:56Z`。固定面板来源 `099cb28a8959e0b3dc5b1e9765f78fb3e77b8a13`，交付物为 GHCR 双架构镜像，无独立安装附件。
+- 不可变镜像 `ghcr.io/p0me1oo/yzboard:1.46.1-099cb28`、`1.46.1` 与 `latest` 均指向清单 `sha256:4d08c66f2cb37c0f34e527c76451a59ee3876432c0a30002655bfea1150f4b43`。linux/amd64 为 `sha256:5d6ee14ceeb17247e3538319bbb453e6c8afa8da2b1588a2c01b11b3ce6f9bf4`，linux/arm64 为 `sha256:6f0afc6d5f6756719842aec428bff35f486f7df202755438e909f81cac5a2ebc`；两个架构的 OCI revision、版本、配置摘要及各 25 个镜像层已匿名核对可获取。版本文件、Telegram Bot 消息模板、管理端清单及两个入口脚本与固定发布提交逐字节一致。
+- [发布流水线 37281770892](https://github.com/P0me1oo/YZboard/actions/runs/37281770892) 成功：PHP 8.2.34 完整回归 544 项、5424 次断言及管理端 5 项资源检查通过。镜像主脚本 SHA256 与下方已验证构建一致。
+
 - 开发基线：面板 `cad3f1c0fdded679f8b3f5d3533134a66d6f7000`，管理端 `a693b9c0918216efd514d7b043837698f7f5b3e3`。修改前两处工作区均干净，目标标签 `v1.46.1`、`v0.23.1` 未占用。
 - 配套管理端 `0.23.1`，Node 沿用 `v2.5.0`。筛选补齐 WireGuard、AnyTLS，并直接使用创建节点的协议列表；修复多个类型同时勾选时列表为空的问题。Telegram Bot 的剩余重置天数显示为「流量重置时间：x天」。无数据库迁移或 Node 协议变更。
 - PHP 8.4.21 使用内存 SQLite 和内存缓存，运行 `php -d extension=pdo_sqlite -d extension=sqlite3 vendor/phpunit/phpunit/phpunit --filter 'TelegramBotMessagePresenterTest|TelegramBotTest|TelegramBotLinkTest'`，99 项测试、691 次断言通过，覆盖新文案、天数取整、日期边界和重复查询不改变账号数据。SQLite 扩展已加载，命令启动时有重复加载提示。
@@ -9,7 +13,7 @@
 - 最终构建位于 `D:/codex-tmp/yz-node-filter-telegram-20261005-1791185736149/dist-final`，3,029 项构建源码与当前文件一致；同步 14 个资源到面板，5 项资源检查通过。主脚本 `admin-BWl4PGYj.js` 的 SHA256 为 `d834d4f756421135b1ed7169e5e7632db87a21762d9e584196620c2307d3cb98`，同步前已备份原资源。
 - 发布前本地 PHP 8.4.21 完整回归 544 项、5424 次断言通过。管理端固定源码为 `7ae6e73e460d325461b9a0e2a10a533e2ad773e8`、本地标签 `v0.23.1`；工程无远程仓库，构建资源随面板镜像交付。
 - 回滚基线为面板 `1.46.0-5ef7871`，清单 `sha256:0907fd9a818bdc02307524d597cdfa12620d1a1742cd64c65a99db7ea8495319`；匿名核对两个架构的 OCI revision、配置摘要及各 25 个镜像层通过。本次只需更新面板。
-- 发布准备已授权：固定提交及标签后，通过既有 GitHub Actions 完成 PHP 8.2 完整回归与双架构镜像发布；实际来源、摘要和可获取性在发布核验后记录。没有运行完整 `npm run verify`，没有连接真实服务器或验证实际 Telegram 投递。本次启动的浏览器、模拟服务和临时测试身份已关闭清空。
+- 本次没有运行完整 `npm run verify`，没有连接真实服务器或验证实际 Telegram 投递。本次启动的浏览器、模拟服务和临时测试身份已关闭清空。
 
 ## 1.46.0 WireGuard 默认值与 MTU 上限
 

@@ -1,6 +1,6 @@
 # Xboard
 
-当前版本 `1.46.1`，配套管理端 `0.23.1`、Node 沿用 `v2.5.0`。节点类型筛选补齐 WireGuard 和 AnyTLS；Telegram Bot 剩余重置天数改为「流量重置时间：x天」，无新增数据库迁移。发布与验证状态见 [兼容矩阵](YZ_COMPATIBILITY.md)。
+当前正式版本 [`1.46.1`](https://github.com/P0me1oo/YZboard/releases/tag/v1.46.1)，配套管理端 `0.23.1`、Node 沿用 `v2.5.0`。节点类型筛选补齐 WireGuard 和 AnyTLS；Telegram Bot 剩余重置天数改为「流量重置时间：x天」，无新增数据库迁移。双架构镜像与 `latest` 已发布并核验，本次只需更新面板。来源与验证结果见 [兼容矩阵](YZ_COMPATIBILITY.md)。
 
 此前开发版本 `1.45.0` 的 Telegram Bot「绑定记录」改为「用户管理」，管理员可在桌面或手机上确认后手动解绑；保留用户账号、套餐和订阅，重复请求不影响重新绑定的新关系。无新增数据库迁移，该功能无需更新 Node。使用方式见 [Telegram Bot](docs/telegram-bot.md)。
 

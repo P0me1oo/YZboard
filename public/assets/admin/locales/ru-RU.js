@@ -1,6 +1,7 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['ru-RU'] = {
   "statistics": {
+    "hour": "По часам", "perPage": "Строк на странице", "backToUsers": "К рейтингу пользователей",
     "navigation": "Статистика", "overview": "Обзор трафика", "userStatistics": "Статистика пользователей",
     "trend": "Динамика общего трафика", "nodeRank": "Рейтинг узлов по трафику", "userRank": "Рейтинг пользователей", "userDetails": "Трафик по пользователям и узлам",
     "period": "Период", "last30": "Последние 30 дней", "last7": "Последние 7 дней", "today": "Сегодня", "custom": "Выбрать даты",
@@ -8,7 +9,6 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
     "startDate": "Начальная дата", "endDate": "Конечная дата", "to": "до", "apply": "Применить", "invalidRange": "Выберите допустимый диапазон дат.",
     "total": "Всего", "upload": "Отправлено", "download": "Получено", "rank": "Место", "node": "Узел", "user": "Пользователь", "actions": "Действия",
     "viewDetails": "Подробнее", "loading": "Загрузка", "empty": "Нет данных", "loadFailed": "Не удалось загрузить данные. Повторите попытку.", "retry": "Повторить",
-    "actualStarted": "Учёт фактического трафика с {{date}}", "detailStarted": "Учёт по узлам с {{date}}",
     "page": "Страница {{page}} / {{pages}}, записей: {{count}}", "previous": "Назад", "next": "Далее",
     "searchUser": "Поиск пользователей", "searchPlaceholder": "Почта или ID пользователя", "search": "Поиск", "clear": "Сбросить",
     "chooseUser": "Найдите пользователя или выберите его в рейтинге.", "filterNode": "Фильтр узлов", "allNodes": "Все узлы",

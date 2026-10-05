@@ -21,6 +21,7 @@ class StatUserJob implements ShouldQueue
     protected array $server;
     protected string $protocol;
     protected string $recordType;
+    protected ?int $receivedAt = null;
 
     public $tries = 3;
     public $timeout = 60;
@@ -44,13 +45,14 @@ class StatUserJob implements ShouldQueue
         $this->server = $server;
         $this->protocol = $protocol;
         $this->recordType = $recordType;
+        $this->receivedAt = now()->timestamp;
     }
 
     public function handle(): void
     {
-        $recordAt = $this->recordType === 'm'
-            ? strtotime(date('Y-m-01'))
-            : strtotime(date('Y-m-d'));
+        // 新任务固定接收时间；升级前的旧队列任务没有该值，继续保留日统计。
+        $received = \Carbon\CarbonImmutable::createFromTimestamp($this->receivedAt ?? now()->timestamp, config('app.timezone'));
+        $recordAt = ($this->recordType === 'm' ? $received->startOfMonth() : $received->startOfDay())->timestamp;
 
         foreach ($this->data as $uid => $v) {
             try {
@@ -60,7 +62,7 @@ class StatUserJob implements ShouldQueue
                         app(TrafficStatisticsRecorder::class)->add(
                             (int) $uid, (int) $this->server['id'], 'entry', $recordAt,
                             (int) $v[0], (int) $v[1],
-                            (int) ($v[0] * $this->server['rate']), (int) ($v[1] * $this->server['rate'])
+                            (int) ($v[0] * $this->server['rate']), (int) ($v[1] * $this->server['rate']), $this->receivedAt
                         );
                     }
                 }, 3);

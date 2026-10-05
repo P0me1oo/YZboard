@@ -10,6 +10,7 @@ use App\Models\ServerGroup;
 use App\Services\ServerPortService;
 use App\Services\ServerRelayService;
 use App\Services\ServerService;
+use App\Services\ServerNameHistory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -189,15 +190,22 @@ class ManageController extends Controller
         $request->validate([
             'id' => 'required|integer',
         ]);
-        $server = Server::find($request->id);
-        if (!$server) {
-            return $this->fail([400202, '服务器不存在']);
-        }
-        if ($server->delete() === false) {
+        try {
+            return DB::transaction(function () use ($request) {
+                $server = Server::whereKey($request->id)->lockForUpdate()->first();
+                if (!$server) {
+                    return $this->fail([400202, '服务器不存在']);
+                }
+                ServerNameHistory::remember(collect([$server]));
+                if ($server->delete() === false) {
+                    throw new \RuntimeException('删除失败');
+                }
+                return $this->success(true);
+            }, 3);
+        } catch (\Exception $e) {
+            Log::error($e);
             return $this->fail([500, '删除失败']);
         }
-
-        return $this->success(true);
     }
 
     /**
@@ -218,11 +226,14 @@ class ManageController extends Controller
         }
 
         try {
-            $deleted = Server::whereIn('id', $ids)->delete();
+            DB::transaction(function () use ($ids) {
+                $servers = Server::whereIn('id', $ids)->orderBy('id')->lockForUpdate()->get();
+                ServerNameHistory::remember($servers);
+                if (Server::whereIn('id', $servers->modelKeys())->delete() === false) {
+                    throw new \RuntimeException('批量删除失败');
+                }
+            }, 3);
             \App\Services\NodeRuntimeMetadata::invalidate(Server::class);
-            if ($deleted === false) {
-                return $this->fail([500, '批量删除失败']);
-            }
             return $this->success(true);
         } catch (\Exception $e) {
             Log::error($e);

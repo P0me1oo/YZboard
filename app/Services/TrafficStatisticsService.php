@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\Server;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
@@ -51,6 +50,14 @@ class TrafficStatisticsService
     public function overview(array $range): array
     {
         $query = $this->between(DB::table('v2_stat_user_server')->where('kind', 'entry'), $range);
+        $summary = $this->summary($query);
+        if ($range['start']->addDay()->equalTo($range['end'])) {
+            $hourly = $this->hourlyOverview($range, $summary);
+            if ($hourly !== null) {
+                return $hourly;
+            }
+            $range['unit'] = 'day';
+        }
         $rows = (clone $query)->selectRaw('record_at, SUM(u) AS upload, SUM(d) AS download')
             ->groupBy('record_at')->get()->keyBy('record_at');
         $series = [];
@@ -68,14 +75,41 @@ class TrafficStatisticsService
             $series[$bucket]['download'] += (int) ($row->download ?? 0);
             $series[$bucket]['total'] = $series[$bucket]['upload'] + $series[$bucket]['download'];
         }
-        return ['list' => array_values($series), 'summary' => $this->summary($query), 'meta' => $range['meta']];
+        return ['list' => array_values($series), 'summary' => $summary, 'meta' => $range['meta'] + ['unit' => $range['unit']]];
+    }
+
+    private function hourlyOverview(array $range, array $summary): ?array
+    {
+        $started = (int) DB::table('v2_settings')->where('name', 'traffic_hourly_started_at')->value('value');
+        if (!$started || $range['end']->timestamp <= $started) {
+            return null;
+        }
+        $query = $this->between(DB::table('v2_stat_traffic_hour'), $range);
+        // 升级当天及旧任务可能只有日记录；不把缺失的小时流量伪装成零。
+        if ($this->summary($query) !== $summary) {
+            return null;
+        }
+        $rows = $query->get()->keyBy('record_at');
+        $first = max($range['start']->timestamp, CarbonImmutable::createFromTimestamp($started, config('app.timezone'))->startOfHour()->timestamp);
+        $last = min($range['end']->timestamp, now()->timestamp + 1);
+        $series = [];
+        // 按真实经过的小时递增，保留夏令时重复小时的时区偏移。
+        for ($timestamp = $first; $timestamp < $last; $timestamp += 3600) {
+            $row = $rows[$timestamp] ?? null;
+            $u = (int) ($row->u ?? 0); $d = (int) ($row->d ?? 0);
+            $series[] = ['date' => CarbonImmutable::createFromTimestamp($timestamp, config('app.timezone'))->toIso8601String(),
+                'upload' => $u, 'download' => $d, 'total' => $u + $d];
+        }
+        return ['list' => $series, 'summary' => $summary, 'meta' => $range['meta'] + ['unit' => 'hour']];
     }
 
     public function nodes(array $range): array
     {
         $query = $this->between(DB::table('v2_stat_server')->where('record_type', 'd'), $range);
+        ServerNameHistory::joinNames($query, 'v2_stat_server');
         $query->selectRaw('server_id AS id, SUM(u) AS upload, SUM(d) AS download, SUM(u + d) AS total')
-            ->groupBy('server_id')->orderByDesc('total')->orderBy('server_id');
+            ->addSelect('node_name', 'node_deleted')->groupBy('server_id', 'node_name', 'node_deleted')
+            ->orderByDesc('total')->orderBy('server_id');
         return $this->ranking($query, $range, 'node');
     }
 
@@ -103,23 +137,26 @@ class TrafficStatisticsService
     {
         $userId = (int) $range['user_id'];
         $base = $this->between(DB::table('v2_stat_user_server')->where('user_id', $userId), $range);
-        $allNodes = (clone $base)->select('server_id')->distinct()->pluck('server_id');
-        $names = Server::whereIn('id', $allNodes)->pluck('name', 'id');
+        $visible = ServerNameHistory::joinNames(clone $base, 'v2_stat_user_server');
+        $allNodes = (clone $visible)->select('server_id', 'node_name', 'node_deleted')->distinct()->orderBy('server_id')->get();
         if (!empty($range['server_id'])) {
             $base->where('server_id', $range['server_id']);
+            $visible->where('server_id', $range['server_id']);
         }
         $entrySummary = $this->summary((clone $base)->where('kind', 'entry'), $range['metric']);
         // 落地没有独立扣费流量；不能伪装为零或与入口相加。
         $relaySummary = $this->summary((clone $base)->where('kind', 'relay'));
         [$expression, $bindings] = $this->bucketExpression($range);
-        $query = (clone $base)->selectRaw($expression . ' AS date', $bindings)
+        $query = $visible->selectRaw($expression . ' AS date', $bindings)
             ->selectRaw('server_id, kind, SUM(u) AS upload, SUM(d) AS download, SUM(u + d) AS total,
                 SUM(billed_u) AS billed_upload, SUM(billed_d) AS billed_download, SUM(billed_u + billed_d) AS billed_total')
-            ->groupBy('date', 'server_id', 'kind')->orderByDesc('date')->orderBy('server_id')->orderBy('kind');
+            ->addSelect('node_name', 'node_deleted')->groupBy('date', 'server_id', 'kind', 'node_name', 'node_deleted')
+            ->orderByDesc('date')->orderBy('server_id')->orderBy('kind');
         $page = $query->paginate((int) $range['page_size'], ['*'], 'page', (int) $range['page']);
-        $list = array_map(function ($row) use ($names): array {
+        $list = array_map(function ($row): array {
             $item = (array) $row;
-            $item['server_name'] = $names[$row->server_id] ?? '节点 #' . $row->server_id;
+            $item['server_name'] = ServerNameHistory::label($row);
+            unset($item['node_name'], $item['node_deleted']);
             foreach (['upload', 'download', 'total', 'billed_upload', 'billed_download', 'billed_total'] as $key) {
                 $item[$key] = str_starts_with($key, 'billed_') && $row->kind === 'relay' ? null : (int) $item[$key];
             }
@@ -127,9 +164,9 @@ class TrafficStatisticsService
         }, $page->items());
         return [
             'user' => ['id' => $userId, 'name' => User::whereKey($userId)->value('email') ?? '用户 #' . $userId],
-            'list' => $list, 'total' => $page->total(), 'page' => $page->currentPage(), 'last_page' => $page->lastPage(),
+            'list' => $list, 'total' => $page->total(), 'page' => $page->currentPage(), 'last_page' => $page->lastPage(), 'page_size' => $page->perPage(),
             'entry_summary' => $entrySummary, 'relay_summary' => $relaySummary,
-            'nodes' => $allNodes->map(fn ($id) => ['id' => $id, 'name' => $names[$id] ?? '节点 #' . $id])->values()->all(),
+            'nodes' => $allNodes->map(fn ($row) => ['id' => $row->server_id, 'name' => ServerNameHistory::label($row)])->all(),
             'meta' => $range['meta'],
         ];
     }
@@ -172,12 +209,12 @@ class TrafficStatisticsService
     {
         $page = $query->paginate((int) $range['page_size'], ['*'], 'page', (int) $range['page']);
         $ids = collect($page->items())->pluck('id');
-        $names = $type === 'node' ? Server::whereIn('id', $ids)->pluck('name', 'id') : User::whereIn('id', $ids)->pluck('email', 'id');
+        $names = $type === 'user' ? User::whereIn('id', $ids)->pluck('email', 'id') : collect();
         $list = array_map(fn ($row) => [
-            'id' => (int) $row->id, 'name' => $names[$row->id] ?? ($type === 'node' ? '节点 #' : '用户 #') . $row->id,
+            'id' => (int) $row->id, 'name' => $type === 'node' ? ServerNameHistory::label($row) : ($names[$row->id] ?? '用户 #' . $row->id),
             'upload' => (int) $row->upload, 'download' => (int) $row->download, 'total' => (int) $row->total,
         ], $page->items());
-        return ['list' => $list, 'total' => $page->total(), 'page' => $page->currentPage(), 'last_page' => $page->lastPage(), 'meta' => $range['meta']];
+        return ['list' => $list, 'total' => $page->total(), 'page' => $page->currentPage(), 'last_page' => $page->lastPage(), 'page_size' => $page->perPage(), 'meta' => $range['meta']];
     }
 
     private function bucket(CarbonImmutable $day, string $unit): string

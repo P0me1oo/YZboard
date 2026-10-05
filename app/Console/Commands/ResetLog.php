@@ -47,6 +47,13 @@ class ResetLog extends Command
         StatUser::where('record_at', '<', $cutoff)->delete();
         StatServer::where('record_at', '<', $cutoff)->delete();
         DB::table('v2_stat_user_server')->where('record_at', '<', $cutoff)->delete();
+        DB::table('v2_stat_traffic_hour')->where('record_at', '<', $cutoff)->delete();
+        DB::table('v2_stat_server_name')->where('deleted_at', '<', $cutoff)
+            ->whereNotExists(fn ($query) => $query->selectRaw('1')->from('v2_stat_server')
+                ->whereColumn('v2_stat_server.server_id', 'v2_stat_server_name.server_id'))
+            ->whereNotExists(fn ($query) => $query->selectRaw('1')->from('v2_stat_user_server')
+                ->whereColumn('v2_stat_user_server.server_id', 'v2_stat_server_name.server_id'))
+            ->delete();
         AdminAuditLog::where('created_at', '<', strtotime('-3 month', time()))->delete();
     }
 }

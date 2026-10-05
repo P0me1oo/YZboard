@@ -138,7 +138,7 @@ class ProcessNodeReportBatch implements ShouldQueue
                 ->incrementEach(['u' => $ratedU, 'd' => $ratedD], ['t' => $now]);
 
             $this->incrementUserStat($userId, $rate, $recordAt, $ratedU, $ratedD, $now);
-            app(TrafficStatisticsRecorder::class)->add($userId, $serverId, 'entry', $recordAt, $u, $d, $ratedU, $ratedD);
+            app(TrafficStatisticsRecorder::class)->add($userId, $serverId, 'entry', $recordAt, $u, $d, $ratedU, $ratedD, $batch->created_at?->timestamp);
             $totalU += $u;
             $totalD += $d;
             $userIds[] = $userId;

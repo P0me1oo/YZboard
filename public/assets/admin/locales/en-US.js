@@ -1,6 +1,7 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['en-US'] = {
   "statistics": {
+    "hour": "Hourly", "perPage": "Rows per page", "backToUsers": "Back to user ranking",
     "navigation": "Statistics", "overview": "Traffic overview", "userStatistics": "User statistics",
     "trend": "Total traffic trend", "nodeRank": "Node traffic ranking", "userRank": "User traffic ranking", "userDetails": "Traffic by user and node",
     "period": "Date range", "last30": "Last 30 days", "last7": "Last 7 days", "today": "Today", "custom": "Custom",
@@ -8,7 +9,6 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     "startDate": "Start date", "endDate": "End date", "to": "to", "apply": "Apply", "invalidRange": "Select a valid start and end date.",
     "total": "Total traffic", "upload": "Upload", "download": "Download", "rank": "Rank", "node": "Node", "user": "User", "actions": "Actions",
     "viewDetails": "View details", "loading": "Loading", "empty": "No data", "loadFailed": "Could not load data. Try again.", "retry": "Retry",
-    "actualStarted": "Actual traffic recorded since {{date}}", "detailStarted": "Node details recorded since {{date}}",
     "page": "Page {{page}} / {{pages}}, {{count}} records", "previous": "Previous", "next": "Next",
     "searchUser": "Search users", "searchPlaceholder": "User email or ID", "search": "Search", "clear": "Clear",
     "chooseUser": "Search for a user or select one from the ranking.", "filterNode": "Filter nodes", "allNodes": "All nodes",

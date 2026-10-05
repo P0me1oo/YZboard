@@ -1,6 +1,7 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['zh-CN'] = {
   "statistics": {
+    "hour": "按小时", "perPage": "每页显示", "backToUsers": "返回用户排行",
     "navigation": "统计分析", "overview": "流量概览", "userStatistics": "用户统计",
     "trend": "总流量趋势", "nodeRank": "节点流量排行", "userRank": "用户流量排行", "userDetails": "用户节点明细",
     "period": "时间范围", "last30": "最近 30 天", "last7": "最近 7 天", "today": "今天", "custom": "自定义",
@@ -8,7 +9,6 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     "startDate": "开始日期", "endDate": "结束日期", "to": "至", "apply": "查询", "invalidRange": "请选择有效的起止日期。",
     "total": "总流量", "upload": "上传", "download": "下载", "rank": "排名", "node": "节点", "user": "用户", "actions": "操作",
     "viewDetails": "查看明细", "loading": "加载中", "empty": "暂无数据", "loadFailed": "读取失败，请重试。", "retry": "重试",
-    "actualStarted": "实际流量记录始于 {{date}}", "detailStarted": "节点明细记录始于 {{date}}",
     "page": "第 {{page}} / {{pages}} 页，共 {{count}} 条", "previous": "上一页", "next": "下一页",
     "searchUser": "搜索用户", "searchPlaceholder": "用户邮箱或 ID", "search": "搜索", "clear": "清除",
     "chooseUser": "搜索用户或从排行中选择用户查看明细。", "filterNode": "筛选节点", "allNodes": "全部节点",

@@ -2,7 +2,10 @@ window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['ru-RU'] = {
   "telegramBot": {
     "operationFailed": "Операция не выполнена. Проверьте настройки и повторите попытку.",
-    "title": "Telegram Bot", "settings": "Настройки бота", "bindings": "Привязанные аккаунты",
+    "title": "Telegram Bot", "settings": "Настройки бота", "bindings": "Управление пользователями",
+    "actions": "Действия", "unbind": "Отвязать", "unbindConfirm": "Отвязать пользователя?",
+    "unbindDescription": "Связь между пользователем Telegram и аккаунтом панели будет удалена. Аккаунт, тариф и подписка сохранятся. Для повторной привязки пользователь может отправить ссылку на подписку.",
+    "unbindSuccess": "Пользователь отвязан", "unbindFailed": "Не удалось отвязать пользователя. Повторите попытку.",
     "loading": "Загрузка", "loadFailed": "Не удалось загрузить данные. Повторите попытку.", "retry": "Повторить",
     "enabledState": "Состояние", "enabled": "Включён", "disabled": "Выключен",
     "connectionState": "Приём сообщений", "username": "Аккаунт бота", "notChecked": "Не проверено",

@@ -2,7 +2,10 @@ window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['zh-CN'] = {
   "telegramBot": {
     "operationFailed": "操作失败，请检查设置后重试。",
-    "title": "Telegram Bot", "settings": "机器人设置", "bindings": "绑定记录",
+    "title": "Telegram Bot", "settings": "机器人设置", "bindings": "用户管理",
+    "actions": "操作", "unbind": "解绑", "unbindConfirm": "解除用户绑定？",
+    "unbindDescription": "解除该 Telegram 与面板账号的绑定，保留账号、套餐和订阅。用户可重新发送订阅链接进行绑定。",
+    "unbindSuccess": "用户绑定已解除", "unbindFailed": "解绑失败，请重试。",
     "loading": "加载中", "loadFailed": "读取失败，请重试。", "retry": "重试",
     "enabledState": "运行状态", "enabled": "已启用", "disabled": "已停用",
     "connectionState": "消息接入", "username": "机器人账号", "notChecked": "未检查",

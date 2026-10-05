@@ -1119,6 +1119,93 @@ class TelegramBotTest extends TestCase
         $this->getJson($this->adminPath('bindings') . '?search=missing_user')->assertOk()->assertJsonPath('total', 0);
     }
 
+    public function test_admin_unbind_rejects_guests_and_regular_users(): void
+    {
+        $user = $this->user();
+        $binding = TelegramBotBinding::create(['user_id' => $user->id, 'telegram_id' => self::TELEGRAM_ID]);
+        $this->postJson($this->adminPath('unbind'), ['binding_id' => $binding->id])->assertForbidden();
+        Sanctum::actingAs($user);
+        $this->postJson($this->adminPath('unbind'), ['binding_id' => $binding->id])->assertForbidden();
+        $this->assertDatabaseHas('v2_telegram_bot_bindings', ['id' => $binding->id]);
+    }
+
+    public function test_admin_unbind_validates_the_selected_binding(): void
+    {
+        $this->asAdmin();
+        $binding = TelegramBotBinding::create(['user_id' => $this->user()->id, 'telegram_id' => self::TELEGRAM_ID]);
+        foreach ([[], ['binding_id' => null], ['binding_id' => 0], ['binding_id' => -1],
+            ['binding_id' => 1.5], ['binding_id' => 'invalid'], ['binding_id' => [$binding->id]]] as $input) {
+            $this->postJson($this->adminPath('unbind'), $input)->assertUnprocessable()->assertJsonValidationErrors('binding_id');
+        }
+        $this->assertDatabaseHas('v2_telegram_bot_bindings', ['id' => $binding->id]);
+    }
+
+    public function test_admin_can_unbind_without_a_running_bot_and_preserves_all_account_data(): void
+    {
+        $this->asAdmin();
+        $user = $this->user(['telegram_id' => self::TELEGRAM_ID + 20, 'balance' => 1234, 'u' => 321, 'd' => 456]);
+        $binding = TelegramBotBinding::create(['user_id' => $user->id, 'telegram_id' => self::TELEGRAM_ID,
+            'unbind_token' => Str::random(24), 'unbind_expires_at' => time() + 300,
+            'reset_token' => Str::random(24), 'reset_expires_at' => time() + 300]);
+        $other = TelegramBotBinding::create(['user_id' => $this->user()->id, 'telegram_id' => self::TELEGRAM_ID + 1]);
+        TelegramBotConfig::findOrFail(1)->update(['enabled' => false, 'token' => null]);
+        $before = $user->fresh()->getRawOriginal();
+        $otherBefore = $other->fresh()->getRawOriginal();
+
+        $this->postJson($this->adminPath('unbind'), ['binding_id' => $binding->id])->assertOk()->assertJsonPath('data', true);
+
+        $this->assertDatabaseMissing('v2_telegram_bot_bindings', ['id' => $binding->id]);
+        $this->assertSame($before, $user->fresh()->getRawOriginal());
+        $this->assertSame($otherBefore, $other->fresh()->getRawOriginal());
+        $this->getJson($this->adminPath('bindings'))->assertOk()->assertJsonPath('total', 1)->assertJsonPath('data.0.id', $other->id);
+        Http::assertNothingSent();
+    }
+
+    public function test_repeated_admin_unbind_does_not_remove_a_new_binding_after_cache_reset(): void
+    {
+        $this->asAdmin();
+        $user = $this->user();
+        $binding = app(BindingService::class)->bind(self::TELEGRAM_ID, $this->link($user));
+        for ($attempt = 0; $attempt < 2; $attempt++) {
+            $this->postJson($this->adminPath('unbind'), ['binding_id' => $binding->id])->assertOk();
+        }
+        $newBinding = app(BindingService::class)->bind(self::TELEGRAM_ID, $this->link($user));
+        $this->assertNotSame($binding->id, $newBinding->id);
+        Cache::flush();
+        $this->postJson($this->adminPath('unbind'), ['binding_id' => $binding->id])->assertOk();
+        $this->assertDatabaseHas('v2_telegram_bot_bindings', ['id' => $newBinding->id, 'user_id' => $user->id]);
+        $this->assertDatabaseCount('v2_telegram_bot_bindings', 1);
+    }
+
+    public function test_admin_unbind_invalidates_old_confirmations_and_replayed_binding_messages(): void
+    {
+        $user = $this->user();
+        $message = $this->message($this->link($user));
+        $this->webhook($message)->assertOk();
+        $this->webhook($this->buttonUpdate('reset_subscription'))->assertOk();
+        $reset = $this->lastReply()['reply_markup']['inline_keyboard'][0][0]['callback_data'];
+        $this->webhook($this->buttonUpdate('unbind'))->assertOk();
+        $unbind = $this->lastReply()['reply_markup']['inline_keyboard'][0][0]['callback_data'];
+        $binding = TelegramBotBinding::firstOrFail();
+        $this->asAdmin();
+        $this->postJson($this->adminPath('unbind'), ['binding_id' => $binding->id])->assertOk();
+
+        $before = $user->fresh()->getRawOriginal();
+        $this->webhook($message)->assertOk();
+        $this->webhook($this->buttonUpdate($reset))->assertOk();
+        $this->webhook($this->buttonUpdate($unbind))->assertOk();
+        $this->assertDatabaseCount('v2_telegram_bot_bindings', 0);
+        $this->assertSame($before, $user->fresh()->getRawOriginal());
+
+        $nextUser = $this->user();
+        $this->bind($nextUser);
+        $nextBefore = $nextUser->fresh()->getRawOriginal();
+        $this->webhook($this->buttonUpdate($reset))->assertOk();
+        $this->webhook($this->buttonUpdate($unbind))->assertOk();
+        $this->assertDatabaseHas('v2_telegram_bot_bindings', ['user_id' => $nextUser->id, 'telegram_id' => self::TELEGRAM_ID]);
+        $this->assertSame($nextBefore, $nextUser->fresh()->getRawOriginal());
+    }
+
     public function test_admin_binding_list_is_paginated_and_does_not_serialize_credentials(): void
     {
         $first = $this->user();

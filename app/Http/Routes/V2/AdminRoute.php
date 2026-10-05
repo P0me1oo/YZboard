@@ -56,6 +56,7 @@ class AdminRoute
                 $router->post('/enable', [TelegramBotController::class, 'enable']);
                 $router->post('/disable', [TelegramBotController::class, 'disable']);
                 $router->get('/bindings', [TelegramBotController::class, 'bindings']);
+                $router->post('/unbind', [TelegramBotController::class, 'unbind']);
             });
 
             // Mail Templates

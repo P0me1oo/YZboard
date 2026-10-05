@@ -58,6 +58,18 @@ class TelegramBotController extends Controller
         return response()->json(['data' => $this->config->disable()]);
     }
 
+    public function unbind(Request $request): JsonResponse
+    {
+        $input = $request->validate([
+            'binding_id' => ['required', 'integer', 'min:1'],
+        ]);
+
+        // 只删除选中的关系；重复请求不能影响后来重新建立的绑定。
+        TelegramBotBinding::whereKey($input['binding_id'])->delete();
+
+        return response()->json(['data' => true]);
+    }
+
     public function bindings(Request $request): JsonResponse
     {
         $input = $request->validate([

@@ -44,6 +44,24 @@ class ServerRelayTest extends TestCase
     private const REALITY_PRIVATE_KEY = 'TESTonlyPRIVATEkeyNOTaREALsecret0123456789';
     private const LANDING_REALITY_PRIVATE_KEY = 'bBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789abcdef0';
 
+    public function test_wireguard_mtu_defaults_and_boundaries_reach_both_ends(): void
+    {
+        $entry = $this->makeEntry();
+        foreach ([null => 1420, 1280 => 1280, 1380 => 1380, 1420 => 1420, 1500 => 1500] as $configured => $expected) {
+            $settings = $configured === '' ? [] : ['mtu' => $configured];
+            $child = $this->makeChild($entry, [
+                'type' => Server::TYPE_WIREGUARD, 'protocol_settings' => $settings,
+            ]);
+            $this->assertNull(ServerRelayService::validateTransitSettings('wireguard', $settings, $child->host));
+            $this->assertSame($expected, data_get(ServerService::buildNodeConfig($child), 'relay.wireguard.mtu'));
+            $children = collect(data_get(ServerService::buildNodeConfig($entry->fresh()), 'relay.children'))->keyBy('node_id');
+            $this->assertSame($expected, data_get($children[$child->id], 'wireguard.mtu'));
+        }
+        foreach ([1279, 1501] as $mtu) {
+            $this->assertNotNull(ServerRelayService::validateTransitSettings('wireguard', ['mtu' => $mtu], '203.0.113.7'));
+        }
+    }
+
     public function test_wireguard_configs_subscriptions_and_lifecycle_for_both_kernels(): void
     {
         $user = $this->makeUser();

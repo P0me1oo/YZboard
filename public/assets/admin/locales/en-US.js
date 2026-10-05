@@ -2,7 +2,10 @@ window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['en-US'] = {
   "telegramBot": {
     "operationFailed": "The operation failed. Check the settings and retry.",
-    "title": "Telegram Bot", "settings": "Bot settings", "bindings": "Linked accounts",
+    "title": "Telegram Bot", "settings": "Bot settings", "bindings": "User management",
+    "actions": "Actions", "unbind": "Unlink", "unbindConfirm": "Unlink this user?",
+    "unbindDescription": "Remove the link between this Telegram user and the panel account. The account, plan and subscription are kept. The user can send their subscription link to bind again.",
+    "unbindSuccess": "User unlinked", "unbindFailed": "Could not unlink the user. Please retry.",
     "loading": "Loading", "loadFailed": "Could not load data. Please retry.", "retry": "Retry",
     "enabledState": "Status", "enabled": "Enabled", "disabled": "Disabled",
     "connectionState": "Message connection", "username": "Bot account", "notChecked": "Not checked",

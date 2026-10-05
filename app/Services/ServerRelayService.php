@@ -462,10 +462,10 @@ class ServerRelayService
     {
         $type = Server::normalizeType($type);
         if ($type === Server::TYPE_WIREGUARD) {
-            $mtu = $settings['mtu'] ?? 1380;
+            $mtu = $settings['mtu'] ?? 1420;
             $keepalive = $settings['keepalive'] ?? 25;
-            if (filter_var($mtu, FILTER_VALIDATE_INT) === false || $mtu < 1280 || $mtu > 1420) {
-                return 'WireGuard MTU 必须在 1280–1420 之间';
+            if (filter_var($mtu, FILTER_VALIDATE_INT) === false || $mtu < 1280 || $mtu > 1500) {
+                return 'WireGuard MTU 必须在 1280–1500 之间';
             }
             if (filter_var($keepalive, FILTER_VALIDATE_INT) === false || $keepalive < 0 || $keepalive > 65535) {
                 return 'WireGuard 保活间隔必须在 0–65535 秒之间';
@@ -708,7 +708,7 @@ class ServerRelayService
             'peer_public_key' => base64_encode($publicKey),
             'address' => $landing ? ['10.253.0.2/32', 'fd7a:797a::2/128'] : ['10.253.0.1/32', 'fd7a:797a::1/128'],
             'allowed_ips' => $landing ? ['10.253.0.1/32', 'fd7a:797a::1/128'] : ['0.0.0.0/0', '::/0'],
-            'mtu' => (int) data_get($child->protocol_settings, 'mtu', 1380),
+            'mtu' => (int) data_get($child->protocol_settings, 'mtu', 1420),
             'keepalive' => $landing ? 0 : (int) data_get($child->protocol_settings, 'keepalive', 25),
         ];
     }

@@ -246,7 +246,7 @@ class Server extends Model
 
     private const PROTOCOL_CONFIGURATIONS = [
         self::TYPE_WIREGUARD => [
-            'mtu' => ['type' => 'integer', 'default' => 1380],
+            'mtu' => ['type' => 'integer', 'default' => 1420],
             'keepalive' => ['type' => 'integer', 'default' => 25],
         ],
         self::TYPE_TROJAN => [

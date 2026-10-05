@@ -42,4 +42,4 @@
 
 管理员接口位于 `/api/v2/<管理路径>/statistics/`：`traffic`、`nodes`、`users`、`user`、`searchUsers`，沿用管理员认证。所有范围、分组、页码和筛选均由后端校验，日期查询限制在保留范围内。
 
-当前为本地开发版本，未发布镜像。验证结果和产物来源见 [兼容矩阵](../YZ_COMPATIBILITY.md)。
+已随 [面板 v1.48.0](https://github.com/P0me1oo/YZboard/releases/tag/v1.48.0) 正式发布，配套管理端 `0.25.0`，Node 沿用 `v2.5.0`。双架构镜像和 `latest` 已核验可获取；只需更新面板，更新前备份数据库。验证结果和固定产物来源见 [兼容矩阵](../YZ_COMPATIBILITY.md)。

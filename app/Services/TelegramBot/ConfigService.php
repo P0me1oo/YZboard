@@ -6,6 +6,7 @@ use App\Exceptions\ApiException;
 use App\Models\TelegramBotConfig;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 
@@ -41,7 +42,31 @@ class ConfigService
             'last_checked_at' => $config->last_checked_at,
             'last_received_at' => $config->last_received_at,
             'last_error' => $config->last_error,
+            'remind_expiring' => $config->remind_expiring,
+            'remind_expired' => $config->remind_expired,
+            'remind_device' => $config->remind_device,
+            'remind_connection' => $config->remind_connection,
+            'remind_days' => $config->remind_days,
+            'remind_interval_minutes' => $config->remind_interval_minutes,
         ];
+    }
+
+    public function saveReminders(array $input): array
+    {
+        return $this->locked(fn () => DB::transaction(function () use ($input) {
+            $config = TelegramBotConfig::whereKey(1)->lockForUpdate()->firstOrFail();
+            if ($input['remind_expired'] && !$config->remind_expired) {
+                $config->remind_expired_since = now()->timestamp;
+            }
+            $config->fill($input)->save();
+            foreach (['expiring', 'expired', 'device', 'connection'] as $kind) {
+                if (!$config->{'remind_' . $kind}) {
+                    \App\Models\TelegramBotReminder::where('kind', $kind)->where('status', 'pending')
+                        ->update(['status' => 'cancelled']);
+                }
+            }
+            return $this->view($config);
+        }));
     }
 
     public function save(array $input): array

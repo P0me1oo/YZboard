@@ -1,0 +1,216 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Jobs\ProcessNodeReportBatch;
+use App\Jobs\StatUserJob;
+use App\Models\NodeReportBatch;
+use App\Models\Server;
+use App\Models\StatServer;
+use App\Models\StatUser;
+use App\Models\User;
+use App\Services\TrafficStatisticsRecorder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Str;
+use Laravel\Sanctum\Sanctum;
+use Tests\TestCase;
+
+class TrafficStatisticsTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->travelTo(now()->startOfSecond());
+        DB::table('v2_settings')->where('name', 'traffic_statistics_started_at')
+            ->update(['value' => (string) now()->startOfDay()->subDays(29)->timestamp]);
+        Sanctum::actingAs($this->user(true));
+    }
+
+    private function user(bool $admin = false): User
+    {
+        return User::create(['email' => Str::random(12) . '@example.test', 'password' => Str::random(32),
+            'uuid' => (string) Str::uuid(), 'token' => Str::random(32), 'is_admin' => $admin]);
+    }
+
+    private function node(): Server
+    {
+        return Server::create(['name' => '测试节点', 'type' => 'vless', 'host' => 'example.test',
+            'port' => 443, 'server_port' => 443, 'rate' => 2, 'group_ids' => [], 'enabled' => true]);
+    }
+
+    private function path(string $endpoint, array $params = []): string
+    {
+        return '/api/v2/' . hash('crc32b', config('app.key')) . '/statistics/' . $endpoint . '?' . http_build_query($params);
+    }
+
+    private function record(int $uid, int $sid, int $u = 100, int $d = 200, int $daysAgo = 0, string $kind = 'entry'): void
+    {
+        app(TrafficStatisticsRecorder::class)->add($uid, $sid, $kind, now()->startOfDay()->subDays($daysAgo)->timestamp, $u, $d, $u * 2, $d * 2);
+    }
+
+    private function batch(User $user, Server $node, Server $relay): NodeReportBatch
+    {
+        return NodeReportBatch::create(['server_id' => $node->id, 'server_type' => $node->type,
+            'report_id' => Str::random(20), 'report_key' => Str::random(64),
+            'server_snapshot' => ['id' => $node->id, 'rate' => $node->rate],
+            'traffic' => [$user->id => [100, 200]],
+            'relay_traffic' => [['server_id' => $relay->id, 'server_type' => $relay->type, 'u' => 90, 'd' => 180]],
+            'relay_user_traffic' => [$user->id => [$relay->id => [90, 180]]],
+            'record_at' => now()->startOfDay()->timestamp, 'status' => 'pending', 'attempts' => 0]);
+    }
+
+    public function test_batch_retry_counts_once_and_relay_does_not_inflate_user_total(): void
+    {
+        $user = $this->user(); $node = $this->node(); $relay = $this->node();
+        $batch = $this->batch($user, $node, $relay);
+        Redis::shouldReceive('sadd')->once()->andReturn(1);
+        (new ProcessNodeReportBatch($batch->id))->handle();
+        (new ProcessNodeReportBatch($batch->id))->handle();
+        $this->assertSame(2, DB::table('v2_stat_user_server')->count());
+        $this->assertSame(600, (int) $user->fresh()->u + (int) $user->fresh()->d);
+        $this->getJson($this->path('traffic', ['period' => 'today']))->assertOk()->assertJsonPath('data.summary.total', 300);
+        $this->getJson($this->path('user', ['user_id' => $user->id, 'metric' => 'billed']))->assertOk()
+            ->assertJsonPath('data.entry_summary.total', 600)->assertJsonPath('data.relay_summary.total', 270);
+        $relayRow = collect($this->getJson($this->path('user', ['user_id' => $user->id]))->json('data.list'))->firstWhere('kind', 'relay');
+        $this->assertNull($relayRow['billed_total']);
+    }
+
+    public function test_transaction_failure_rolls_back_new_statistics_and_recovery_counts_once(): void
+    {
+        $user = $this->user(); $node = $this->node(); $relay = $this->node();
+        $batch = $this->batch($user, $node, $relay);
+        Redis::shouldReceive('sadd')->once()->andThrow(new \RuntimeException('测试队列状态不可用'));
+        try {
+            (new ProcessNodeReportBatch($batch->id))->handle();
+            $this->fail('应当回滚');
+        } catch (\RuntimeException $error) {
+            $this->assertSame('测试队列状态不可用', $error->getMessage());
+        }
+        $this->assertSame(0, DB::table('v2_stat_user_server')->count());
+        $this->assertSame(0, StatUser::count());
+        $this->assertSame(0, (int) $user->fresh()->u);
+        Redis::shouldReceive('sadd')->once()->andReturn(1);
+        (new ProcessNodeReportBatch($batch->id))->handle();
+        $this->assertSame(2, DB::table('v2_stat_user_server')->count());
+    }
+
+    public function test_zero_rate_preserves_actual_traffic_and_legacy_collection_is_supported(): void
+    {
+        $user = $this->user(); $node = $this->node();
+        (new StatUserJob(['id' => $node->id, 'rate' => 0], [$user->id => [101, 203]], 'vless'))->handle();
+        $this->getJson($this->path('users'))->assertOk()->assertJsonPath('data.list.0.total', 304);
+        $this->getJson($this->path('users', ['metric' => 'billed']))->assertOk()->assertJsonPath('data.list.0.total', 0);
+    }
+
+    public function test_default_range_includes_exactly_thirty_days_and_fills_missing_days(): void
+    {
+        $this->record(101, 201, 1, 2, 29);
+        $this->record(101, 201, 10, 20, 30);
+        $this->record(101, 201, 100, 200, 0);
+        $response = $this->getJson($this->path('traffic'))->assertOk()->assertJsonCount(30, 'data.list')
+            ->assertJsonPath('data.summary.total', 303)->assertJsonPath('data.list.1.total', 0);
+        $this->assertSame(now()->subDays(29)->toDateString(), $response->json('data.meta.start_date'));
+        $this->getJson($this->path('traffic', ['period' => '7d']))->assertJsonCount(7, 'data.list')->assertJsonPath('data.summary.total', 300);
+    }
+
+    public function test_custom_end_is_exclusive_and_week_and_month_preserve_totals(): void
+    {
+        $this->record(101, 201, 10, 20, 1);
+        $this->record(101, 201, 100, 200);
+        $yesterday = now()->subDay()->toDateString();
+        $this->getJson($this->path('traffic', ['period' => 'custom', 'start_date' => $yesterday, 'end_date' => $yesterday]))
+            ->assertOk()->assertJsonCount(1, 'data.list')->assertJsonPath('data.summary.total', 30);
+        foreach (['week', 'month'] as $unit) {
+            $response = $this->getJson($this->path('traffic', ['unit' => $unit]))->assertOk();
+            $this->assertSame(330, array_sum(array_column($response->json('data.list'), 'total')));
+            $response = $this->getJson($this->path('user', ['user_id' => 101, 'unit' => $unit]))->assertOk();
+            $this->assertSame(330, array_sum(array_column($response->json('data.list'), 'total')));
+        }
+    }
+
+    public function test_unrecorded_history_is_not_rendered_as_zero(): void
+    {
+        DB::table('v2_settings')->where('name', 'traffic_statistics_started_at')->update(['value' => (string) now()->timestamp]);
+        $this->getJson($this->path('traffic'))->assertOk()->assertJsonCount(1, 'data.list');
+        $yesterday = now()->subDay()->toDateString();
+        $this->getJson($this->path('traffic', ['period' => 'custom', 'start_date' => $yesterday, 'end_date' => $yesterday]))
+            ->assertOk()->assertJsonCount(0, 'data.list');
+    }
+
+    public function test_rank_pagination_search_and_deleted_names(): void
+    {
+        $user = $this->user();
+        $user->update(['email' => 'literal_%@example.test']);
+        $this->record($user->id, 201, 1, 2);
+        $this->record(99999, 202, 100, 200);
+        $this->getJson($this->path('users', ['page_size' => 1]))->assertOk()
+            ->assertJsonPath('data.total', 2)->assertJsonPath('data.list.0.name', '用户 #99999');
+        $this->getJson($this->path('users', ['page_size' => 1, 'page' => 2]))->assertJsonPath('data.list.0.id', $user->id);
+        $this->getJson($this->path('searchUsers', ['search' => '_%']))->assertOk()->assertJsonCount(1, 'data');
+        $this->getJson($this->path('users', ['search' => '_%']))->assertJsonCount(1, 'data.list');
+        $this->getJson($this->path('user', ['user_id' => 99999, 'server_id' => 202]))->assertOk()
+            ->assertJsonPath('data.list.0.server_name', '节点 #202');
+        $this->getJson($this->path('user', ['user_id' => 99999, 'server_id' => 201]))->assertJsonCount(0, 'data.list');
+    }
+
+    public function test_delayed_batch_day_and_rate_changes_preserve_summary_and_details(): void
+    {
+        DB::table('v2_settings')->where('name', 'traffic_statistics_started_at')->update(['value' => (string) now()->timestamp]);
+        $this->record(101, 201, 10, 20, 1);
+        app(TrafficStatisticsRecorder::class)->add(101, 201, 'entry', now()->startOfDay()->subDay()->timestamp, 100, 200, 300, 600);
+        $response = $this->getJson($this->path('traffic'))->assertOk()->assertJsonPath('data.summary.total', 330);
+        $this->assertSame(330, array_sum(array_column($response->json('data.list'), 'total')));
+        $this->getJson($this->path('user', ['user_id' => 101, 'metric' => 'billed']))
+            ->assertOk()->assertJsonPath('data.entry_summary.total', 960)->assertJsonPath('data.list.0.billed_total', 960);
+        $this->assertSame(1, DB::table('v2_stat_user_server')->count());
+    }
+
+    public function test_node_ranking_excludes_monthly_records_and_legacy_rank_excludes_next_midnight(): void
+    {
+        // 旧控制器构造器连接 Redis，但本次排行查询仅访问数据库。
+        $this->mock(\App\Services\StatisticalService::class);
+        foreach ([['d', 0, 300], ['d', 1, 30], ['m', 2, 9000]] as [$kind, $days, $amount]) {
+            StatServer::create(['server_id' => 201, 'server_type' => 'vless', 'record_type' => $kind,
+                'record_at' => now()->startOfDay()->subDays($days)->timestamp, 'u' => $amount, 'd' => 0]);
+        }
+        $this->getJson($this->path('nodes'))->assertOk()->assertJsonPath('data.list.0.total', 330);
+        $path = '/api/v2/' . hash('crc32b', config('app.key')) . '/stat/getTrafficRank?';
+        $this->getJson($path . http_build_query(['type' => 'node', 'start_time' => now()->startOfDay()->subDay()->timestamp,
+            'end_time' => now()->startOfDay()->timestamp]))->assertOk()->assertJsonPath('data.0.value', 30);
+    }
+
+    public function test_retention_cleans_all_daily_statistics_but_keeps_boundary_and_deduplication(): void
+    {
+        $this->record(101, 201, 1, 2, 30);
+        $this->record(101, 201, 1, 2, 29);
+        foreach ([29, 30] as $days) {
+            StatUser::create(['user_id' => 101, 'server_rate' => 1, 'record_type' => 'd',
+                'record_at' => now()->startOfDay()->subDays($days)->timestamp, 'u' => 1, 'd' => 2]);
+            StatServer::create(['server_id' => 201, 'server_type' => 'vless', 'record_type' => 'd',
+                'record_at' => now()->startOfDay()->subDays($days)->timestamp, 'u' => 1, 'd' => 2]);
+        }
+        $batch = $this->batch($this->user(), $this->node(), $this->node());
+        $this->artisan('reset:log')->assertSuccessful();
+        $this->assertSame(1, DB::table('v2_stat_user_server')->count());
+        $this->assertSame(1, StatUser::count()); $this->assertSame(1, StatServer::count());
+        $this->assertNotNull($batch->fresh());
+    }
+
+    public function test_invalid_filters_and_non_admin_access_are_rejected(): void
+    {
+        foreach ([['period' => 'custom'], ['unit' => 'hour'], ['page_size' => 101], ['metric' => 'other'],
+            ['period' => 'custom', 'start_date' => now()->subDays(30)->toDateString(), 'end_date' => now()->toDateString()],
+            ['period' => 'custom', 'start_date' => now()->toDateString(), 'end_date' => now()->subDay()->toDateString()]] as $params) {
+            $this->getJson($this->path('traffic', $params))->assertUnprocessable();
+        }
+        $this->getJson($this->path('user'))->assertUnprocessable();
+        Sanctum::actingAs($this->user());
+        foreach (['traffic', 'nodes', 'users', 'user', 'searchUsers'] as $endpoint) {
+            $this->assertNotSame(200, $this->getJson($this->path($endpoint))->status());
+        }
+    }
+}

@@ -11,6 +11,7 @@ use App\Http\Controllers\V2\Admin\Server\MachineController;
 use App\Http\Controllers\V2\Admin\OrderController;
 use App\Http\Controllers\V2\Admin\UserController;
 use App\Http\Controllers\V2\Admin\StatController;
+use App\Http\Controllers\V2\Admin\TrafficStatisticsController;
 use App\Http\Controllers\V2\Admin\NoticeController;
 use App\Http\Controllers\V2\Admin\TicketController;
 use App\Http\Controllers\V2\Admin\CouponController;
@@ -51,6 +52,7 @@ class AdminRoute
                 $router->get('/config', [TelegramBotController::class, 'config']);
                 $router->get('/token', [TelegramBotController::class, 'token']);
                 $router->post('/save', [TelegramBotController::class, 'save']);
+                $router->post('/reminders', [TelegramBotController::class, 'reminders']);
                 $router->post('/check', [TelegramBotController::class, 'check']);
                 $router->post('/test-message', [TelegramBotController::class, 'testMessage']);
                 $router->post('/enable', [TelegramBotController::class, 'enable']);
@@ -158,6 +160,14 @@ class AdminRoute
                 $router->post('/resetSecret', [UserController::class, 'resetSecret']);
                 $router->post('/setInviteUser', [UserController::class, 'setInviteUser']);
                 $router->post('/destroy', [UserController::class, 'destroy']);
+            });
+
+            $router->group(['prefix' => 'statistics'], function ($router) {
+                $router->get('/traffic', [TrafficStatisticsController::class, 'overview']);
+                $router->get('/nodes', [TrafficStatisticsController::class, 'nodes']);
+                $router->get('/users', [TrafficStatisticsController::class, 'users']);
+                $router->get('/user', [TrafficStatisticsController::class, 'user']);
+                $router->get('/searchUsers', [TrafficStatisticsController::class, 'searchUsers']);
             });
 
             // Stat

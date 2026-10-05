@@ -432,7 +432,7 @@ class StatController extends Controller
         $request->validate([
             'type' => 'required|in:node,user',
             'start_time' => 'nullable|integer|min:1000000000|max:9999999999',
-            'end_time' => 'nullable|integer|min:1000000000|max:9999999999'
+            'end_time' => 'nullable|integer|min:1000000000|max:9999999999|gt:start_time'
         ]);
 
         $type = $request->input('type');
@@ -444,8 +444,9 @@ class StatController extends Controller
         if ($type === 'node') {
             // Get node traffic data
             $currentData = StatServer::selectRaw('server_id as id, SUM(u + d) as value')
+                ->where('record_type', 'd')
                 ->where('record_at', '>=', $startDate)
-                ->where('record_at', '<=', $endDate)
+                ->where('record_at', '<', $endDate)
                 ->groupBy('server_id')
                 ->orderBy('value', 'DESC')
                 ->limit(10)
@@ -453,6 +454,7 @@ class StatController extends Controller
 
             // Get previous period data for comparison
             $previousData = StatServer::selectRaw('server_id as id, SUM(u + d) as value')
+                ->where('record_type', 'd')
                 ->where('record_at', '>=', $previousStartDate)
                 ->where('record_at', '<', $previousEndDate)
                 ->whereIn('server_id', $currentData->pluck('id'))
@@ -463,8 +465,9 @@ class StatController extends Controller
         } else {
             // Get user traffic data
             $currentData = StatUser::selectRaw('user_id as id, SUM(u + d) as value')
+                ->where('record_type', 'd')
                 ->where('record_at', '>=', $startDate)
-                ->where('record_at', '<=', $endDate)
+                ->where('record_at', '<', $endDate)
                 ->groupBy('user_id')
                 ->orderBy('value', 'DESC')
                 ->limit(10)
@@ -472,6 +475,7 @@ class StatController extends Controller
 
             // Get previous period data for comparison
             $previousData = StatUser::selectRaw('user_id as id, SUM(u + d) as value')
+                ->where('record_type', 'd')
                 ->where('record_at', '>=', $previousStartDate)
                 ->where('record_at', '<', $previousEndDate)
                 ->whereIn('user_id', $currentData->pluck('id'))

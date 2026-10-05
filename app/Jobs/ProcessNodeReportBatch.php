@@ -6,6 +6,7 @@ use App\Models\NodeReportBatch;
 use App\Models\StatServer;
 use App\Models\StatUser;
 use App\Services\Plugin\HookManager;
+use App\Services\TrafficStatisticsRecorder;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -53,6 +54,15 @@ class ProcessNodeReportBatch implements ShouldQueue
 
             $userIds = $this->applyUserTraffic($batch);
             $this->applyRelayTraffic($batch);
+
+            foreach ((array) $batch->relay_user_traffic as $userId => $nodes) {
+                foreach ($nodes as $serverId => $traffic) {
+                    app(TrafficStatisticsRecorder::class)->add(
+                        (int) $userId, (int) $serverId, 'relay', (int) $batch->record_at,
+                        (int) $traffic[0], (int) $traffic[1]
+                    );
+                }
+            }
 
             if ((array) $batch->relay_user_traffic !== []) {
                 HookManager::call('traffic.relay_user.processed', [
@@ -128,6 +138,7 @@ class ProcessNodeReportBatch implements ShouldQueue
                 ->incrementEach(['u' => $ratedU, 'd' => $ratedD], ['t' => $now]);
 
             $this->incrementUserStat($userId, $rate, $recordAt, $ratedU, $ratedD, $now);
+            app(TrafficStatisticsRecorder::class)->add($userId, $serverId, 'entry', $recordAt, $u, $d, $ratedU, $ratedD);
             $totalU += $u;
             $totalD += $d;
             $userIds[] = $userId;

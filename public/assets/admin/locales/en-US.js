@@ -1,6 +1,24 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['en-US'] = {
+  "statistics": {
+    "navigation": "Statistics", "overview": "Traffic overview", "userStatistics": "User statistics",
+    "trend": "Total traffic trend", "nodeRank": "Node traffic ranking", "userRank": "User traffic ranking", "userDetails": "Traffic by user and node",
+    "period": "Date range", "last30": "Last 30 days", "last7": "Last 7 days", "today": "Today", "custom": "Custom",
+    "unit": "Group by", "day": "Day", "week": "Week", "month": "Month", "metric": "Traffic measure", "actual": "Actual traffic", "billed": "Billed traffic",
+    "startDate": "Start date", "endDate": "End date", "to": "to", "apply": "Apply", "invalidRange": "Select a valid start and end date.",
+    "total": "Total traffic", "upload": "Upload", "download": "Download", "rank": "Rank", "node": "Node", "user": "User", "actions": "Actions",
+    "viewDetails": "View details", "loading": "Loading", "empty": "No data", "loadFailed": "Could not load data. Try again.", "retry": "Retry",
+    "actualStarted": "Actual traffic recorded since {{date}}", "detailStarted": "Node details recorded since {{date}}",
+    "page": "Page {{page}} / {{pages}}, {{count}} records", "previous": "Previous", "next": "Next",
+    "searchUser": "Search users", "searchPlaceholder": "User email or ID", "search": "Search", "clear": "Clear",
+    "chooseUser": "Search for a user or select one from the ranking.", "filterNode": "Filter nodes", "allNodes": "All nodes",
+    "entryTotal": "Entry total", "relayTotal": "Relay total", "date": "Date", "position": "Position", "entry": "Entry", "relay": "Relay"
+  },
   "telegramBot": {
+    "reminders": "Reminders", "reminderSaved": "Reminder settings saved",
+    "reminderTypes": { "expiring": "Upcoming expiry", "expired": "Expired subscription", "device": "Device limit exceeded", "connection": "Connection limit exceeded" },
+    "reminderDays": "Days before expiry", "reminderInterval": "Limit reminder interval (minutes)",
+    "reminderRange": "Enter an integer from 1 to {{max}}",
     "operationFailed": "The operation failed. Check the settings and retry.",
     "title": "Telegram Bot", "settings": "Bot settings", "bindings": "User management",
     "actions": "Actions", "unbind": "Unlink", "unbindConfirm": "Unlink this user?",

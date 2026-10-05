@@ -4,6 +4,7 @@ namespace App\Http\Controllers\V2\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\TelegramBotConfigRequest;
+use App\Http\Requests\Admin\TelegramBotReminderRequest;
 use App\Models\TelegramBotBinding;
 use App\Services\TelegramBot\ConfigService;
 use Illuminate\Http\JsonResponse;
@@ -35,6 +36,11 @@ class TelegramBotController extends Controller
     public function check(): JsonResponse
     {
         return response()->json(['data' => $this->config->check()]);
+    }
+
+    public function reminders(TelegramBotReminderRequest $request): JsonResponse
+    {
+        return response()->json(['data' => $this->config->saveReminders($request->validated())]);
     }
 
     public function enable(): JsonResponse

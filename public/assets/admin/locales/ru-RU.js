@@ -1,6 +1,24 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['ru-RU'] = {
+  "statistics": {
+    "navigation": "Статистика", "overview": "Обзор трафика", "userStatistics": "Статистика пользователей",
+    "trend": "Динамика общего трафика", "nodeRank": "Рейтинг узлов по трафику", "userRank": "Рейтинг пользователей", "userDetails": "Трафик по пользователям и узлам",
+    "period": "Период", "last30": "Последние 30 дней", "last7": "Последние 7 дней", "today": "Сегодня", "custom": "Выбрать даты",
+    "unit": "Группировка", "day": "По дням", "week": "По неделям", "month": "По месяцам", "metric": "Тип трафика", "actual": "Фактический", "billed": "Списанный",
+    "startDate": "Начальная дата", "endDate": "Конечная дата", "to": "до", "apply": "Применить", "invalidRange": "Выберите допустимый диапазон дат.",
+    "total": "Всего", "upload": "Отправлено", "download": "Получено", "rank": "Место", "node": "Узел", "user": "Пользователь", "actions": "Действия",
+    "viewDetails": "Подробнее", "loading": "Загрузка", "empty": "Нет данных", "loadFailed": "Не удалось загрузить данные. Повторите попытку.", "retry": "Повторить",
+    "actualStarted": "Учёт фактического трафика с {{date}}", "detailStarted": "Учёт по узлам с {{date}}",
+    "page": "Страница {{page}} / {{pages}}, записей: {{count}}", "previous": "Назад", "next": "Далее",
+    "searchUser": "Поиск пользователей", "searchPlaceholder": "Почта или ID пользователя", "search": "Поиск", "clear": "Сбросить",
+    "chooseUser": "Найдите пользователя или выберите его в рейтинге.", "filterNode": "Фильтр узлов", "allNodes": "Все узлы",
+    "entryTotal": "Всего на входе", "relayTotal": "Всего на выходе", "date": "Дата", "position": "Позиция", "entry": "Вход", "relay": "Выход"
+  },
   "telegramBot": {
+    "reminders": "Напоминания", "reminderSaved": "Настройки напоминаний сохранены",
+    "reminderTypes": { "expiring": "Скорое окончание подписки", "expired": "Подписка истекла", "device": "Превышен лимит устройств", "connection": "Превышен лимит соединений" },
+    "reminderDays": "Дней до окончания подписки", "reminderInterval": "Интервал уведомлений о лимитах (минуты)",
+    "reminderRange": "Введите целое число от 1 до {{max}}",
     "operationFailed": "Операция не выполнена. Проверьте настройки и повторите попытку.",
     "title": "Telegram Bot", "settings": "Настройки бота", "bindings": "Управление пользователями",
     "actions": "Действия", "unbind": "Отвязать", "unbindConfirm": "Отвязать пользователя?",

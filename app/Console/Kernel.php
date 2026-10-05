@@ -42,6 +42,7 @@ class Kernel extends ConsoleKernel
         $schedule->command('reset:log')->daily()->onOneServer();
         $schedule->command('telegram-bot:prune-updates')->daily()->onOneServer()->withoutOverlapping(10);
         // send
+        $schedule->command('telegram-bot:send-reminders')->everyMinute()->onOneServer()->withoutOverlapping(10);
         $schedule->command('send:remindMail', ['--force'])->dailyAt('11:30')->onOneServer();
         // horizon metrics
         $schedule->command('horizon:snapshot')->everyFiveMinutes()->onOneServer();

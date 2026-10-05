@@ -453,8 +453,7 @@ class ServerService
      * 处理节点上报的连接限制超限事件。
      *
      * 节点按上报周期汇总，同一用户可能同时上报并发、速率和设备数三条。
-     * 面板不落库，只做校验后触发 server.limit.exceeded 钩子，
-     * 由插件决定是否通知以及如何去重。
+     * 校验后交给独立 Telegram Bot 保存待发送提醒，保留插件钩子。
      *
      * @param array $events 节点上报的原始事件列表
      */
@@ -488,6 +487,8 @@ class ServerService
         if (empty($normalized)) {
             return;
         }
+
+        app(\App\Services\TelegramBot\ReminderService::class)->recordLimits($normalized);
 
         HookManager::call('server.limit.exceeded', [
             'node_id' => (int) $node->id,

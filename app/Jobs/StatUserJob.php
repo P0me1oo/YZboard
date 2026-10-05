@@ -4,6 +4,7 @@
 namespace App\Jobs;
 
 use App\Models\StatUser;
+use App\Services\TrafficStatisticsRecorder;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -53,7 +54,16 @@ class StatUserJob implements ShouldQueue
 
         foreach ($this->data as $uid => $v) {
             try {
-                $this->processUserStat($uid, $v, $recordAt);
+                DB::transaction(function () use ($uid, $v, $recordAt): void {
+                    $this->processUserStat($uid, $v, $recordAt);
+                    if ($this->recordType === 'd') {
+                        app(TrafficStatisticsRecorder::class)->add(
+                            (int) $uid, (int) $this->server['id'], 'entry', $recordAt,
+                            (int) $v[0], (int) $v[1],
+                            (int) ($v[0] * $this->server['rate']), (int) ($v[1] * $this->server['rate'])
+                        );
+                    }
+                }, 3);
             } catch (\Exception $e) {
                 Log::error('StatUserJob failed for user ' . $uid . ': ' . $e->getMessage());
                 throw $e;

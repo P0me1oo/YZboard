@@ -6,6 +6,7 @@ use App\Models\AdminAuditLog;
 use App\Models\StatServer;
 use App\Models\StatUser;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 
 class ResetLog extends Command
 {
@@ -41,8 +42,11 @@ class ResetLog extends Command
      */
     public function handle()
     {
-        StatUser::where('record_at', '<', strtotime('-2 month', time()))->delete();
-        StatServer::where('record_at', '<', strtotime('-2 month', time()))->delete();
+        // 保留今天及此前 29 个自然日，与统计页的最近 30 天一致。
+        $cutoff = now()->startOfDay()->subDays(29)->timestamp;
+        StatUser::where('record_at', '<', $cutoff)->delete();
+        StatServer::where('record_at', '<', $cutoff)->delete();
+        DB::table('v2_stat_user_server')->where('record_at', '<', $cutoff)->delete();
         AdminAuditLog::where('created_at', '<', strtotime('-3 month', time()))->delete();
     }
 }

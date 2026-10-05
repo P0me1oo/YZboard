@@ -1,6 +1,24 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['zh-CN'] = {
+  "statistics": {
+    "navigation": "统计分析", "overview": "流量概览", "userStatistics": "用户统计",
+    "trend": "总流量趋势", "nodeRank": "节点流量排行", "userRank": "用户流量排行", "userDetails": "用户节点明细",
+    "period": "时间范围", "last30": "最近 30 天", "last7": "最近 7 天", "today": "今天", "custom": "自定义",
+    "unit": "统计单位", "day": "按天", "week": "按周", "month": "按月", "metric": "流量口径", "actual": "实际流量", "billed": "扣费流量",
+    "startDate": "开始日期", "endDate": "结束日期", "to": "至", "apply": "查询", "invalidRange": "请选择有效的起止日期。",
+    "total": "总流量", "upload": "上传", "download": "下载", "rank": "排名", "node": "节点", "user": "用户", "actions": "操作",
+    "viewDetails": "查看明细", "loading": "加载中", "empty": "暂无数据", "loadFailed": "读取失败，请重试。", "retry": "重试",
+    "actualStarted": "实际流量记录始于 {{date}}", "detailStarted": "节点明细记录始于 {{date}}",
+    "page": "第 {{page}} / {{pages}} 页，共 {{count}} 条", "previous": "上一页", "next": "下一页",
+    "searchUser": "搜索用户", "searchPlaceholder": "用户邮箱或 ID", "search": "搜索", "clear": "清除",
+    "chooseUser": "搜索用户或从排行中选择用户查看明细。", "filterNode": "筛选节点", "allNodes": "全部节点",
+    "entryTotal": "入口合计", "relayTotal": "落地合计", "date": "日期", "position": "统计位置", "entry": "入口", "relay": "落地"
+  },
   "telegramBot": {
+    "reminders": "提醒设置", "reminderSaved": "提醒设置已保存",
+    "reminderTypes": { "expiring": "到期提醒", "expired": "过期提醒", "device": "设备数超限提醒", "connection": "连接数超限提醒" },
+    "reminderDays": "提前提醒天数", "reminderInterval": "超限提醒间隔（分钟）",
+    "reminderRange": "请输入 1 至 {{max}} 的整数",
     "operationFailed": "操作失败，请检查设置后重试。",
     "title": "Telegram Bot", "settings": "机器人设置", "bindings": "用户管理",
     "actions": "操作", "unbind": "解绑", "unbindConfirm": "解除用户绑定？",

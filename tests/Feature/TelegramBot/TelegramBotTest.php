@@ -4,6 +4,7 @@ namespace Tests\Feature\TelegramBot;
 
 use App\Jobs\NodeUserSyncJob;
 use App\Models\AdminAuditLog;
+use App\Models\Plan;
 use App\Models\TelegramBotBinding;
 use App\Models\TelegramBotConfig;
 use App\Models\TelegramBotUpdate;
@@ -310,14 +311,52 @@ class TelegramBotTest extends TestCase
         Http::assertNothingSent();
     }
 
-    public function test_binding_displays_four_inline_menu_actions(): void
+    public function test_binding_displays_subscription_and_account_menu_actions(): void
     {
         $user = $this->user(['telegram_id' => 800000001]);
         $this->bind($user);
         $buttons = $this->lastReply()['reply_markup']['inline_keyboard'];
-        $this->assertSame(['订阅信息', '订阅链接', '重置订阅', '账户信息'], array_map(fn ($row) => $row[0]['text'], $buttons));
+        $this->assertSame(['订阅信息', '账户信息'], array_map(fn ($row) => $row[0]['text'], $buttons));
+        $this->assertSame(['subscription', 'account'], array_map(fn ($row) => $row[0]['callback_data'], $buttons));
         $this->assertSame(800000001, $user->fresh()->telegram_id);
         $this->assertDatabaseCount('v2_telegram_bot_bindings', 1);
+    }
+
+    public function test_combined_subscription_menu_supports_cancel_reset_and_current_account_plan(): void
+    {
+        $plan = Plan::create(['name' => 'Coding_Plan_Test', 'reset_traffic_method' => Plan::RESET_TRAFFIC_MONTHLY]);
+        $user = $this->user(['plan_id' => $plan->id, 'expired_at' => time() + 30 * 86400]);
+        $this->bind($user);
+        $before = $user->fresh()->getRawOriginal();
+
+        $this->webhook($this->buttonUpdate('subscription'))->assertOk();
+        $reply = $this->lastReply();
+        $this->assertStringContainsString('套餐：Coding_Plan_Test', $reply['text']);
+        $this->assertStringContainsString('已用：0.00 GB / 1.00 GB', $reply['text']);
+        $this->assertStringContainsString(Helper::getSubscribeUrl($user->token), $reply['text']);
+        $this->assertTrue($reply['link_preview_options']['is_disabled']);
+        $resetAction = $reply['reply_markup']['inline_keyboard'][0][0]['callback_data'];
+        $this->assertSame('reset_subscription', $resetAction);
+
+        $this->webhook($this->buttonUpdate($resetAction))->assertOk();
+        $this->webhook($this->buttonUpdate('reset_cancel'))->assertOk();
+        $this->assertSame($reply['text'], $this->lastReply()['text']);
+        $this->assertSame($before, $user->fresh()->getRawOriginal());
+        $this->assertNull(TelegramBotBinding::first()->reset_token);
+
+        $this->webhook($this->buttonUpdate($resetAction))->assertOk();
+        $confirmation = $this->lastReply()['reply_markup']['inline_keyboard'][0][0]['callback_data'];
+        $this->webhook($this->buttonUpdate($confirmation))->assertOk();
+        $this->assertStringContainsString('订阅已重置', $this->lastReply()['text']);
+        $this->assertStringContainsString('套餐：Coding_Plan_Test', $this->lastReply()['text']);
+        $this->assertStringContainsString(Helper::getSubscribeUrl($user->fresh()->token), $this->lastReply()['text']);
+        $this->assertSame('reset_subscription', $this->lastReply()['reply_markup']['inline_keyboard'][0][0]['callback_data']);
+
+        $plan->update(['name' => 'Renamed_Plan']);
+        $this->webhook($this->buttonUpdate('account'))->assertOk();
+        $this->assertStringContainsString('当前套餐：Renamed_Plan', $this->lastReply()['text']);
+        $this->webhook($this->buttonUpdate('menu'))->assertOk();
+        $this->assertSame(['订阅信息', '账户信息'], array_map(fn ($row) => $row[0]['text'], $this->lastReply()['reply_markup']['inline_keyboard']));
     }
 
     public function test_both_sides_are_unique_and_existing_binding_is_never_overwritten(): void
@@ -925,6 +964,161 @@ class TelegramBotTest extends TestCase
         $this->assertStringContainsString('私聊', $this->lastReply()['text']);
     }
 
+    public function test_binding_saves_optional_telegram_username(): void
+    {
+        $first = $this->user();
+        $update = $this->message($this->link($first));
+        $update['message']['from']['username'] = 'Sample_User';
+        $this->webhook($update)->assertOk();
+        $this->assertDatabaseHas('v2_telegram_bot_bindings', [
+            'user_id' => $first->id, 'telegram_id' => self::TELEGRAM_ID, 'telegram_username' => 'Sample_User',
+        ]);
+        $second = $this->user();
+        $this->bind($second, self::TELEGRAM_ID + 1);
+        $this->assertDatabaseHas('v2_telegram_bot_bindings', ['user_id' => $second->id, 'telegram_username' => null]);
+    }
+
+    public function test_private_messages_and_callbacks_refresh_username_without_changing_binding(): void
+    {
+        $this->bind($this->user());
+        $binding = TelegramBotBinding::firstOrFail();
+        $original = $binding->only(['id', 'user_id', 'telegram_id', 'created_at']);
+        $update = $this->message('/start');
+        $update['message']['from']['username'] = 'First_Name';
+        $this->webhook($update)->assertOk();
+        $this->assertSame('First_Name', $binding->fresh()->telegram_username);
+
+        Cache::flush();
+        $callback = $this->buttonUpdate('account');
+        $callback['callback_query']['from']['username'] = 'Renamed_User';
+        $callback['callback_query']['message']['from']['username'] = 'robot_name';
+        $this->webhook($callback)->assertOk();
+        $this->assertSame('Renamed_User', $binding->fresh()->telegram_username);
+        $this->assertSame($original, $binding->fresh()->only(array_keys($original)));
+        $this->assertDatabaseCount('v2_telegram_bot_bindings', 1);
+
+        $this->webhook($this->buttonUpdate('account'))->assertOk();
+        $this->assertNull($binding->fresh()->telegram_username);
+        $update['update_id'] = $this->sequence++;
+        $this->webhook($update)->assertOk();
+        $this->webhook($this->message('/start'))->assertOk();
+        $this->assertNull($binding->fresh()->telegram_username);
+        $binding->update(['telegram_username' => 'Known_User']);
+        $empty = $this->message('/start');
+        $empty['message']['from']['username'] = '';
+        $this->webhook($empty)->assertOk();
+        $this->assertNull($binding->fresh()->telegram_username);
+    }
+
+    public function test_invalid_username_does_not_replace_known_profile_or_break_queries(): void
+    {
+        $this->bind($this->user());
+        $binding = TelegramBotBinding::firstOrFail();
+        $binding->update(['telegram_username' => 'Known_User']);
+        foreach (['@invalid', 'bad-name', str_repeat('a', 33), ['username'], 123] as $username) {
+            $update = $this->message('/start');
+            $update['message']['from']['username'] = $username;
+            $this->webhook($update)->assertOk();
+            $this->assertSame('Known_User', $binding->fresh()->telegram_username);
+        }
+    }
+
+    public function test_group_stale_and_mismatched_private_messages_cannot_change_username(): void
+    {
+        $this->bind($this->user());
+        $binding = TelegramBotBinding::firstOrFail();
+        $binding->update(['telegram_username' => 'Known_User']);
+        foreach (['group', 'stale', 'mismatched'] as $kind) {
+            $update = $this->message('/start');
+            $update['message']['from']['username'] = 'Wrong_User';
+            if ($kind === 'group') {
+                $update['message']['chat'] = ['id' => -100000001, 'type' => 'supergroup'];
+            } elseif ($kind === 'stale') {
+                $update['message']['date'] = time() - 8 * 86400;
+            } else {
+                $update['message']['chat']['id'] = self::TELEGRAM_ID + 1;
+            }
+            $this->webhook($update)->assertOk();
+            $this->assertSame('Known_User', $binding->fresh()->telegram_username);
+        }
+    }
+
+    public function test_reply_failure_and_duplicate_updates_do_not_revert_newer_username(): void
+    {
+        $update = $this->message($this->link($this->user()));
+        $update['message']['from']['username'] = 'Original_Name';
+        $this->failReply = true;
+        $this->webhook($update)->assertStatus(503);
+        $binding = TelegramBotBinding::firstOrFail();
+        $this->assertSame('Original_Name', $binding->telegram_username);
+        $newer = $this->message('/start');
+        $newer['message']['from']['username'] = 'Current_Name';
+        $this->webhook($newer)->assertOk();
+        $this->webhook($update)->assertOk();
+        $this->webhook($update)->assertOk();
+        $this->assertSame('Current_Name', $binding->fresh()->telegram_username);
+        $this->assertDatabaseCount('v2_telegram_bot_bindings', 1);
+        $this->assertDatabaseCount('v2_telegram_bot_updates', 2);
+    }
+
+    public function test_username_migration_preserves_existing_binding_and_can_be_reapplied(): void
+    {
+        $this->bind($this->user());
+        $migration = require database_path('migrations/2026_10_05_000002_add_username_to_telegram_bot_bindings.php');
+        $migration->down();
+        $this->assertFalse(Schema::hasColumn('v2_telegram_bot_bindings', 'telegram_username'));
+        $before = DB::table('v2_telegram_bot_bindings')->first();
+        $migration->up();
+        $after = DB::table('v2_telegram_bot_bindings')->first();
+        $this->assertSame((array) $before, array_intersect_key((array) $after, (array) $before));
+        $this->assertNull($after->telegram_username);
+        $update = $this->message('/start');
+        $update['message']['from']['username'] = 'Backfilled_User';
+        $this->webhook($update)->assertOk();
+        $this->assertSame('Backfilled_User', TelegramBotBinding::firstOrFail()->telegram_username);
+    }
+
+    public function test_failed_username_save_rolls_back_and_can_be_retried(): void
+    {
+        $this->bind($this->user());
+        $binding = TelegramBotBinding::firstOrFail();
+        $before = $binding->getRawOriginal();
+        $update = $this->message('/start');
+        $update['message']['from']['username'] = str_repeat('a', 32);
+        $fail = true;
+        Event::listen('eloquent.updating: ' . TelegramBotBinding::class, function ($binding) use (&$fail) {
+            if ($fail && $binding->isDirty('telegram_username')) {
+                throw new \RuntimeException('模拟用户名保存失败');
+            }
+        });
+        $this->webhook($update)->assertStatus(503);
+        $this->assertSame($before, $binding->fresh()->getRawOriginal());
+        $this->assertDatabaseMissing('v2_telegram_bot_updates', ['update_id' => $update['update_id']]);
+        $fail = false;
+        $this->webhook($update)->assertOk();
+        $this->assertSame(str_repeat('a', 32), $binding->fresh()->telegram_username);
+    }
+
+    public function test_admin_can_search_usernames_with_optional_at_case_and_literal_underscore(): void
+    {
+        $first = $this->user();
+        $second = $this->user();
+        TelegramBotBinding::create(['user_id' => $first->id, 'telegram_id' => self::TELEGRAM_ID, 'telegram_username' => 'Sample_User']);
+        TelegramBotBinding::create(['user_id' => $second->id, 'telegram_id' => self::TELEGRAM_ID + 1, 'telegram_username' => 'SampleXUser']);
+        $this->asAdmin();
+        foreach (['Sample_User', '@sample_user', 'SAMPLE_', '@User', $first->email, (string) self::TELEGRAM_ID] as $search) {
+            $response = $this->getJson($this->adminPath('bindings') . '?' . http_build_query(['search' => $search]))->assertOk();
+            if ($search === '@User') {
+                $response->assertJsonPath('total', 2);
+            } else {
+                $response->assertJsonPath('total', 1)->assertJsonPath('data.0.user_id', $first->id)
+                    ->assertJsonPath('data.0.telegram_username', 'Sample_User');
+            }
+        }
+        $this->getJson($this->adminPath('bindings') . '?search=%40missing%25')->assertOk()->assertJsonPath('total', 0);
+        $this->getJson($this->adminPath('bindings') . '?search=missing_user')->assertOk()->assertJsonPath('total', 0);
+    }
+
     public function test_admin_binding_list_is_paginated_and_does_not_serialize_credentials(): void
     {
         $first = $this->user();
@@ -933,7 +1127,7 @@ class TelegramBotTest extends TestCase
         $this->bind($second, self::TELEGRAM_ID + 1);
         $this->asAdmin();
         $response = $this->getJson($this->adminPath('bindings') . '?per_page=1')->assertOk();
-        $response->assertJsonPath('total', 2)->assertJsonCount(1, 'data');
+        $response->assertJsonPath('total', 2)->assertJsonCount(1, 'data')->assertJsonPath('data.0.telegram_username', null);
         $this->assertStringNotContainsString($first->token, $response->getContent());
         $this->getJson($this->adminPath('bindings') . '?search=' . self::TELEGRAM_ID)
             ->assertOk()->assertJsonPath('total', 1)->assertJsonPath('data.0.user_id', $first->id);

@@ -28,7 +28,7 @@ class MessagePresenter
                 : ['text' => "已解除绑定。\n如需重新绑定，请发送本面板的订阅链接。"];
         }
         if (!$binding || !$binding->user) {
-            return ['text' => "欢迎使用 Telegram Bot。\n请发送你的 XBoard 订阅链接以绑定账号。"];
+            return ['text' => "Ciallo～(∠・ω< )⌒☆\n请把你的订阅链接交给我吧！"];
         }
         $user = $binding->user;
         if ($action === 'confirm_reset') {
@@ -55,35 +55,20 @@ class MessagePresenter
                 ]],
             ];
         }
-        if ($action === 'subscription') {
-            return [
-                'text' => implode("\n", [
-                    '订阅信息',
-                    '套餐：' . ($user->plan?->name ?? '未订购套餐'),
-                    '状态：' . $this->subscriptionStatus($user),
-                    '到期时间：' . ($user->expired_at === null ? '长期有效' : date('Y-m-d H:i', $user->expired_at)),
-                    '总流量：' . Helper::trafficConvert(max(0, (int) $user->transfer_enable)),
-                    '已用流量：' . Helper::trafficConvert($user->getTotalUsedTraffic()),
-                    '剩余流量：' . Helper::trafficConvert($user->getRemainingTraffic()),
-                ]),
-                'keyboard' => $this->back(),
-            ];
-        }
-        if ($action === 'link') {
-            return ['text' => "订阅链接\n" . Helper::getSubscribeUrl($user->token), 'keyboard' => $this->back()];
-        }
-        if ($action === 'subscription_reset') {
-            return [
-                'text' => "订阅已重置，Telegram 绑定已保留。\n请用新链接更新客户端订阅：\n" . Helper::getSubscribeUrl($user->token),
-                'keyboard' => $this->back(),
-            ];
+        if (in_array($action, ['subscription', 'link', 'subscription_reset'], true)) {
+            $reply = $this->subscription($user);
+            if ($action === 'subscription_reset') {
+                $reply['text'] = "订阅已重置，Telegram 绑定已保留。\n请用下方新链接更新客户端订阅。\n\n" . $reply['text'];
+            }
+            return $reply;
         }
         if ($action === 'account') {
             return [
                 'text' => implode("\n", [
                     '账户信息',
                     '邮箱：' . $user->email,
-                    '账户状态：' . ($user->banned ? '已封禁' : '正常'),
+                    '当前套餐：' . ($user->plan?->name ?? '未订购套餐'),
+                    '账户状态：' . ($user->banned ? '封禁中' : '正常'),
                     '余额：' . number_format($user->balance / 100, 2, '.', '') . ' 元',
                     '注册时间：' . date('Y-m-d H:i', $user->created_at),
                 ]),
@@ -91,11 +76,9 @@ class MessagePresenter
             ];
         }
         return [
-            'text' => $action === 'bound' ? '绑定成功，请选择需要查看的内容。' : '请选择需要查看的内容。',
+            'text' => $action === 'bound' ? '绑定成功，请选择需要查看的内容。' : 'Ciallo～(∠・ω< )⌒☆ 欢迎回来，今天想看点什么？',
             'keyboard' => [
                 [['text' => '订阅信息', 'callback_data' => 'subscription']],
-                [['text' => '订阅链接', 'callback_data' => 'link']],
-                [['text' => '重置订阅', 'callback_data' => 'reset_subscription']],
                 [['text' => '账户信息', 'callback_data' => 'account']],
             ],
         ];
@@ -106,14 +89,59 @@ class MessagePresenter
         return [[['text' => '返回主菜单', 'callback_data' => 'menu']]];
     }
 
+    private function subscription(User $user): array
+    {
+        $percentage = max(0, $user->getTrafficUsagePercentage());
+        $filled = (int) round($percentage / 100 * 14);
+
+        return [
+            'text' => implode("\n", [
+                '订阅信息',
+                '套餐：' . ($user->plan?->name ?? '未订购套餐'),
+                '状态：' . $this->subscriptionStatus($user),
+                '到期时间：' . ($user->expired_at === null ? '长期有效' : date('Y-m-d H:i', $user->expired_at)),
+                '已用：' . $this->traffic($user->getTotalUsedTraffic()) . ' / ' . $this->traffic((int) $user->transfer_enable),
+                '剩余：' . $this->traffic($user->getRemainingTraffic()),
+                str_repeat('█', $filled) . str_repeat('░', 14 - $filled) . ' ' . number_format($percentage, 1, '.', '') . '%',
+                $this->trafficResetNotice($user),
+                '',
+                '订阅链接',
+                Helper::getSubscribeUrl($user->token),
+            ]),
+            'keyboard' => array_merge([[['text' => '重置订阅', 'callback_data' => 'reset_subscription']]], $this->back()),
+        ];
+    }
+
+    private function traffic(int $bytes): string
+    {
+        return number_format(max(0, $bytes) / 1073741824, 2, '.', '') . ' GB';
+    }
+
+    private function trafficResetNotice(User $user): string
+    {
+        if ($user->next_reset_at === null) {
+            return '不自动重置流量';
+        }
+
+        $seconds = $user->next_reset_at - now()->timestamp;
+        if ($seconds <= 0) {
+            return '已到流量重置时间';
+        }
+
+        return (int) ceil($seconds / 86400) . ' 天后重置流量';
+    }
+
     private function subscriptionStatus(User $user): string
     {
+        $now = now()->timestamp;
+
         return match (true) {
-            (bool) $user->banned => '已封禁',
-            $user->expired_at !== null && $user->expired_at <= time() => '已过期',
+            (bool) $user->banned => '封禁中',
+            $user->expired_at !== null && $user->expired_at <= $now => '已过期',
             $user->transfer_enable <= 0 => '未开通',
-            $user->getRemainingTraffic() <= 0 => '流量已用完',
-            default => '可用',
+            $user->getRemainingTraffic() <= 0 => '流量耗尽',
+            $user->expired_at !== null && $user->expired_at <= $now + 3 * 86400 => '即将到期',
+            default => '正常',
         };
     }
 }

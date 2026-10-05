@@ -73,6 +73,13 @@ class TelegramBotController extends Controller
                 if (ctype_digit($search) && strlen($search) <= 18) {
                     $query->orWhere('telegram_id', $search);
                 }
+                $username = str_starts_with($search, '@') ? substr($search, 1) : $search;
+                if (preg_match('/\A[A-Za-z0-9_]{1,32}\z/', $username)) {
+                    // 用户名不区分大小写，下划线按原字符查询。
+                    $query->orWhereRaw("LOWER(telegram_username) LIKE ? ESCAPE '!'", [
+                        '%' . str_replace('_', '!_', strtolower($username)) . '%',
+                    ]);
+                }
             });
         }
         $page = $query->paginate($input['per_page'] ?? 20);
@@ -82,6 +89,7 @@ class TelegramBotController extends Controller
                 'user_id' => $binding->user_id,
                 'email' => $binding->user?->email,
                 'telegram_id' => (string) $binding->telegram_id,
+                'telegram_username' => $binding->telegram_username,
                 'created_at' => $binding->created_at,
             ]),
             'total' => $page->total(),

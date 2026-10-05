@@ -47,6 +47,9 @@ class UpdateDispatcher
                             return $record;
                         }
                         [$action, $bindingId] = $this->apply($context);
+                        if ($context['private'] && $context['action'] !== 'stale' && $bindingId !== null) {
+                            $this->bindings->syncUsername($bindingId, $context['sender_username']);
+                        }
                         return TelegramBotUpdate::create([
                             'bot_id' => $config->bot_id,
                             'update_id' => $context['update_id'],
@@ -106,7 +109,7 @@ class UpdateDispatcher
         }
         if ($action === 'reset_cancel') {
             $this->bindings->cancelReset($sender);
-            return ['menu', $binding?->id];
+            return ['subscription', $binding?->id];
         }
         if ($action === 'unbind') {
             $binding = $this->bindings->prepareUnbind($sender);
@@ -185,6 +188,7 @@ class UpdateDispatcher
         return [
             'update_id' => $update['update_id'],
             'sender_id' => $from['id'],
+            'sender_username' => $from['username'] ?? null,
             'chat_id' => $message['chat']['id'],
             'message_id' => $message['message_id'],
             'private' => $private,

@@ -20,6 +20,19 @@ class BindingService
         return TelegramBotBinding::with('user.plan')->where('telegram_id', $telegramId)->first();
     }
 
+    public function syncUsername(int $bindingId, mixed $username): void
+    {
+        // 用户名可移除；格式异常时保留已知资料，不影响原有绑定操作。
+        if ($username !== null && (!is_string($username) || !preg_match('/\A[A-Za-z0-9_]{1,32}\z/', $username))) {
+            return;
+        }
+        $binding = TelegramBotBinding::find($bindingId);
+        if ($binding && $binding->telegram_username !== $username) {
+            $binding->telegram_username = $username;
+            $binding->saveOrFail();
+        }
+    }
+
     public function bind(int $telegramId, string $url): TelegramBotBinding
     {
         $token = $this->links->token($url);

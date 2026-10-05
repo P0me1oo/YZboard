@@ -117,7 +117,7 @@ class TelegramBotMessagePresenterTest extends TestCase
             '已用：50.46 GB / 101.51 GB',
             '剩余：51.05 GB',
             '███████░░░░░░░ 49.7%',
-            '16 天后重置流量',
+            '流量重置时间：16天',
             '',
             '订阅链接',
             Helper::getSubscribeUrl($user->token),
@@ -178,9 +178,9 @@ class TelegramBotMessagePresenterTest extends TestCase
     public static function resetCountdowns(): array
     {
         return [
-            '恰好十六天' => [16 * 86400, '16 天后重置流量'],
-            '不足十六天向上取整' => [15 * 86400 + 1, '16 天后重置流量'],
-            '还剩一秒' => [1, '1 天后重置流量'],
+            '恰好十六天' => [16 * 86400, '流量重置时间：16天'],
+            '不足十六天向上取整' => [15 * 86400 + 1, '流量重置时间：16天'],
+            '还剩一秒' => [1, '流量重置时间：1天'],
             '恰好到达重置时间' => [0, '已到流量重置时间'],
             '已超过重置时间' => [-1, '已到流量重置时间'],
             '没有自动重置安排' => [null, '不自动重置流量'],
@@ -193,13 +193,13 @@ class TelegramBotMessagePresenterTest extends TestCase
         $binding = $this->binding(['next_reset_at' => now()->timestamp + 86401]);
         $presenter = app(MessagePresenter::class);
 
-        $this->assertContains('2 天后重置流量', explode("\n", $presenter->render('subscription', $binding)['text']));
+        $this->assertContains('流量重置时间：2天', explode("\n", $presenter->render('subscription', $binding)['text']));
         $this->travel(1)->seconds();
-        $this->assertContains('1 天后重置流量', explode("\n", $presenter->render('subscription', $binding)['text']));
+        $this->assertContains('流量重置时间：1天', explode("\n", $presenter->render('subscription', $binding)['text']));
         $this->travel(86400)->seconds();
         $this->assertContains('已到流量重置时间', explode("\n", $presenter->render('subscription', $binding)['text']));
         $binding->user->next_reset_at = now()->timestamp + 16 * 86400;
-        $this->assertContains('16 天后重置流量', explode("\n", $presenter->render('subscription', $binding)['text']));
+        $this->assertContains('流量重置时间：16天', explode("\n", $presenter->render('subscription', $binding)['text']));
     }
 
     #[DataProvider('accountPlans')]

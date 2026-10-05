@@ -1,5 +1,16 @@
 # YZboard 兼容矩阵
 
+## 1.46.1 节点类型筛选与 Telegram Bot 文案
+
+- 开发基线：面板 `cad3f1c0fdded679f8b3f5d3533134a66d6f7000`，管理端 `a693b9c0918216efd514d7b043837698f7f5b3e3`。修改前两处工作区均干净，目标标签 `v1.46.1`、`v0.23.1` 未占用。
+- 配套管理端 `0.23.1`，Node 沿用 `v2.5.0`。筛选补齐 WireGuard、AnyTLS，并直接使用创建节点的协议列表；修复多个类型同时勾选时列表为空的问题。Telegram Bot 的剩余重置天数显示为「流量重置时间：x天」。无数据库迁移或 Node 协议变更。
+- PHP 8.4.21 使用内存 SQLite 和内存缓存，运行 `php -d extension=pdo_sqlite -d extension=sqlite3 vendor/phpunit/phpunit/phpunit --filter 'TelegramBotMessagePresenterTest|TelegramBotTest|TelegramBotLinkTest'`，99 项测试、691 次断言通过，覆盖新文案、天数取整、日期边界和重复查询不改变账号数据。SQLite 扩展已加载，命令启动时有重复加载提示。
+- 管理端源码检查 3,028 个文件、53 项行为测试、正式构建和资源检查通过。浏览器确认十二种协议均可选择，WG、AnyTLS 单选、多选、取消、清除及刷新恢复正常；首轮发现多选为空并修复后复测通过。原 WG 编辑、停用和参数保存浏览器用例也通过。
+- 最终构建位于 `D:/codex-tmp/yz-node-filter-telegram-20261005-1791185736149/dist-final`，3,029 项构建源码与当前文件一致；同步 14 个资源到面板，5 项资源检查通过。主脚本 `admin-BWl4PGYj.js` 的 SHA256 为 `d834d4f756421135b1ed7169e5e7632db87a21762d9e584196620c2307d3cb98`，同步前已备份原资源。
+- 发布前本地 PHP 8.4.21 完整回归 544 项、5424 次断言通过。管理端固定源码为 `7ae6e73e460d325461b9a0e2a10a533e2ad773e8`、本地标签 `v0.23.1`；工程无远程仓库，构建资源随面板镜像交付。
+- 回滚基线为面板 `1.46.0-5ef7871`，清单 `sha256:0907fd9a818bdc02307524d597cdfa12620d1a1742cd64c65a99db7ea8495319`；匿名核对两个架构的 OCI revision、配置摘要及各 25 个镜像层通过。本次只需更新面板。
+- 发布准备已授权：固定提交及标签后，通过既有 GitHub Actions 完成 PHP 8.2 完整回归与双架构镜像发布；实际来源、摘要和可获取性在发布核验后记录。没有运行完整 `npm run verify`，没有连接真实服务器或验证实际 Telegram 投递。本次启动的浏览器、模拟服务和临时测试身份已关闭清空。
+
 ## 1.46.0 WireGuard 默认值与 MTU 上限
 
 - 2026-10-05：[Release v1.46.0](https://github.com/P0me1oo/YZboard/releases/tag/v1.46.0) 已发布，固定来源 `5ef7871ca7a7cfa7e74015d188c784a459d69a40`。交付物为 GHCR 双架构镜像，包含已有 `1.45.0` Telegram Bot 用户管理修改，无独立安装附件。

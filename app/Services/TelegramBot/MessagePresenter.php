@@ -128,7 +128,7 @@ class MessagePresenter
             return '已到流量重置时间';
         }
 
-        return (int) ceil($seconds / 86400) . ' 天后重置流量';
+        return '流量重置时间：' . (int) ceil($seconds / 86400) . '天';
     }
 
     private function subscriptionStatus(User $user): string

@@ -1,6 +1,10 @@
 # YZboard 兼容矩阵
 
-## 1.49.0 小时趋势与用户详情（发布准备）
+## 1.49.0 小时趋势与用户详情
+
+- [Release v1.49.0](https://github.com/P0me1oo/YZboard/releases/tag/v1.49.0) 于 `2026-10-05T15:27:38Z` 正式发布并核对为最新正式版，无独立安装附件。固定面板来源为 `de0dcdbd5a3f9a35d2bcd3c2de357b6f7a4f96d2`，后续发布记录提交不改变该 Tag 或镜像来源。
+- 不可变镜像 `ghcr.io/p0me1oo/yzboard:1.49.0-de0dcdb`、`1.49.0` 和 `latest` 均指向清单 `sha256:9ecc52316f76e1b6c14a70978b5410bdd967de7d0ea740c60e4b9d151d1f363a`。linux/amd64 为 `sha256:c97f76c234b90dcc142c0b31ff378b2fc5aafc3f90ba24ad7838899114aedae2`，linux/arm64 为 `sha256:aafa4e2dd6f1e1b8024fedf8d040c03fd8652de0e43c1658a9f507f3a539f7b2`。已匿名核对三个标签、两个架构的 OCI 来源、版本、配置摘要及各 25 个镜像层均可获取。
+- [发布流水线 37331311762](https://github.com/P0me1oo/YZboard/actions/runs/37331311762) 成功：PHP 8.2.34 完整回归 587 项、5661 次断言及 5 项管理端资源测试通过。首次本地直连仓库超时，重试匿名核验通过。
 
 - 基线为面板 `e05cad4bc7a46ac345ada30fc430fffa1b351797`、管理端 `7343a533ba61aff29d79304f9faf7a1a28442bf2`，在原有 `1.48.1` / `0.25.1` 未提交修改上继续开发，完整保留并纳入本次交付。
 - 配套管理端 `0.26.0`、Node `v2.5.0`；无 Node 通信格式及核心依赖变化。用户排行进入独立详情页，返回保留排行条件，三个统计列表分别记忆每页条数。

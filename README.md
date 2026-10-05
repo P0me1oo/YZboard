@@ -1,8 +1,8 @@
 # Xboard
 
-当前待发布版本为 `1.49.0`，配套管理端 `0.26.0`。用户明细改为排行的二级页面，统计列表支持每页条数选择，单日趋势新增小时展示。包含原 `1.48.1` 的统计图标、已删除节点原名、提醒开关调整；新增名称记录和小时汇总两项迁移，Node 沿用 `v2.5.0`。小时记录按面板首次接收时间归档，旧历史继续按天展示。详见 [统计分析](docs/statistics.md) 和 [验证记录](YZ_COMPATIBILITY.md)。
+当前正式版本为 [`1.49.0`](https://github.com/P0me1oo/YZboard/releases/tag/v1.49.0)，配套管理端 `0.26.0`，双架构镜像和 `latest` 已发布并核对可匿名获取。用户明细改为排行的二级页面，统计列表支持每页条数选择，单日趋势新增小时展示。包含原 `1.48.1` 的统计图标、已删除节点原名、提醒开关调整；新增名称记录和小时汇总两项迁移，Node 沿用 `v2.5.0`。小时记录按面板首次接收时间归档，旧历史继续按天展示。详见 [统计分析](docs/statistics.md) 和 [验证记录](YZ_COMPATIBILITY.md)。
 
-当前正式版本为 [`1.48.0`](https://github.com/P0me1oo/YZboard/releases/tag/v1.48.0)，配套管理端 `0.25.0`。新增独立「统计分析」入口，分为流量概览和用户统计，支持流量趋势、节点及用户排行、用户节点明细。默认最近 30 天，历史保留 30 个自然日；统计口径和上线前历史限制见 [统计分析](docs/statistics.md)。同时发布 `1.47.0` 开发阶段的 Telegram Bot 四项独立提醒及设置，新增两项数据库迁移。双架构镜像与 `latest` 已发布并核验，只需更新面板，Node 沿用 `v2.5.0`。来源与摘要见 [兼容矩阵](YZ_COMPATIBILITY.md)，提醒规则见 [Telegram Bot 文档](docs/telegram-bot.md)。
+上一正式版本为 [`1.48.0`](https://github.com/P0me1oo/YZboard/releases/tag/v1.48.0)，配套管理端 `0.25.0`。新增独立「统计分析」入口，分为流量概览和用户统计，支持流量趋势、节点及用户排行、用户节点明细。默认最近 30 天，历史保留 30 个自然日；统计口径和上线前历史限制见 [统计分析](docs/statistics.md)。同时发布 `1.47.0` 开发阶段的 Telegram Bot 四项独立提醒及设置，新增两项数据库迁移。该版本发布核验记录见 [兼容矩阵](YZ_COMPATIBILITY.md)，提醒规则见 [Telegram Bot 文档](docs/telegram-bot.md)。
 
 上一正式版本 [`1.46.1`](https://github.com/P0me1oo/YZboard/releases/tag/v1.46.1)，配套管理端 `0.23.1`、Node 沿用 `v2.5.0`。节点类型筛选补齐 WireGuard 和 AnyTLS；Telegram Bot 剩余重置天数改为「流量重置时间：x天」，无新增数据库迁移。历史发布来源与验证结果见 [兼容矩阵](YZ_COMPATIBILITY.md)。
 

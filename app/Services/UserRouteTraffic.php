@@ -37,6 +37,9 @@ class UserRouteTraffic
         if (!$started || $receivedAt === null || $receivedAt < $started || ($u === 0 && $d === 0)) {
             return;
         }
+        app(FineTrafficStatistics::class)->record('route', [
+            'user_id' => $uid, 'entry_id' => $entry, 'server_id' => $sid, 'kind' => $kind, 'rate' => (string) $rate,
+        ], ['u' => $u, 'd' => $d, 'billed_u' => $billedU, 'billed_d' => $billedD], $day, $receivedAt);
         $updates = [];
         foreach (['u', 'd', 'billed_u', 'billed_d'] as $column) {
             $updates[$column] = DB::raw(in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)
@@ -51,6 +54,7 @@ class UserRouteTraffic
 
     private function source(array $range): Builder
     {
+        if (($range['precision'] ?? '') === 'auto') { return app(FineTrafficStatistics::class)->source($range, 'route'); }
         return DB::table(self::TABLE)->where('record_at', '>=', $range['start']->timestamp)
             ->where('record_at', '<', $range['end']->timestamp);
     }

@@ -147,7 +147,7 @@ class ProcessNodeReportBatch implements ShouldQueue
 
         if ($totalU > 0 || $totalD > 0) {
             $this->incrementServerStat($serverId, $serverType, $recordAt, $totalU, $totalD, $now);
-            app(\App\Services\NodeTrafficHour::class)->add($recordAt, $totalU, $totalD, $batch->created_at?->timestamp);
+            app(\App\Services\NodeTrafficHour::class)->add($recordAt, $totalU, $totalD, $batch->created_at?->timestamp, $serverId);
             DB::table('v2_server')
                 ->where('id', $serverId)
                 ->incrementEach(['u' => $totalU, 'd' => $totalD], ['updated_at' => now()]);
@@ -180,7 +180,7 @@ class ProcessNodeReportBatch implements ShouldQueue
                 $d,
                 $now
             );
-            app(\App\Services\NodeTrafficHour::class)->add((int) $batch->record_at, $u, $d, $batch->created_at?->timestamp);
+            app(\App\Services\NodeTrafficHour::class)->add((int) $batch->record_at, $u, $d, $batch->created_at?->timestamp, $serverId);
             DB::table('v2_server')
                 ->where('id', $serverId)
                 ->incrementEach(['u' => $u, 'd' => $d], ['updated_at' => now()]);

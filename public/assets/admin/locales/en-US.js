@@ -1,6 +1,9 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['en-US'] = {
   "statistics": {
+    "last24": "Last 24 hours", "last14": "Last 14 days", "all": "All", "startTime": "Start time", "endTime": "End time",
+    "confirm": "Confirm", "cancel": "Cancel", "previousMonth": "Prev", "nextMonth": "Next",
+    "wholeHours": "Use whole hours for past dates or ranges spanning multiple days.", "searchNode": "Search nodes", "nodeName": "Node name", "asc": "Ascending", "desc": "Descending",
     "direct": "Direct", "effectiveRate": "Applied rate",
     "hour": "Hourly", "perPage": "Rows per page", "backToUsers": "Back to user ranking",
     "navigation": "Statistics", "overview": "Traffic overview", "userStatistics": "User statistics",

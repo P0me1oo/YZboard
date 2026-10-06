@@ -50,6 +50,12 @@ class ResetLog extends Command
         DB::table('v2_stat_traffic_hour')->where('record_at', '<', $cutoff)->delete();
         DB::table('v2_stat_node_hour')->where('record_at', '<', $cutoff)->delete();
         DB::table('v2_stat_user_route_source')->where('record_at', '<', $cutoff)->delete();
+        foreach (['node_hour_detail', 'route_hour'] as $table) {
+            DB::table('v2_stat_' . $table)->where('record_at', '<', $cutoff)->delete();
+        }
+        foreach (['node_minute_detail', 'route_minute'] as $table) {
+            DB::table('v2_stat_' . $table)->where('record_at', '<', now()->startOfDay()->timestamp)->delete();
+        }
         DB::table('v2_stat_server_name')->where('deleted_at', '<', $cutoff)
             ->whereNotExists(fn ($query) => $query->selectRaw('1')->from('v2_stat_server')
                 ->whereColumn('v2_stat_server.server_id', 'v2_stat_server_name.server_id'))

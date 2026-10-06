@@ -1,0 +1,182 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Jobs\ProcessNodeReportBatch;
+use App\Models\NodeReportBatch;
+use App\Models\Server;
+use App\Models\StatServer;
+use App\Models\User;
+use App\Services\FineTrafficStatistics;
+use App\Services\NodeTrafficHour;
+use App\Services\UserRouteTraffic;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Str;
+use Laravel\Sanctum\Sanctum;
+use Tests\TestCase;
+
+class FineTrafficStatisticsTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->travelTo(now()->startOfDay()->setTime(14, 35));
+        DB::table('v2_settings')->whereIn('name', ['fine_traffic_started_at', 'user_route_statistics_started_at', 'node_hourly_started_at'])
+            ->update(['value' => (string) now()->startOfDay()->subDays(29)->timestamp]);
+        Sanctum::actingAs(User::create(['email' => 'fine-admin@example.test', 'password' => Str::random(32),
+            'uuid' => (string) Str::uuid(), 'token' => Str::random(32), 'is_admin' => true]));
+    }
+
+    private function node(string $name = '测试节点'): Server
+    {
+        return Server::create(['name' => $name, 'type' => 'vless', 'host' => 'example.test', 'port' => 443,
+            'server_port' => 443, 'rate' => 2, 'group_ids' => [], 'enabled' => true]);
+    }
+
+    private function getStats(string $endpoint, array $params = [])
+    {
+        return $this->getJson('/api/v2/' . hash('crc32b', config('app.key')) . '/statistics/' . $endpoint . '?'
+            . http_build_query($params + ['period' => 'today', 'precision' => 'auto']));
+    }
+
+    private function slice(string $start = '09:10', string $end = '09:12', ?string $date = null): array
+    {
+        return ['period' => 'custom', 'start_date' => $date ?? now()->toDateString(), 'end_date' => $date ?? now()->toDateString(),
+            'start_time' => $start, 'end_time' => $end];
+    }
+
+    private function record(int $sid, int $at, int $u, int $d): void
+    {
+        $day = \Carbon\CarbonImmutable::createFromTimestamp($at, config('app.timezone'))->startOfDay()->timestamp;
+        app(NodeTrafficHour::class)->add($day, $u, $d, $at, $sid);
+        app(UserRouteTraffic::class)->record(101, $sid, $sid, 'entry', 2, $day, $u, $d, $u * 2, $d * 2, $at);
+        $row = StatServer::firstOrCreate(['server_id' => $sid, 'server_type' => 'vless', 'record_type' => 'd', 'record_at' => $day], ['u' => 0, 'd' => 0]);
+        StatServer::whereKey($row->id)->incrementEach(['u' => $u, 'd' => $d]);
+    }
+
+    public function test_minute_bounds_are_exclusive_and_all_endpoints_agree(): void
+    {
+        $node = $this->node();
+        foreach ([['09:09', 100], ['09:10', 10], ['09:11', 20], ['09:12', 200]] as [$time, $amount]) {
+            $this->record($node->id, now()->setTimeFromTimeString($time)->timestamp, $amount, $amount * 2);
+        }
+        $this->getStats('traffic', $this->slice())->assertOk()->assertJsonPath('data.summary.total', 90)->assertJsonPath('data.meta.unit', 'minute')->assertJsonCount(2, 'data.list');
+        $this->getStats('nodes', $this->slice())->assertOk()->assertJsonPath('data.list.0.total', 90);
+        $this->getStats('users', $this->slice())->assertOk()->assertJsonPath('data.list.0.total', 90);
+        $this->getStats('users', $this->slice() + ['metric' => 'billed'])->assertOk()->assertJsonPath('data.list.0.total', 180);
+        $this->getStats('user', $this->slice() + ['user_id' => 101])->assertOk()->assertJsonPath('data.actual_summary.total', 90)->assertJsonPath('data.billed_summary.total', 180);
+        $this->getStats('traffic')->assertJsonPath('data.summary.total', 990)->assertJsonPath('data.meta.unit', 'minute');
+    }
+
+    public function test_midnight_cleanup_keeps_hours_and_rejects_old_minutes(): void
+    {
+        $node = $this->node(); $date = now()->toDateString();
+        $this->record($node->id, now()->setTime(9, 10)->timestamp, 10, 20);
+        $this->travelTo(now()->addDay()->setTime(10, 0));
+        $this->artisan('reset:log')->assertSuccessful();
+        $this->assertSame(0, DB::table('v2_stat_route_minute')->count());
+        $this->assertSame(0, DB::table('v2_stat_node_minute_detail')->count());
+        $this->assertSame(1, DB::table('v2_stat_route_hour')->count());
+        $this->getStats('nodes', $this->slice('09:00', '10:00', $date))->assertOk()->assertJsonPath('data.list.0.total', 30);
+        $this->getStats('user', $this->slice('09:00', '10:00', $date) + ['user_id' => 101])->assertOk()->assertJsonPath('data.actual_summary.total', 30);
+        $this->getStats('traffic', $this->slice('09:10', '10:00', $date))->assertUnprocessable();
+        $this->getStats('traffic', ['period' => '24h'])->assertOk()->assertJsonPath('data.summary.total', 0);
+    }
+
+    public function test_search_and_sort_apply_before_pagination_and_escape_wildcards(): void
+    {
+        $a = $this->node('节点_%'); $b = $this->node('节点 B'); $c = $this->node('节点 C');
+        foreach ([[$a, 10, 90], [$b, 30, 10], [$c, 20, 10]] as [$node, $u, $d]) { $this->record($node->id, now()->timestamp, $u, $d); }
+        foreach (['upload' => [$a->id, $b->id], 'download' => [$b->id, $a->id], 'total' => [$c->id, $a->id]] as $sort => [$asc, $desc]) {
+            $this->getStats('nodes', ['sort' => $sort, 'direction' => 'asc', 'page_size' => 1])->assertOk()->assertJsonPath('data.list.0.id', $asc)->assertJsonPath('data.total', 3);
+            $this->getStats('nodes', ['sort' => $sort, 'direction' => 'desc', 'page_size' => 1])->assertOk()->assertJsonPath('data.list.0.id', $desc);
+        }
+        $this->getStats('nodes', ['search' => '_%'])->assertJsonPath('data.total', 1)->assertJsonPath('data.list.0.id', $a->id);
+        $this->getStats('nodes', ['search' => '不存在'])->assertJsonCount(0, 'data.list');
+        $this->getStats('nodes', ['sort' => 'id'])->assertUnprocessable();
+        $this->getStats('nodes', ['direction' => 'invalid'])->assertUnprocessable();
+    }
+
+    public function test_old_daily_history_is_preserved_without_fabricating_fine_data(): void
+    {
+        $node = $this->node();
+        DB::table('v2_settings')->where('name', 'fine_traffic_started_at')->update(['value' => (string) now()->timestamp]);
+        $this->record($node->id, now()->subDay()->timestamp, 10, 20);
+        $date = now()->subDay()->toDateString();
+        $this->getStats('traffic', ['period' => 'custom', 'start_date' => $date, 'end_date' => $date])->assertOk()->assertJsonPath('data.summary.total', 30)->assertJsonPath('data.meta.unit', 'day');
+        $this->getStats('nodes', $this->slice('09:00', '10:00', $date))->assertUnprocessable();
+        $this->getStats('users', $this->slice('09:00', '10:00', $date))->assertUnprocessable();
+        $this->assertSame(0, DB::table('v2_stat_route_hour')->count());
+    }
+
+    public function test_minute_samples_are_aggregated_before_direct_difference_and_billing_allocation(): void
+    {
+        $entry = $this->node(); $relay = $this->node(); $day = now()->startOfDay()->timestamp;
+        foreach ([['09:10', 10, 15], ['09:11', 20, 15]] as [$time, $u, $r]) {
+            $at = now()->setTimeFromTimeString($time)->timestamp;
+            app(UserRouteTraffic::class)->record(101, $entry->id, $entry->id, 'entry', 0.5, $day, $u, 0, (int) ($u * .5), 0, $at);
+            app(UserRouteTraffic::class)->record(101, $entry->id, $relay->id, 'relay', 0.5, $day, $r, 0, 0, 0, $at);
+        }
+        $this->getStats('user', $this->slice() + ['user_id' => 101])->assertOk()->assertJsonPath('data.actual_summary.total', 30)
+            ->assertJsonPath('data.billed_summary.total', 15)->assertJsonPath('data.direct_summary.total', 0)->assertJsonCount(1, 'data.list');
+    }
+
+    public function test_batch_rollback_retry_and_delayed_processing_preserve_hour_records(): void
+    {
+        $entry = $this->node(); $relay = $this->node();
+        $batch = NodeReportBatch::create(['server_id' => $entry->id, 'server_type' => 'vless', 'report_id' => Str::random(20), 'report_key' => Str::random(64),
+            'server_snapshot' => ['id' => $entry->id, 'rate' => 2], 'traffic' => [101 => [10, 20]],
+            'relay_traffic' => [['server_id' => $relay->id, 'server_type' => 'vless', 'u' => 8, 'd' => 16]],
+            'relay_user_traffic' => [101 => [$relay->id => [8, 16]]], 'record_at' => now()->startOfDay()->timestamp, 'status' => 'pending', 'attempts' => 0]);
+        Redis::shouldReceive('sadd')->once()->andThrow(new \RuntimeException('测试回滚'));
+        try { (new ProcessNodeReportBatch($batch->id))->handle(); $this->fail('应回滚'); } catch (\RuntimeException $e) { $this->assertSame('测试回滚', $e->getMessage()); }
+        foreach (['route_minute', 'route_hour', 'node_minute_detail', 'node_hour_detail'] as $table) { $this->assertSame(0, DB::table('v2_stat_' . $table)->count()); }
+        $this->travelTo(now()->addDay());
+        Redis::shouldReceive('sadd')->once()->andReturn(1);
+        (new ProcessNodeReportBatch($batch->id))->handle(); (new ProcessNodeReportBatch($batch->id))->handle();
+        $this->assertSame(0, DB::table('v2_stat_route_minute')->count());
+        $this->assertSame(0, DB::table('v2_stat_node_minute_detail')->count());
+        $this->assertSame(2, DB::table('v2_stat_route_hour')->count());
+        $this->assertSame(54, (int) DB::table('v2_stat_node_hour_detail')->selectRaw('SUM(u + d) AS total')->value('total'));
+    }
+
+    public function test_retention_keeps_today_minutes_and_thirty_day_hour_boundary(): void
+    {
+        $node = $this->node();
+        foreach ([0, 29, 30] as $days) { $this->record($node->id, now()->subDays($days)->timestamp, 1, 2); }
+        $this->artisan('reset:log')->assertSuccessful();
+        $this->assertSame(2, DB::table('v2_stat_route_hour')->count());
+        $this->assertSame(1, DB::table('v2_stat_route_minute')->count());
+        $this->getStats('traffic', ['period' => 'all'])->assertOk()->assertJsonPath('data.summary.total', 6);
+        $this->getStats('metadata')->assertOk()->assertJsonStructure(['data' => ['presets' => ['today', '24h', '7d', '14d', '30d', 'all']]]);
+    }
+
+    public function test_last_twenty_four_hours_include_both_days_without_double_counting(): void
+    {
+        $node = $this->node();
+        $this->record($node->id, now()->subDay()->setTime(14, 59)->timestamp, 100, 200);
+        $this->record($node->id, now()->subDay()->setTime(15, 0)->timestamp, 1, 2);
+        $this->record($node->id, now()->setTime(14, 20)->timestamp, 10, 20);
+        $this->getStats('traffic', ['period' => '24h'])->assertOk()->assertJsonPath('data.summary.total', 33)
+            ->assertJsonPath('data.meta.unit', 'hour')->assertJsonCount(24, 'data.list');
+        $this->getStats('nodes', ['period' => '24h'])->assertJsonPath('data.list.0.total', 33);
+        $this->getStats('users', ['period' => '24h'])->assertJsonPath('data.list.0.total', 33);
+        $this->getStats('user', ['period' => '24h', 'user_id' => 101])->assertJsonPath('data.actual_summary.total', 33);
+    }
+
+    public function test_invalid_and_nonexistent_local_time_and_metadata_access(): void
+    {
+        foreach ([$this->slice('09:12', '09:10'), $this->slice('25:00', '26:00'), ['start_time' => '09:00'], $this->slice() + ['precision' => 'invalid']] as $params) {
+            $this->getStats('traffic', $params)->assertUnprocessable();
+        }
+        config(['app.timezone' => 'America/New_York']);
+        $this->travelTo(\Carbon\CarbonImmutable::parse('2026-03-08 12:00:00', 'America/New_York'));
+        $this->getStats('traffic', $this->slice('02:10', '04:00', '2026-03-08'))->assertUnprocessable();
+        $admin = auth()->user(); $admin->is_admin = false; $admin->save(); Sanctum::actingAs($admin);
+        $this->assertNotSame(200, $this->getStats('metadata')->status());
+    }
+}

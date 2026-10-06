@@ -163,6 +163,7 @@ class AdminRoute
             });
 
             $router->group(['prefix' => 'statistics'], function ($router) {
+                $router->get('/metadata', [TrafficStatisticsController::class, 'metadata']);
                 $router->get('/traffic', [TrafficStatisticsController::class, 'overview']);
                 $router->get('/nodes', [TrafficStatisticsController::class, 'nodes']);
                 $router->get('/users', [TrafficStatisticsController::class, 'users']);

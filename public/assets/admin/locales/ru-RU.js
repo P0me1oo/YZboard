@@ -1,6 +1,9 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['ru-RU'] = {
   "statistics": {
+    "last24": "За 24 часа", "last14": "За 14 дней", "all": "Всё", "startTime": "Начало", "endTime": "Конец",
+    "confirm": "Применить", "cancel": "Отмена", "previousMonth": "Назад", "nextMonth": "Вперёд",
+    "wholeHours": "Для прошлых дат и диапазонов в несколько дней выбирайте целые часы.", "searchNode": "Поиск узлов", "nodeName": "Название узла", "asc": "По возрастанию", "desc": "По убыванию",
     "direct": "Напрямую", "effectiveRate": "Применённый множитель",
     "hour": "По часам", "perPage": "Строк на странице", "backToUsers": "К рейтингу пользователей",
     "navigation": "Статистика", "overview": "Обзор трафика", "userStatistics": "Статистика пользователей",

@@ -14,7 +14,7 @@ class TrafficStatisticsService
     public function range(Request $request): array
     {
         $input = $request->validate([
-            'period' => 'sometimes|in:30d,7d,today,custom',
+            'period' => 'sometimes|in:30d,14d,7d,24h,today,all,custom',
             'start_date' => 'required_if:period,custom|date_format:Y-m-d',
             'end_date' => 'required_if:period,custom|date_format:Y-m-d|after_or_equal:start_date',
             'unit' => 'sometimes|in:day,week,month',
@@ -24,22 +24,53 @@ class TrafficStatisticsService
             'search' => 'nullable|string|max:100',
             'user_id' => 'sometimes|integer|min:1',
             'server_id' => 'sometimes|integer|min:1',
+            'precision' => 'sometimes|in:auto',
+            'start_time' => 'required_with:end_time|date_format:H:i',
+            'end_time' => 'required_with:start_time|date_format:H:i',
+            'sort' => 'sometimes|in:upload,download,total',
+            'direction' => 'sometimes|in:asc,desc',
         ]);
         $today = CarbonImmutable::today(config('app.timezone'));
         $oldest = $today->subDays(29);
         $period = $input['period'] ?? '30d';
         $start = $period === 'custom' ? CarbonImmutable::parse($input['start_date'], config('app.timezone'))
-            : $today->subDays(match ($period) { '7d' => 6, 'today' => 0, default => 29 });
+            : $today->subDays(match ($period) { '7d' => 6, '14d' => 13, 'today' => 0, default => 29 });
         $end = $period === 'custom' ? CarbonImmutable::parse($input['end_date'], config('app.timezone')) : $today;
-        if ($start < $oldest || $end > $today) {
+        $timed = isset($input['start_time'], $input['end_time']);
+        if ($timed && ($period !== 'custom' || ($input['precision'] ?? '') !== 'auto')) {
+            throw ValidationException::withMessages(['start_time' => '请选择自定义时间范围。']);
+        }
+        $end = $end->addDay();
+        if ($timed) {
+            $start = $start->setTimeFromTimeString($input['start_time']);
+            $end = $end->subDay()->setTimeFromTimeString($input['end_time']);
+            if ($start->format('Y-m-d H:i') !== $input['start_date'] . ' ' . $input['start_time']
+                || $end->format('Y-m-d H:i') !== $input['end_date'] . ' ' . $input['end_time']) {
+                throw ValidationException::withMessages(['start_time' => '该本地时间不存在，请按面板时区重新选择。']);
+            }
+        }
+        if ($period === '24h') { $end = CarbonImmutable::now(config('app.timezone'))->startOfHour()->addHour(); $start = $end->subHours(24); }
+        if ($start < $oldest || $end > $today->addDay() || $start >= $end) {
             throw ValidationException::withMessages(['start_date' => '请选择最近 30 天内的日期。']);
         }
+        if ($start < $today && ($start->minute !== 0 || $end->minute !== 0)) {
+            throw ValidationException::withMessages(['start_time' => '跨日或历史查询请使用整点，分钟记录仅保留今天。']);
+        }
         $started = (int) DB::table('v2_settings')->where('name', 'traffic_statistics_started_at')->value('value');
+        $presets = [];
+        foreach (['today' => 0, '7d' => 6, '14d' => 13, '30d' => 29, 'all' => 29, '24h' => 0] as $key => $days) {
+            $presetEnd = $key === '24h' ? CarbonImmutable::now(config('app.timezone'))->startOfHour()->addHour() : $today->addDay();
+            $presetStart = $key === '24h' ? $presetEnd->subHours(24) : $today->subDays($days);
+            $presets[$key] = [$presetStart->format('Y-m-d\TH:i'), $presetEnd->format('Y-m-d\TH:i')];
+        }
         return $input + [
-            'start' => $start, 'end' => $end->addDay(), 'unit' => 'day', 'metric' => 'actual',
+            'start' => $start, 'end' => $end, 'unit' => 'day', 'metric' => 'actual',
             'page' => 1, 'page_size' => 20,
             'meta' => [
-                'start_date' => $start->toDateString(), 'end_date' => $end->toDateString(),
+                'start_date' => $start->toDateString(), 'end_date' => $end->subSecond()->toDateString(),
+                'start_at' => $start->format('Y-m-d\TH:i'), 'end_at' => $end->format('Y-m-d\TH:i'),
+                'now' => CarbonImmutable::now(config('app.timezone'))->format('Y-m-d\TH:i'),
+                'presets' => $presets,
                 'today' => $today->toDateString(), 'min_date' => $oldest->toDateString(),
                 'timezone' => config('app.timezone'), 'retention_days' => 30,
                 'started_at' => $started ? CarbonImmutable::createFromTimestamp($started, config('app.timezone'))->toIso8601String() : null,
@@ -49,6 +80,7 @@ class TrafficStatisticsService
 
     public function overview(array $range): array
     {
+        if (($range['precision'] ?? '') === 'auto') { return $this->fineOverview($range); }
         $query = $this->between(DB::table('v2_stat_server')->where('record_type', 'd'), $range);
         $summary = $this->summary($query);
         if ($range['start']->addDay()->equalTo($range['end'])) {
@@ -79,6 +111,38 @@ class TrafficStatisticsService
         return ['list' => array_values($series), 'summary' => $summary, 'meta' => $range['meta'] + ['unit' => $range['unit']]];
     }
 
+    private function fineOverview(array $range): array
+    {
+        $query = app(FineTrafficStatistics::class)->source($range, 'node', true);
+        $summary = $this->summary($query);
+        $rows = $query->selectRaw('record_at, bucket_unit, SUM(u) AS upload, SUM(d) AS download')
+            ->groupBy('record_at', 'bucket_unit')->orderBy('record_at')->get();
+        $unit = $rows->contains('bucket_unit', 'day') || $range['end']->timestamp - $range['start']->timestamp > 172800
+            ? 'day' : ($range['start'] >= CarbonImmutable::today(config('app.timezone')) ? 'minute' : 'hour');
+        $series = [];
+        foreach ($rows as $row) {
+            $time = CarbonImmutable::createFromTimestamp((int) $row->record_at, config('app.timezone'));
+            $key = $unit === 'day' ? $time->startOfDay()->timestamp : $time->timestamp;
+            $series[$key] ??= ['date' => $unit === 'day' ? $time->toDateString() : $time->toIso8601String(), 'upload' => 0, 'download' => 0, 'total' => 0];
+            $series[$key]['upload'] += (int) $row->upload;
+            $series[$key]['download'] += (int) $row->download;
+            $series[$key]['total'] = $series[$key]['upload'] + $series[$key]['download'];
+        }
+        // 只在已记录的范围内补空档，不补造启用前的细分历史。
+        if ($rows->isNotEmpty()) {
+            $first = CarbonImmutable::createFromTimestamp((int) $rows->first()->record_at, config('app.timezone'));
+            $last = min($range['end']->timestamp, now()->timestamp + 1);
+            for ($time = $first; $time->timestamp < $last; $time = match ($unit) {
+                'minute' => $time->addSeconds(60), 'hour' => $time->addSeconds(3600), default => $time->addDay(),
+            }) {
+                $key = $unit === 'day' ? $time->startOfDay()->timestamp : $time->timestamp;
+                $series[$key] ??= ['date' => $unit === 'day' ? $time->toDateString() : $time->toIso8601String(), 'upload' => 0, 'download' => 0, 'total' => 0];
+            }
+        }
+        ksort($series);
+        return ['list' => array_values($series), 'summary' => $summary, 'meta' => $range['meta'] + ['unit' => $unit]];
+    }
+
     private function hourlyOverview(array $range, array $summary): ?array
     {
         $started = (int) DB::table('v2_settings')->where('name', 'node_hourly_started_at')->value('value');
@@ -106,11 +170,18 @@ class TrafficStatisticsService
 
     public function nodes(array $range): array
     {
-        $query = $this->between(DB::table('v2_stat_server')->where('record_type', 'd'), $range);
-        ServerNameHistory::joinNames($query, 'v2_stat_server');
+        $fine = ($range['precision'] ?? '') === 'auto';
+        $query = $fine ? app(FineTrafficStatistics::class)->source($range, 'node')
+            : $this->between(DB::table('v2_stat_server')->where('record_type', 'd'), $range);
+        ServerNameHistory::joinNames($query, $fine ? 'fine_source' : 'v2_stat_server');
+        $search = trim($range['search'] ?? '');
+        if ($search !== '') {
+            $pattern = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($search)) . '%';
+            $query->whereRaw("LOWER(node_name) LIKE ? ESCAPE '!'", [$pattern]);
+        }
         $query->selectRaw('server_id AS id, SUM(u) AS upload, SUM(d) AS download, SUM(u + d) AS total')
             ->addSelect('node_name', 'node_deleted')->groupBy('server_id', 'node_name', 'node_deleted')
-            ->orderByDesc('total')->orderBy('server_id');
+            ->orderBy($range['sort'] ?? 'total', $range['direction'] ?? 'desc')->orderBy('server_id');
         return $this->ranking($query, $range, 'node');
     }
 

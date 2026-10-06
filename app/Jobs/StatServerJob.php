@@ -65,7 +65,7 @@ class StatServerJob implements ShouldQueue
                 $this->processServerStat($u, $d, $recordAt);
                 $this->updateServerTraffic($u, $d);
                 if ($this->recordType === 'd') {
-                    app(\App\Services\NodeTrafficHour::class)->add($recordAt, $u, $d, $this->receivedAt);
+                    app(\App\Services\NodeTrafficHour::class)->add($recordAt, $u, $d, $this->receivedAt, (int) $this->server['id']);
                 }
             }, 3);
         } catch (\Exception $e) {

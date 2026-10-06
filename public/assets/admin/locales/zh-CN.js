@@ -1,6 +1,9 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['zh-CN'] = {
   "statistics": {
+    "last24": "近 24 小时", "last14": "近 14 天", "all": "全部", "startTime": "开始时间", "endTime": "结束时间",
+    "confirm": "确定", "cancel": "取消", "previousMonth": "上月", "nextMonth": "下月",
+    "wholeHours": "跨日或历史查询请选择整点。", "searchNode": "搜索节点", "nodeName": "节点名称", "asc": "升序", "desc": "降序",
     "direct": "直出", "effectiveRate": "生效倍率",
     "hour": "按小时", "perPage": "每页显示", "backToUsers": "返回用户排行",
     "navigation": "统计分析", "overview": "流量概览", "userStatistics": "用户统计",

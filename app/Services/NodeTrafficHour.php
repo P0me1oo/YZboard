@@ -8,8 +8,11 @@ use Illuminate\Support\Facades\DB;
 class NodeTrafficHour
 {
     /** 与节点日统计共用事务；入口和落地各记一次，与节点管理保持同一口径。 */
-    public function add(int $day, int $u, int $d, ?int $receivedAt): void
+    public function add(int $day, int $u, int $d, ?int $receivedAt, ?int $serverId = null): void
     {
+        if ($serverId !== null) {
+            app(FineTrafficStatistics::class)->record('node', ['server_id' => $serverId], ['u' => $u, 'd' => $d], $day, $receivedAt);
+        }
         $started = (int) DB::table('v2_settings')->where('name', 'node_hourly_started_at')->value('value');
         if (!$started || $receivedAt === null || $receivedAt < $started || ($u === 0 && $d === 0)) { return; }
         $received = CarbonImmutable::createFromTimestamp($receivedAt, config('app.timezone'));

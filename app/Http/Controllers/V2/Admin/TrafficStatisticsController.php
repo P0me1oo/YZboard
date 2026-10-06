@@ -10,6 +10,11 @@ class TrafficStatisticsController extends Controller
 {
     public function __construct(private readonly TrafficStatisticsService $statistics) {}
 
+    public function metadata(Request $request)
+    {
+        return $this->success($this->statistics->range($request)['meta']);
+    }
+
     public function overview(Request $request)
     {
         return $this->success($this->statistics->overview($this->statistics->range($request)));

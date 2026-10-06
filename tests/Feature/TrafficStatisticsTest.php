@@ -10,6 +10,7 @@ use App\Models\StatServer;
 use App\Models\StatUser;
 use App\Models\User;
 use App\Services\TrafficStatisticsRecorder;
+use App\Services\UserRouteTraffic;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
@@ -26,6 +27,8 @@ class TrafficStatisticsTest extends TestCase
         parent::setUp();
         $this->travelTo(now()->startOfSecond());
         DB::table('v2_settings')->where('name', 'traffic_statistics_started_at')
+            ->update(['value' => (string) now()->startOfDay()->subDays(29)->timestamp]);
+        DB::table('v2_settings')->whereIn('name', ['user_route_statistics_started_at', 'node_hourly_started_at'])
             ->update(['value' => (string) now()->startOfDay()->subDays(29)->timestamp]);
         Sanctum::actingAs($this->user(true));
     }
@@ -50,6 +53,11 @@ class TrafficStatisticsTest extends TestCase
     private function record(int $uid, int $sid, int $u = 100, int $d = 200, int $daysAgo = 0, string $kind = 'entry'): void
     {
         app(TrafficStatisticsRecorder::class)->add($uid, $sid, $kind, now()->startOfDay()->subDays($daysAgo)->timestamp, $u, $d, $u * 2, $d * 2);
+        app(UserRouteTraffic::class)->record($uid, $sid, $sid, $kind, 2,
+            now()->startOfDay()->subDays($daysAgo)->timestamp, $u, $d, $u * 2, $d * 2, now()->timestamp);
+        $stat = StatServer::firstOrCreate(['server_id' => $sid, 'server_type' => 'vless', 'record_type' => 'd',
+            'record_at' => now()->startOfDay()->subDays($daysAgo)->timestamp], ['u' => 0, 'd' => 0]);
+        StatServer::whereKey($stat->id)->incrementEach(['u' => $u, 'd' => $d]);
     }
 
     private function batch(User $user, Server $node, Server $relay): NodeReportBatch
@@ -72,11 +80,12 @@ class TrafficStatisticsTest extends TestCase
         (new ProcessNodeReportBatch($batch->id))->handle();
         $this->assertSame(2, DB::table('v2_stat_user_server')->count());
         $this->assertSame(600, (int) $user->fresh()->u + (int) $user->fresh()->d);
-        $this->getJson($this->path('traffic', ['period' => 'today']))->assertOk()->assertJsonPath('data.summary.total', 300);
+        $this->getJson($this->path('traffic', ['period' => 'today']))->assertOk()->assertJsonPath('data.summary.total', 570);
         $this->getJson($this->path('user', ['user_id' => $user->id, 'metric' => 'billed']))->assertOk()
-            ->assertJsonPath('data.entry_summary.total', 600)->assertJsonPath('data.relay_summary.total', 270);
+            ->assertJsonPath('data.billed_summary.total', 600)->assertJsonPath('data.actual_summary.total', 300)
+            ->assertJsonPath('data.direct_summary.total', 30)->assertJsonPath('data.relay_summary.total', 270);
         $relayRow = collect($this->getJson($this->path('user', ['user_id' => $user->id]))->json('data.list'))->firstWhere('kind', 'relay');
-        $this->assertNull($relayRow['billed_total']);
+        $this->assertSame(540, $relayRow['billed_total']);
     }
 
     public function test_transaction_failure_rolls_back_new_statistics_and_recovery_counts_once(): void
@@ -136,7 +145,7 @@ class TrafficStatisticsTest extends TestCase
     public function test_unrecorded_history_is_not_rendered_as_zero(): void
     {
         DB::table('v2_settings')->where('name', 'traffic_statistics_started_at')->update(['value' => (string) now()->timestamp]);
-        $this->getJson($this->path('traffic'))->assertOk()->assertJsonCount(1, 'data.list');
+        $this->getJson($this->path('traffic'))->assertOk()->assertJsonCount(0, 'data.list');
         $yesterday = now()->subDay()->toDateString();
         $this->getJson($this->path('traffic', ['period' => 'custom', 'start_date' => $yesterday, 'end_date' => $yesterday]))
             ->assertOk()->assertJsonCount(0, 'data.list');
@@ -155,7 +164,7 @@ class TrafficStatisticsTest extends TestCase
         $this->getJson($this->path('users', ['search' => '_%']))->assertJsonCount(1, 'data.list');
         $this->getJson($this->path('user', ['user_id' => 99999, 'server_id' => 202]))->assertOk()
             ->assertJsonCount(0, 'data.list')->assertJsonCount(0, 'data.nodes')
-            ->assertJsonPath('data.entry_summary.total', 300);
+            ->assertJsonPath('data.actual_summary.total', 300);
         $this->getJson($this->path('user', ['user_id' => 99999, 'server_id' => 201]))->assertJsonCount(0, 'data.list');
     }
 
@@ -165,10 +174,14 @@ class TrafficStatisticsTest extends TestCase
         $node = $this->node();
         $this->record(101, $node->id, 10, 20, 1);
         app(TrafficStatisticsRecorder::class)->add(101, $node->id, 'entry', now()->startOfDay()->subDay()->timestamp, 100, 200, 300, 600);
+        app(UserRouteTraffic::class)->record(101, $node->id, $node->id, 'entry', 3,
+            now()->startOfDay()->subDay()->timestamp, 100, 200, 300, 600, now()->timestamp);
+        StatServer::where('server_id', $node->id)->incrementEach(['u' => 100, 'd' => 200]);
         $response = $this->getJson($this->path('traffic'))->assertOk()->assertJsonPath('data.summary.total', 330);
         $this->assertSame(330, array_sum(array_column($response->json('data.list'), 'total')));
         $this->getJson($this->path('user', ['user_id' => 101, 'metric' => 'billed']))
-            ->assertOk()->assertJsonPath('data.entry_summary.total', 960)->assertJsonPath('data.list.0.billed_total', 960);
+            ->assertOk()->assertJsonPath('data.billed_summary.total', 960)->assertJsonCount(2, 'data.list')
+            ->assertJsonPath('data.list.0.rate', 2)->assertJsonPath('data.list.1.rate', 3);
         $this->assertSame(1, DB::table('v2_stat_user_server')->count());
     }
 
@@ -193,8 +206,6 @@ class TrafficStatisticsTest extends TestCase
         $this->record(101, 201, 1, 2, 29);
         foreach ([29, 30] as $days) {
             StatUser::create(['user_id' => 101, 'server_rate' => 1, 'record_type' => 'd',
-                'record_at' => now()->startOfDay()->subDays($days)->timestamp, 'u' => 1, 'd' => 2]);
-            StatServer::create(['server_id' => 201, 'server_type' => 'vless', 'record_type' => 'd',
                 'record_at' => now()->startOfDay()->subDays($days)->timestamp, 'u' => 1, 'd' => 2]);
         }
         $batch = $this->batch($this->user(), $this->node(), $this->node());
@@ -221,10 +232,12 @@ class TrafficStatisticsTest extends TestCase
     public function test_hourly_trend_uses_received_time_and_stops_at_current_hour(): void
     {
         $this->travelTo(now()->startOfDay()->setTime(14, 35));
-        DB::table('v2_settings')->where('name', 'traffic_hourly_started_at')->update(['value' => (string) now()->startOfDay()->timestamp]);
+        DB::table('v2_settings')->where('name', 'node_hourly_started_at')->update(['value' => (string) now()->startOfDay()->timestamp]);
         $at = now()->setTime(9, 20)->timestamp;
         app(TrafficStatisticsRecorder::class)->add(101, 201, 'entry', now()->startOfDay()->timestamp, 10, 20, 20, 40, $at);
         app(TrafficStatisticsRecorder::class)->add(101, 202, 'relay', now()->startOfDay()->timestamp, 10, 20, 0, 0, $at);
+        StatServer::create(['server_id' => 201, 'server_type' => 'vless', 'record_type' => 'd', 'record_at' => now()->startOfDay()->timestamp, 'u' => 10, 'd' => 20]);
+        app(\App\Services\NodeTrafficHour::class)->add(now()->startOfDay()->timestamp, 10, 20, $at);
         $this->getJson($this->path('traffic', ['period' => 'today']))->assertOk()->assertJsonPath('data.meta.unit', 'hour')
             ->assertJsonCount(15, 'data.list')->assertJsonPath('data.list.9.total', 30)->assertJsonPath('data.list.10.total', 0)
             ->assertJsonPath('data.summary.total', 30);
@@ -243,14 +256,14 @@ class TrafficStatisticsTest extends TestCase
         Redis::shouldReceive('sadd')->once()->andThrow(new \RuntimeException('测试回滚'));
         try { (new ProcessNodeReportBatch($batch->id))->handle(); $this->fail('应当回滚'); }
         catch (\RuntimeException $error) { $this->assertSame('测试回滚', $error->getMessage()); }
-        $this->assertSame(0, DB::table('v2_stat_traffic_hour')->count());
+        $this->assertSame(0, DB::table('v2_stat_node_hour')->count());
         Redis::shouldReceive('sadd')->once()->andReturn(1);
         (new ProcessNodeReportBatch($batch->id))->handle();
         (new ProcessNodeReportBatch($batch->id))->handle();
-        $this->assertSame(1, DB::table('v2_stat_traffic_hour')->count());
+        $this->assertSame(1, DB::table('v2_stat_node_hour')->count());
         $this->getJson($this->path('traffic', ['period' => 'custom', 'start_date' => $date, 'end_date' => $date]))
             ->assertOk()->assertJsonPath('data.meta.unit', 'hour')->assertJsonCount(24, 'data.list')
-            ->assertJsonPath('data.list.23.total', 300)->assertJsonPath('data.summary.total', 300);
+            ->assertJsonPath('data.list.23.total', 570)->assertJsonPath('data.summary.total', 570);
     }
 
     public function test_legacy_queue_retains_received_day_and_hour_after_serialization(): void
@@ -259,8 +272,10 @@ class TrafficStatisticsTest extends TestCase
         DB::table('v2_settings')->where('name', 'traffic_hourly_started_at')->update(['value' => (string) now()->startOfDay()->timestamp]);
         $user = $this->user(); $node = $this->node(); $date = now()->toDateString();
         $job = unserialize(serialize(new StatUserJob(['id' => $node->id, 'rate' => 2], [$user->id => [10, 20]], 'vless')));
+        $nodeJob = unserialize(serialize(new \App\Jobs\StatServerJob(['id' => $node->id], [$user->id => [10, 20]], 'vless')));
         $this->travelTo(now()->addDay()->setTime(1, 20));
         $job->handle();
+        $nodeJob->handle();
         $this->getJson($this->path('traffic', ['period' => 'custom', 'start_date' => $date, 'end_date' => $date]))
             ->assertOk()->assertJsonPath('data.meta.unit', 'hour')->assertJsonPath('data.list.23.total', 30);
         $this->assertSame(60, (int) StatUser::first()->u + (int) StatUser::first()->d);
@@ -269,10 +284,10 @@ class TrafficStatisticsTest extends TestCase
     public function test_hourly_retention_keeps_boundary_and_old_days_remain_daily(): void
     {
         foreach ([29, 30] as $days) {
-            DB::table('v2_stat_traffic_hour')->insert(['record_at' => now()->startOfDay()->subDays($days)->timestamp, 'u' => 1, 'd' => 2]);
+            DB::table('v2_stat_node_hour')->insert(['record_at' => now()->startOfDay()->subDays($days)->timestamp, 'u' => 1, 'd' => 2]);
         }
         $this->artisan('reset:log')->assertSuccessful();
-        $this->assertSame(1, DB::table('v2_stat_traffic_hour')->count());
+        $this->assertSame(1, DB::table('v2_stat_node_hour')->count());
         $date = now()->subDay()->toDateString();
         $this->record(101, 201, 10, 20, 1);
         $this->getJson($this->path('traffic', ['period' => 'custom', 'start_date' => $date, 'end_date' => $date]))

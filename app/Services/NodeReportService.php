@@ -39,7 +39,7 @@ class NodeReportService
         array $relayUserTraffic = []
     ): ?NodeReportBatch {
         $traffic = $this->normalizeTraffic($traffic);
-        $serverSnapshot = null;
+        $serverSnapshot = ['id' => (int) $node->id, 'rate' => $node->getEffectiveRate(), 'type' => $node->type];
         $protocol = $node->type;
 
         if ($traffic !== []) {

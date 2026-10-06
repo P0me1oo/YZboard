@@ -39,6 +39,8 @@ class DeletedServerStatisticsTest extends TestCase
     private function record(int $id, int $amount = 100): void
     {
         app(TrafficStatisticsRecorder::class)->add(101, $id, 'entry', now()->startOfDay()->timestamp, $amount, 0, $amount, 0);
+        app(\App\Services\UserRouteTraffic::class)->record(101, $id, $id, 'entry', 1,
+            now()->startOfDay()->timestamp, $amount, 0, $amount, 0, now()->timestamp);
         StatServer::create(['server_id' => $id, 'server_type' => 'vless', 'record_type' => 'd',
             'record_at' => now()->startOfDay()->timestamp, 'u' => $amount, 'd' => 0]);
     }
@@ -56,7 +58,7 @@ class DeletedServerStatisticsTest extends TestCase
             ->assertJsonPath('data.list.0.name', '香港 01（已删除）')->assertJsonPath('data.list.0.total', 100);
         $this->getJson($this->path('statistics/user?user_id=101'))->assertOk()
             ->assertJsonPath('data.list.0.server_name', '香港 01（已删除）')
-            ->assertJsonPath('data.nodes.0.name', '香港 01（已删除）')->assertJsonPath('data.entry_summary.total', 100);
+            ->assertJsonPath('data.nodes.0.name', '香港 01（已删除）')->assertJsonPath('data.actual_summary.total', 100);
         $this->travel(1)->hours();
         $this->assertNotSame(200, $this->postJson($this->path('server/manage/drop'), ['id' => $node->id])->status());
         $this->assertEquals($saved, DB::table('v2_stat_server_name')->first());
@@ -94,7 +96,7 @@ class DeletedServerStatisticsTest extends TestCase
         $this->getJson($this->path('statistics/nodes?page_size=1&page=2'))->assertOk()->assertJsonPath('data.list.0.id', $second->id);
         $this->getJson($this->path('statistics/user?user_id=101&page_size=1'))->assertOk()
             ->assertJsonPath('data.total', 2)->assertJsonCount(2, 'data.nodes')->assertJsonPath('data.last_page', 2)
-            ->assertJsonPath('data.list.0.server_id', $first->id)->assertJsonPath('data.entry_summary.total', 9300);
+            ->assertJsonPath('data.list.0.server_id', $first->id)->assertJsonPath('data.actual_summary.total', 9300);
         $this->getJson($this->path('statistics/user?user_id=101&server_id=99999'))->assertOk()->assertJsonCount(0, 'data.list');
         $this->getJson($this->path('statistics/traffic'))->assertJsonPath('data.summary.total', 9300);
         $this->getJson($this->path('statistics/users'))->assertJsonPath('data.list.0.total', 9300);

@@ -54,6 +54,7 @@ class ProcessNodeReportBatch implements ShouldQueue
 
             $userIds = $this->applyUserTraffic($batch);
             $this->applyRelayTraffic($batch);
+            app(\App\Services\UserRouteTraffic::class)->recordBatch($batch);
 
             foreach ((array) $batch->relay_user_traffic as $userId => $nodes) {
                 foreach ($nodes as $serverId => $traffic) {
@@ -146,6 +147,7 @@ class ProcessNodeReportBatch implements ShouldQueue
 
         if ($totalU > 0 || $totalD > 0) {
             $this->incrementServerStat($serverId, $serverType, $recordAt, $totalU, $totalD, $now);
+            app(\App\Services\NodeTrafficHour::class)->add($recordAt, $totalU, $totalD, $batch->created_at?->timestamp);
             DB::table('v2_server')
                 ->where('id', $serverId)
                 ->incrementEach(['u' => $totalU, 'd' => $totalD], ['updated_at' => now()]);
@@ -178,6 +180,7 @@ class ProcessNodeReportBatch implements ShouldQueue
                 $d,
                 $now
             );
+            app(\App\Services\NodeTrafficHour::class)->add((int) $batch->record_at, $u, $d, $batch->created_at?->timestamp);
             DB::table('v2_server')
                 ->where('id', $serverId)
                 ->incrementEach(['u' => $u, 'd' => $d], ['updated_at' => now()]);

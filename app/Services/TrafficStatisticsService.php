@@ -49,7 +49,7 @@ class TrafficStatisticsService
 
     public function overview(array $range): array
     {
-        $query = $this->between(DB::table('v2_stat_user_server')->where('kind', 'entry'), $range);
+        $query = $this->between(DB::table('v2_stat_server')->where('record_type', 'd'), $range);
         $summary = $this->summary($query);
         if ($range['start']->addDay()->equalTo($range['end'])) {
             $hourly = $this->hourlyOverview($range, $summary);
@@ -61,8 +61,9 @@ class TrafficStatisticsService
         $rows = (clone $query)->selectRaw('record_at, SUM(u) AS upload, SUM(d) AS download')
             ->groupBy('record_at')->get()->keyBy('record_at');
         $series = [];
-        $started = $range['meta']['started_at'];
-        $firstDay = $started ? CarbonImmutable::parse($started)->startOfDay() : $range['start'];
+        $firstRecorded = DB::table('v2_stat_server')->where('record_type', 'd')->min('record_at');
+        $firstDay = $firstRecorded === null ? $range['end']
+            : CarbonImmutable::createFromTimestamp((int) $firstRecorded, config('app.timezone'))->startOfDay();
         for ($day = $range['start']; $day < $range['end']; $day = $day->addDay()) {
             // 升级前已接收但尚未结算的批次可能迟到，保留确实收集到的日期。
             if ($day < $firstDay && !$rows->has($day->timestamp)) {
@@ -80,11 +81,11 @@ class TrafficStatisticsService
 
     private function hourlyOverview(array $range, array $summary): ?array
     {
-        $started = (int) DB::table('v2_settings')->where('name', 'traffic_hourly_started_at')->value('value');
-        if (!$started || $range['end']->timestamp <= $started) {
+        $started = (int) DB::table('v2_settings')->where('name', 'node_hourly_started_at')->value('value');
+        if (!$started || $range['end']->timestamp <= $started || $summary['total'] === 0) {
             return null;
         }
-        $query = $this->between(DB::table('v2_stat_traffic_hour'), $range);
+        $query = $this->between(DB::table('v2_stat_node_hour'), $range);
         // 升级当天及旧任务可能只有日记录；不把缺失的小时流量伪装成零。
         if ($this->summary($query) !== $summary) {
             return null;
@@ -115,10 +116,10 @@ class TrafficStatisticsService
 
     public function users(array $range): array
     {
+        $routes = app(UserRouteTraffic::class);
         $query = $range['metric'] === 'billed'
-            ? DB::table('v2_stat_user')->where('record_type', 'd')
-            : DB::table('v2_stat_user_server')->where('kind', 'entry');
-        $this->between($query, $range);
+            ? $routes->billedQuery($range)
+            : $routes->actualQuery($range);
         $search = trim($range['search'] ?? '');
         if ($search !== '') {
             $query->where(function (Builder $query) use ($search): void {
@@ -128,7 +129,9 @@ class TrafficStatisticsService
                 }
             });
         }
-        $query->selectRaw('user_id AS id, SUM(u) AS upload, SUM(d) AS download, SUM(u + d) AS total')
+        $u = $range['metric'] === 'billed' ? 'billed_u' : 'u';
+        $d = $range['metric'] === 'billed' ? 'billed_d' : 'd';
+        $query->selectRaw("user_id AS id, SUM({$u}) AS upload, SUM({$d}) AS download, SUM({$u} + {$d}) AS total")
             ->groupBy('user_id')->orderByDesc('total')->orderBy('user_id');
         return $this->ranking($query, $range, 'user');
     }
@@ -136,37 +139,30 @@ class TrafficStatisticsService
     public function user(array $range): array
     {
         $userId = (int) $range['user_id'];
-        $base = $this->between(DB::table('v2_stat_user_server')->where('user_id', $userId), $range);
-        $visible = ServerNameHistory::joinNames(clone $base, 'v2_stat_user_server');
-        $allNodes = (clone $visible)->select('server_id', 'node_name', 'node_deleted')->distinct()->orderBy('server_id')->get();
-        if (!empty($range['server_id'])) {
-            $base->where('server_id', $range['server_id']);
-            $visible->where('server_id', $range['server_id']);
-        }
-        $entrySummary = $this->summary((clone $base)->where('kind', 'entry'), $range['metric']);
-        // 落地没有独立扣费流量；不能伪装为零或与入口相加。
-        $relaySummary = $this->summary((clone $base)->where('kind', 'relay'));
-        [$expression, $bindings] = $this->bucketExpression($range);
-        $query = $visible->selectRaw($expression . ' AS date', $bindings)
-            ->selectRaw('server_id, kind, SUM(u) AS upload, SUM(d) AS download, SUM(u + d) AS total,
-                SUM(billed_u) AS billed_upload, SUM(billed_d) AS billed_download, SUM(billed_u + billed_d) AS billed_total')
-            ->addSelect('node_name', 'node_deleted')->groupBy('date', 'server_id', 'kind', 'node_name', 'node_deleted')
-            ->orderByDesc('date')->orderBy('server_id')->orderBy('kind');
-        $page = $query->paginate((int) $range['page_size'], ['*'], 'page', (int) $range['page']);
-        $list = array_map(function ($row): array {
-            $item = (array) $row;
-            $item['server_name'] = ServerNameHistory::label($row);
-            unset($item['node_name'], $item['node_deleted']);
-            foreach (['upload', 'download', 'total', 'billed_upload', 'billed_download', 'billed_total'] as $key) {
-                $item[$key] = str_starts_with($key, 'billed_') && $row->kind === 'relay' ? null : (int) $item[$key];
-            }
-            return $item;
-        }, $page->items());
+        $rows = collect(app(UserRouteTraffic::class)->details($userId, $range));
+        $names = ServerNameHistory::joinNames(DB::table(UserRouteTraffic::TABLE)->where('user_id', $userId), UserRouteTraffic::TABLE)
+            ->select('server_id', 'node_name', 'node_deleted')->distinct()->get()->keyBy('server_id');
+        $allNodes = $rows->pluck('server_id')->unique()->sort()->filter(fn ($id) => $names->has($id))
+            ->map(fn ($id) => ['id' => $id, 'name' => ServerNameHistory::label($names[$id])])->values()->all();
+        if (!empty($range['server_id'])) { $rows = $rows->where('server_id', (int) $range['server_id']); }
+        // 合计先于名称过滤，已删除且没有名称的节点仍保留真实用量与扣费。
+        $summarize = fn ($items, string $prefix = '') => [
+            'upload' => (int) $items->sum($prefix . 'upload'), 'download' => (int) $items->sum($prefix . 'download'),
+            'total' => (int) $items->sum($prefix . 'total'),
+        ];
+        $actual = $summarize($rows); $billed = $summarize($rows, 'billed_');
+        $direct = $summarize($rows->where('kind', 'direct')); $relay = $summarize($rows->where('kind', 'relay'));
+        $rows = $rows->filter(fn ($row) => $names->has($row['server_id']))
+            ->map(fn ($row) => $row + ['server_name' => ServerNameHistory::label($names[$row['server_id']])])
+            ->sort(fn ($a, $b) => strcmp($b['date'], $a['date']) ?: ($a['server_id'] <=> $b['server_id'])
+                ?: strcmp($a['kind'], $b['kind']) ?: ($a['rate'] <=> $b['rate']))->values();
+        $count = $rows->count(); $size = (int) $range['page_size']; $page = (int) $range['page'];
         return [
             'user' => ['id' => $userId, 'name' => User::whereKey($userId)->value('email') ?? '用户 #' . $userId],
-            'list' => $list, 'total' => $page->total(), 'page' => $page->currentPage(), 'last_page' => $page->lastPage(), 'page_size' => $page->perPage(),
-            'entry_summary' => $entrySummary, 'relay_summary' => $relaySummary,
-            'nodes' => $allNodes->map(fn ($row) => ['id' => $row->server_id, 'name' => ServerNameHistory::label($row)])->all(),
+            'list' => $rows->slice(($page - 1) * $size, $size)->values()->all(), 'total' => $count,
+            'page' => $page, 'last_page' => max(1, (int) ceil($count / $size)), 'page_size' => $size,
+            'actual_summary' => $actual, 'billed_summary' => $billed,
+            'direct_summary' => $direct, 'relay_summary' => $relay, 'nodes' => $allNodes,
             'meta' => $range['meta'],
         ];
     }

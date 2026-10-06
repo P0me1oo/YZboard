@@ -22,6 +22,7 @@ class StatServerJob implements ShouldQueue
     protected array $server;
     protected string $protocol;
     protected string $recordType;
+    protected ?int $receivedAt = null;
 
     public $tries = 3;
     public $timeout = 60;
@@ -45,13 +46,13 @@ class StatServerJob implements ShouldQueue
         $this->server = $server;
         $this->protocol = $protocol;
         $this->recordType = $recordType;
+        $this->receivedAt = now()->timestamp;
     }
 
     public function handle(): void
     {
-        $recordAt = $this->recordType === 'm'
-            ? strtotime(date('Y-m-01'))
-            : strtotime(date('Y-m-d'));
+        $received = \Carbon\CarbonImmutable::createFromTimestamp($this->receivedAt ?? now()->timestamp, config('app.timezone'));
+        $recordAt = ($this->recordType === 'm' ? $received->startOfMonth() : $received->startOfDay())->timestamp;
 
         $u = $d = 0;
         foreach ($this->data as $traffic) {
@@ -60,8 +61,13 @@ class StatServerJob implements ShouldQueue
         }
 
         try {
-            $this->processServerStat($u, $d, $recordAt);
-            $this->updateServerTraffic($u, $d);
+            DB::transaction(function () use ($u, $d, $recordAt): void {
+                $this->processServerStat($u, $d, $recordAt);
+                $this->updateServerTraffic($u, $d);
+                if ($this->recordType === 'd') {
+                    app(\App\Services\NodeTrafficHour::class)->add($recordAt, $u, $d, $this->receivedAt);
+                }
+            }, 3);
         } catch (\Exception $e) {
             Log::error('StatServerJob failed for server ' . $this->server['id'] . ': ' . $e->getMessage());
             throw $e;

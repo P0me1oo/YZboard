@@ -25,6 +25,7 @@ class RelayNodeTrafficJob implements ShouldQueue
     public $tries = 3;
     public $timeout = 60;
     public $maxExceptions = 3;
+    private ?int $receivedAt = null;
 
     public function __construct(
         private readonly int $serverId,
@@ -34,6 +35,7 @@ class RelayNodeTrafficJob implements ShouldQueue
         private readonly string $recordType = 'd',
     ) {
         $this->onQueue('stat');
+        $this->receivedAt = now()->timestamp;
     }
 
     public function backoff(): array
@@ -47,18 +49,19 @@ class RelayNodeTrafficJob implements ShouldQueue
             return;
         }
 
-        $recordAt = $this->recordType === 'm'
-            ? strtotime(date('Y-m-01'))
-            : strtotime(date('Y-m-d'));
+        $received = \Carbon\CarbonImmutable::createFromTimestamp($this->receivedAt ?? now()->timestamp, config('app.timezone'));
+        $recordAt = ($this->recordType === 'm' ? $received->startOfMonth() : $received->startOfDay())->timestamp;
 
         try {
-            $this->upsertStat($recordAt);
-            DB::table('v2_server')
-                ->where('id', $this->serverId)
-                ->incrementEach(
-                    ['u' => $this->u, 'd' => $this->d],
-                    ['updated_at' => Carbon::now()]
+            DB::transaction(function () use ($recordAt): void {
+                $this->upsertStat($recordAt);
+                DB::table('v2_server')->where('id', $this->serverId)->incrementEach(
+                    ['u' => $this->u, 'd' => $this->d], ['updated_at' => Carbon::now()]
                 );
+                if ($this->recordType === 'd') {
+                    app(\App\Services\NodeTrafficHour::class)->add($recordAt, $this->u, $this->d, $this->receivedAt);
+                }
+            }, 3);
         } catch (\Throwable $e) {
             Log::error("RelayNodeTrafficJob failed for server {$this->serverId}: {$e->getMessage()}");
             throw $e;

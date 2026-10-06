@@ -64,6 +64,11 @@ class StatUserJob implements ShouldQueue
                             (int) $v[0], (int) $v[1],
                             (int) ($v[0] * $this->server['rate']), (int) ($v[1] * $this->server['rate']), $this->receivedAt
                         );
+                        app(\App\Services\UserRouteTraffic::class)->record(
+                            (int) $uid, (int) $this->server['id'], (int) $this->server['id'], 'entry',
+                            (float) $this->server['rate'], $recordAt, (int) $v[0], (int) $v[1],
+                            (int) ($v[0] * $this->server['rate']), (int) ($v[1] * $this->server['rate']), $this->receivedAt
+                        );
                     }
                 }, 3);
             } catch (\Exception $e) {

@@ -1,6 +1,7 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['ru-RU'] = {
   "statistics": {
+    "direct": "Напрямую", "effectiveRate": "Применённый множитель",
     "hour": "По часам", "perPage": "Строк на странице", "backToUsers": "К рейтингу пользователей",
     "navigation": "Статистика", "overview": "Обзор трафика", "userStatistics": "Статистика пользователей",
     "trend": "Динамика общего трафика", "nodeRank": "Рейтинг узлов по трафику", "userRank": "Рейтинг пользователей", "userDetails": "Трафик по пользователям и узлам",

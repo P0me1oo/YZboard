@@ -1,6 +1,7 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['en-US'] = {
   "statistics": {
+    "direct": "Direct", "effectiveRate": "Applied rate",
     "hour": "Hourly", "perPage": "Rows per page", "backToUsers": "Back to user ranking",
     "navigation": "Statistics", "overview": "Traffic overview", "userStatistics": "User statistics",
     "trend": "Total traffic trend", "nodeRank": "Node traffic ranking", "userRank": "User traffic ranking", "userDetails": "Traffic by user and node",

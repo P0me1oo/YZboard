@@ -1,6 +1,7 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['zh-CN'] = {
   "statistics": {
+    "direct": "直出", "effectiveRate": "生效倍率",
     "hour": "按小时", "perPage": "每页显示", "backToUsers": "返回用户排行",
     "navigation": "统计分析", "overview": "流量概览", "userStatistics": "用户统计",
     "trend": "总流量趋势", "nodeRank": "节点流量排行", "userRank": "用户流量排行", "userDetails": "用户节点明细",

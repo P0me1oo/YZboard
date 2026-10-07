@@ -4,6 +4,7 @@
 namespace App\Http\Requests\Admin;
 
 use App\Models\Server;
+use App\Rules\SourcePolicyIp;
 use App\Services\ServerRelayService;
 use App\Services\ServerRouteService;
 use Illuminate\Contracts\Validation\Validator;
@@ -13,6 +14,17 @@ class ServerSave extends FormRequest
 {
     protected function prepareForValidation(): void
     {
+        $sourcePolicy = $this->input('source_policy');
+        if (is_array($sourcePolicy)) {
+            if (array_key_exists('block_cn', $sourcePolicy)
+                && in_array($sourcePolicy['block_cn'], [true, false, 0, 1, '0', '1'], true)) {
+                $sourcePolicy['block_cn'] = (bool) $sourcePolicy['block_cn'];
+            }
+            if (is_array($sourcePolicy['allow_ips'] ?? null)) {
+                $sourcePolicy['allow_ips'] = array_values(array_map([SourcePolicyIp::class, 'normalize'], $sourcePolicy['allow_ips']));
+            }
+            $this->merge(['source_policy' => $sourcePolicy]);
+        }
         // 与列表绑定操作保持一致，0 表示取消绑定，不能作为机器外键保存。
         if (in_array($this->input('machine_id'), [0, '0'], true)) {
             $this->merge(['machine_id' => null]);
@@ -165,6 +177,10 @@ class ServerSave extends FormRequest
             'rate_time_ranges' => 'nullable|array',
             'custom_outbounds' => 'nullable|array',
             'custom_routes' => 'nullable|array',
+            'source_policy' => 'nullable|array:block_cn,allow_ips',
+            'source_policy.block_cn' => 'required_with:source_policy|boolean',
+            'source_policy.allow_ips' => 'sometimes|array|max:128',
+            'source_policy.allow_ips.*' => ['bail', 'string', 'distinct', new SourcePolicyIp()],
             'cert_config' => 'nullable|array',
             'rate_time_ranges.*.start' => 'required_with:rate_time_ranges|string|date_format:H:i',
             'rate_time_ranges.*.end' => 'required_with:rate_time_ranges|string|date_format:H:i',
@@ -295,6 +311,10 @@ class ServerSave extends FormRequest
         $validator->after(function (Validator $validator) {
             $selfId = $this->input('id') !== null ? (int) $this->input('id') : null;
             $existing = $selfId !== null ? Server::find($selfId) : null;
+            $policy = $this->input('source_policy', $existing?->source_policy);
+            if ($this->input('type') === Server::TYPE_WIREGUARD && $this->input('relay_entry_id') && data_get($policy, 'block_cn')) {
+                $validator->errors()->add('source_policy', 'WireGuard 中转落地请在前置入口设置大陆来源拦截');
+            }
             // 0、空串和 null 都表示“不使用中转”，管理端会把“无”提交为 0。
             // 编辑时省略可选字段表示保留已保存值，校验必须与实际更新一致。
             $entryId = (int) $this->input('relay_entry_id', $existing?->relay_entry_id);
@@ -317,6 +337,10 @@ class ServerSave extends FormRequest
     public function attributes(): array
     {
         return [
+            'source_policy' => '来源限制',
+            'source_policy.block_cn' => '屏蔽大陆来源 IP',
+            'source_policy.allow_ips' => '例外放行 IP',
+            'source_policy.allow_ips.*' => '例外放行 IP',
             'protocol_settings.cipher' => '加密方式',
             'protocol_settings.obfs' => '混淆类型',
             'protocol_settings.network' => '传输协议',

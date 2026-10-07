@@ -12,6 +12,7 @@ class General extends AbstractProtocol
     public $flags = ['general', 'v2rayn', 'v2rayng', 'passwall', 'ssrplus', 'sagernet'];
 
     public $allowedProtocols = [
+        Server::TYPE_WIREGUARD,
         Server::TYPE_VMESS,
         Server::TYPE_VLESS,
         Server::TYPE_SHADOWSOCKS,
@@ -35,6 +36,7 @@ class General extends AbstractProtocol
 
         foreach ($servers as $item) {
             $uri .= match ($item['type']) {
+                Server::TYPE_WIREGUARD => self::buildWireGuard($item),
                 Server::TYPE_VMESS => self::buildVmess($item['password'], $item),
                 Server::TYPE_VLESS => self::buildVless($item['password'], $item),
                 Server::TYPE_SHADOWSOCKS => self::buildShadowsocks($item['password'], $item),
@@ -50,6 +52,16 @@ class General extends AbstractProtocol
         return response(base64_encode($uri))
             ->header('content-type', 'text/plain')
             ->header('subscription-userinfo', $this->buildSubscriptionUserInfo());
+    }
+
+    public static function buildWireGuard(array $server): string
+    {
+        $wg = $server['wireguard'];
+        $host = str_contains($server['host'], ':') ? '[' . trim($server['host'], '[]') . ']' : $server['host'];
+        $query = http_build_query(['publickey' => $wg['public_key'], 'address' => implode(',', $wg['address']),
+            'mtu' => $wg['mtu'], 'keepalive' => $wg['keepalive']], '', '&', PHP_QUERY_RFC3986);
+        return 'wireguard://' . rawurlencode($wg['private_key']) . '@' . $host . ':' . $server['port']
+            . '?' . $query . '#' . rawurlencode($server['name']) . "\r\n";
     }
 
     public static function buildShadowsocks($password, $server)

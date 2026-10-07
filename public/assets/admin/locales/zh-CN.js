@@ -2234,6 +2234,13 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
         "placeholder": "选择父节点",
         "none": "无"
       },
+      "source_policy": {
+        "label": "屏蔽大陆来源 IP",
+        "allow_ips": "例外放行 IP",
+        "placeholder": "输入中转 IP，按回车添加",
+        "invalid_ip": "请填写具体的 IPv4 或 IPv6 地址",
+        "max_ips": "最多添加 128 个例外 IP"
+      },
       "route": {
         "label": "路由组",
         "placeholder": "选择路由组",

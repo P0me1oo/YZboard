@@ -639,9 +639,6 @@ class ServerRelayService
     {
         // 0 与 null 都表示“不使用中转”，管理端会把“无”提交为 0。
         if (!$entryId) {
-            if (Server::normalizeType($type) === Server::TYPE_WIREGUARD) {
-                return 'WireGuard 落地必须绑定前置入口';
-            }
             // 已被落地引用的入口必须保持支持路由编号的协议和内核。
             if ($selfId !== null && Server::where('relay_entry_id', $selfId)->exists()) {
                 if ($error = self::validateEntrySettings($type, $protocolSettings, $host, $kernelType)) {

@@ -110,7 +110,7 @@ class ServerRelayTest extends TestCase
                 }
             }
         }
-        $this->assertNotNull(ServerRelayService::validateEntry(null, null, 'wireguard'));
+        $this->assertNull(ServerRelayService::validateEntry(null, null, 'wireguard'));
         $this->assertNotNull(ServerRelayService::validateTransitSettings('wireguard', ['mtu' => 1000], '203.0.113.7'));
         $this->assertNotNull(ServerRelayService::validateTransitSettings('wireguard', ['keepalive' => -1], '203.0.113.7'));
         $this->assertSame('singbox', Server::defaultKernelType('wireguard'));

@@ -11,6 +11,7 @@ class SingBox extends AbstractProtocol
 {
     public $flags = ['sing-box', 'hiddify', 'sfm'];
     public $allowedProtocols = [
+        Server::TYPE_WIREGUARD,
         Server::TYPE_SHADOWSOCKS,
         Server::TYPE_TROJAN,
         Server::TYPE_VMESS,
@@ -135,6 +136,14 @@ class SingBox extends AbstractProtocol
         $outbounds = $this->config['outbounds'];
         $proxies = [];
         foreach ($this->servers as $item) {
+            if ($item['type'] === Server::TYPE_WIREGUARD) {
+                $wg = $item['wireguard'];
+                $proxies[] = ['type' => 'wireguard', 'tag' => $item['name'],
+                    'server' => $item['host'], 'server_port' => (int) $item['port'],
+                    'local_address' => $wg['address'], 'private_key' => $wg['private_key'],
+                    'peer_public_key' => $wg['public_key'], 'mtu' => $wg['mtu'],
+                    'persistent_keepalive_interval' => $wg['keepalive']];
+            }
             $protocol_settings = $item['protocol_settings'];
             if ($item['type'] === Server::TYPE_SHADOWSOCKS) {
                 $ssConfig = $this->buildShadowsocks($item['password'], $item);
@@ -214,6 +223,29 @@ class SingBox extends AbstractProtocol
         }
         unset($outbound);
 
+        if (version_compare($this->getSingBoxCoreVersion() ?? '1.13.0', '1.11.0', '>=')) {
+            $proxies = array_values(array_filter($proxies, function ($proxy) {
+                if ($proxy['type'] !== 'wireguard') {
+                    return true;
+                }
+                $this->config['endpoints'][] = ['type' => 'wireguard', 'tag' => $proxy['tag'],
+                    'address' => $proxy['local_address'], 'private_key' => $proxy['private_key'],
+                    'mtu' => $proxy['mtu'], 'peers' => [[
+                        'address' => $proxy['server'], 'port' => $proxy['server_port'],
+                        'public_key' => $proxy['peer_public_key'], 'allowed_ips' => ['0.0.0.0/0', '::/0'],
+                        'persistent_keepalive_interval' => $proxy['persistent_keepalive_interval'],
+                    ]]];
+                return false;
+            }));
+        } else {
+            // 旧版 WG outbound 不支持保活字段，不能向严格解析器输出未知字段。
+            foreach ($proxies as &$proxy) {
+                if ($proxy['type'] === 'wireguard') {
+                    unset($proxy['persistent_keepalive_interval']);
+                }
+            }
+            unset($proxy);
+        }
         $outbounds = array_merge($outbounds, $proxies);
         $this->config['outbounds'] = $outbounds;
         return $outbounds;

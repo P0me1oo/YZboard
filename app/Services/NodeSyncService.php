@@ -83,7 +83,7 @@ class NodeSyncService
             if (!self::isNodeOnline($server->id))
                 continue;
 
-            if (ServerRelayService::hasRelayChildren($server)) {
+            if (ServerRelayService::hasRelayChildren($server) || $server->type === Server::TYPE_WIREGUARD) {
                 self::push($server->id, 'sync.users', ['users' => ServerService::getAvailableUsers($server)->toArray()]);
                 continue;
             }
@@ -131,7 +131,7 @@ class NodeSyncService
                 continue;
 
             // 旧组撤权可能只移除一条线路，不能误删该用户仍有权使用的其他线路。
-            if (ServerRelayService::hasRelayChildren($server)) {
+            if (ServerRelayService::hasRelayChildren($server) || $server->type === Server::TYPE_WIREGUARD) {
                 self::push($server->id, 'sync.users', ['users' => ServerService::getAvailableUsers($server)->toArray()]);
                 continue;
             }

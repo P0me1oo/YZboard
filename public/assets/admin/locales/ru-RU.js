@@ -2164,6 +2164,13 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
         "placeholder": "Выберите родителя",
         "none": "Нет"
       },
+      "source_policy": {
+        "label": "Блокировать подключения с IP материкового Китая",
+        "allow_ips": "Разрешённые IP-исключения",
+        "placeholder": "Введите IP ретранслятора и нажмите Enter",
+        "invalid_ip": "Введите отдельный адрес IPv4 или IPv6",
+        "max_ips": "Допускается не более 128 IP-исключений"
+      },
       "route": {
         "label": "Группы маршрутов",
         "placeholder": "Выберите маршруты",

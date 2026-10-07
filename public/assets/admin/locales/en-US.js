@@ -2239,6 +2239,13 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
         "placeholder": "Select parent node",
         "none": "None"
       },
+      "source_policy": {
+        "label": "Block mainland China source IPs",
+        "allow_ips": "Allowed source IP exceptions",
+        "placeholder": "Enter a relay IP and press Enter",
+        "invalid_ip": "Enter an individual IPv4 or IPv6 address",
+        "max_ips": "Up to 128 IP exceptions are allowed"
+      },
       "route": {
         "label": "Route Groups",
         "placeholder": "Select route groups",

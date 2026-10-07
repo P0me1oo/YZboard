@@ -87,7 +87,12 @@ class ServerService
 
         $servers = collect($servers)->map(function ($server) use ($user) {
             if ($server->type === Server::TYPE_WIREGUARD && !$server->isRelayChild()) {
-                return null;
+                if ($server->enabled === false || $user->banned
+                    || ($user->expired_at !== null && $user->expired_at <= time())
+                    || $user->u + $user->d >= $user->transfer_enable) {
+                    return null;
+                }
+                $server->wireguard = WireGuardService::client($server, $user);
             }
             if ($server->isRelayChild()) {
                 $entry = ServerRelayService::entryFor($server);
@@ -180,6 +185,9 @@ class ServerService
             return collect();
         }
         $fields = ['id', 'uuid', 'speed_limit', 'device_limit', 'conn_limit', 'conn_rate_limit'];
+        if ($node->type === Server::TYPE_WIREGUARD) {
+            $fields[] = 'expired_at';
+        }
         $users = User::toBase()
             ->where(function ($query) use ($groupIds) {
                 $query->whereIn('group_id', $groupIds);
@@ -209,6 +217,12 @@ class ServerService
                 unset($user->group_id, $user->group_ids);
                 return $user->relay_routes !== [];
             })->values();
+        }
+        if ($node->type === Server::TYPE_WIREGUARD) {
+            foreach ($users as $user) {
+                $user->wireguard = WireGuardService::peer($node, $user);
+                unset($user->expired_at);
+            }
         }
         return HookManager::filter('server.users.get', $users, $node);
     }
@@ -705,6 +719,9 @@ class ServerService
         if ($relay = self::buildRelayConfig($node)) {
             $response['relay'] = $relay;
         }
+        if ($nodeType === Server::TYPE_WIREGUARD && !$node->isRelayChild()) {
+            $response['wireguard'] = WireGuardService::nodeConfig($node);
+        }
 
         // HY2 内核仍监听单个服务端口，由 Node 管理客户端端口到监听端口的转发。
         if ($nodeType === Server::TYPE_HYSTERIA
@@ -724,6 +741,13 @@ class ServerService
 
         if (!empty($node['custom_routes'])) {
             $response['custom_routes'] = $node['custom_routes'];
+        }
+
+        if (($nodeType !== Server::TYPE_WIREGUARD || !$node->isRelayChild()) && data_get($node->source_policy, 'block_cn')) {
+            $response['source_policy'] = [
+                'block_cn' => true,
+                'allow_ips' => array_values(data_get($node->source_policy, 'allow_ips', [])),
+            ];
         }
 
         if (!empty($node['cert_config'])) {

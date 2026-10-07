@@ -16,6 +16,7 @@ class ClashMeta extends AbstractProtocol
     const CUSTOM_CLASH_TEMPLATE_FILE = 'resources/rules/custom.clash.yaml';
     const DEFAULT_TEMPLATE_FILE = 'resources/rules/default.clash.yaml';
     public $allowedProtocols = [
+        Server::TYPE_WIREGUARD,
         Server::TYPE_SHADOWSOCKS,
         Server::TYPE_VMESS,
         Server::TYPE_TROJAN,
@@ -203,6 +204,16 @@ class ClashMeta extends AbstractProtocol
         return version_compare($version, $minimum, '>=');
     }
 
+    public static function buildWireGuard(array $server): array
+    {
+        $wg = $server['wireguard'];
+        return ['name' => $server['name'], 'type' => 'wireguard', 'server' => $server['host'],
+            'port' => (int) $server['port'], 'ip' => explode('/', $wg['address'][0])[0],
+            'ipv6' => explode('/', $wg['address'][1])[0], 'private-key' => $wg['private_key'],
+            'public-key' => $wg['public_key'], 'udp' => true, 'mtu' => $wg['mtu'],
+            'persistent-keepalive' => $wg['keepalive']];
+    }
+
     public function handle()
     {
         $servers = $this->servers;
@@ -216,6 +227,10 @@ class ClashMeta extends AbstractProtocol
         $proxies = [];
 
         foreach ($servers as $item) {
+            if ($item['type'] === Server::TYPE_WIREGUARD) {
+                $proxy[] = self::buildWireGuard($item);
+                $proxies[] = $item['name'];
+            }
             if ($item['type'] === Server::TYPE_SHADOWSOCKS) {
                 array_push($proxy, self::buildShadowsocks($item['password'], $item));
                 array_push($proxies, $item['name']);

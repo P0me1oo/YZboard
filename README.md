@@ -1,8 +1,8 @@
 # Xboard
 
-版本 `1.53.0` 支持 WireGuard 普通直连节点，可不绑定前置，保留原 WG 中转。配套管理端 `0.30.0`、Node `v2.7.1`，提供用户订阅、独立身份、权限、流量、限速、到期停用及按公网 IP 计算的设备限制；普通 WG 也支持大陆来源拦截。包含原 `1.52.0` 的来源策略改动。发布核验状态见 [兼容矩阵](YZ_COMPATIBILITY.md)，功能说明见 [普通 WG](docs/wireguard-direct.md) 与 [来源拦截](docs/source-policy.md)。
+当前正式版本 [`1.53.0`](https://github.com/P0me1oo/YZboard/releases/tag/v1.53.0) 支持 WireGuard 普通直连节点，可不绑定前置，保留原 WG 中转。配套管理端 `0.30.0`、Node `v2.7.1`，提供用户订阅、独立身份、权限、流量、限速、到期停用及按公网 IP 计算的设备限制；普通 WG 也支持大陆来源拦截。包含原 `1.52.0` 的来源策略改动。双架构镜像、latest 和镜像内管理端文件已核验，详见 [兼容矩阵](YZ_COMPATIBILITY.md)、[普通 WG](docs/wireguard-direct.md) 与 [来源拦截](docs/source-policy.md)。
 
-当前正式版本为 [`1.51.1`](https://github.com/P0me1oo/YZboard/releases/tag/v1.51.1)，配套管理端 `0.28.1`、Node `v2.5.0`，双架构镜像与 `latest` 已核验可匿名获取。统计分析新增日期时间弹窗，今天可按分钟筛选，历史及跨日按小时筛选；分钟记录只保留今天，小时记录保留 30 个自然日。节点排行支持名称搜索与流量升降序。固定来源与验证限制见 [发布记录](YZ_COMPATIBILITY.md)，查询边界见 [统计分析](docs/statistics.md)。
+上一正式版本为 [`1.51.1`](https://github.com/P0me1oo/YZboard/releases/tag/v1.51.1)，配套管理端 `0.28.1`、Node `v2.5.0`，其固定镜像仍可匿名获取，作为本次回滚基线。统计分析新增日期时间弹窗，今天可按分钟筛选，历史及跨日按小时筛选；分钟记录只保留今天，小时记录保留 30 个自然日。节点排行支持名称搜索与流量升降序。固定来源与验证限制见 [发布记录](YZ_COMPATIBILITY.md)，查询边界见 [统计分析](docs/statistics.md)。
 
 上一正式版本为 [`1.50.0`](https://github.com/P0me1oo/YZboard/releases/tag/v1.50.0)，配套管理端 `0.27.0`、Node `v2.5.0`。流量概览按所有节点相加；用户统计将中转只归到落地，前置只保留直出。非 1 倍明细显示当时倍率和已扣量归属，套餐扣费与节点额度规则保持不变。
 

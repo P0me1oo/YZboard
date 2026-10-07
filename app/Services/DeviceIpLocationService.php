@@ -26,7 +26,7 @@ class DeviceIpLocationService
             if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
                 continue;
             }
-            $key = 'device_location:v2:' . hash('sha256', $ip);
+            $key = 'device_location:v3:' . hash('sha256', $ip);
             try {
                 $cached = Cache::get($key);
                 if (is_array($cached)) {
@@ -122,6 +122,10 @@ class DeviceIpLocationService
                 'asn' => $number !== false ? 'AS' . $number : null,
                 'as_name' => is_string($name) ? mb_substr(trim($name), 0, 200) : null,
             ];
+            foreach (['country_code', 'country_name', 'region_name'] as $field) {
+                $value = $body[$field] ?? null;
+                $result[$field] = is_string($value) && trim($value) !== '-' ? mb_substr(trim($value), 0, 200) : '';
+            }
             $places = [];
             foreach (['country_name', 'region_name', 'city_name'] as $field) {
                 $place = $body[$field] ?? null;
@@ -133,7 +137,8 @@ class DeviceIpLocationService
                 $result['region'] = implode(' ', array_unique($places));
                 $result['location_source'] = 'ip2location';
             }
-            Cache::put($key, $result, $places !== [] ? 7 * 86400 : 300);
+            $result['expires_at'] = now()->timestamp + ($places !== [] ? 30 * 86400 : 300);
+            Cache::put($key, $result, $places !== [] ? 30 * 86400 : 300);
             return $result;
         } catch (\Throwable) {
             try { Cache::put('device_asn:backoff', true, 300); } catch (\Throwable) {}

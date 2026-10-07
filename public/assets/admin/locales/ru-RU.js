@@ -1,6 +1,9 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['ru-RU'] = {
   "statistics": {
+    "inboundIp": "Входящие IP", "inboundUsers": "Входящие IP пользователей", "ipCount": "Число IP", "firstSeen": "Первое появление", "lastSeen": "Последнее появление",
+    "backToInbound": "К списку входящих IP", "filterProvince": "Выбрать регион", "allProvinces": "Все регионы",
+    "ipAddress": "IP-адрес", "location": "Местоположение", "asn": "ASN", "unknown": "Неизвестно", "inboundCount": "Всего IP: {{count}}",
     "last24": "За 24 часа", "last14": "За 14 дней", "all": "Всё", "startTime": "Начало", "endTime": "Конец",
     "confirm": "Применить", "cancel": "Отмена", "previousMonth": "Назад", "nextMonth": "Вперёд",
     "wholeHours": "Для прошлых дат и диапазонов в несколько дней выбирайте целые часы.", "searchNode": "Поиск узлов", "nodeName": "Название узла", "asc": "По возрастанию", "desc": "По убыванию",

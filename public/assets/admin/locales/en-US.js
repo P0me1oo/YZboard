@@ -1,6 +1,9 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['en-US'] = {
   "statistics": {
+    "inboundIp": "Inbound IPs", "inboundUsers": "User inbound IPs", "ipCount": "IP count", "firstSeen": "First seen", "lastSeen": "Last seen",
+    "backToInbound": "Back to inbound IPs", "filterProvince": "Filter province", "allProvinces": "All provinces / regions",
+    "ipAddress": "IP address", "location": "Location", "asn": "ASN", "unknown": "Unknown", "inboundCount": "{{count}} IPs",
     "last24": "Last 24 hours", "last14": "Last 14 days", "all": "All", "startTime": "Start time", "endTime": "End time",
     "confirm": "Confirm", "cancel": "Cancel", "previousMonth": "Prev", "nextMonth": "Next",
     "wholeHours": "Use whole hours for past dates or ranges spanning multiple days.", "searchNode": "Search nodes", "nodeName": "Node name", "asc": "Ascending", "desc": "Descending",

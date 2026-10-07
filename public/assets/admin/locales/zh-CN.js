@@ -1,6 +1,9 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['zh-CN'] = {
   "statistics": {
+    "inboundIp": "入站 IP", "inboundUsers": "用户入站 IP", "ipCount": "IP 数量", "firstSeen": "首次出现", "lastSeen": "最近出现",
+    "backToInbound": "返回入站 IP 列表", "filterProvince": "筛选省份", "allProvinces": "全部省份 / 地区",
+    "ipAddress": "IP 地址", "location": "归属地", "asn": "ASN", "unknown": "未知", "inboundCount": "共 {{count}} 个 IP",
     "last24": "近 24 小时", "last14": "近 14 天", "all": "全部", "startTime": "开始时间", "endTime": "结束时间",
     "confirm": "确定", "cancel": "取消", "previousMonth": "上月", "nextMonth": "下月",
     "wholeHours": "跨日或历史查询请选择整点。", "searchNode": "搜索节点", "nodeName": "节点名称", "asc": "升序", "desc": "降序",

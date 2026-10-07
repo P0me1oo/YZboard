@@ -286,8 +286,9 @@ class ServerService
     /**
      * 处理节点在线设备汇报
      */
-    public static function processAlive(int $nodeId, array $alive): void
+    public static function processAlive(int $nodeId, array $alive, ?int $receivedAt = null): void
     {
+        app(InboundIpRecorder::class)->record($alive, $receivedAt);
         app(DeviceStateService::class)->replaceNodeDevices($nodeId, $alive);
     }
 

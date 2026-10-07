@@ -12,6 +12,7 @@ use App\Http\Controllers\V2\Admin\OrderController;
 use App\Http\Controllers\V2\Admin\UserController;
 use App\Http\Controllers\V2\Admin\StatController;
 use App\Http\Controllers\V2\Admin\TrafficStatisticsController;
+use App\Http\Controllers\V2\Admin\InboundIpStatisticsController;
 use App\Http\Controllers\V2\Admin\NoticeController;
 use App\Http\Controllers\V2\Admin\TicketController;
 use App\Http\Controllers\V2\Admin\CouponController;
@@ -163,6 +164,8 @@ class AdminRoute
             });
 
             $router->group(['prefix' => 'statistics'], function ($router) {
+                $router->get('/inboundUsers', [InboundIpStatisticsController::class, 'users']);
+                $router->get('/inboundUser', [InboundIpStatisticsController::class, 'user']);
                 $router->get('/metadata', [TrafficStatisticsController::class, 'metadata']);
                 $router->get('/traffic', [TrafficStatisticsController::class, 'overview']);
                 $router->get('/nodes', [TrafficStatisticsController::class, 'nodes']);

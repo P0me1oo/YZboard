@@ -53,6 +53,25 @@ class DeviceIpExclusion
         return self::parse(self::rawSetting())[0];
     }
 
+    /** 查询历史时按当前名单过滤，必须先于汇总和分页。地址键为补齐到 32 位的十六进制。 */
+    public static function constrainQuery(\Illuminate\Database\Query\Builder $query, string $alias = 'i'): void
+    {
+        foreach (self::entries() as $entry) {
+            [$address, $bits] = array_pad(explode('/', $entry, 2), 2, null);
+            $binary = inet_pton($address);
+            $bits = $bits === null ? strlen($binary) * 8 : (int) $bits;
+            $minimum = self::mask($binary, $bits);
+            $maximum = $minimum;
+            for ($index = 0; $index < strlen($binary); $index++) {
+                $hostBits = min(8, max(0, ($index + 1) * 8 - $bits));
+                $maximum[$index] = chr(ord($minimum[$index]) | ((1 << $hostBits) - 1));
+            }
+            $bounds = array_map(fn ($value) => str_pad(bin2hex($value), 32, '0', STR_PAD_LEFT), [$minimum, $maximum]);
+            $query->whereNot(fn ($part) => $part->where($alias . '.ip_version', strlen($binary) === 4 ? 4 : 6)
+                ->whereBetween($alias . '.ip_key', $bounds));
+        }
+    }
+
     /** 先按原始地址过滤名单，再将公网 IPv6 合并到 /64；IPv4 仍按单个地址计数。 */
     public static function countKey(string $raw): ?string
     {

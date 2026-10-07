@@ -45,6 +45,9 @@ class ResetLog extends Command
         // 保留今天及此前 29 个自然日，与统计页的最近 30 天一致。
         $cutoff = now()->startOfDay()->subDays(29)->timestamp;
         StatUser::where('record_at', '<', $cutoff)->delete();
+        DB::table('v2_stat_user_inbound_ip')->where('record_at', '<', $cutoff)->delete();
+        DB::table('v2_inbound_ip')->whereNotExists(fn ($query) => $query->selectRaw('1')->from('v2_stat_user_inbound_ip')
+            ->whereColumn('v2_stat_user_inbound_ip.ip', 'v2_inbound_ip.ip'))->delete();
         StatServer::where('record_at', '<', $cutoff)->delete();
         DB::table('v2_stat_user_server')->where('record_at', '<', $cutoff)->delete();
         DB::table('v2_stat_traffic_hour')->where('record_at', '<', $cutoff)->delete();

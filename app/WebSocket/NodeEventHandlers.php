@@ -56,7 +56,7 @@ class NodeEventHandlers
         }
 
         $oldDevices = $service->getNodeDevices($nodeId);
-        $service->replaceNodeDevices($nodeId, $data);
+        ServerService::processAlive($nodeId, $data);
 
         // Mark for push
         Redis::sadd('device:push_pending_nodes', $nodeId);

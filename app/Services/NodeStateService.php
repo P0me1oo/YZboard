@@ -39,13 +39,13 @@ class NodeStateService
             if ($applied === $version) {
                 return;
             }
-            self::apply($node, $snapshot['data']);
+            self::apply($node, $snapshot['data'], intdiv($snapshot['received_at'], 1000));
             Cache::forever($key, $version);
         });
     }
 
     /** 复用原报告处理次序，尤其是中转来源必须早于整个入口的设备快照。 */
-    public static function apply(Server $node, array $state): void
+    public static function apply(Server $node, array $state, ?int $receivedAt = null): void
     {
         ServerService::touchNode($node);
         if (is_array($state['relay_user_alive'] ?? null) && $state['relay_user_alive'] !== []) {
@@ -62,7 +62,7 @@ class NodeStateService
             }
         }
         if (is_array($state['alive'] ?? null)) {
-            ServerService::processAlive((int) $node->id, $state['alive']);
+            ServerService::processAlive((int) $node->id, $state['alive'], $receivedAt);
         }
         if (is_array($state['online'] ?? null)) {
             ServerService::processOnline($node, $state['online']);

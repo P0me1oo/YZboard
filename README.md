@@ -1,6 +1,6 @@
 # Xboard
 
-面板 `1.54.2` 修复 MariaDB 下入站 IP 用户明细读取失败及旧流量排行数字类型不一致。SQLite、MariaDB 两套本地完整测试各通过 627 项，后续推送到 `master`、PR 和镜像发布均执行两套回归。测试入口见 [测试说明](docs/testing.md)，验证环境、发布进度与镜像来源见 [兼容矩阵](YZ_COMPATIBILITY.md)。
+面板 [`1.54.2`](https://github.com/P0me1oo/YZboard/releases/tag/v1.54.2) 已正式发布：修复 MariaDB 下入站 IP 用户明细读取失败及旧流量排行数字类型不一致。正式 PHP 8.2 流程中，SQLite、MariaDB 两套完整测试各通过 627 项；双架构镜像、`latest` 和镜像内关键文件均已核验。后续推送到 `master`、PR 和镜像发布均执行两套回归，测试入口见 [测试说明](docs/testing.md)，固定来源、镜像摘要和回滚版本见 [兼容矩阵](YZ_COMPATIBILITY.md)。
 
 原 `1.54.1` 管理端修改统一纳入 `1.54.2`：配套管理端 `0.31.1`，例外 IP、标签及权限组等多选输入已有内容时隐藏占位提示，清空后恢复。验证及集成记录见 [兼容矩阵](YZ_COMPATIBILITY.md)，Node 无需升级。
 

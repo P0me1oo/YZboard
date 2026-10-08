@@ -27,7 +27,7 @@ class TrafficStatisticsService
             'precision' => 'sometimes|in:auto',
             'start_time' => 'required_with:end_time|date_format:H:i',
             'end_time' => 'required_with:start_time|date_format:H:i',
-            'sort' => 'sometimes|in:upload,download,total',
+            'sort' => 'sometimes|in:node,upload,download,total',
             'direction' => 'sometimes|in:asc,desc',
         ]);
         $today = CarbonImmutable::today(config('app.timezone'));
@@ -180,8 +180,16 @@ class TrafficStatisticsService
             $query->whereRaw("LOWER(node_name) LIKE ? ESCAPE '!'", [$pattern]);
         }
         $query->selectRaw('server_id AS id, SUM(u) AS upload, SUM(d) AS download, SUM(u + d) AS total')
-            ->addSelect('node_name', 'node_deleted')->groupBy('server_id', 'node_name', 'node_deleted')
-            ->orderBy($range['sort'] ?? 'total', $range['direction'] ?? 'desc')->orderBy('server_id');
+            ->addSelect('node_name', 'node_deleted')->groupBy('server_id', 'node_name', 'node_deleted');
+        $sort = $range['sort'] ?? 'total';
+        $direction = $range['direction'] ?? 'desc';
+        if ($sort === 'node') {
+            // 在分页前沿用节点管理的排序，已删除节点统一放在现有节点后面。
+            $query->groupBy('node_sort')->orderBy('node_deleted')->orderBy('node_sort', $direction)
+                ->orderBy('server_id', $direction);
+        } else {
+            $query->orderBy($sort, $direction)->orderBy('server_id');
+        }
         return $this->ranking($query, $range, 'node');
     }
 
@@ -202,8 +210,9 @@ class TrafficStatisticsService
         }
         $u = $range['metric'] === 'billed' ? 'billed_u' : 'u';
         $d = $range['metric'] === 'billed' ? 'billed_d' : 'd';
+        $sort = ($range['sort'] ?? 'total') === 'node' ? 'total' : ($range['sort'] ?? 'total');
         $query->selectRaw("user_id AS id, SUM({$u}) AS upload, SUM({$d}) AS download, SUM({$u} + {$d}) AS total")
-            ->groupBy('user_id')->orderByDesc('total')->orderBy('user_id');
+            ->groupBy('user_id')->orderBy($sort, $range['direction'] ?? 'desc')->orderBy('user_id');
         return $this->ranking($query, $range, 'user');
     }
 
@@ -212,9 +221,11 @@ class TrafficStatisticsService
         $userId = (int) $range['user_id'];
         $rows = collect(app(UserRouteTraffic::class)->details($userId, $range));
         $names = ServerNameHistory::joinNames(DB::table(UserRouteTraffic::TABLE)->where('user_id', $userId), UserRouteTraffic::TABLE)
-            ->select('server_id', 'node_name', 'node_deleted')->distinct()->get()->keyBy('server_id');
-        $allNodes = $rows->pluck('server_id')->unique()->sort()->filter(fn ($id) => $names->has($id))
-            ->map(fn ($id) => ['id' => $id, 'name' => ServerNameHistory::label($names[$id])])->values()->all();
+            ->select('server_id', 'node_name', 'node_deleted', 'node_sort')->distinct()
+            ->orderBy('node_deleted')->orderBy('node_sort')->orderBy('server_id')->get()->keyBy('server_id');
+        $nodeOrder = $names->keys()->flip();
+        $allNodes = $names->only($rows->pluck('server_id')->unique()->all())
+            ->map(fn ($node) => ['id' => (int) $node->server_id, 'name' => ServerNameHistory::label($node)])->values()->all();
         if (!empty($range['server_id'])) { $rows = $rows->where('server_id', (int) $range['server_id']); }
         // 合计先于名称过滤，已删除且没有名称的节点仍保留真实用量与扣费。
         $summarize = fn ($items, string $prefix = '') => [
@@ -223,10 +234,18 @@ class TrafficStatisticsService
         ];
         $actual = $summarize($rows); $billed = $summarize($rows, 'billed_');
         $direct = $summarize($rows->where('kind', 'direct')); $relay = $summarize($rows->where('kind', 'relay'));
+        $sort = $range['sort'] ?? 'total';
+        $direction = ($range['direction'] ?? 'desc') === 'asc' ? 1 : -1;
         $rows = $rows->filter(fn ($row) => $names->has($row['server_id']))
             ->map(fn ($row) => $row + ['server_name' => ServerNameHistory::label($names[$row['server_id']])])
-            ->sort(fn ($a, $b) => strcmp($b['date'], $a['date']) ?: ($a['server_id'] <=> $b['server_id'])
-                ?: strcmp($a['kind'], $b['kind']) ?: ($a['rate'] <=> $b['rate']))->values();
+            ->sort(function ($a, $b) use ($sort, $direction, $names, $nodeOrder): int {
+                $order = $sort === 'node'
+                    ? ($names[$a['server_id']]->node_deleted <=> $names[$b['server_id']]->node_deleted)
+                        ?: $direction * ($nodeOrder[$a['server_id']] <=> $nodeOrder[$b['server_id']])
+                    : $direction * ($a[$sort] <=> $b[$sort]);
+                return $order ?: strcmp($b['date'], $a['date']) ?: ($a['server_id'] <=> $b['server_id'])
+                    ?: strcmp($a['kind'], $b['kind']) ?: ($a['rate'] <=> $b['rate']);
+            })->values();
         $count = $rows->count(); $size = (int) $range['page_size']; $page = (int) $range['page'];
         return [
             'user' => ['id' => $userId, 'name' => User::whereKey($userId)->value('email') ?? '用户 #' . $userId],

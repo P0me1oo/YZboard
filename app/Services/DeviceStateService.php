@@ -225,6 +225,23 @@ class DeviceStateService
         return $this->filterDeviceIPs($records, $states, time(), $legacyOnly);
     }
 
+    /** 来源对应的在线节点，供换网协调器识别仍使用旧设备协议的节点。 */
+    public function getDeviceSources(int $userId): array
+    {
+        $records = Redis::hgetall(self::PREFIX . $userId);
+        $states = app(RealtimeStateStore::class)->readMany($this->deviceSources([$records]));
+        $result = [];
+        foreach ($records as $field => $timestamp) {
+            if (!str_contains($field, ':') || time() - (int) $timestamp > self::TTL) continue;
+            $nodeId = (int) strstr($field, ':', true);
+            $state = $states['node:' . $nodeId] ?? null;
+            if ($nodeId <= 0 || ($state !== null && !$state['fresh'])) continue;
+            $ip = DeviceIpExclusion::countKey(substr($field, strpos($field, ':') + 1));
+            if ($ip !== null) $result[$ip][$nodeId] = $nodeId;
+        }
+        return array_map('array_values', $result);
+    }
+
     /** 同批用户共享节点状态，避免每个用户重复读取和解码同一份完整快照。 */
     private function deviceSources(array $users): array
     {

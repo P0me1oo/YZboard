@@ -21,6 +21,9 @@ class ServerRoute
             $route->post('realtime/begin', [\App\Http\Controllers\V2\Server\RealtimeController::class, 'begin']);
             $route->post('realtime/state', [\App\Http\Controllers\V2\Server\RealtimeController::class, 'state']);
             $route->get('realtime/sync', [\App\Http\Controllers\V2\Server\RealtimeController::class, 'sync']);
+            $route->post('device-handover/begin', [\App\Http\Controllers\V2\Server\DeviceHandoverController::class, 'begin']);
+            $route->post('device-handover/admit', [\App\Http\Controllers\V2\Server\DeviceHandoverController::class, 'admit']);
+            $route->post('device-handover/sync', [\App\Http\Controllers\V2\Server\DeviceHandoverController::class, 'sync']);
             $route->get('config', [UniProxyController::class, 'config']);
             $route->get('user', [UniProxyController::class, 'user']);
             $route->post('push', [UniProxyController::class, 'push']);

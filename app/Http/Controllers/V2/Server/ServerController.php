@@ -17,6 +17,10 @@ class ServerController extends Controller
      */
     public function handshake(Request $request): JsonResponse
     {
+        $node = $request->attributes->get('node_info');
+        if ($node !== null && (int) $request->input('device_handover', 0) !== 1) {
+            app(\App\Services\DeviceHandoverService::class)->legacyNode((int) $node->id);
+        }
         $websocket = ['enabled' => false];
 
         if ((bool) admin_setting('server_ws_enable', 1) && Cache::has(NodeWorker::HEARTBEAT_CACHE_KEY)) {
@@ -46,6 +50,7 @@ class ServerController extends Controller
                 'state_interval' => 1,
                 'fallback_interval' => 10,
                 'traffic_ack' => true,
+                'device_handover' => 1,
             ],
         ]);
     }

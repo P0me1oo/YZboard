@@ -170,8 +170,12 @@ class ServerService
      * @param Server $node
      * @return Collection
      */
-    public static function getAvailableUsers(Server $node)
+    public static function getAvailableUsers(Server $node, ?int $userId = null)
     {
+        // 插件可能依赖完整名单；普通单用户准入直接查询一行，避免每次换网加载整节点用户。
+        if ($userId !== null && isset(HookManager::getFilters()['server.users.get'])) {
+            return self::getAvailableUsers($node)->filter(fn ($user) => (int) $user->id === $userId)->values();
+        }
         // 中转逻辑节点的落地入站只接受入口服务器的内部凭据，不下发面板用户，
         // 也因此不会在落地端重复统计用户流量。
         if ($node->isRelayChild()) {
@@ -189,6 +193,7 @@ class ServerService
             $fields[] = 'expired_at';
         }
         $users = User::toBase()
+            ->when($userId !== null, fn ($query) => $query->where('id', $userId))
             ->where(function ($query) use ($groupIds) {
                 $query->whereIn('group_id', $groupIds);
                 foreach ($groupIds as $groupId) {

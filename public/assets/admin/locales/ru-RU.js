@@ -1,6 +1,7 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['ru-RU'] = {
   "statistics": {
+    "observedProvinces": "Регионы появления",
     "inboundIp": "Входящие IP", "inboundUsers": "Входящие IP пользователей", "ipCount": "Число IP", "firstSeen": "Первое появление", "lastSeen": "Последнее появление",
     "backToInbound": "К списку входящих IP", "filterProvince": "Выбрать регион", "allProvinces": "Все регионы",
     "ipAddress": "IP-адрес", "location": "Местоположение", "asn": "ASN", "unknown": "Неизвестно", "inboundCount": "Всего IP: {{count}}",

@@ -1,5 +1,7 @@
 # Xboard
 
+面板 `1.56.0`，配套 Node `v2.8.0`、管理端 `0.32.0`：设备名额满时，新 IP 替换最久没有发起新连接的旧来源，确认旧连接关闭后接入；旧来源冷却 60 秒，有空位可提前恢复。同时交付统计排序、日期布局和入站 IP 省份展示。规则与正式发布核验状态见 [设备换网](docs/device-handover.md)、[统计分析](docs/statistics.md) 和 [兼容矩阵](YZ_COMPATIBILITY.md)。
+
 面板 [`1.54.2`](https://github.com/P0me1oo/YZboard/releases/tag/v1.54.2) 已正式发布：修复 MariaDB 下入站 IP 用户明细读取失败及旧流量排行数字类型不一致。正式 PHP 8.2 流程中，SQLite、MariaDB 两套完整测试各通过 627 项；双架构镜像、`latest` 和镜像内关键文件均已核验。后续推送到 `master`、PR 和镜像发布均执行两套回归，测试入口见 [测试说明](docs/testing.md)，固定来源、镜像摘要和回滚版本见 [兼容矩阵](YZ_COMPATIBILITY.md)。
 
 原 `1.54.1` 管理端修改统一纳入 `1.54.2`：配套管理端 `0.31.1`，例外 IP、标签及权限组等多选输入已有内容时隐藏占位提示，清空后恢复。验证及集成记录见 [兼容矩阵](YZ_COMPATIBILITY.md)，Node 无需升级。

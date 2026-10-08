@@ -94,6 +94,33 @@ class InboundIpStatisticsTest extends TestCase
         $this->getJson($this->path('inboundUsers'))->assertOk()->assertJsonPath('data.list.0.ip_count', 3);
     }
 
+    public function test_user_list_provinces_follow_dates_exclusions_and_user_pagination_without_external_queries(): void
+    {
+        $a = $this->user(); $b = $this->user();
+        $this->record($a->id, ['8.8.8.8']);
+        $this->record($a->id, ['8.8.8.8', '1.1.1.1', '2400:cb00:1:2::1'], now()->subDay()->timestamp);
+        $this->record($b->id, ['9.9.9.9', '1.0.0.1']);
+        DB::table('v2_inbound_ip')->where('ip_version', 6)->update(['province' => '广东省', 'region' => '旧地址',
+            'external_expires_at' => now()->subSecond()->timestamp, 'lookup_after' => now()->addHour()->timestamp]);
+
+        $this->getJson($this->path('inboundUsers', ['page_size' => 1]))->assertOk()
+            ->assertJsonPath('data.list.0.id', $b->id)->assertJsonPath('data.list.0.provinces', ['浙江省']);
+        $this->getJson($this->path('inboundUsers', ['page_size' => 1, 'page' => 2]))->assertOk()
+            ->assertJsonPath('data.list.0.id', $a->id)->assertJsonPath('data.list.0.ip_count', 1)
+            ->assertJsonPath('data.list.0.provinces', ['广东省']);
+        $response = $this->getJson($this->path('inboundUsers', ['period' => '7d', 'page_size' => 1]))->assertOk()
+            ->assertJsonPath('data.list.0.id', $a->id)->assertJsonPath('data.list.0.ip_count', 3);
+        $this->assertEqualsCanonicalizing(['广东省', '浙江省', '未知'], $response->json('data.list.0.provinces'));
+        admin_setting(['device_ip_exclude' => ['1.1.1.1', '2400:cb00:1:2::1']]);
+        $this->getJson($this->path('inboundUsers', ['period' => '7d', 'search' => $a->email]))->assertOk()
+            ->assertJsonPath('data.total', 1)->assertJsonPath('data.list.0.provinces', ['广东省']);
+        DB::table('v2_inbound_ip')->where('ip', '8.8.8.8')->update(['province' => '上海市']);
+        $this->getJson($this->path('inboundUsers', ['search' => $a->email]))->assertOk()
+            ->assertJsonPath('data.list.0.provinces', ['上海市']);
+        $this->getJson($this->path('inboundUsers', ['search' => '不存在']))->assertOk()->assertJsonPath('data.list', []);
+        Http::assertNothingSent();
+    }
+
     public function test_location_sources_province_filter_and_thirty_day_cache(): void
     {
         $user = $this->user();
@@ -190,6 +217,9 @@ class InboundIpStatisticsTest extends TestCase
         $user = $this->user();
         $ips = array_map(fn ($index) => '11.0.' . intdiv($index, 256) . '.' . ($index % 256), range(1, 270));
         $this->record($user->id, $ips);
+        $this->getJson($this->path('inboundUsers'))->assertOk()->assertJsonPath('data.list.0.provinces', ['浙江省']);
+        $this->assertSame(270, DB::table('v2_inbound_ip')->where('province', '浙江省')->count());
+        Http::assertNothingSent();
         $this->getJson($this->path('inboundUser', ['user_id' => $user->id, 'province' => '浙江省', 'page_size' => 100, 'page' => 3]))
             ->assertOk()->assertJsonPath('data.total', 270)->assertJsonCount(70, 'data.list')->assertJsonPath('data.last_page', 3);
         $this->assertSame(270, DB::table('v2_inbound_ip')->where('province', '浙江省')->count());

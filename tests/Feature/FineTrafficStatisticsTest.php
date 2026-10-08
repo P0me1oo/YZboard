@@ -101,6 +101,90 @@ class FineTrafficStatisticsTest extends TestCase
         $this->getStats('nodes', ['direction' => 'invalid'])->assertUnprocessable();
     }
 
+    public function test_node_sort_uses_management_order_before_pagination_and_tracks_changes(): void
+    {
+        $a = $this->node('排序 A'); $b = $this->node('排序 B'); $c = $this->node('排序 C');
+        $d = $this->node('排序 D'); $e = $this->node('排序 E');
+        foreach ([[$a, 20], [$b, null], [$c, 0], [$d, 20], [$e, 10]] as [$node, $sort]) {
+            $node->update(['sort' => $sort]);
+            $this->record($node->id, now()->timestamp, $node->id * 10, 10);
+        }
+        $path = '/api/v2/' . hash('crc32b', config('app.key')) . '/statistics/nodes?';
+        foreach ([[], ['precision' => 'auto']] as $precision) {
+            foreach (['asc' => [$b->id, $c->id, $e->id, $a->id, $d->id],
+                'desc' => [$d->id, $a->id, $e->id, $c->id, $b->id]] as $direction => $ids) {
+                $response = $this->getJson($path . http_build_query($precision + ['period' => 'today', 'sort' => 'node', 'direction' => $direction]))->assertOk();
+                $this->assertSame($ids, array_column($response->json('data.list'), 'id'));
+                $this->getJson($path . http_build_query($precision + ['period' => 'today', 'sort' => 'node', 'direction' => $direction, 'page_size' => 2, 'page' => 2]))
+                    ->assertOk()->assertJsonPath('data.total', 5)->assertJsonPath('data.list.0.id', $ids[2]);
+            }
+        }
+        $e->update(['sort' => 30]);
+        $this->getStats('nodes', ['sort' => 'node', 'direction' => 'asc', 'page_size' => 2, 'page' => 3])
+            ->assertOk()->assertJsonPath('data.list.0.id', $e->id)->assertJsonPath('data.total', 5);
+        \App\Services\ServerNameHistory::remember(collect([$e]));
+        $e->delete();
+        foreach (['asc', 'desc'] as $direction) {
+            $this->getStats('nodes', ['sort' => 'node', 'direction' => $direction, 'page_size' => 1, 'page' => 5])
+                ->assertOk()->assertJsonPath('data.list.0.id', $e->id)->assertJsonPath('data.list.0.name', '排序 E（已删除）');
+        }
+        $this->getStats('nodes')->assertOk()->assertJsonPath('data.list.0.id', $e->id);
+    }
+
+    public function test_user_ranking_sorts_actual_and_billed_traffic_before_pagination(): void
+    {
+        $node = $this->node();
+        foreach ([[101, 10, 90, 1], [102, 30, 10, 4], [103, 20, 5, 2]] as [$id, $u, $d, $rate]) {
+            app(UserRouteTraffic::class)->record($id, $node->id, $node->id, 'entry', $rate,
+                now()->startOfDay()->timestamp, $u, $d, $u * $rate, $d * $rate, now()->timestamp);
+        }
+        foreach (['actual' => ['upload' => [101, 102], 'download' => [103, 101], 'total' => [103, 101]],
+            'billed' => ['upload' => [101, 102], 'download' => [103, 101], 'total' => [103, 102]]] as $metric => $orders) {
+            foreach ($orders as $sort => [$asc, $desc]) {
+                foreach (['asc' => $asc, 'desc' => $desc] as $direction => $id) {
+                    $this->getStats('users', ['metric' => $metric, 'sort' => $sort, 'direction' => $direction, 'page_size' => 1])
+                        ->assertOk()->assertJsonPath('data.total', 3)->assertJsonPath('data.list.0.id', $id);
+                }
+            }
+        }
+        $this->getStats('users', ['page_size' => 1])->assertJsonPath('data.list.0.id', 101);
+        $this->getStats('users', ['page_size' => 1, 'page' => 2])->assertJsonPath('data.list.0.id', 102);
+        $this->getStats('users', ['sort' => 'upload', 'direction' => 'desc', 'page_size' => 1, 'page' => 2])->assertJsonPath('data.list.0.id', 103);
+        $this->getStats('users', ['sort' => 'invalid'])->assertUnprocessable();
+        $this->getStats('users', ['direction' => 'invalid'])->assertUnprocessable();
+    }
+
+    public function test_user_detail_sort_preserves_totals_filters_and_stable_pages(): void
+    {
+        $a = $this->node('排序 A'); $b = $this->node('排序 B');
+        $a->update(['sort' => 20]); $b->update(['sort' => 10]);
+        $this->record($a->id, now()->timestamp, 30, 10);
+        $this->record($b->id, now()->timestamp, 10, 90);
+        $this->record($a->id, now()->subDay()->timestamp, 20, 5);
+        $params = ['user_id' => 101, 'period' => '7d'];
+        foreach (['upload' => [[100, 25, 40], [40, 25, 100]], 'download' => [[25, 40, 100], [100, 40, 25]],
+            'total' => [[25, 40, 100], [100, 40, 25]], 'node' => [[100, 40, 25], [40, 25, 100]]] as $sort => [$asc, $desc]) {
+            foreach (['asc' => $asc, 'desc' => $desc] as $direction => $totals) {
+                $response = $this->getStats('user', $params + ['sort' => $sort, 'direction' => $direction])->assertOk()
+                    ->assertJsonPath('data.actual_summary.total', 165)->assertJsonPath('data.billed_summary.total', 330);
+                $this->assertSame($totals, array_column($response->json('data.list'), 'total'));
+                $this->getStats('user', $params + ['sort' => $sort, 'direction' => $direction, 'page_size' => 1, 'page' => 2])
+                    ->assertOk()->assertJsonPath('data.list.0.total', $totals[1])->assertJsonPath('data.total', 3);
+            }
+        }
+        $this->getStats('user', $params)->assertJsonPath('data.list.0.total', 100);
+        $this->getStats('user', $params + ['server_id' => $a->id, 'sort' => 'total', 'direction' => 'asc'])->assertOk()
+            ->assertJsonPath('data.total', 2)->assertJsonPath('data.list.0.total', 25)
+            ->assertJsonPath('data.actual_summary.total', 65)->assertJsonPath('data.billed_summary.total', 130);
+        $b->update(['sort' => 30]);
+        $this->getStats('user', $params + ['sort' => 'node', 'direction' => 'asc'])->assertJsonPath('data.list.0.server_id', $a->id);
+        \App\Services\ServerNameHistory::remember(collect([$b]));
+        $b->delete();
+        $this->getStats('user', $params + ['sort' => 'node', 'direction' => 'desc'])->assertOk()
+            ->assertJsonPath('data.list.2.server_name', '排序 B（已删除）')->assertJsonPath('data.actual_summary.total', 165);
+        $this->getStats('user', $params + ['sort' => 'invalid'])->assertUnprocessable();
+    }
+
     public function test_old_daily_history_is_preserved_without_fabricating_fine_data(): void
     {
         $node = $this->node();

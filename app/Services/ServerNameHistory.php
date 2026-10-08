@@ -23,10 +23,10 @@ class ServerNameHistory
     public static function joinNames(Builder $query, string $table): Builder
     {
         $current = DB::table('v2_server')->whereNotNull('name')->whereRaw("TRIM(name) <> ''");
-        $names = (clone $current)->selectRaw('id AS named_server_id, name AS node_name, 0 AS node_deleted')
+        $names = (clone $current)->selectRaw('id AS named_server_id, name AS node_name, sort AS node_sort, 0 AS node_deleted')
             ->unionAll(DB::table('v2_stat_server_name')->whereRaw("TRIM(name) <> ''")
                 ->whereNotIn('server_id', (clone $current)->select('id'))
-                ->selectRaw('server_id AS named_server_id, name AS node_name, 1 AS node_deleted'));
+                ->selectRaw('server_id AS named_server_id, name AS node_name, NULL AS node_sort, 1 AS node_deleted'));
         return $query->joinSub($names, 'stat_node_names', 'stat_node_names.named_server_id', '=', $table . '.server_id');
     }
 

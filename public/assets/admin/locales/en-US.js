@@ -1,6 +1,7 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['en-US'] = {
   "statistics": {
+    "observedProvinces": "Observed provinces",
     "inboundIp": "Inbound IPs", "inboundUsers": "User inbound IPs", "ipCount": "IP count", "firstSeen": "First seen", "lastSeen": "Last seen",
     "backToInbound": "Back to inbound IPs", "filterProvince": "Filter province", "allProvinces": "All provinces / regions",
     "ipAddress": "IP address", "location": "Location", "asn": "ASN", "unknown": "Unknown", "inboundCount": "{{count}} IPs",

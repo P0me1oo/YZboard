@@ -1,6 +1,7 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['zh-CN'] = {
   "statistics": {
+    "observedProvinces": "出现省份",
     "inboundIp": "入站 IP", "inboundUsers": "用户入站 IP", "ipCount": "IP 数量", "firstSeen": "首次出现", "lastSeen": "最近出现",
     "backToInbound": "返回入站 IP 列表", "filterProvince": "筛选省份", "allProvinces": "全部省份 / 地区",
     "ipAddress": "IP 地址", "location": "归属地", "asn": "ASN", "unknown": "未知", "inboundCount": "共 {{count}} 个 IP",

@@ -181,7 +181,8 @@ class TrafficStatisticsTest extends TestCase
         $this->assertSame(330, array_sum(array_column($response->json('data.list'), 'total')));
         $this->getJson($this->path('user', ['user_id' => 101, 'metric' => 'billed']))
             ->assertOk()->assertJsonPath('data.billed_summary.total', 960)->assertJsonCount(2, 'data.list')
-            ->assertJsonPath('data.list.0.rate', 2)->assertJsonPath('data.list.1.rate', 3);
+            ->assertJsonPath('data.list.0.rate', 3)->assertJsonPath('data.list.0.total', 300)->assertJsonPath('data.list.0.billed_total', 900)
+            ->assertJsonPath('data.list.1.rate', 2)->assertJsonPath('data.list.1.total', 30)->assertJsonPath('data.list.1.billed_total', 60);
         $this->assertSame(1, DB::table('v2_stat_user_server')->count());
     }
 

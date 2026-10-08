@@ -33,7 +33,8 @@ class IpProvince
     public static function fromChinese(string $place): string
     {
         $place = trim($place);
-        $local = preg_replace('/^中国[\s\/\-]*/u', '', $place);
+        // 纯真库使用 Unicode 横线分隔国家、省市，兼容普通短横线及其他横线写法。
+        $local = preg_replace('/^中国[\s\/\p{Pd}]*/u', '', $place);
         foreach (self::PROVINCES as $prefix => $name) {
             if (str_starts_with($local, $prefix)) return $name;
         }

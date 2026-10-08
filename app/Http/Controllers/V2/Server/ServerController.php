@@ -51,6 +51,8 @@ class ServerController extends Controller
                 'fallback_interval' => 10,
                 'traffic_ack' => true,
                 'device_handover' => 1,
+                'device_handover_ws' => 1,
+                'device_handover_renewal' => 1,
             ],
         ]);
     }

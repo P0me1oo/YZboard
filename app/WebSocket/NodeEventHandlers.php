@@ -3,6 +3,7 @@
 namespace App\WebSocket;
 
 use App\Models\Server;
+use App\Services\DeviceHandoverProtocol;
 use App\Services\DeviceStateService;
 use App\Services\NodeRegistry;
 use App\Services\ServerService;
@@ -17,6 +18,38 @@ use Workerman\Connection\TcpConnection;
 
 class NodeEventHandlers
 {
+    public static function handleDeviceBegin(TcpConnection $conn, int $nodeId, array $data): void
+    {
+        self::handleDeviceHandover($conn, $nodeId, 'begin', $data);
+    }
+
+    public static function handleDeviceAdmit(TcpConnection $conn, int $nodeId, array $data): void
+    {
+        self::handleDeviceHandover($conn, $nodeId, 'admit', $data);
+    }
+
+    public static function handleDeviceSync(TcpConnection $conn, int $nodeId, array $data): void
+    {
+        self::handleDeviceHandover($conn, $nodeId, 'sync', $data);
+    }
+
+    private static function handleDeviceHandover(TcpConnection $conn, int $nodeId, string $action, array $data): void
+    {
+        abort_if(empty($conn->realtime), 400);
+        $metadata = app(NodeRuntimeMetadata::class);
+        $node = $metadata->nodeForDevices($nodeId);
+        abort_if($node === null, 404);
+        if (!empty($conn->machineId)) {
+            $machine = $metadata->machineOrFail((int) $conn->machineId);
+            abort_unless($machine->is_active && $node->enabled && (int) $node->machine_id === (int) $machine->id, 403);
+        }
+        $result = app(DeviceHandoverProtocol::class)->handle($node, $action, $data);
+        $conn->send(json_encode(['event' => 'device.' . $action . '.ack', 'data' => [
+            'node_id' => $nodeId, 'request_id' => $data['request_id'] ?? null,
+            'accepted' => true, 'result' => $result,
+        ]], JSON_THROW_ON_ERROR));
+    }
+
     /**
      * Handle pong heartbeat
      */

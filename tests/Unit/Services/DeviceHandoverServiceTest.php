@@ -7,6 +7,7 @@ use App\Services\DeviceStateService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
+use Symfony\Component\HttpKernel\Exception\PreconditionFailedHttpException;
 use Tests\TestCase;
 
 class DeviceHandoverServiceTest extends TestCase
@@ -54,6 +55,146 @@ class DeviceHandoverServiceTest extends TestCase
     {
         return $this->service->sync($node, ['run' => $this->runID($node),
             'sequence' => ++$this->sequence[$node], 'pending' => $pending, 'sources' => $sources]);
+    }
+
+    private function renew(int $base, int $node = 1): array
+    {
+        return $this->service->sync($node, ['run' => $this->runID($node), 'sequence' => ++$this->sequence[$node],
+            'unchanged' => true, 'base_sequence' => $base]);
+    }
+
+    public function test_renewal_preserves_sources_and_still_waits_for_actual_close(): void
+    {
+        $a = $this->admit('8.8.8.8', 1, 1);
+        $base = $this->sync([$this->source($a, '8.8.8.8', 1)])['sequence'];
+        $before = Cache::get('device_handover:node:1');
+        $this->legacy[10] = ['8.8.8.8' => [1]];
+        Carbon::setTestNow(now()->addSeconds(20));
+        $this->renew($base);
+        $this->assertSame($before, Cache::get('device_handover:node:1'), '续期不应重写完整来源');
+        $this->assertSame(now()->getTimestampMs(), Cache::get('device_handover:node:1:progress')['seen_at']);
+        $this->assertSame('waiting', $this->admit('1.1.1.1', 2, 1)['status']);
+        $this->assertSame([$a['lease']], array_column($this->renew($base)['revoked'], 'lease'));
+        $this->assertSame('waiting', $this->admit('1.1.1.1', 2, 1)['status']);
+        $this->sync([]);
+        $this->assertSame('allowed', $this->admit('1.1.1.1', 2, 1)['status']);
+    }
+
+    public function test_renewal_keeps_pending_grants_and_rejects_old_full_snapshots(): void
+    {
+        $this->admit('8.8.8.8', 1, 1);
+        $base = $this->sync([], 1, [1])['sequence'];
+        $renewal = $this->renew($base);
+        $this->service->sync(1, ['run' => $this->runID(1), 'sequence' => $base, 'pending' => [], 'sources' => []]);
+        $this->assertSame('waiting', $this->admit('1.1.1.1', 2, 1)['status']);
+        $progress = Cache::get('device_handover:node:1:progress');
+        Carbon::setTestNow(now()->addSecond());
+        $this->service->sync(1, ['run' => $this->runID(1), 'sequence' => $renewal['sequence'], 'unchanged' => true, 'base_sequence' => $base]);
+        $this->assertSame($progress, Cache::get('device_handover:node:1:progress'), '重复确认不应倒退或重新续期');
+    }
+
+    public function test_redis_renewal_avoids_loading_full_sources_and_rejects_eviction(): void
+    {
+        $base = $this->sync([])['sequence'];
+        $prefix = 'renewal-test:';
+        $nodeKey = $prefix . 'device_handover:node:1';
+        $progressKey = $nodeKey . ':progress';
+        $values = [
+            $nodeKey => serialize(Cache::get('device_handover:node:1')),
+            $progressKey => serialize(Cache::get('device_handover:node:1:progress')),
+        ];
+        $original = $values[$nodeKey];
+        $connection = \Mockery::mock(\Illuminate\Redis\Connections\Connection::class);
+        $connection->shouldReceive('get')->andReturnUsing(function (string $key) use (&$values, $nodeKey) {
+            if ($key === $nodeKey) throw new \RuntimeException('稳定续期不应读取完整来源');
+            return $values[$key] ?? null;
+        });
+        $connection->shouldReceive('set')->andReturnUsing(function (string $key, mixed $value) use (&$values): bool {
+            $values[$key] = $value;
+            return true;
+        });
+        $connection->shouldReceive('exists')->with($nodeKey)->andReturnUsing(function () use (&$values, $nodeKey): int {
+            return (int) array_key_exists($nodeKey, $values);
+        });
+        $factory = \Mockery::mock(\Illuminate\Contracts\Redis\Factory::class);
+        $factory->shouldReceive('connection')->with('cache')->andReturn($connection);
+        $store = \Mockery::mock(\Illuminate\Cache\RedisStore::class . '[lock]', [$factory, $prefix, 'cache']);
+        $locks = new \Illuminate\Cache\ArrayStore();
+        $store->shouldReceive('lock')->andReturnUsing(fn ($name, $seconds) => $locks->lock($name, $seconds));
+        Cache::swap(new \Illuminate\Cache\Repository($store));
+
+        Carbon::setTestNow(now()->addSecond());
+        $reply = $this->renew($base);
+        $this->assertSame($original, $values[$nodeKey]);
+        $progress = unserialize($values[$progressKey]);
+        $this->assertSame($reply['sequence'], $progress['sequence']);
+        $this->assertSame(now()->getTimestampMs(), $progress['seen_at']);
+
+        unset($values[$nodeKey]);
+        try {
+            $this->renew($base);
+            $this->fail('完整来源丢失时不能继续确认续期');
+        } catch (PreconditionFailedHttpException $exception) {
+            $this->assertSame(412, $exception->getStatusCode());
+        }
+        $this->assertSame($progress, unserialize($values[$progressKey]));
+    }
+
+    public function test_missing_renewal_metadata_requests_full_snapshot_without_destroying_session(): void
+    {
+        $a = $this->admit('8.8.8.8', 1, 1);
+        $sources = [$this->source($a, '8.8.8.8', 1)];
+        $base = $this->sync($sources)['sequence'];
+        Cache::forget('device_handover:node:1:progress');
+        try {
+            $this->renew($base);
+            $this->fail('续期基线缺失时不能确认');
+        } catch (PreconditionFailedHttpException $exception) {
+            $this->assertSame(412, $exception->getStatusCode());
+        }
+        $base = $this->sync($sources)['sequence'];
+        $this->renew($base);
+        $this->assertSame('waiting', $this->admit('1.1.1.1', 2, 1)['status']);
+    }
+
+    public function test_old_renewal_baseline_cannot_overwrite_new_full_snapshot(): void
+    {
+        $base = $this->sync([])['sequence'];
+        $a = $this->admit('8.8.8.8', 1, 1);
+        $this->sync([$this->source($a, '8.8.8.8', $this->sequence[1])]);
+        $this->expectException(PreconditionFailedHttpException::class);
+        $this->renew($base);
+    }
+
+    public function test_failed_full_snapshot_write_cannot_publish_a_renewal_baseline(): void
+    {
+        $store = new class extends \Illuminate\Cache\ArrayStore {
+            public bool $failWrite = false;
+            public function forever($key, $value)
+            {
+                if ($this->failWrite && $key === 'device_handover:node:1') return false;
+                return parent::forever($key, $value);
+            }
+        };
+        Cache::swap(new \Illuminate\Cache\Repository($store));
+        $this->service->begin(1, $this->runID(1));
+        $store->failWrite = true;
+        try {
+            $this->sync([]);
+            $this->fail('写入失败不能确认完整快照');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('设备来源完整快照写入失败', $exception->getMessage());
+        }
+        $this->assertFalse(Cache::has('device_handover:node:1:progress'));
+        $this->assertSame(0, Cache::get('device_handover:node:1')['sequence']);
+    }
+
+    public function test_renewal_from_previous_run_is_a_session_conflict(): void
+    {
+        $base = $this->sync([])['sequence'];
+        $this->service->begin(1, str_repeat('e', 32));
+        $this->expectException(ConflictHttpException::class);
+        $this->renew($base);
     }
 
     public function test_replaces_least_recent_new_connection_and_waits_for_actual_close(): void

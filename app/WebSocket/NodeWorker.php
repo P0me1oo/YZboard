@@ -37,6 +37,9 @@ class NodeWorker
         'request.devices' => [NodeEventHandlers::class, 'handleDeviceRequest'],
         'runtime.state' => [NodeEventHandlers::class, 'handleRuntimeState'],
         'report.traffic' => [NodeEventHandlers::class, 'handleTrafficReport'],
+        'device.begin' => [NodeEventHandlers::class, 'handleDeviceBegin'],
+        'device.admit' => [NodeEventHandlers::class, 'handleDeviceAdmit'],
+        'device.sync' => [NodeEventHandlers::class, 'handleDeviceSync'],
         'request.sync' => [NodeEventHandlers::class, 'handleSyncRequest'],
     ];
 
@@ -358,6 +361,7 @@ class NodeWorker
             $errorEvent = match ($event) {
                 'runtime.state', 'machine.state' => 'state.error',
                 'report.traffic' => 'traffic.error',
+                'device.begin', 'device.admit', 'device.sync' => $event . '.error',
                 default => 'error',
             };
             $conn->send(json_encode(['event' => $errorEvent, 'data' => [

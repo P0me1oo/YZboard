@@ -138,6 +138,49 @@ class InboundIpStatisticsTest extends TestCase
         Http::assertSentCount(4);
     }
 
+    public function test_upgrade_refreshes_unknown_ipv4_provinces_without_changing_other_cached_data(): void
+    {
+        $user = $this->user();
+        $this->record($user->id, ['8.8.8.8', '1.1.1.1', '9.9.9.9', '2400:cb00:1:2::1']);
+        $expires = now()->addDays(30)->timestamp;
+        DB::table('v2_inbound_ip')->update(['local_expires_at' => $expires,
+            'external_expires_at' => $expires, 'lookup_after' => $expires,
+            'asn' => 'AS64500', 'as_name' => '测试网络']);
+        DB::table('v2_inbound_ip')->where('ip', '8.8.8.8')->update(['region' => '中国–上海–上海–宝山区 测试网络']);
+        DB::table('v2_inbound_ip')->where('ip', '1.1.1.1')->update(['region' => '浙江省杭州市', 'province' => '浙江省']);
+        DB::table('v2_inbound_ip')->where('ip_version', 6)->update(['region' => 'China Unknown']);
+        $before = DB::table('v2_inbound_ip')->orderBy('ip')->get()->keyBy('ip')->toArray();
+        $history = DB::table('v2_stat_user_inbound_ip')->orderBy('ip')->get()->toArray();
+        $migration = require database_path('migrations/2026_10_08_000001_refresh_unknown_inbound_ip_provinces.php');
+        $migration->up();
+        $migration->up();
+        $expected = unserialize(serialize($before));
+        $expected['8.8.8.8']->local_expires_at = 0;
+        $this->assertEquals($expected, DB::table('v2_inbound_ip')->orderBy('ip')->get()->keyBy('ip')->toArray());
+
+        $this->mock(QqwryLocation::class, function ($mock): void {
+            $mock->shouldReceive('lookup')->once()->with('8.8.8.8')->andReturn([
+                'region' => '中国–上海–上海–宝山区 测试网络',
+                'province' => \App\Services\IpProvince::fromChinese('中国–上海–上海–宝山区'),
+            ]);
+        });
+        foreach ([1, 2] as $attempt) {
+            $response = $this->getJson($this->path('inboundUsers'))->assertOk()
+                ->assertJsonPath('data.list.0.ip_count', 4);
+            $this->assertEqualsCanonicalizing(['上海市', '浙江省', '未知'], $response->json('data.list.0.provinces'));
+            $this->getJson($this->path('inboundUser', ['user_id' => $user->id, 'province' => '上海市']))->assertOk()
+                ->assertJsonPath('data.total', 1)->assertJsonPath('data.list.0.ip', '8.8.8.8')
+                ->assertJsonPath('data.list.0.province', '上海市')
+                ->assertJsonPath('data.list.0.region', '中国–上海–上海–宝山区 测试网络');
+        }
+        $migration->down();
+        $expected['8.8.8.8']->province = '上海市';
+        $expected['8.8.8.8']->local_expires_at = $expires;
+        $this->assertEquals($expected, DB::table('v2_inbound_ip')->orderBy('ip')->get()->keyBy('ip')->toArray());
+        $this->assertEquals($history, DB::table('v2_stat_user_inbound_ip')->orderBy('ip')->get()->toArray());
+        Http::assertNothingSent();
+    }
+
     public function test_lookup_failure_keeps_ipv4_local_and_expired_ipv6_becomes_unknown(): void
     {
         $user = $this->user();

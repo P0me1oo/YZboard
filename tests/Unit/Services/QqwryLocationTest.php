@@ -13,7 +13,7 @@ class QqwryLocationTest extends TestCase
         $this->assertSame('46cc2175f60cf8d62e24774bc4ecefdffb8047f60877dc95d85cd543d34e780a', hash_file('sha256', resource_path('ip/qqwry.dat')));
         $reader = new QqwryLocation();
         $this->assertNotSame('未知', $reader->lookup('8.8.8.8')['region']);
-        $this->assertNotSame('未知', $reader->lookup('223.5.5.5')['region']);
+        $this->assertSame('浙江省', $reader->lookup('223.5.5.5')['province']);
         $this->assertSame('未知', $reader->lookup('2400:cb00::1')['region']);
     }
 
@@ -54,5 +54,17 @@ class QqwryLocationTest extends TestCase
         $this->assertSame('陕西省', IpProvince::fromExternal(['country_code' => 'CN', 'region_name' => 'Shaanxi']));
         $this->assertSame('美国', IpProvince::fromExternal(['country_code' => 'US', 'country_name' => '美国', 'region_name' => 'California']));
         $this->assertSame('未知', IpProvince::fromExternal(['country_code' => 'CN', 'region_name' => 'unrecognized']));
+    }
+
+    public function test_chinese_provinces_accept_database_separators_without_guessing_unknown_locations(): void
+    {
+        foreach (['–', '-', '—', '－', '/', ' ', ''] as $separator) {
+            $this->assertSame('上海市', IpProvince::fromChinese("中国{$separator}上海{$separator}上海{$separator}宝山区"));
+            $this->assertSame('广东省', IpProvince::fromChinese("中国{$separator}广东{$separator}广州"));
+            $this->assertSame('未知', IpProvince::fromChinese("中国{$separator}未知地区"));
+        }
+        $this->assertSame('未知', IpProvince::fromChinese('中国–未知地区 上海电信'));
+        $this->assertSame('美国', IpProvince::fromChinese('美国–加利福尼亚州'));
+        $this->assertSame('未知', IpProvince::fromChinese(''));
     }
 }

@@ -2,8 +2,10 @@
 
 namespace App\Services;
 
+use Illuminate\Cache\RedisStore;
 use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
+use Symfony\Component\HttpKernel\Exception\PreconditionFailedHttpException;
 
 /** 按账号协调来源名额，旧连接的关闭必须由所属节点的完整快照确认。 */
 class DeviceHandoverService
@@ -24,6 +26,7 @@ class DeviceHandoverService
                 Cache::forever($this->nodeKey($nodeId), [
                     'run' => $run, 'sequence' => 0, 'pending' => [], 'sources' => [], 'version' => 1, 'seen_at' => $this->now(),
                 ]);
+                Cache::forget($this->progressKey($nodeId));
             }
             return ['version' => 1, 'run' => $run];
         });
@@ -37,6 +40,7 @@ class DeviceHandoverService
             Cache::forever($this->nodeKey($nodeId), [
                 'run' => '', 'sequence' => 0, 'pending' => [], 'sources' => [], 'version' => 0, 'seen_at' => $this->now(),
             ]);
+            Cache::forget($this->progressKey($nodeId));
             return array_unique(array_merge(array_column($current['sources'] ?? [], 'user_id'), Cache::get($this->queueKey($nodeId), [])));
         });
         foreach ($users as $userId) $this->locked((int) $userId, function (array &$state): void { $this->reconcile($state); });
@@ -45,6 +49,10 @@ class DeviceHandoverService
     public function sync(int $nodeId, array $data): array
     {
         Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->block(2, function () use ($nodeId, $data): void {
+            if (!empty($data['unchanged'])) {
+                $this->renew($nodeId, $data);
+                return;
+            }
             $current = $this->node($nodeId, $data['run']);
             if ($data['sequence'] <= $current['sequence']) return;
             $sources = [];
@@ -55,10 +63,13 @@ class DeviceHandoverService
                     ? $previous['last_new_at'] : $now - $source['age_ms'];
                 $sources[$source['lease']] = $source;
             }
-            Cache::forever($this->nodeKey($nodeId), [
+            if (!Cache::forever($this->nodeKey($nodeId), [
                 'run' => $data['run'], 'sequence' => $data['sequence'],
                 'pending' => array_fill_keys($data['pending'], true), 'sources' => $sources, 'version' => 1, 'seen_at' => $now,
-            ]);
+            ])) {
+                throw new \RuntimeException('设备来源完整快照写入失败');
+            }
+            $this->saveProgress($nodeId, $data['run'], $data['sequence'], $data['sequence'], $now);
         });
 
         $revoked = [];
@@ -73,6 +84,53 @@ class DeviceHandoverService
             array_push($revoked, ...$items);
         }
         return ['run' => $data['run'], 'sequence' => $data['sequence'], 'revoked' => $revoked];
+    }
+
+    /** 未变化的快照只更新小记录，不反复读取、序列化和写入全部来源。 */
+    private function renew(int $nodeId, array $data): void
+    {
+        $progress = Cache::get($this->progressKey($nodeId));
+        if (!is_array($progress) || $progress['run'] !== $data['run']) {
+            $this->node($nodeId, $data['run']);
+            throw new PreconditionFailedHttpException('设备来源需要完整快照');
+        }
+        if ($progress['base_sequence'] !== (int) $data['base_sequence'] || !$this->snapshotExists($nodeId)) {
+            throw new PreconditionFailedHttpException('设备来源快照基线已失效');
+        }
+        if ($data['sequence'] > $progress['sequence']) {
+            $this->saveProgress($nodeId, $data['run'], $data['sequence'], $progress['base_sequence'], $this->now());
+        }
+    }
+
+    private function snapshotExists(int $nodeId): bool
+    {
+        $key = $this->nodeKey($nodeId);
+        $store = Cache::getStore();
+        // 框架的 has() 会读取并反序列化全部内容，Redis 直接检查键即可。
+        if ($store instanceof RedisStore) {
+            return (bool) $store->connection()->exists($store->getPrefix() . $key);
+        }
+        return Cache::has($key);
+    }
+
+    private function saveProgress(int $nodeId, string $run, int $sequence, int $baseSequence, int $seenAt): void
+    {
+        if (!Cache::forever($this->progressKey($nodeId), [
+            'run' => $run, 'sequence' => $sequence, 'base_sequence' => $baseSequence, 'seen_at' => $seenAt,
+        ])) {
+            throw new \RuntimeException('设备来源续期写入失败');
+        }
+    }
+
+    private function withProgress(?array $state, ?array $progress): ?array
+    {
+        // 完整快照与续期可能被并发读取；只有同一基线才能合并，不能跨代确认关闭。
+        if ($state !== null && $progress !== null && $state['run'] === $progress['run']
+            && (int) $state['sequence'] === $progress['base_sequence']) {
+            $state['sequence'] = $progress['sequence'];
+            $state['seen_at'] = $progress['seen_at'];
+        }
+        return $state;
     }
 
     public function admit(int $nodeId, int $userId, int $limit, array $data): array
@@ -164,11 +222,15 @@ class DeviceHandoverService
         foreach ($state['sources'] as $source) {
             foreach ($source['owners'] as $nodeId => $_) $nodeIds[$nodeId] = true;
         }
-        $keys = array_map(fn ($id) => $this->nodeKey((int) $id), array_keys($nodeIds));
+        $keys = [];
+        foreach (array_keys($nodeIds) as $nodeId) {
+            $keys[] = $this->nodeKey((int) $nodeId);
+            $keys[] = $this->progressKey((int) $nodeId);
+        }
         $nodes = $keys === [] ? [] : Cache::many($keys);
         foreach ($state['sources'] as $ip => &$source) {
             foreach ($source['owners'] as $nodeId => &$owner) {
-                $node = $nodes[$this->nodeKey((int) $nodeId)] ?? null;
+                $node = $this->withProgress($nodes[$this->nodeKey((int) $nodeId)] ?? null, $nodes[$this->progressKey((int) $nodeId)] ?? null);
                 // 缺失状态不能证明连接已经关闭，保留名额等待节点恢复或明确换代。
                 if ($node === null) continue;
                 if ($node['run'] !== $owner['run']) {
@@ -227,7 +289,7 @@ class DeviceHandoverService
         $result = [];
         foreach ($this->devices->getDeviceSources($userId) as $key => $nodes) {
             foreach ($nodes as $nodeId) {
-                $state = Cache::get($this->nodeKey((int) $nodeId));
+                $state = $this->withProgress(Cache::get($this->nodeKey((int) $nodeId)), Cache::get($this->progressKey((int) $nodeId)));
                 if (($state['version'] ?? 0) !== 1 || $this->now() - $state['seen_at'] > 15000) $result[$key] = true;
             }
         }
@@ -285,7 +347,7 @@ class DeviceHandoverService
     {
         $state = Cache::get($this->nodeKey($nodeId));
         if (!is_array($state) || ($state['run'] ?? null) !== $run) throw new ConflictHttpException('设备来源会话已失效');
-        return $state;
+        return $this->withProgress($state, Cache::get($this->progressKey($nodeId)));
     }
 
     private function answer(string $status, int $limit, int $count, string $reason = ''): array
@@ -295,5 +357,6 @@ class DeviceHandoverService
 
     private function now(): int { return now()->getTimestampMs(); }
     private function nodeKey(int $nodeId): string { return 'device_handover:node:' . $nodeId; }
+    private function progressKey(int $nodeId): string { return $this->nodeKey($nodeId) . ':progress'; }
     private function queueKey(int $nodeId): string { return 'device_handover:queue:' . $nodeId; }
 }

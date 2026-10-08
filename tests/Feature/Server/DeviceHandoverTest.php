@@ -5,11 +5,14 @@ namespace Tests\Feature\Server;
 use App\Models\Server;
 use App\Models\User;
 use App\Services\DeviceStateService;
+use App\Services\NodeRegistry;
 use App\Services\Plugin\HookManager;
+use App\WebSocket\NodeWorker;
 use App\Support\Setting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
+use Workerman\Connection\TcpConnection;
 
 class DeviceHandoverTest extends TestCase
 {
@@ -59,6 +62,61 @@ class DeviceHandoverTest extends TestCase
     private function source(string $ip, string $lease, int $sequence): array
     {
         return ['user_id' => $this->user->id, 'ip' => $ip, 'lease' => $lease, 'connect_sequence' => $sequence, 'age_ms' => 0];
+    }
+
+    public function test_http_renewal_requires_a_matching_full_baseline_and_excludes_source_payloads(): void
+    {
+        $this->postJson('/api/v2/server/handshake', $this->auth() + ['device_handover' => 1])->assertOk()
+            ->assertJsonPath('realtime.device_handover_ws', 1)->assertJsonPath('realtime.device_handover_renewal', 1);
+        $this->deviceRequest('begin')->assertOk();
+        $this->deviceRequest('sync', ['sequence' => 1, 'pending' => [], 'sources' => []])->assertOk();
+        $renewal = ['sequence' => 2, 'unchanged' => true, 'base_sequence' => 1];
+        $this->deviceRequest('sync', $renewal + ['sources' => []])->assertStatus(422);
+        $this->deviceRequest('sync', $renewal + ['retired' => []])->assertStatus(422);
+        $this->deviceRequest('sync', ['sequence' => 2, 'unchanged' => true])->assertStatus(422);
+        $this->deviceRequest('sync', ['sequence' => 3, 'unchanged' => true, 'base_sequence' => 2])->assertStatus(412);
+        $this->deviceRequest('sync', $renewal)->assertOk()->assertJsonPath('data.sequence', 2);
+        $this->deviceRequest('sync', $renewal)->assertOk()->assertJsonPath('data.sequence', 2);
+    }
+
+    public function test_websocket_and_http_share_validation_permissions_and_idempotent_grants(): void
+    {
+        $frames = [];
+        $connection = \Mockery::mock(TcpConnection::class);
+        $connection->realtime = true;
+        $connection->nodeId = (int) $this->node->id;
+        $connection->shouldReceive('send')->andReturnUsing(function ($data) use (&$frames) {
+            $frames[] = json_decode($data, true);
+            return true;
+        });
+        $worker = (new \ReflectionClass(NodeWorker::class))->newInstanceWithoutConstructor();
+        NodeRegistry::add((int) $this->node->id, $connection);
+        $send = function (string $action, array $data = []) use ($worker, $connection): void {
+            $worker->onMessage($connection, json_encode(['event' => 'device.' . $action,
+                'data' => ['run' => $this->run, 'request_id' => 'device-rpc-test', 'node_id' => $this->node->id] + $data]));
+        };
+        try {
+            $send('begin');
+            $this->assertSame('device.begin.ack', $frames[0]['event']);
+            $this->assertSame($this->run, $frames[0]['data']['result']['run']);
+            $send('sync', ['sequence' => 1, 'pending' => []]);
+            $this->assertSame('device.sync.error', $frames[1]['event']);
+            $this->assertSame(422, $frames[1]['data']['code']);
+            $send('admit', ['sequence' => 2, 'user_id' => $this->user->id, 'ip' => '8.8.8.8']);
+            $this->assertTrue($frames[2]['data']['accepted']);
+            $this->assertSame('device-rpc-test', $frames[2]['data']['request_id']);
+            $lease = $frames[2]['data']['result']['lease'];
+            $this->admit('8.8.8.8', 2)->assertOk()->assertJsonPath('data.lease', $lease);
+            $send('sync', ['sequence' => 3, 'pending' => [], 'sources' => [$this->source('8.8.8.8', $lease, 2)]]);
+            $send('sync', ['sequence' => 4, 'unchanged' => true, 'base_sequence' => 3]);
+            $this->assertSame(4, $frames[4]['data']['result']['sequence']);
+            $this->user->forceFill(['group_id' => 2])->saveQuietly();
+            $send('admit', ['sequence' => 5, 'user_id' => $this->user->id, 'ip' => '1.1.1.1']);
+            $this->assertSame('device.admit.error', $frames[5]['event']);
+            $this->assertSame(403, $frames[5]['data']['code']);
+        } finally {
+            NodeRegistry::remove((int) $this->node->id, $connection);
+        }
     }
 
     public function test_authenticated_requests_replace_only_after_complete_close_snapshot(): void

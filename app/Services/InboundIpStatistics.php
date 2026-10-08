@@ -72,8 +72,11 @@ class InboundIpStatistics
             MIN(h.first_seen_at) AS first_seen_at, MAX(h.last_seen_at) AS last_seen_at")
             ->groupBy('i.ip', 'i.ip_version', 'i.region', 'i.province', 'i.asn', 'i.as_name', 'i.external_expires_at');
         $result = $this->paginate($query, $range, 'province', 'asc');
-        $groups = (clone $base)->selectRaw("$province AS province, COUNT(DISTINCT h.ip) AS count")
-            ->groupByRaw($province)->orderBy('province')->get()
+        // 先算出最终分类再汇总，兼容 MariaDB 严格分组，并合并归为“未知”的过期地址。
+        $classified = (clone $base)->selectRaw("h.ip, $province AS province");
+        $groups = DB::query()->fromSub($classified, 'inbound_provinces')
+            ->select('province')->selectRaw('COUNT(DISTINCT ip) AS count')
+            ->groupBy('province')->orderBy('province')->get()
             ->map(fn ($row) => ['name' => $row->province, 'count' => (int) $row->count])->all();
         return $result + ['user' => ['id' => (int) $range['user_id'],
             'name' => DB::table('v2_user')->where('id', $range['user_id'])->value('email') ?? '#' . $range['user_id']],

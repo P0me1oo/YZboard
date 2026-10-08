@@ -491,13 +491,15 @@ class StatController extends Controller
             : User::whereIn('id', $ids)->pluck('email', 'id');
 
         foreach ($currentData as $data) {
-            $previousValue = isset($previousData[$data->id]) ? $previousData[$data->id]->value : 0;
-            $change = $previousValue > 0 ? round(($data->value - $previousValue) / $previousValue * 100, 1) : 0;
+            // MariaDB 的 SUM 返回十进制字符串；接口统一输出流量字节数。
+            $value = (int) $data->value;
+            $previousValue = isset($previousData[$data->id]) ? (int) $previousData[$data->id]->value : 0;
+            $change = $previousValue > 0 ? round(($value - $previousValue) / $previousValue * 100, 1) : 0;
 
             $result[] = [
                 'id' => (string) $data->id,
                 'name' => $names[$data->id] ?? ($type === 'node' ? "Node {$data->id}" : "User {$data->id}"),
-                'value' => $data->value,
+                'value' => $value,
                 'previousValue' => $previousValue,
                 'change' => $change,
                 'timestamp' => date('c', $endDate)

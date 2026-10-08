@@ -1,0 +1,69 @@
+name: 面板完整回归
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_call:
+    inputs:
+      source_ref:
+        description: 要验证的固定源码引用
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: SQLite、MariaDB 11.4 与管理端资源
+    runs-on: ubuntu-24.04
+    services:
+      mariadb:
+        image: mariadb:11.4.8
+        env:
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: '1'
+          MARIADB_DATABASE: yzboard_mariadb_test
+        ports:
+          - 127.0.0.1:3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - name: 检出待验证源码
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+
+      - name: 配置与生产镜像一致的 PHP 版本
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: bcmath, curl, fileinfo, mbstring, openssl, pcntl, pdo_mysql, pdo_sqlite, sqlite3, sodium, zip
+          tools: composer:v2
+          coverage: none
+
+      - name: 安装测试依赖
+        run: composer install --prefer-dist --no-interaction --no-progress --no-security-blocking
+
+      - name: SQLite 完整回归
+        env:
+          LOG_CHANNEL: stderr
+          LOG_LEVEL: critical
+        run: php vendor/bin/phpunit --do-not-cache-result
+
+      - name: MariaDB 严格分组完整回归
+        env:
+          LOG_CHANNEL: stderr
+          LOG_LEVEL: critical
+        run: php vendor/bin/phpunit --bootstrap tests/bootstrap-mariadb.php --do-not-cache-result
+
+      - name: 配置管理端测试环境
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 验证管理端产物
+        run: node --test --test-reporter=tap tests/admin-dist.test.cjs

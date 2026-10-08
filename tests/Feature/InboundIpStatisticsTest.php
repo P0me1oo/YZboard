@@ -148,14 +148,13 @@ class InboundIpStatisticsTest extends TestCase
     public function test_database_failure_rolls_back_addresses_and_retry_recovers(): void
     {
         $user = $this->user();
-        DB::statement("CREATE TRIGGER fail_inbound BEFORE INSERT ON v2_stat_user_inbound_ip BEGIN SELECT RAISE(ABORT, 'test failure'); END");
+        $this->failNextQueryMatching('/^insert\b.*\bv2_stat_user_inbound_ip\b/i');
         try {
             $this->record($user->id, ['8.8.8.8']);
             $this->fail('应当报告写入失败');
         } catch (\Illuminate\Database\QueryException) {
             $this->assertDatabaseCount('v2_inbound_ip', 0);
         }
-        DB::statement('DROP TRIGGER fail_inbound');
         $this->record($user->id, ['8.8.8.8']);
         $this->assertDatabaseCount('v2_stat_user_inbound_ip', 1);
     }
@@ -223,6 +222,38 @@ class InboundIpStatisticsTest extends TestCase
             ->assertJsonPath('data.provinces.0.name', '未知');
         $this->getJson($this->path('inboundUser', ['user_id' => $user->id, 'province' => '广东省']))->assertOk()
             ->assertJsonPath('data.total', 0);
+        Http::assertNothingSent();
+    }
+
+    public function test_province_groups_merge_final_classifications_and_deduplicate_across_days(): void
+    {
+        $user = $this->user();
+        $ips = ['8.8.8.8', '1.1.1.1', '9.9.9.9', '2400:cb00:1:2::1',
+            '2400:cb00:1:2::2', '2400:cb00:1:2::3', '2400:cb00:1:2::4'];
+        $this->record($user->id, $ips);
+        $this->record($user->id, $ips, now()->subDay()->timestamp);
+        DB::table('v2_inbound_ip')->update(['province' => '广东省', 'region' => '广东省广州市',
+            'local_expires_at' => now()->addDay()->timestamp, 'lookup_after' => now()->addDay()->timestamp,
+            'external_expires_at' => now()->addDay()->timestamp]);
+        DB::table('v2_inbound_ip')->whereIn('ip', ['1.1.1.1', '2400:cb00:1:2::2', '2400:cb00:1:2::3'])
+            ->update(['external_expires_at' => now()->subSecond()->timestamp]);
+        DB::table('v2_inbound_ip')->where('ip', '2400:cb00:1:2::3')->update(['province' => '浙江省']);
+        DB::table('v2_inbound_ip')->whereIn('ip', ['9.9.9.9', '2400:cb00:1:2::4'])->update(['province' => '未知']);
+
+        $params = ['user_id' => $user->id, 'period' => '7d', 'page_size' => 2];
+        $response = $this->getJson($this->path('inboundUser', $params))->assertOk()
+            ->assertJsonPath('data.total', 7)->assertJsonPath('data.ip_count', 7)->assertJsonCount(2, 'data.list');
+        $groups = array_column($response->json('data.provinces'), 'count', 'name');
+        $this->assertEquals(['广东省' => 3, '未知' => 4], $groups);
+        $filtered = $this->getJson($this->path('inboundUser', $params + ['province' => '未知', 'page' => 2]))
+            ->assertOk()->assertJsonPath('data.total', 4)->assertJsonPath('data.ip_count', 7)
+            ->assertJsonPath('data.last_page', 2)->assertJsonCount(2, 'data.list');
+        $this->assertEquals($groups, array_column($filtered->json('data.provinces'), 'count', 'name'));
+        foreach ($filtered->json('data.list') as $row) {
+            $this->assertSame('未知', $row['province']);
+        }
+        $this->getJson($this->path('inboundUser', ['user_id' => $this->user()->id]))->assertOk()
+            ->assertJsonPath('data.total', 0)->assertJsonPath('data.ip_count', 0)->assertJsonCount(0, 'data.provinces');
         Http::assertNothingSent();
     }
 }

@@ -114,16 +114,12 @@ class DeletedServerStatisticsTest extends TestCase
         $node = $this->node('回滚节点');
         $this->record($node->id);
         $params = $endpoint === 'drop' ? ['id' => $node->id] : ['ids' => [$node->id]];
-        DB::unprepared("CREATE TEMP TRIGGER statistics_block_delete BEFORE DELETE ON v2_server BEGIN SELECT RAISE(ABORT, 'test delete failed'); END");
-        try {
-            $response = $this->postJson($this->path('server/manage/' . $endpoint), $params);
-            $this->assertNotSame(200, $response->status());
-            $this->assertDatabaseHas('v2_server', ['id' => $node->id]);
-            $this->assertDatabaseCount('v2_stat_server_name', 0);
-            $this->getJson($this->path('statistics/nodes'))->assertJsonPath('data.list.0.name', '回滚节点');
-        } finally {
-            DB::unprepared('DROP TRIGGER statistics_block_delete');
-        }
+        $this->failNextQueryMatching('/^delete\b.*\bv2_server\b/i');
+        $response = $this->postJson($this->path('server/manage/' . $endpoint), $params);
+        $this->assertNotSame(200, $response->status());
+        $this->assertDatabaseHas('v2_server', ['id' => $node->id]);
+        $this->assertDatabaseCount('v2_stat_server_name', 0);
+        $this->getJson($this->path('statistics/nodes'))->assertJsonPath('data.list.0.name', '回滚节点');
         $this->postJson($this->path('server/manage/' . $endpoint), $params)->assertOk();
         $this->getJson($this->path('statistics/nodes'))->assertJsonPath('data.list.0.name', '回滚节点（已删除）')
             ->assertJsonPath('data.list.0.total', 100);

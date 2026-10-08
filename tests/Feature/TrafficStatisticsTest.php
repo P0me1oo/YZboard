@@ -200,6 +200,26 @@ class TrafficStatisticsTest extends TestCase
             'end_time' => now()->startOfDay()->timestamp]))->assertOk()->assertJsonPath('data.0.value', 30);
     }
 
+    public function test_legacy_node_and_user_ranks_return_numeric_current_and_previous_values(): void
+    {
+        $this->mock(\App\Services\StatisticalService::class);
+        $node = $this->node();
+        $user = $this->user();
+        foreach ([[0, 20], [1, 10]] as [$days, $amount]) {
+            $data = ['record_type' => 'd', 'record_at' => now()->startOfDay()->subDays($days)->timestamp,
+                'u' => $amount, 'd' => 0];
+            StatServer::create($data + ['server_id' => $node->id, 'server_type' => 'vless']);
+            StatUser::create($data + ['user_id' => $user->id, 'server_rate' => 1]);
+        }
+        $path = '/api/v2/' . hash('crc32b', config('app.key')) . '/stat/getTrafficRank?';
+        foreach (['node', 'user'] as $type) {
+            $this->getJson($path . http_build_query(['type' => $type,
+                'start_time' => now()->startOfDay()->timestamp, 'end_time' => now()->startOfDay()->addDay()->timestamp]))
+                ->assertOk()->assertJsonPath('data.0.value', 20)->assertJsonPath('data.0.previousValue', 10)
+                ->assertJsonPath('data.0.change', 100);
+        }
+    }
+
     public function test_retention_cleans_all_daily_statistics_but_keeps_boundary_and_deduplication(): void
     {
         $this->record(101, 201, 1, 2, 30);

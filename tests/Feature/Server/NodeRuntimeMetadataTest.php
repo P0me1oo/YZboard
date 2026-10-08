@@ -8,6 +8,8 @@ use App\Services\MachineStateService;
 use App\Services\NodeRuntimeMetadata;
 use App\Services\Plugin\HookManager;
 use App\Support\Setting;
+use Illuminate\Foundation\Testing\DatabaseTruncation;
+use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -15,11 +17,27 @@ use Tests\TestCase;
 
 class NodeRuntimeMetadataTest extends TestCase
 {
+    use DatabaseTruncation;
+
+    protected function beforeTruncatingDatabase(): void
+    {
+        // SQLite 每例使用新内存库；MariaDB 则由框架清空上例已提交的数据。
+        if (DB::connection()->getDriverName() === 'sqlite') {
+            RefreshDatabaseState::$migrated = false;
+        }
+    }
+
+    public static function tearDownAfterClass(): void
+    {
+        // 下一组事务测试重新建立迁移基线，包含迁移写入的默认记录。
+        RefreshDatabaseState::$migrated = false;
+        parent::tearDownAfterClass();
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
-        // 使用独立内存库，提交/回滚测试不能包在框架的外层测试事务中。
-        $this->artisan('migrate', ['--force' => true])->assertExitCode(0);
+        // 真实提交/回滚用例不包在框架的外层测试事务中。
         $this->mock(Setting::class, fn ($mock) => $mock->shouldReceive('get')->andReturnNull());
     }
 

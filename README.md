@@ -1,6 +1,6 @@
 # Xboard
 
-面板 `1.61.0` 配套管理端 `0.36.0`：用户管理新增可搜索的“套餐”多选筛选，节点管理的“国家/地区”改称“地区”。规则见 [用户管理](docs/user-management.md) 与 [节点管理](docs/node-management.md)，验证及发布状态见 [兼容矩阵](YZ_COMPATIBILITY.md)。
+面板 [`1.61.0`](https://github.com/P0me1oo/YZboard/releases/tag/v1.61.0) 已正式发布，配套管理端 `0.36.0`：用户管理新增可搜索的“套餐”多选筛选，节点管理的“国家/地区”改称“地区”。两套数据库完整测试各通过 666 项，完整浏览器回归 131 项通过；双架构镜像、`latest` 和镜像内交付文件均已核验。规则见 [用户管理](docs/user-management.md) 与 [节点管理](docs/node-management.md)，来源、摘要与回滚记录见 [兼容矩阵](YZ_COMPATIBILITY.md)。
 
 本版纳入 `1.60.0` / `0.35.0` 开发阶段的改动：流量条件收进“流量筛选”，同时用于用户排行和节点明细；修正统计操作列对齐；端口重叠改为红色图标提醒，允许保存、开启和批量修改。无需数据库迁移或升级 Node，规则见 [统计分析](docs/statistics.md) 和 [端口提醒](docs/node-port-validation.md)。
 

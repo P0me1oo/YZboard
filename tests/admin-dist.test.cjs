@@ -82,6 +82,12 @@ test('三种语言资源齐全，并包含两步验证文案', () => {
             assert.ok(translations.user?.extend_duration?.[key], `${locale} 缺少增加时长文案 ${key}`);
         }
         assert.equal(translations.nav?.telegramBot, 'Telegram Bot', `${locale} 缺少独立机器人侧栏入口`);
+        for (const key of ['country', 'country_unknown']) {
+            assert.ok(translations.server?.toolbar?.[key], `${locale} 缺少节点地区筛选文案 ${key}`);
+        }
+        for (const key of ['batch', 'selected', 'top', 'up', 'down', 'bottom', 'clear', 'error']) {
+            assert.ok(translations.server?.toolbar?.sort?.[key], `${locale} 缺少节点批量排序文案 ${key}`);
+        }
         for (const key of ['settings', 'bindings', 'token', 'showToken', 'hideToken', 'webhookUrl', 'enableConfirm', 'disableConfirm']) {
             assert.ok(translations.telegramBot?.[key], `${locale} 缺少机器人管理文案 ${key}`);
         }
@@ -119,6 +125,8 @@ test('产物包含全部 YZ 定制，避免误用未定制的上游管理端', (
         '单节点运行开关': 'data-yz-node-switch',
         '内部端口校验': 'yzCreateServerPortValidator',
         '节点批量权限组': 'group_action',
+        '节点地区筛选': 'country_unknown',
+        '节点批量排序操作栏': 'yz-node-sort-bar',
         '插件上传 64 MiB': '67108864',
         '套餐周期价格': 'three_year_price',
         '管理员两步验证': 'loginWithTotp',

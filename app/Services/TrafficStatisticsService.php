@@ -22,6 +22,7 @@ class TrafficStatisticsService
             'page' => 'sometimes|integer|min:1|max:1000000',
             'page_size' => 'sometimes|integer|min:1|max:100',
             'search' => 'nullable|string|max:100',
+            'min_traffic_mb' => 'sometimes|numeric|min:0|max:8589934591',
             'user_id' => 'sometimes|integer|min:1',
             'server_id' => 'sometimes|integer|min:1',
             'precision' => 'sometimes|in:auto',
@@ -128,15 +129,19 @@ class TrafficStatisticsService
             $series[$key]['download'] += (int) $row->download;
             $series[$key]['total'] = $series[$key]['upload'] + $series[$key]['download'];
         }
-        // 只在已记录的范围内补空档，不补造启用前的细分历史。
+        // 细分时间轴从查询起点展开；启用前缺少记录的时段保留为空。
         if ($rows->isNotEmpty()) {
-            $first = CarbonImmutable::createFromTimestamp((int) $rows->first()->record_at, config('app.timezone'));
+            $first = $unit === 'day'
+                ? CarbonImmutable::createFromTimestamp((int) $rows->first()->record_at, config('app.timezone'))
+                : $range['start'];
+            $started = (int) DB::table('v2_settings')->where('name', 'fine_traffic_started_at')->value('value');
             $last = min($range['end']->timestamp, now()->timestamp + 1);
             for ($time = $first; $time->timestamp < $last; $time = match ($unit) {
                 'minute' => $time->addSeconds(60), 'hour' => $time->addSeconds(3600), default => $time->addDay(),
             }) {
                 $key = $unit === 'day' ? $time->startOfDay()->timestamp : $time->timestamp;
-                $series[$key] ??= ['date' => $unit === 'day' ? $time->toDateString() : $time->toIso8601String(), 'upload' => 0, 'download' => 0, 'total' => 0];
+                $empty = $unit !== 'day' && (!$started || $time->timestamp < $started) ? null : 0;
+                $series[$key] ??= ['date' => $unit === 'day' ? $time->toDateString() : $time->toIso8601String(), 'upload' => $empty, 'download' => $empty, 'total' => $empty];
             }
         }
         ksort($series);
@@ -213,6 +218,11 @@ class TrafficStatisticsService
         $sort = ($range['sort'] ?? 'total') === 'node' ? 'total' : ($range['sort'] ?? 'total');
         $query->selectRaw("user_id AS id, SUM({$u}) AS upload, SUM({$d}) AS download, SUM({$u} + {$d}) AS total")
             ->groupBy('user_id')->orderBy($sort, $range['direction'] ?? 'desc')->orderBy('user_id');
+        if (($range['min_traffic_mb'] ?? 0) > 0) {
+            // 先汇总用户在所选时段的流量再过滤，保证分页总数与排行一致。
+            $minimum = (int) ceil((float) $range['min_traffic_mb'] * 1048576);
+            $query->havingRaw("SUM({$u} + {$d}) >= ?", [$minimum]);
+        }
         return $this->ranking($query, $range, 'user');
     }
 

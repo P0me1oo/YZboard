@@ -1,6 +1,7 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['zh-CN'] = {
   "statistics": {
+    "minimumTraffic": "最低流量（MB）",
     "observedProvinces": "出现省份",
     "inboundIp": "入站 IP", "inboundUsers": "用户入站 IP", "ipCount": "IP 数量", "firstSeen": "首次出现", "lastSeen": "最近出现",
     "backToInbound": "返回入站 IP 列表", "filterProvince": "筛选省份", "allProvinces": "全部省份 / 地区",
@@ -2085,6 +2086,8 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     },
     "toolbar": {
       "search": "搜索节点...",
+      "country": "国家/地区",
+      "country_unknown": "未识别",
       "type": "类型",
       "server": "服务器",
       "server_search": "搜索服务器...",
@@ -2093,6 +2096,14 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
       "actions": "操作",
       "sort": {
         "tip": "拖拽节点进行排序，完成后点击保存",
+        "batch": "批量排序",
+        "selected": "已选 {{count}} 个节点",
+        "top": "移至顶部",
+        "up": "上移一位",
+        "down": "下移一位",
+        "bottom": "移至底部",
+        "clear": "取消选择",
+        "error": "排序保存或刷新失败，请重试",
         "edit": "编辑排序",
         "save": "保存排序",
         "success": "排序保存成功"

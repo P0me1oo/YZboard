@@ -1,6 +1,7 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['en-US'] = {
   "statistics": {
+    "minimumTraffic": "Minimum traffic (MB)",
     "observedProvinces": "Observed provinces",
     "inboundIp": "Inbound IPs", "inboundUsers": "User inbound IPs", "ipCount": "IP count", "firstSeen": "First seen", "lastSeen": "Last seen",
     "backToInbound": "Back to inbound IPs", "filterProvince": "Filter province", "allProvinces": "All provinces / regions",
@@ -2097,6 +2098,8 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     },
     "toolbar": {
       "search": "Search nodes...",
+      "country": "Country/region",
+      "country_unknown": "Unrecognized",
       "type": "Type",
       "server": "Server",
       "server_search": "Search servers...",
@@ -2105,6 +2108,14 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "actions": "Actions",
       "sort": {
         "tip": "Drag nodes to sort, then click save",
+        "batch": "Batch sorting",
+        "selected": "{{count}} nodes selected",
+        "top": "Move to top",
+        "up": "Move up",
+        "down": "Move down",
+        "bottom": "Move to bottom",
+        "clear": "Clear selection",
+        "error": "Failed to save or refresh the order. Please retry.",
         "edit": "Edit Sort",
         "save": "Save Sort",
         "success": "Sort order saved"

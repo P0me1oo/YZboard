@@ -87,6 +87,68 @@ class FineTrafficStatisticsTest extends TestCase
         $this->getStats('traffic', ['period' => '24h'])->assertOk()->assertJsonPath('data.summary.total', 0);
     }
 
+    public function test_today_trend_starts_at_midnight_and_custom_range_keeps_its_start(): void
+    {
+        $node = $this->node();
+        $this->record($node->id, now()->setTime(9, 10)->timestamp, 10, 20);
+        $response = $this->getStats('traffic')->assertOk()->assertJsonPath('data.meta.unit', 'minute')
+            ->assertJsonPath('data.list.0.date', now()->startOfDay()->toIso8601String())
+            ->assertJsonPath('data.list.0.total', 0)->assertJsonPath('data.summary.total', 30);
+        $this->assertSame(30, array_sum(array_column($response->json('data.list'), 'total')));
+        $this->assertSame(now()->startOfMinute()->toIso8601String(), collect($response->json('data.list'))->last()['date']);
+        $this->getStats('traffic', $this->slice('09:00', '09:12'))->assertOk()
+            ->assertJsonPath('data.list.0.date', now()->setTime(9, 0)->toIso8601String())
+            ->assertJsonPath('data.list.0.total', 0)->assertJsonCount(12, 'data.list')->assertJsonPath('data.summary.total', 30);
+        $this->travelTo(now()->addDay());
+        $date = now()->subDay()->toDateString();
+        $this->getStats('traffic', ['period' => 'custom', 'start_date' => $date, 'end_date' => $date])->assertOk()
+            ->assertJsonPath('data.meta.unit', 'hour')->assertJsonCount(24, 'data.list')
+            ->assertJsonPath('data.list.0.date', now()->subDay()->startOfDay()->toIso8601String())
+            ->assertJsonPath('data.list.0.total', 0)->assertJsonPath('data.summary.total', 30);
+    }
+
+    public function test_trend_leaves_time_before_statistics_enabled_unknown(): void
+    {
+        $node = $this->node();
+        DB::table('v2_settings')->where('name', 'fine_traffic_started_at')->update(['value' => (string) now()->setTime(9, 0, 30)->timestamp]);
+        $this->record($node->id, now()->setTime(9, 10)->timestamp, 10, 20);
+        $this->getStats('traffic')->assertOk()->assertJsonPath('data.list.0.date', now()->startOfDay()->toIso8601String())
+            ->assertJsonPath('data.list.0.total', null)->assertJsonPath('data.list.540.total', null)
+            ->assertJsonPath('data.list.541.total', 0)->assertJsonPath('data.list.550.total', 30)
+            ->assertJsonPath('data.summary.total', 30);
+    }
+
+    public function test_user_minimum_filters_aggregated_metric_before_pagination(): void
+    {
+        $a = $this->node(); $b = $this->node(); $mb = 1048576;
+        foreach ([[101, $a, $mb / 4, $mb / 4, 1], [101, $b, $mb / 4, $mb / 4, 1],
+            [102, $a, 0, $mb - 1, 2], [103, $a, $mb, $mb, 2]] as [$id, $node, $u, $d, $rate]) {
+            $at = now()->setTime(9, $node->id === $a->id ? 10 : 11);
+            app(UserRouteTraffic::class)->record($id, $node->id, $node->id, 'entry', $rate,
+                $at->copy()->startOfDay()->timestamp, (int) $u, (int) $d, (int) ($u * $rate), (int) ($d * $rate), $at->timestamp);
+        }
+        $path = '/api/v2/' . hash('crc32b', config('app.key')) . '/statistics/users?';
+        foreach ([[], ['precision' => 'auto']] as $precision) {
+            $params = $precision + ['period' => 'today', 'min_traffic_mb' => 1, 'page_size' => 1];
+            $this->getJson($path . http_build_query($params))->assertOk()->assertJsonPath('data.total', 2)
+                ->assertJsonPath('data.last_page', 2)->assertJsonPath('data.list.0.id', 103);
+            $this->getJson($path . http_build_query($params + ['page' => 2]))->assertOk()
+                ->assertJsonPath('data.list.0.id', 101)->assertJsonPath('data.list.0.total', $mb);
+        }
+        $this->getStats('users', ['min_traffic_mb' => 1, 'direction' => 'asc'])->assertJsonPath('data.list.0.id', 101);
+        $this->getStats('users', ['min_traffic_mb' => 1, 'metric' => 'billed'])->assertJsonPath('data.total', 3);
+        $this->getStats('users', ['min_traffic_mb' => 1.000001])->assertJsonPath('data.total', 1)->assertJsonPath('data.list.0.id', 103);
+        $this->getStats('users', ['min_traffic_mb' => 0])->assertJsonPath('data.total', 3);
+        $this->getStats('users')->assertJsonPath('data.total', 3);
+        $this->getStats('users', ['min_traffic_mb' => 1, 'search' => '102'])->assertJsonPath('data.total', 0);
+        $this->getStats('users', $this->slice('09:10', '09:11') + ['min_traffic_mb' => 1])
+            ->assertJsonPath('data.total', 1)->assertJsonPath('data.list.0.id', 103);
+        $this->getStats('users', ['min_traffic_mb' => 3])->assertOk()->assertJsonCount(0, 'data.list')->assertJsonPath('data.last_page', 1);
+        foreach ([-1, 'invalid', 'NaN', 'INF', '', 8589934592] as $minimum) {
+            $this->getStats('users', ['min_traffic_mb' => $minimum])->assertUnprocessable();
+        }
+    }
+
     public function test_search_and_sort_apply_before_pagination_and_escape_wildcards(): void
     {
         $a = $this->node('节点_%'); $b = $this->node('节点 B'); $c = $this->node('节点 C');

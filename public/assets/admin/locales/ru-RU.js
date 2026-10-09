@@ -1,6 +1,7 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['ru-RU'] = {
   "statistics": {
+    "minimumTraffic": "Минимальный трафик (МБ)",
     "observedProvinces": "Регионы появления",
     "inboundIp": "Входящие IP", "inboundUsers": "Входящие IP пользователей", "ipCount": "Число IP", "firstSeen": "Первое появление", "lastSeen": "Последнее появление",
     "backToInbound": "К списку входящих IP", "filterProvince": "Выбрать регион", "allProvinces": "Все регионы",
@@ -2033,6 +2034,8 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
     },
     "toolbar": {
       "search": "Поиск узлов...",
+      "country": "Страна/регион",
+      "country_unknown": "Не определено",
       "type": "Тип",
       "server": "Сервер",
       "server_search": "Поиск серверов...",
@@ -2041,6 +2044,14 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
       "actions": "Действия",
       "sort": {
         "tip": "Перетаскивайте узлы для сортировки, затем нажмите сохранить",
+        "batch": "Групповая сортировка",
+        "selected": "Выбрано узлов: {{count}}",
+        "top": "В начало",
+        "up": "На строку выше",
+        "down": "На строку ниже",
+        "bottom": "В конец",
+        "clear": "Снять выделение",
+        "error": "Не удалось сохранить или обновить порядок. Повторите попытку.",
         "edit": "Редактировать порядок",
         "save": "Сохранить порядок",
         "success": "Порядок сортировки сохранён"

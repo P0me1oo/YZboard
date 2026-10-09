@@ -244,6 +244,11 @@ class TrafficStatisticsService
         ];
         $actual = $summarize($rows); $billed = $summarize($rows, 'billed_');
         $direct = $summarize($rows->where('kind', 'direct')); $relay = $summarize($rows->where('kind', 'relay'));
+        if (($range['min_traffic_mb'] ?? 0) > 0) {
+            // 隐藏低流量明细，但保留所选用户、时间及节点范围的完整用量合计。
+            $minimum = (int) ceil((float) $range['min_traffic_mb'] * 1048576);
+            $rows = $rows->where($range['metric'] === 'billed' ? 'billed_total' : 'total', '>=', $minimum);
+        }
         $sort = $range['sort'] ?? 'total';
         $direction = ($range['direction'] ?? 'desc') === 'asc' ? 1 : -1;
         $rows = $rows->filter(fn ($row) => $names->has($row['server_id']))

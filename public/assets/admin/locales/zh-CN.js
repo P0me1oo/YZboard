@@ -1,7 +1,9 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['zh-CN'] = {
   "statistics": {
-    "minimumTraffic": "最低流量（MB）",
+    "minimumTraffic": "隐藏小于多少 MB 的记录", "trafficFilter": "流量筛选", "hideTrafficBelow": "隐藏小于",
+    "trafficMinimumSuffix": "MB 的记录", "trafficFilterApplied": "隐藏小于 {{value}} MB 的记录",
+    "showAllTraffic": "显示全部", "applyTrafficFilter": "应用",
     "observedProvinces": "出现省份",
     "inboundIp": "入站 IP", "inboundUsers": "用户入站 IP", "ipCount": "IP 数量", "firstSeen": "首次出现", "lastSeen": "最近出现",
     "backToInbound": "返回入站 IP 列表", "filterProvince": "筛选省份", "allProvinces": "全部省份 / 地区",
@@ -485,6 +487,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
       "clear": "清除筛选",
       "search_placeholder": "搜索...",
       "email_search": "搜索用户邮箱...",
+      "plan": "套餐",
       "advanced": "高级筛选",
       "reset": "重置筛选",
       "sheet": {
@@ -1976,6 +1979,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     }
   },
   "server": {
+    "portConflictWarning": "端口可能冲突",
     "manage": {
       "title": "节点管理",
       "description": "管理所有节点，包括添加、删除、编辑等操作。",
@@ -2086,7 +2090,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     },
     "toolbar": {
       "search": "搜索节点...",
-      "country": "国家/地区",
+      "country": "地区",
       "country_unknown": "未识别",
       "type": "类型",
       "server": "服务器",

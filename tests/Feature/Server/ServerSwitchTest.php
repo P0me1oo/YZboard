@@ -207,7 +207,7 @@ class ServerSwitchTest extends TestCase
         $peerAttributes = $peer->fresh()->getAttributes();
         $this->pushes = [];
 
-        foreach ([['enabled' => 'invalid'], ['enabled' => true, 'server_port' => 24443]] as $fields) {
+        foreach ([['enabled' => 'invalid'], ['enabled' => true, 'server_port' => 0]] as $fields) {
             $this->postJson('/_tests/server-switch/save', $this->creationPayload($machine, $fields))
                 ->assertUnprocessable()->assertJsonValidationErrors(
                     isset($fields['server_port']) ? 'server_port' : 'enabled',
@@ -279,21 +279,23 @@ class ServerSwitchTest extends TestCase
         $this->assertSame([$node->id], array_column($this->pushes[1]['data']['nodes'], 'id'));
     }
 
-    public function test_conflicting_restart_is_rejected_without_changing_other_nodes_or_sending_a_stop(): void
+    public function test_conflicting_restart_is_allowed_without_changing_other_nodes_or_sending_a_stop(): void
     {
         $machine = $this->machine();
         $peer = $this->node($machine, 24443);
         $target = $this->node($machine, 24443, ['enabled' => false, 'show' => false]);
-        $targetAttributes = $target->fresh()->getAttributes();
+        $peerAttributes = $peer->fresh()->getAttributes();
         $this->pushes = [];
 
         $this->postJson('/_tests/server-switch', ['id' => $target->id, 'enabled' => true])
-            ->assertStatus(422)->assertJsonValidationErrors('server_port');
-        $this->assertFalse($target->fresh()->enabled);
-        $this->assertSame($targetAttributes, $target->fresh()->getAttributes());
+            ->assertOk()->assertJsonPath('data', true);
+        $this->assertTrue($target->fresh()->enabled);
+        $this->assertTrue($target->fresh()->show);
+        $this->assertSame($peerAttributes, $peer->fresh()->getAttributes());
         $this->assertTrue($peer->fresh()->enabled);
-        $this->assertDiscovered($machine, [$peer]);
-        $this->assertSame([], $this->pushes);
+        $this->assertDiscovered($machine, [$peer, $target]);
+        $this->assertCount(1, $this->pushes);
+        $this->assertSame([$peer->id, $target->id], array_column($this->pushes[0]['data']['nodes'], 'id'));
     }
 
     public function test_invalid_switch_requests_do_not_change_any_node(): void
@@ -422,26 +424,30 @@ class ServerSwitchTest extends TestCase
         $this->assertCount(4, $this->pushes);
     }
 
-    public function test_batch_conflict_rolls_back_runtime_and_visibility_without_notifying_nodes(): void
+    public function test_batch_conflict_allows_enabling_and_notifies_with_all_nodes(): void
     {
         $machine = $this->machine();
         $first = $this->node($machine, 24444, ['enabled' => false, 'show' => false]);
         $second = $this->node($machine, 24443, ['enabled' => false, 'show' => false]);
         $peer = $this->node($machine, 24443);
-        $original = array_map(fn (Server $node) => $node->fresh()->getAttributes(), [$first, $second, $peer]);
+        $peerAttributes = $peer->fresh()->getAttributes();
         $this->pushes = [];
 
         $this->postJson('/_tests/server-switch/batch', [
             'ids' => [$first->id, $second->id], 'enabled' => true,
-        ])->assertUnprocessable()->assertJsonValidationErrors('server_port');
+        ])->assertOk()->assertJsonPath('data', true);
 
-        $this->assertSame(
-            $original,
-            array_map(fn (Server $node) => $node->fresh()->getAttributes(), [$first, $second, $peer])
-        );
-        $this->assertDiscovered($machine, [$peer]);
-        $this->assertVisible([$peer]);
-        $this->assertSame([], $this->pushes);
+        foreach ([$first, $second] as $node) {
+            $this->assertTrue($node->fresh()->enabled);
+            $this->assertTrue($node->fresh()->show);
+        }
+        $this->assertSame($peerAttributes, $peer->fresh()->getAttributes());
+        $this->assertDiscovered($machine, [$first, $second, $peer]);
+        $this->assertVisible([$first, $second, $peer]);
+        $this->assertCount(2, $this->pushes);
+        foreach ($this->pushes as $push) {
+            $this->assertSame([$first->id, $second->id, $peer->id], array_column($push['data']['nodes'], 'id'));
+        }
     }
 
     public function test_saving_other_node_settings_preserves_independent_visibility(): void
@@ -491,14 +497,18 @@ class ServerSwitchTest extends TestCase
         }
         $this->pushes = [];
 
-        // 端口未改时直接开启被端口冲突拦下，副本保持关闭并隐藏。
+        // 端口重叠不再阻止管理员开启，副本正常进入下发列表。
         $this->postJson('/_tests/server-switch', ['id' => $copy->id, 'enabled' => true])
-            ->assertUnprocessable()->assertJsonValidationErrors('server_port');
-        $this->assertFalse($copy->fresh()->enabled);
-        $this->assertFalse($copy->fresh()->show);
-        $this->assertSame([], $this->pushes);
+            ->assertOk()->assertJsonPath('data', true);
+        $this->assertTrue($copy->fresh()->enabled);
+        $this->assertTrue($copy->fresh()->show);
+        $this->assertDiscovered($machine, [$source, $copy]);
+        $this->assertVisible([$source, $copy]);
+        $this->assertCount(1, $this->pushes);
+        $this->postJson('/_tests/server-switch', ['id' => $copy->id, 'enabled' => false])->assertOk();
+        $this->pushes = [];
 
-        // 改成空闲端口后再开启，副本才进入 Node 列表并对用户显示。
+        // 停用后更换端口，再次开启仍走同一套下发流程。
         $this->postJson('/_tests/server-switch/save', array_replace($copy->fresh()->toArray(), [
             'name' => '改端口后的副本', 'server_port' => 24450, 'port' => '24450',
         ]))->assertOk()->assertJsonPath('data', true);

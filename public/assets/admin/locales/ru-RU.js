@@ -1,7 +1,9 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['ru-RU'] = {
   "statistics": {
-    "minimumTraffic": "Минимальный трафик (МБ)",
+    "minimumTraffic": "Скрыть трафик меньше (МБ)", "trafficFilter": "Фильтр трафика", "hideTrafficBelow": "Скрыть меньше",
+    "trafficMinimumSuffix": "МБ", "trafficFilterApplied": "Скрыть записи меньше {{value}} МБ",
+    "showAllTraffic": "Показать всё", "applyTrafficFilter": "Применить",
     "observedProvinces": "Регионы появления",
     "inboundIp": "Входящие IP", "inboundUsers": "Входящие IP пользователей", "ipCount": "Число IP", "firstSeen": "Первое появление", "lastSeen": "Последнее появление",
     "backToInbound": "К списку входящих IP", "filterProvince": "Выбрать регион", "allProvinces": "Все регионы",
@@ -427,6 +429,7 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
       "clear": "Очистить фильтры",
       "search_placeholder": "Поиск...",
       "email_search": "Поиск по email...",
+      "plan": "Тариф",
       "advanced": "Расширенный фильтр",
       "reset": "Сбросить фильтр",
       "sheet": {
@@ -1913,6 +1916,7 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
     }
   },
   "server": {
+    "portConflictWarning": "Возможен конфликт портов",
     "title": "Конфигурация узла",
     "description": "Настройка параметров связи и синхронизации узла, включая ключ связи, интервал опроса, балансировку нагрузки и другие расширенные параметры.",
     "server_token": {
@@ -2034,7 +2038,7 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
     },
     "toolbar": {
       "search": "Поиск узлов...",
-      "country": "Страна/регион",
+      "country": "Регион",
       "country_unknown": "Не определено",
       "type": "Тип",
       "server": "Сервер",

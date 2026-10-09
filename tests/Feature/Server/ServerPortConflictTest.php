@@ -5,6 +5,7 @@ namespace Tests\Feature\Server;
 use App\Http\Controllers\V2\Admin\Server\ManageController;
 use App\Models\Server;
 use App\Models\ServerMachine;
+use App\Services\ServerPortService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -20,6 +21,7 @@ class ServerPortConflictTest extends TestCase
         foreach (['save', 'checkPort', 'update', 'batchUpdate', 'copy'] as $action) {
             Route::post('/_tests/server-port/' . $action, [ManageController::class, $action]);
         }
+        Route::get('/_tests/server-port/nodes', [ManageController::class, 'getNodes']);
     }
 
     private function machine(): ServerMachine
@@ -61,7 +63,7 @@ class ServerPortConflictTest extends TestCase
         ]));
     }
 
-    public function test_duplicate_internal_port_is_reported_and_cannot_be_saved(): void
+    public function test_duplicate_internal_port_is_reported_and_can_be_saved(): void
     {
         $machine = $this->machine();
         $other = $this->node(['machine_id' => $machine->id, 'name' => '已占用节点']);
@@ -76,9 +78,13 @@ class ServerPortConflictTest extends TestCase
 
         for ($repeat = 0; $repeat < 2; $repeat++) {
             $this->postJson('/_tests/server-port/save', $payload)
-                ->assertUnprocessable()->assertJsonValidationErrors('server_port');
+                ->assertOk()->assertJsonPath('data', true);
         }
-        $this->assertSame(1, Server::count());
+        $this->assertSame(3, Server::count());
+        foreach ($this->getJson('/_tests/server-port/nodes')->assertOk()->json('data') as $node) {
+            $this->assertStringContainsString('24443/TCP', $node['port_conflict']);
+            $this->assertStringContainsString('可能', $node['port_conflict']);
+        }
     }
 
     public static function transportCases(): array
@@ -131,14 +137,12 @@ class ServerPortConflictTest extends TestCase
         ]);
         $this->postJson('/_tests/server-port/checkPort', $this->preview($payload))
             ->assertOk()->assertJsonPath('data.valid', $allowed);
-        $response = $this->postJson('/_tests/server-port/save', $payload);
-        if ($allowed) {
-            $response->assertOk();
-            $this->assertSame(24443, (int) $candidate->fresh()->server_port);
-        } else {
-            $response->assertUnprocessable()->assertJsonValidationErrors('server_port');
-            $this->assertSame(24444, (int) $candidate->fresh()->server_port);
-        }
+        $this->postJson('/_tests/server-port/save', $payload)->assertOk();
+        $this->assertSame(24443, (int) $candidate->fresh()->server_port);
+        $warnings = ServerPortService::conflictMessages(Server::all());
+        $this->assertSame(!$allowed, isset($warnings[$candidate->id]));
+        $this->postJson('/_tests/server-port/checkPort', $this->preview($payload))
+            ->assertOk()->assertJsonPath('data.valid', $allowed);
     }
 
     public function test_connection_ports_other_machines_and_unbound_nodes_are_independent(): void
@@ -153,7 +157,10 @@ class ServerPortConflictTest extends TestCase
             ['machine_id' => 0],
             [],
         ] as $override) {
-            $response = $this->postJson('/_tests/server-port/save', $this->payload($override));
+            $payload = $this->payload($override);
+            $this->postJson('/_tests/server-port/checkPort', $this->preview($payload))
+                ->assertOk()->assertJsonPath('data.valid', true);
+            $response = $this->postJson('/_tests/server-port/save', $payload);
             $this->assertSame(200, $response->status(), json_encode($override));
             $this->assertSame('443', (string) Server::latest('id')->firstOrFail()->port);
         }
@@ -176,7 +183,7 @@ class ServerPortConflictTest extends TestCase
             $this->assertFalse($copy->show);
             $payload = $this->payload(['id' => $copy->id, 'name' => '副本新名称', 'enabled' => false]);
             $this->postJson('/_tests/server-port/checkPort', $this->preview($payload))
-                ->assertOk()->assertJsonPath('data.valid', true);
+                ->assertOk()->assertJsonPath('data.valid', false);
             $this->postJson('/_tests/server-port/save', $payload)->assertOk();
             $this->postJson('/_tests/server-port/save', $payload)->assertOk();
             $this->assertSame('副本新名称', $copy->fresh()->name);
@@ -185,12 +192,14 @@ class ServerPortConflictTest extends TestCase
         $occupied = $this->node(['machine_id' => $machine->id, 'server_port' => 24444]);
         $this->postJson('/_tests/server-port/save', $this->payload([
             'id' => $copy->id, 'server_port' => $occupied->server_port,
-        ]))->assertUnprocessable()->assertJsonValidationErrors('server_port');
+        ]))->assertOk();
+        $this->assertStringContainsString('24444/TCP', ServerPortService::conflictMessage($copy->fresh()));
         $this->postJson('/_tests/server-port/save', $this->payload([
             'id' => $copy->id, 'server_port' => 24445,
         ]))->assertOk();
         $this->assertSame(24445, (int) $copy->fresh()->server_port);
         $this->assertTrue($copy->fresh()->enabled);
+        $this->assertNull(ServerPortService::conflictMessage($copy->fresh()));
     }
 
     public function test_rebinding_and_changing_transport_recheck_the_port(): void
@@ -203,18 +212,20 @@ class ServerPortConflictTest extends TestCase
             $response = $this->postJson('/_tests/server-port/' . $action, $action === 'checkPort' ? $this->preview($payload) : $payload);
             $action === 'checkPort'
                 ? $response->assertOk()->assertJsonPath('data.valid', false)
-                : $response->assertUnprocessable()->assertJsonValidationErrors('server_port');
+                : $response->assertOk();
         }
         $this->postJson('/_tests/server-port/update', ['id' => $node->id, 'machine_id' => $machine->id])
-            ->assertUnprocessable()->assertJsonValidationErrors('server_port');
-        $this->assertNull($node->fresh()->machine_id);
+            ->assertOk();
+        $this->assertSame($machine->id, $node->fresh()->machine_id);
+        $this->assertNotNull(ServerPortService::conflictMessage($node->fresh()));
 
         $udp = $this->node([
             'machine_id' => $machine->id, 'protocol_settings' => ['tls' => 1, 'network' => 'hysteria'],
         ]);
         $this->postJson('/_tests/server-port/save', $this->payload(['id' => $udp->id]))
-            ->assertUnprocessable()->assertJsonValidationErrors('server_port');
-        $this->assertSame('hysteria', $udp->fresh()->protocol_settings['network']);
+            ->assertOk();
+        $this->assertSame('tcp', $udp->fresh()->protocol_settings['network']);
+        $this->assertNotNull(ServerPortService::conflictMessage($udp->fresh()));
     }
 
     public function test_new_socks_defaults_and_kernel_switch_use_the_same_check(): void
@@ -228,33 +239,40 @@ class ServerPortConflictTest extends TestCase
         $socks = Server::latest('id')->firstOrFail();
         $this->assertSame('singbox', $socks->kernel_type);
         $this->postJson('/_tests/server-port/update', ['id' => $socks->id, 'kernel_type' => 'xray'])
-            ->assertUnprocessable()->assertJsonValidationErrors('server_port');
-        $this->assertSame('singbox', $socks->fresh()->kernel_type);
+            ->assertOk();
+        $this->assertSame('xray', $socks->fresh()->kernel_type);
+        $this->assertStringContainsString('24443/UDP', ServerPortService::conflictMessage($socks->fresh()));
     }
 
-    public function test_hidden_and_disabled_nodes_reserve_their_internal_port(): void
+    public function test_hidden_and_disabled_nodes_still_produce_warnings(): void
     {
         $machine = $this->machine();
         $this->node(['machine_id' => $machine->id, 'show' => false, 'enabled' => false]);
-        $this->postJson('/_tests/server-port/save', $this->payload(['machine_id' => $machine->id]))
-            ->assertUnprocessable()->assertJsonValidationErrors('server_port');
+        $payload = $this->payload(['machine_id' => $machine->id]);
+        $this->postJson('/_tests/server-port/checkPort', $this->preview($payload))
+            ->assertOk()->assertJsonPath('data.valid', false);
+        $this->postJson('/_tests/server-port/save', $payload)->assertOk();
+        $this->assertCount(2, ServerPortService::conflictMessages(Server::all()));
     }
 
-    public function test_disabling_a_duplicate_is_allowed_but_reenabling_is_checked(): void
+    public function test_disabling_and_reenabling_duplicates_preserves_warnings(): void
     {
         $machine = $this->machine();
         $source = $this->node(['machine_id' => $machine->id]);
         $this->postJson('/_tests/server-port/copy', ['id' => $source->id])->assertOk();
         $copy = Server::latest('id')->firstOrFail();
-        $this->postJson('/_tests/server-port/update', ['id' => $copy->id, 'enabled' => false])->assertOk();
-        $this->postJson('/_tests/server-port/update', ['id' => $copy->id, 'enabled' => true])
-            ->assertUnprocessable()->assertJsonValidationErrors('server_port');
+        foreach ([false, true, true, false, false, true] as $enabled) {
+            $this->postJson('/_tests/server-port/update', ['id' => $copy->id, 'enabled' => $enabled])->assertOk();
+            $this->assertSame($enabled, $copy->fresh()->enabled);
+            $this->assertSame($enabled, $copy->fresh()->show);
+            $this->assertCount(2, ServerPortService::conflictMessages(Server::all()));
+        }
         $this->postJson('/_tests/server-port/save', $this->payload(['id' => $copy->id]))
-            ->assertUnprocessable()->assertJsonValidationErrors('server_port');
-        $this->assertFalse($copy->fresh()->enabled);
+            ->assertOk();
+        $this->assertTrue($copy->fresh()->enabled);
     }
 
-    public function test_batch_rebinding_rolls_back_all_nodes_on_conflict(): void
+    public function test_batch_rebinding_saves_all_nodes_and_recomputes_warnings(): void
     {
         $firstMachine = $this->machine();
         $secondMachine = $this->machine();
@@ -263,9 +281,10 @@ class ServerPortConflictTest extends TestCase
         $second = $this->node(['machine_id' => $secondMachine->id]);
         $this->postJson('/_tests/server-port/batchUpdate', [
             'ids' => [$first->id, $second->id], 'machine_id' => $target->id,
-        ])->assertUnprocessable()->assertJsonValidationErrors('server_port');
-        $this->assertSame($firstMachine->id, $first->fresh()->machine_id);
-        $this->assertSame($secondMachine->id, $second->fresh()->machine_id);
+        ])->assertOk();
+        $this->assertSame($target->id, $first->fresh()->machine_id);
+        $this->assertSame($target->id, $second->fresh()->machine_id);
+        $this->assertCount(2, ServerPortService::conflictMessages(Server::all()));
 
         $second->update(['protocol_settings' => ['tls' => 1, 'network' => 'hysteria']]);
         for ($repeat = 0; $repeat < 2; $repeat++) {
@@ -275,9 +294,10 @@ class ServerPortConflictTest extends TestCase
         }
         $this->assertSame($target->id, $first->fresh()->machine_id);
         $this->assertSame($target->id, $second->fresh()->machine_id);
+        $this->assertSame([], ServerPortService::conflictMessages(Server::all()));
     }
 
-    public function test_batch_kernel_change_cannot_add_an_occupied_udp_listener(): void
+    public function test_batch_kernel_change_can_add_an_overlapping_udp_listener_with_warning(): void
     {
         $machine = $this->machine();
         $this->node(['machine_id' => $machine->id, 'type' => Server::TYPE_HYSTERIA]);
@@ -286,8 +306,33 @@ class ServerPortConflictTest extends TestCase
         ]);
         $this->postJson('/_tests/server-port/batchUpdate', [
             'ids' => [$socks->id], 'kernel_type' => 'xray',
-        ])->assertUnprocessable()->assertJsonValidationErrors('server_port');
-        $this->assertSame('singbox', $socks->fresh()->kernel_type);
+        ])->assertOk();
+        $this->assertSame('xray', $socks->fresh()->kernel_type);
+        $this->assertStringContainsString('24443/UDP', ServerPortService::conflictMessage($socks->fresh()));
+    }
+
+    public function test_list_warnings_update_for_both_nodes_after_changes_and_deletion(): void
+    {
+        $machine = $this->machine();
+        $first = $this->node(['machine_id' => $machine->id]);
+        $udp = $this->node(['machine_id' => $machine->id, 'type' => Server::TYPE_HYSTERIA]);
+        $unbound = $this->node();
+        $remote = $this->node(['machine_id' => $this->machine()->id]);
+        $list = fn () => collect($this->getJson('/_tests/server-port/nodes')->assertOk()->json('data'))->keyBy('id');
+        foreach ($list() as $node) { $this->assertNull($node['port_conflict']); }
+
+        $this->postJson('/_tests/server-port/copy', ['id' => $first->id])->assertOk();
+        $copy = Server::latest('id')->firstOrFail();
+        $rows = $list();
+        foreach ([$first, $copy] as $node) { $this->assertStringContainsString('24443/TCP', $rows[$node->id]['port_conflict']); }
+        foreach ([$udp, $unbound, $remote] as $node) { $this->assertNull($rows[$node->id]['port_conflict']); }
+
+        $this->postJson('/_tests/server-port/save', $this->payload(['id' => $copy->id, 'server_port' => 24444]))->assertOk();
+        foreach ($list() as $node) { $this->assertNull($node['port_conflict']); }
+        $this->postJson('/_tests/server-port/save', $this->payload(['id' => $copy->id]))->assertOk();
+        $this->assertNotNull($list()[$first->id]['port_conflict']);
+        $copy->delete();
+        foreach ($list() as $node) { $this->assertNull($node['port_conflict']); }
     }
 
     public function test_invalid_internal_ports_are_rejected_before_writing(): void

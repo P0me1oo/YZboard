@@ -1,7 +1,9 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['en-US'] = {
   "statistics": {
-    "minimumTraffic": "Minimum traffic (MB)",
+    "minimumTraffic": "Hide traffic below (MB)", "trafficFilter": "Traffic filter", "hideTrafficBelow": "Hide below",
+    "trafficMinimumSuffix": "MB", "trafficFilterApplied": "Hide records below {{value}} MB",
+    "showAllTraffic": "Show all", "applyTrafficFilter": "Apply",
     "observedProvinces": "Observed provinces",
     "inboundIp": "Inbound IPs", "inboundUsers": "User inbound IPs", "ipCount": "IP count", "firstSeen": "First seen", "lastSeen": "Last seen",
     "backToInbound": "Back to inbound IPs", "filterProvince": "Filter province", "allProvinces": "All provinces / regions",
@@ -485,6 +487,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "clear": "Clear filters",
       "search_placeholder": "Search...",
       "email_search": "Search user email...",
+      "plan": "Plan",
       "advanced": "Advanced Filter",
       "reset": "Reset Filter",
       "sheet": {
@@ -1971,6 +1974,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     }
   },
   "server": {
+    "portConflictWarning": "Possible port conflict",
     "title": "Node Configuration",
     "description": "Configure node communication and synchronization settings, including communication key, polling interval, load balancing and other advanced options.",
     "server_token": {
@@ -2098,7 +2102,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     },
     "toolbar": {
       "search": "Search nodes...",
-      "country": "Country/region",
+      "country": "Region",
       "country_unknown": "Unrecognized",
       "type": "Type",
       "server": "Server",

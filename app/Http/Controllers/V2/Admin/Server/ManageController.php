@@ -21,11 +21,13 @@ class ManageController extends Controller
     public function getNodes(Request $request)
     {
         $servers = ServerService::getAllServers();
+        $portConflicts = ServerPortService::conflictMessages($servers);
 
         // 前置入口一定也在这份全量列表里，用内存映射解析名称，避免逐行再查一次库。
         $nameById = $servers->pluck('name', 'id');
 
-        $servers = $servers->map(function ($item) use ($nameById) {
+        $servers = $servers->map(function ($item) use ($nameById, $portConflicts) {
+            $item['port_conflict'] = $portConflicts[$item->id] ?? null;
             $item['groups'] = ServerGroup::whereIn('id', $item['group_ids'] ?? [])
                 ->orderedForDisplay()
                 ->get(['name', 'id']);
@@ -77,7 +79,6 @@ class ManageController extends Controller
                 if (!$server) {
                     return $this->fail([400202, '服务器不存在']);
                 }
-                $previous = $server->exists ? clone $server : null;
                 $server->fill($params);
                 if (!$server->exists) {
                     // 新建时显隐跟随开关；未传开关沿用数据库默认开启，显式空值保留独立部署设置。
@@ -86,7 +87,6 @@ class ManageController extends Controller
                         $server->show = $enabled;
                     }
                 }
-                ServerPortService::validateForSave($server, $previous);
                 $server->save();
                 return $this->success(true);
             }, 3);
@@ -98,7 +98,7 @@ class ManageController extends Controller
         }
     }
 
-    /** 表单填写时检查内部端口；正式保存仍在事务中重新核对。 */
+    /** 表单填写时检查内部端口，配置重叠只提供提醒，不阻止保存。 */
     public function checkPort(Request $request)
     {
         $params = $request->validate([
@@ -120,7 +120,7 @@ class ManageController extends Controller
         if ($previous === null && !$server->kernel_type) {
             $server->kernel_type = Server::defaultKernelType($server->type);
         }
-        $message = ServerPortService::conflictMessage($server, $previous);
+        $message = ServerPortService::conflictMessage($server);
 
         return $this->success(['valid' => $message === null, 'message' => $message]);
     }
@@ -140,8 +140,6 @@ class ManageController extends Controller
             if (!$server) {
                 return $this->fail([400202, '服务器不存在']);
             }
-            $previous = clone $server;
-
             if (array_key_exists('kernel_type', $params)) {
                 $error = ServerRelayService::validateEntry(
                     $server->id,
@@ -171,7 +169,6 @@ class ManageController extends Controller
                 $server->show = $server->enabled;
             }
 
-            ServerPortService::validateForSave($server, $previous);
             if (!$server->save()) {
                 return $this->fail([500, '保存失败']);
             }
@@ -349,7 +346,6 @@ class ManageController extends Controller
                 $servers = Server::whereIn('id', $ids)->orderBy('id')->lockForUpdate()->get();
                 /** @var Server $server */
                 foreach ($servers as $server) {
-                    $previous = clone $server;
                     if (!empty($update)) {
                         $server->fill($update);
                     }
@@ -373,7 +369,6 @@ class ManageController extends Controller
                     }
 
                     if ($server->isDirty()) {
-                        ServerPortService::validateForSave($server, $previous);
                         $server->save();
                     }
                 }
@@ -401,7 +396,7 @@ class ManageController extends Controller
 
         $copiedServer = $server->replicate();
         // 副本沿用源节点的绑定服务器和内部端口，默认关闭并隐藏，避免立即向 Node 下发重复监听；
-        // 管理员改完端口再开启，开启时按端口冲突规则重新校验。显式空开关的独立部署保持空值。
+        // 管理员可自行修改配置或开启，端口重叠由管理列表提醒。显式空开关的独立部署保持空值。
         $copiedServer->enabled = $server->enabled === null ? null : false;
         $copiedServer->show = false;
         $copiedServer->code = null;

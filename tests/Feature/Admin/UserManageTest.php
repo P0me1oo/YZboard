@@ -56,6 +56,39 @@ class UserManageTest extends TestCase
         ], $overrides));
     }
 
+    public function test_plan_filters_combine_before_pagination_and_can_be_cleared(): void
+    {
+        Route::post('/_tests/admin-user/fetch', [UserController::class, 'fetch']);
+        $first = $this->plan('套餐甲');
+        $second = $this->plan('套餐乙');
+        $empty = $this->plan('空套餐');
+        $users = collect(range(1, 6))->map(fn ($index) => $this->user([
+            'email' => "plan-filter-{$index}@example.invalid",
+            'plan_id' => $index % 2 ? $first->id : $second->id,
+        ]));
+        $withoutPlan = $this->user(['email' => 'without-plan@example.invalid']);
+        $filter = [['id' => 'plan_id', 'value' => [$first->id, $second->id]]];
+        $actual = [];
+        foreach ([1, 2, 3] as $page) {
+            $response = $this->postJson('/_tests/admin-user/fetch', [
+                'filter' => $filter, 'pageSize' => 2, 'current' => $page,
+            ])->assertOk()->assertJsonPath('total', 6)->assertJsonPath('last_page', 3);
+            $actual = array_merge($actual, array_column($response->json('data'), 'id'));
+        }
+        $this->assertSame($users->reverse()->pluck('id')->all(), $actual);
+        $this->postJson('/_tests/admin-user/fetch', [
+            'filter' => [['id' => 'plan_id', 'value' => [$first->id]]],
+        ])->assertOk()->assertJsonPath('total', 3);
+        $this->postJson('/_tests/admin-user/fetch', [
+            'filter' => [...$filter, ['id' => 'email', 'value' => 'plan-filter-6@']],
+        ])->assertOk()->assertJsonPath('total', 1)->assertJsonPath('data.0.id', $users->last()->id);
+        $this->postJson('/_tests/admin-user/fetch', [
+            'filter' => [['id' => 'plan_id', 'value' => [$empty->id]]],
+        ])->assertOk()->assertJsonPath('total', 0)->assertJsonCount(0, 'data');
+        $this->postJson('/_tests/admin-user/fetch', ['filter' => []])
+            ->assertOk()->assertJsonPath('total', 7)->assertJsonPath('data.0.id', $withoutPlan->id);
+    }
+
     public function test_changing_plan_syncs_group_and_limits_from_the_new_plan(): void
     {
         $old = $this->plan('旧套餐', ['group_id' => 1, 'device_limit' => null]);

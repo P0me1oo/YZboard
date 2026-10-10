@@ -50,6 +50,30 @@ class NodeRuntimeMetadataTest extends TestCase
         ]);
     }
 
+    public function test_device_ownership_is_cleaned_only_after_node_deletion_commits(): void
+    {
+        $this->mock(\App\Services\DeviceStateService::class, fn ($mock) =>
+            $mock->shouldReceive('getDeviceSources')->andReturn([]));
+        $service = app(\App\Services\DeviceHandoverService::class);
+        $node = $this->node();
+        $run = str_repeat('a', 32);
+        $service->begin($node->id, $run);
+        $service->admit($node->id, 10, 1, ['run' => $run, 'sequence' => 1, 'ip' => '8.8.8.8']);
+        $before = Cache::get('device_handover:user:10');
+
+        DB::beginTransaction();
+        Server::findOrFail($node->id)->delete();
+        $this->assertSame($before, Cache::get('device_handover:user:10'));
+        DB::rollBack();
+        $this->assertSame($before, Cache::get('device_handover:user:10'));
+        $this->assertTrue(Server::query()->whereKey($node->id)->exists());
+
+        DB::transaction(fn () => Server::findOrFail($node->id)->delete());
+        $this->assertSame([], Cache::get('device_handover:user:10')['sources']);
+        $this->assertFalse(Cache::has('device_handover:node:' . $node->id));
+        $this->assertFalse(Cache::has('device_handover:queue:' . $node->id));
+    }
+
     public function test_repeated_reports_reuse_queries_without_sharing_mutable_models(): void
     {
         $node = $this->node();

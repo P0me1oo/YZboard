@@ -3,6 +3,7 @@
 namespace App\Observers;
 
 use App\Models\Server;
+use App\Services\DeviceHandoverService;
 use App\Services\NodeSyncService;
 
 class ServerObserver
@@ -66,6 +67,7 @@ class ServerObserver
     {
         $this->notifyMachineChange(null, $server->getOriginal('machine_id') ?: $server->machine_id);
         $this->notifyRelayEntry($server->getOriginal('relay_entry_id') ?: $server->relay_entry_id);
+        app(DeviceHandoverService::class)->deletedNode((int) $server->id);
     }
 
     /**

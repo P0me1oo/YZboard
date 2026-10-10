@@ -2,6 +2,8 @@
 
 namespace Tests\Unit\Services;
 
+use App\Models\Server;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Services\DeviceHandoverService;
 use App\Services\DeviceStateService;
 use Illuminate\Support\Carbon;
@@ -12,6 +14,7 @@ use Tests\TestCase;
 
 class DeviceHandoverServiceTest extends TestCase
 {
+    use RefreshDatabase;
     private DeviceHandoverService $service;
     private array $sequence = [];
     private array $legacy = [];
@@ -24,6 +27,12 @@ class DeviceHandoverServiceTest extends TestCase
         $devices = \Mockery::mock(DeviceStateService::class);
         $devices->shouldReceive('getDeviceSources')->andReturnUsing(fn (int $id) => $this->legacy[$id] ?? []);
         $this->service = new DeviceHandoverService($devices);
+        Server::withoutEvents(function (): void {
+            foreach ([1, 2, 3, 99] as $id) {
+                Server::forceCreate(['id' => $id, 'name' => '设备清理测试', 'type' => 'vmess',
+                    'host' => '127.0.0.1', 'port' => 443, 'server_port' => 443, 'rate' => '1', 'group_ids' => []]);
+            }
+        });
         foreach ([1, 2, 3] as $node) {
             $this->sequence[$node] = 0;
             $this->service->begin($node, $this->runID($node));
@@ -37,6 +46,80 @@ class DeviceHandoverServiceTest extends TestCase
     }
 
     private function runID(int $node): string { return str_repeat(dechex($node), 32); }
+
+    public function test_deleted_node_with_stale_snapshot_no_longer_blocks_replacement(): void
+    {
+        $a = $this->admit('8.8.8.8', 1, 1);
+        $this->sync([$this->source($a, '8.8.8.8', 1)]);
+        $this->assertSame('waiting', $this->admit('1.1.1.1', 2, 1)['status']);
+        // 模拟旧版本删除或批量删除，未经过模型事件，快照仍保留。
+        Server::query()->whereKey(1)->delete();
+        Carbon::setTestNow(now()->addHours(3));
+        $reply = $this->admit('1.1.1.1', 2, 1);
+        $this->assertSame('allowed', $reply['status']);
+        $this->assertSame($reply['lease'], $this->admit('1.1.1.1', 2, 1)['lease']);
+        $this->assertNull(Cache::get('device_handover:user:10')['pending']);
+    }
+
+    public function test_deleted_node_cleanup_keeps_other_owners_and_is_idempotent(): void
+    {
+        $a = $this->admit('8.8.8.8', 1, 1);
+        $this->admit('8.8.8.8', 2, 1);
+        $this->sync([$this->source($a, '8.8.8.8', 1)], 1);
+        $this->sync([$this->source($a, '8.8.8.8', 1)], 2);
+        $this->assertSame('waiting', $this->admit('1.1.1.1', 3, 1)['status']);
+        Server::query()->whereKey(1)->delete();
+        $this->service->deletedNode(1);
+        $this->service->deletedNode(1);
+        $this->assertFalse(Cache::has('device_handover:node:1'));
+        $this->assertFalse(Cache::has('device_handover:node:1:progress'));
+        $this->assertFalse(Cache::has('device_handover:queue:1'));
+        $this->assertSame([2], array_keys(Cache::get('device_handover:user:10')['sources']['8.8.8.8']['owners']));
+        $this->assertSame('waiting', $this->admit('1.1.1.1', 3, 1)['status']);
+        $this->sync([], 2);
+        $this->assertSame('allowed', $this->admit('1.1.1.1', 3, 1)['status']);
+    }
+
+    public function test_existing_node_with_missing_or_stale_state_keeps_its_slot(): void
+    {
+        $a = $this->admit('8.8.8.8', 1, 1);
+        $this->sync([$this->source($a, '8.8.8.8', 1)]);
+        Carbon::setTestNow(now()->addHours(3));
+        $this->service->deletedNode(1);
+        $this->assertTrue(Cache::has('device_handover:node:1'));
+        $this->assertSame('waiting', $this->admit('1.1.1.1', 2, 1)['status']);
+        Cache::forget('device_handover:node:1');
+        $this->assertSame('waiting', $this->admit('1.1.1.1', 2, 1)['status']);
+    }
+
+    public function test_deleted_legacy_node_does_not_consume_a_slot(): void
+    {
+        $this->legacy[10] = ['8.8.8.8' => [99]];
+        Server::query()->whereKey(99)->delete();
+        $this->assertSame('allowed', $this->admit('1.1.1.1', 1, 1)['status']);
+    }
+
+    public function test_pending_grant_without_node_snapshot_is_cleaned_after_deletion(): void
+    {
+        $this->admit('8.8.8.8', 1, 1);
+        Server::query()->whereKey(1)->delete();
+        $this->service->deletedNode(1);
+        $this->assertSame([], Cache::get('device_handover:user:10')['sources']);
+        $this->assertSame('allowed', $this->admit('1.1.1.1', 2, 1)['status']);
+    }
+
+    public function test_database_failure_does_not_release_device_ownership(): void
+    {
+        $this->admit('8.8.8.8', 1, 1);
+        $before = Cache::get('device_handover:user:10');
+        $this->failNextQueryMatching('/select .*v2_server/i');
+        try {
+            $this->admit('1.1.1.1', 2, 1);
+            $this->fail('数据库查询失败时不能推断节点已删除');
+        } catch (\Illuminate\Database\QueryException) {
+            $this->assertSame($before, Cache::get('device_handover:user:10'));
+        }
+    }
 
     private function admit(string $ip, int $node = 1, int $limit = 2, int $user = 10): array
     {

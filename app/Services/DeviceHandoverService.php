@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Server;
 use Illuminate\Cache\RedisStore;
 use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
@@ -14,6 +15,22 @@ class DeviceHandoverService
     private const CLAIM_MS = 5000;
 
     public function __construct(private readonly DeviceStateService $devices) {}
+
+    /** 删除提交后清理已知用户；遗漏的旧记录由下一次协调时核对数据库兜底。 */
+    public function deletedNode(int $nodeId): void
+    {
+        if (Server::query()->whereKey($nodeId)->exists()) return;
+        $users = Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->block(2, function () use ($nodeId): array {
+            $node = Cache::get($this->nodeKey($nodeId), []);
+            return array_unique(array_merge(array_column($node['sources'] ?? [], 'user_id'), Cache::get($this->queueKey($nodeId), [])));
+        });
+        foreach ($users as $userId) {
+            $this->locked((int) $userId, function (array &$state): void { $this->reconcile($state); });
+        }
+        Cache::forget($this->nodeKey($nodeId));
+        Cache::forget($this->progressKey($nodeId));
+        Cache::forget($this->queueKey($nodeId));
+    }
 
     public function begin(int $nodeId, string $run): array
     {
@@ -228,8 +245,14 @@ class DeviceHandoverService
             $keys[] = $this->progressKey((int) $nodeId);
         }
         $nodes = $keys === [] ? [] : Cache::many($keys);
+        // 只释放数据库确认已删除的节点；超时或缓存丢失不代表连接已经关闭。
+        $existingNodes = $nodeIds === [] ? [] : Server::query()->whereIn('id', array_keys($nodeIds))->pluck('id')->flip()->all();
         foreach ($state['sources'] as $ip => &$source) {
             foreach ($source['owners'] as $nodeId => &$owner) {
+                if (!isset($existingNodes[$nodeId])) {
+                    unset($source['owners'][$nodeId]);
+                    continue;
+                }
                 $node = $this->withProgress($nodes[$this->nodeKey((int) $nodeId)] ?? null, $nodes[$this->progressKey((int) $nodeId)] ?? null);
                 // 缺失状态不能证明连接已经关闭，保留名额等待节点恢复或明确换代。
                 if ($node === null) continue;
@@ -287,8 +310,12 @@ class DeviceHandoverService
     private function legacyGroups(int $userId): array
     {
         $result = [];
-        foreach ($this->devices->getDeviceSources($userId) as $key => $nodes) {
+        $sources = $this->devices->getDeviceSources($userId);
+        $nodeIds = array_unique(array_merge([], ...array_values($sources)));
+        $existingNodes = $nodeIds === [] ? [] : Server::query()->whereIn('id', $nodeIds)->pluck('id')->flip()->all();
+        foreach ($sources as $key => $nodes) {
             foreach ($nodes as $nodeId) {
+                if (!isset($existingNodes[$nodeId])) continue;
                 $state = $this->withProgress(Cache::get($this->nodeKey((int) $nodeId)), Cache::get($this->progressKey((int) $nodeId)));
                 if (($state['version'] ?? 0) !== 1 || $this->now() - $state['seen_at'] > 15000) $result[$key] = true;
             }

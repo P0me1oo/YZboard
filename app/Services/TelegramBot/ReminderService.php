@@ -6,6 +6,7 @@ use App\Jobs\SendTelegramBotReminder;
 use App\Models\TelegramBotBinding;
 use App\Models\TelegramBotConfig;
 use App\Models\TelegramBotReminder;
+use App\Services\LimitEventSnapshot;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 
@@ -18,6 +19,10 @@ class ReminderService
     public function schedule(): void
     {
         $config = TelegramBotConfig::find(1);
+        // 队列暂停或机器人停用时也清理过期的 IP 快照，不把提醒记录当作日志保存。
+        TelegramBotReminder::where('cycle', 0)->where('status', 'pending')
+            ->where('details->event_at', '<=', now()->timestamp - max(300, ($config?->remind_interval_minutes ?? 60) * 60))
+            ->update(['status' => 'cancelled', 'details' => null]);
         if (!$config?->enabled) {
             return;
         }
@@ -82,6 +87,11 @@ class ReminderService
             if ($config->{'remind_' . $kind}) {
                 $groups[$event['user_id']][$kind][$event['kind']] = [
                     'limit' => $event['limit'], 'count' => $event['count'],
+                    'snapshot' => LimitEventSnapshot::normalize($event['snapshot'] ?? null),
+                    'ips' => $event['kind'] === 'device' ? array_slice(array_values(array_unique(array_filter(
+                        is_array($event['ips'] ?? null) ? $event['ips'] : [],
+                        fn ($ip) => is_string($ip) && filter_var($ip, FILTER_VALIDATE_IP) !== false
+                    ))), 0, 5) : [],
                 ];
             }
         }
@@ -102,7 +112,8 @@ class ReminderService
                         continue;
                     }
                     $reminder->fill([
-                        'status' => 'pending', 'details' => ['events' => $details, 'event_at' => $now],
+                        'status' => 'pending', 'details' => ['events' => $details, 'event_at' => min($now,
+                            ...array_values(array_map(fn ($event) => $event['snapshot']['occurred_at'] ?? $now, $details)))],
                         'attempts' => 0, 'retry_at' => $now,
                     ])->save();
                 }
@@ -127,7 +138,7 @@ class ReminderService
             $user = $binding->user;
             if (!$config?->enabled || !$config->getRawOriginal('token') || !$config->{'remind_' . $reminder->kind}
                 || !$user || !$this->valid($reminder, $config, $binding, $user->expired_at, $now)) {
-                $reminder->update(['status' => 'cancelled']);
+                $reminder->update(['status' => 'cancelled', 'details' => null]);
                 return;
             }
             // 给私聊交互保留余量；限流不会消耗消息重试次数。
@@ -153,6 +164,7 @@ class ReminderService
                 $terminal = in_array($error->telegramStatus, [400, 401, 403], true) || $attempts >= 5;
                 $reminder->update([
                     'status' => $terminal ? 'failed' : 'pending', 'attempts' => $attempts,
+                    'details' => $terminal ? null : $reminder->details,
                     'retry_at' => $now + ($terminal ? $config->remind_interval_minutes * 60 : min(3600, 60 * 2 ** ($attempts - 1))),
                 ]);
             }
@@ -188,17 +200,6 @@ class ReminderService
             return "订阅过期提醒\n您的订阅已过期。\n到期时间："
                 . date('Y-m-d H:i', $reminder->cycle) . "\n如需继续使用，请前往面板续费。";
         }
-        $lines = [$reminder->kind === 'device' ? '设备数超限提醒' : '连接数超限提醒'];
-        foreach ($reminder->details['events'] as $kind => $event) {
-            $label = match ($kind) {
-                'device' => '设备数上限', 'conn' => '同时连接数上限', 'rate' => '每秒新建连接数上限',
-            };
-            $lines[] = "{$label}：{$event['limit']}";
-            $lines[] = "本次节点上报中被拒绝的连接次数：{$event['count']}";
-        }
-        $lines[] = $reminder->kind === 'device'
-            ? '设备数按来源 IP 计算，请减少同时使用的网络或设备。'
-            : '请减少同时连接数或降低新建连接频率。';
-        return implode("\n", $lines);
+        return app(LimitReminderPresenter::class)->render($reminder->kind, $reminder->details);
     }
 }

@@ -47,6 +47,22 @@ class DeviceHandoverServiceTest extends TestCase
 
     private function runID(int $node): string { return str_repeat(dechex($node), 32); }
 
+    public function test_denial_snapshot_keeps_live_sources_and_excludes_deleted_node_occupancy(): void
+    {
+        $a = $this->admit('8.8.8.8', 1, 1);
+        $this->sync([$this->source($a, '8.8.8.8', 1)]);
+        $this->legacy[10] = ['9.9.9.9' => [99], '1.0.0.1' => [3]];
+        Cache::forget('device_handover:node:3');
+        Server::query()->whereKey(99)->delete();
+        $reply = $this->admit('1.1.1.1', 2, 2);
+        $this->assertSame('denied', $reply['status']);
+        $this->assertSame('legacy_node', $reply['reason']);
+        $this->assertSame(['1.0.0.1', '8.8.8.8'], $reply['limit_snapshot']['active_ips']);
+        $this->assertSame('1.1.1.1', $reply['limit_snapshot']['source_ip']);
+        $this->assertSame(2, $reply['limit_snapshot']['observed']);
+        $this->assertSame(now()->timestamp, $reply['limit_snapshot']['occurred_at']);
+    }
+
     public function test_deleted_node_with_stale_snapshot_no_longer_blocks_replacement(): void
     {
         $a = $this->admit('8.8.8.8', 1, 1);

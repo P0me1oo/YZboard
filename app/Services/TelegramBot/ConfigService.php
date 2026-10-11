@@ -62,7 +62,7 @@ class ConfigService
             foreach (['expiring', 'expired', 'device', 'connection'] as $kind) {
                 if (!$config->{'remind_' . $kind}) {
                     \App\Models\TelegramBotReminder::where('kind', $kind)->where('status', 'pending')
-                        ->update(['status' => 'cancelled']);
+                        ->update(['status' => 'cancelled', 'details' => null]);
                 }
             }
             return $this->view($config);

@@ -501,6 +501,9 @@ class ServerService
             if ($kind === 'device') {
                 $item['ips'] = self::normalizeLimitEventIps($event['ips'] ?? null);
             }
+            if ($snapshot = LimitEventSnapshot::normalize($event['snapshot'] ?? null)) {
+                $item['snapshot'] = $snapshot;
+            }
             $normalized[] = $item;
         }
 

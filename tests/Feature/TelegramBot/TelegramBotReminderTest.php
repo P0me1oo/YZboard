@@ -9,6 +9,7 @@ use App\Models\TelegramBotConfig;
 use App\Models\TelegramBotReminder;
 use App\Models\User;
 use App\Services\ServerService;
+use App\Services\DeviceIpLocationService;
 use App\Services\TelegramBot\ConfigService;
 use App\Services\TelegramBot\ReminderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -393,5 +394,114 @@ class TelegramBotReminderTest extends TestCase
         $this->travel(61)->seconds();
         $this->tick();
         Http::assertSentCount(1);
+    }
+
+    private function snapshotEvent(User $user, string $kind = 'device', array $changes = []): array
+    {
+        return $this->event($user, $kind) + ['snapshot' => array_replace([
+            'occurred_at' => now()->timestamp - 10, 'limit' => 2, 'observed' => 2,
+            'source_ip' => '203.0.113.30', 'active_ips' => ['198.51.100.10', '198.51.100.20'],
+            'active_total' => 2, 'active_known' => true,
+        ], $changes)];
+    }
+
+    public function test_limit_notice_uses_original_snapshot_and_clears_details_after_delivery(): void
+    {
+        $this->enable();
+        $user = $this->user(null);
+        $event = $this->snapshotEvent($user);
+        $locations = $this->mock(DeviceIpLocationService::class);
+        $locations->shouldReceive('lookupMany')->once()
+            ->with(['203.0.113.30', '198.51.100.10', '198.51.100.20'])->andReturn([
+                '203.0.113.30' => ['region' => '测试地区', 'isp' => '测试网络', 'asn' => 'AS64500'],
+            ]);
+        app(ReminderService::class)->recordLimits([$event]);
+        Http::assertNothingSent();
+        // 排队期间后续事件不能覆盖原快照，也不能用周期峰值代替原占用数。
+        app(ReminderService::class)->recordLimits([$this->snapshotEvent($user, 'device', ['source_ip' => '203.0.113.99'])]);
+        $this->travel(60)->seconds();
+        $this->tick();
+        Http::assertSent(fn ($request) => str_contains($request['text'], '设备数上限：2')
+            && str_contains($request['text'], '已占用设备名额：2')
+            && str_contains($request['text'], '发生时间：' . date('Y-m-d H:i:s', $event['snapshot']['occurred_at']))
+            && str_contains($request['text'], "203.0.113.30\n测试地区\n测试网络 · AS64500")
+            && str_contains($request['text'], '198.51.100.10') && str_contains($request['text'], '198.51.100.20')
+            && !str_contains($request['text'], '203.0.113.99') && !str_contains($request['text'], '被拒绝的连接次数')
+            && !str_contains($request['text'], '当时') && str_contains($request['text'], '如有误报，请向管理员反馈。')
+            && str_contains($request['text'], 'Bot → 订阅信息 → 重置订阅'));
+        $this->assertNull(TelegramBotReminder::first()->details);
+        $this->tick();
+        Http::assertSentCount(1);
+    }
+
+    public function test_connection_and_rate_keep_separate_source_snapshots_in_one_message(): void
+    {
+        $this->enable();
+        $user = $this->user(null);
+        $this->mock(DeviceIpLocationService::class)->shouldReceive('lookupMany')->once()->andReturn([]);
+        app(ReminderService::class)->recordLimits([
+            $this->snapshotEvent($user, 'conn'),
+            $this->snapshotEvent($user, 'rate', ['source_ip' => '203.0.113.40', 'active_ips' => [], 'active_total' => 0]),
+        ]);
+        $this->tick();
+        Http::assertSentCount(1);
+        Http::assertSent(fn ($request) => str_contains($request['text'], '同时连接数上限：2')
+            && str_contains($request['text'], '每秒新建连接数上限：2')
+            && str_contains($request['text'], '203.0.113.30') && str_contains($request['text'], '203.0.113.40')
+            && str_contains($request['text'], "已连接的 IP\n无已记录的 IP"));
+    }
+
+    public function test_failed_ip_lookup_does_not_block_delivery_and_old_nodes_do_not_invent_active_ips(): void
+    {
+        $this->enable();
+        $user = $this->user(null);
+        $this->mock(DeviceIpLocationService::class)->shouldReceive('lookupMany')->once()->andThrow(new \RuntimeException('测试故障'));
+        app(ReminderService::class)->recordLimits([$this->event($user, 'device') + ['ips' => ['203.0.113.30']]]);
+        $this->tick();
+        Http::assertSent(fn ($request) => str_contains($request['text'], "203.0.113.30\n未知")
+            && str_contains($request['text'], "占用名额的 IP\n未提供")
+            && str_contains($request['text'], '上报时间：') && !str_contains($request['text'], '发生时间：'));
+    }
+
+    public function test_limit_snapshot_survives_transient_retry_and_expired_or_terminal_records_are_cleared(): void
+    {
+        $this->enable();
+        $user = $this->user(null);
+        $this->mock(DeviceIpLocationService::class)->shouldReceive('lookupMany')->andReturn([]);
+        $service = app(ReminderService::class);
+        $service->recordLimits([$this->snapshotEvent($user)]);
+        $this->responseStatus = 500;
+        $this->tick();
+        $this->assertSame('203.0.113.30', TelegramBotReminder::first()->details['events']['device']['snapshot']['source_ip']);
+        $this->travel(60)->seconds();
+        $this->responseStatus = 403;
+        $this->tick();
+        $this->assertSame('failed', TelegramBotReminder::first()->status);
+        $this->assertNull(TelegramBotReminder::first()->details);
+        $this->travel(61)->minutes();
+        $service->recordLimits([$this->snapshotEvent($user, 'device', ['occurred_at' => now()->timestamp - 3700])]);
+        $this->responseStatus = 200;
+        $this->tick();
+        $this->assertSame('cancelled', TelegramBotReminder::first()->status);
+        $this->assertNull(TelegramBotReminder::first()->details);
+        Http::assertSentCount(2);
+    }
+
+    public function test_disabling_reminders_and_disabled_bot_expiry_remove_ip_details(): void
+    {
+        $this->enable();
+        $user = $this->user(null);
+        $service = app(ReminderService::class);
+        $service->recordLimits([$this->snapshotEvent($user)]);
+        $this->enable(['remind_device' => false]);
+        $this->assertNull(TelegramBotReminder::first()->details);
+        $this->enable();
+        $service->recordLimits([$this->snapshotEvent($user)]);
+        TelegramBotConfig::findOrFail(1)->update(['enabled' => false]);
+        $this->travel(61)->minutes();
+        $service->schedule();
+        $this->assertNull(TelegramBotReminder::first()->details);
+        $this->assertSame('cancelled', TelegramBotReminder::first()->status);
+        Http::assertNothingSent();
     }
 }

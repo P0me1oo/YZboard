@@ -163,6 +163,7 @@ class DeviceHandoverService
                 $legacy = $this->legacyGroups($userId);
                 $count = count($groups + $legacy);
                 $now = $this->now();
+                $deny = fn (string $reason) => $this->denied($limit, $count, $reason, $raw, $groups, $legacy);
 
                 $existing = $state['sources'][$raw] ?? null;
                 if ($existing !== null && !$existing['revoked']) {
@@ -176,7 +177,7 @@ class DeviceHandoverService
                 $pending = $state['pending'];
                 if ($pending !== null) {
                     if ($pending['target'] !== '' && $pending['target'] !== $key) {
-                        return $this->answer('denied', $limit, $count, 'replacement_pending');
+                        return $deny('replacement_pending');
                     }
                     $state['pending']['target'] = $key;
                     $state['pending']['until'] = $now + self::CLAIM_MS;
@@ -192,14 +193,14 @@ class DeviceHandoverService
                     return $this->grant($state, $nodeId, $userId, $raw, $data, $limit, $count);
                 }
                 if (($state['cooldown'][$key] ?? 0) > $now) {
-                    return $this->answer('denied', $limit, $count, 'cooldown');
+                    return $deny('cooldown');
                 }
                 // 旧节点无法确认关闭，也没有可比较的连接时间，混用时保留原来的拒绝规则。
-                if ($legacy !== []) return $this->answer('denied', $limit, $count, 'legacy_node');
+                if ($legacy !== []) return $deny('legacy_node');
 
                 uasort($groups, fn (array $a, array $b) => ($a['last_new_at'] <=> $b['last_new_at']) ?: strcmp($a['key'], $b['key']));
                 $victim = reset($groups);
-                if ($victim === false) return $this->answer('denied', $limit, $count, 'unknown_state');
+                if ($victim === false) return $deny('unknown_state');
                 $leases = [];
                 foreach ($victim['ips'] as $ip) {
                     $state['sources'][$ip]['revoked'] = true;
@@ -380,6 +381,25 @@ class DeviceHandoverService
     private function answer(string $status, int $limit, int $count, string $reason = ''): array
     {
         return ['status' => $status, 'limit' => max(0, $limit), 'observed' => $count, 'reason' => $reason];
+    }
+
+    /** 在名额锁内保存拒绝所依据的来源；旧节点的 IPv6 只掌握网段时明确标明 /64。 */
+    private function denied(int $limit, int $count, string $reason, string $source, array $groups, array $legacy): array
+    {
+        $ips = [];
+        foreach ($groups as $group) {
+            foreach ($group['ips'] as $ip) $ips[$ip] = true;
+        }
+        foreach ($legacy as $key => $_) {
+            if (isset($groups[$key])) continue;
+            $ips[str_contains($key, ':') ? $key . '/64' : $key] = true;
+        }
+        $active = array_keys($ips);
+        sort($active, SORT_STRING);
+        return $this->answer('denied', $limit, $count, $reason) + ['limit_snapshot' => [
+            'occurred_at' => now()->timestamp, 'limit' => $limit, 'observed' => $count, 'source_ip' => $source,
+            'active_ips' => array_slice($active, 0, 5), 'active_total' => count($active), 'active_known' => true,
+        ]];
     }
 
     private function now(): int { return now()->getTimestampMs(); }

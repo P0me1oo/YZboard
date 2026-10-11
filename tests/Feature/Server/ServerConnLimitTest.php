@@ -157,6 +157,23 @@ class ServerConnLimitTest extends TestCase
         $this->assertSame([], $this->received);
     }
 
+    public function test_report_normalizes_limit_snapshot_without_requiring_it_from_old_nodes(): void
+    {
+        Bus::fake();
+        $node = $this->makeServer();
+        $this->postJson('/api/v2/server/report', [
+            'token' => 'server-token', 'node_id' => $node->id,
+            'limit_events' => [['user_id' => 5, 'kind' => 'conn', 'limit' => 8, 'observed' => 8, 'count' => 9,
+                'snapshot' => ['occurred_at' => now()->timestamp, 'source_ip' => '203.0.113.1', 'limit' => 4, 'observed' => 4,
+                    'active_ips' => ['198.51.100.1', 'invalid', '198.51.100.1'], 'active_known' => true, 'active_total' => 1,
+                    'extra' => '不得透传']]],
+        ])->assertOk();
+        $snapshot = $this->received[0]['events'][0]['snapshot'];
+        $this->assertSame(['198.51.100.1'], $snapshot['active_ips']);
+        $this->assertSame(4, $snapshot['limit']);
+        $this->assertArrayNotHasKey('extra', $snapshot);
+    }
+
     public function test_repeated_reports_fire_one_hook_each_without_persisting(): void
     {
         Bus::fake();

@@ -135,6 +135,8 @@ class ConfigService
                 $this->client->request($config->token, 'setMyCommands', [
                     'commands' => [
                         ['command' => 'start', 'description' => '打开账号菜单'],
+                        ['command' => 'ips', 'description' => '查询自己的入站 IP'],
+                        ['command' => 'traffic', 'description' => '查询自己的流量记录'],
                         ['command' => 'unbind', 'description' => '解除账号绑定'],
                     ],
                     'scope' => ['type' => 'all_private_chats'],

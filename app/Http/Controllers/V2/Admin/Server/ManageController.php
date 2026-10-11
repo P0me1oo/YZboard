@@ -84,7 +84,7 @@ class ManageController extends Controller
                     // 新建时显隐跟随开关；未传开关沿用数据库默认开启，显式空值保留独立部署设置。
                     $enabled = array_key_exists('enabled', $params) ? $server->enabled : true;
                     if ($enabled !== null) {
-                        $server->show = $enabled;
+                        $server->setRunning($enabled);
                     }
                 }
                 $server->save();
@@ -164,9 +164,7 @@ class ManageController extends Controller
                 $server->kernel_type = $params['kernel_type'] ?: null;
             }
             if (array_key_exists('enabled', $params)) {
-                $server->enabled = (bool) $params['enabled'];
-                // 启停单向带动显隐；单独修改 show 不改变运行状态。
-                $server->show = $server->enabled;
+                $server->setRunning((bool) $params['enabled']);
             }
 
             if (!$server->save()) {
@@ -325,7 +323,6 @@ class ManageController extends Controller
         }
         if (array_key_exists('enabled', $params) && $params['enabled'] !== null) {
             $update['enabled'] = (bool) $params['enabled'];
-            $update['show'] = $update['enabled'];
         }
         if (array_key_exists('machine_id', $params)) {
             $update['machine_id'] = $params['machine_id'] ?: null;
@@ -348,6 +345,9 @@ class ManageController extends Controller
                 foreach ($servers as $server) {
                     if (!empty($update)) {
                         $server->fill($update);
+                        if (array_key_exists('enabled', $update)) {
+                            $server->setRunning($update['enabled']);
+                        }
                     }
 
                     if ($groupAction !== null && $groupId !== null) {
@@ -397,8 +397,11 @@ class ManageController extends Controller
         $copiedServer = $server->replicate();
         // 副本沿用源节点的绑定服务器和内部端口，默认关闭并隐藏，避免立即向 Node 下发重复监听；
         // 管理员可自行修改配置或开启，端口重叠由管理列表提醒。显式空开关的独立部署保持空值。
-        $copiedServer->enabled = $server->enabled === null ? null : false;
-        $copiedServer->show = false;
+        if ($server->enabled === null) {
+            $copiedServer->show = false;
+        } else {
+            $copiedServer->setRunning(false);
+        }
         $copiedServer->code = null;
         $copiedServer->u = 0;
         $copiedServer->d = 0;

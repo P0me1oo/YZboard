@@ -359,6 +359,13 @@ class Server extends Model
         ]
     ];
 
+    /** 管理操作中的启停统一带动显隐，重复操作也重新同步。 */
+    public function setRunning(bool $enabled): void
+    {
+        $this->enabled = $enabled;
+        $this->show = $enabled;
+    }
+
     protected static function booted(): void
     {
         // 路由编号由面板自动分配，管理端无需填写；新建节点（含复制）始终获得独立编号。

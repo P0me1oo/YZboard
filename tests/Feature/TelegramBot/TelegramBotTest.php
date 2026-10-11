@@ -316,8 +316,8 @@ class TelegramBotTest extends TestCase
         $user = $this->user(['telegram_id' => 800000001]);
         $this->bind($user);
         $buttons = $this->lastReply()['reply_markup']['inline_keyboard'];
-        $this->assertSame(['订阅信息', '账户信息'], array_map(fn ($row) => $row[0]['text'], $buttons));
-        $this->assertSame(['subscription', 'account'], array_map(fn ($row) => $row[0]['callback_data'], $buttons));
+        $this->assertSame(['订阅信息', '账户信息', '入站 IP', '流量记录'], array_map(fn ($row) => $row[0]['text'], $buttons));
+        $this->assertSame(['subscription', 'account', 'inbound:today:1', 'traffic:today:1'], array_map(fn ($row) => $row[0]['callback_data'], $buttons));
         $this->assertSame(800000001, $user->fresh()->telegram_id);
         $this->assertDatabaseCount('v2_telegram_bot_bindings', 1);
     }
@@ -356,7 +356,7 @@ class TelegramBotTest extends TestCase
         $this->webhook($this->buttonUpdate('account'))->assertOk();
         $this->assertStringContainsString('当前套餐：Renamed_Plan', $this->lastReply()['text']);
         $this->webhook($this->buttonUpdate('menu'))->assertOk();
-        $this->assertSame(['订阅信息', '账户信息'], array_map(fn ($row) => $row[0]['text'], $this->lastReply()['reply_markup']['inline_keyboard']));
+        $this->assertSame(['订阅信息', '账户信息', '入站 IP', '流量记录'], array_map(fn ($row) => $row[0]['text'], $this->lastReply()['reply_markup']['inline_keyboard']));
     }
 
     public function test_both_sides_are_unique_and_existing_binding_is_never_overwritten(): void
@@ -873,6 +873,9 @@ class TelegramBotTest extends TestCase
         $this->assertSame(['message', 'callback_query'], $registration['allowed_updates']);
         $this->assertFalse($registration['drop_pending_updates']);
         $this->assertContains('setMyCommands', array_column($this->calls, 'method'));
+        $commands = array_values(array_filter($this->calls, fn ($call) => $call['method'] === 'setMyCommands'))[0]['data'];
+        $this->assertSame(['start', 'ips', 'traffic', 'unbind'], array_column($commands['commands'], 'command'));
+        $this->assertSame(['type' => 'all_private_chats'], $commands['scope']);
     }
 
     public function test_existing_foreign_webhook_is_not_overwritten_or_deleted(): void

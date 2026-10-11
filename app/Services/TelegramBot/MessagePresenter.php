@@ -31,6 +31,9 @@ class MessagePresenter
             return ['text' => "Ciallo～(∠・ω< )⌒☆\n请把你的订阅链接交给我吧！"];
         }
         $user = $binding->user;
+        if (($query = StatisticsPresenter::parseAction($action)) !== null) {
+            return app(StatisticsPresenter::class)->render($query, (int) $user->id);
+        }
         if ($action === 'confirm_reset') {
             if (!$binding->reset_token || ($binding->reset_expires_at ?? 0) <= time()) {
                 return ['text' => '重置确认已过期，请重新操作。', 'keyboard' => $this->back()];
@@ -80,6 +83,8 @@ class MessagePresenter
             'keyboard' => [
                 [['text' => '订阅信息', 'callback_data' => 'subscription']],
                 [['text' => '账户信息', 'callback_data' => 'account']],
+                [['text' => '入站 IP', 'callback_data' => 'inbound:today:1']],
+                [['text' => '流量记录', 'callback_data' => 'traffic:today:1']],
             ],
         ];
     }

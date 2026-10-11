@@ -1974,6 +1974,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     }
   },
   "server": {
+    "visibility": { "hide": "Hide", "show": "Show", "hidden": "Hidden", "failed": "Failed to update visibility. Please try again.", "refreshFailed": "Visibility updated. Refresh the list to confirm." },
     "portConflictWarning": "Possible port conflict",
     "title": "Node Configuration",
     "description": "Configure node communication and synchronization settings, including communication key, polling interval, load balancing and other advanced options.",

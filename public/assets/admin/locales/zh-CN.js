@@ -1979,6 +1979,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     }
   },
   "server": {
+    "visibility": { "hide": "隐藏", "show": "显示", "hidden": "已隐藏", "failed": "显隐更新失败，请重试", "refreshFailed": "显隐已更新，请刷新列表确认" },
     "portConflictWarning": "端口可能冲突",
     "manage": {
       "title": "节点管理",

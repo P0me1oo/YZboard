@@ -158,6 +158,8 @@ class UpdateDispatcher
             }
             if (in_array($text, ['menu', 'subscription', 'link', 'account', 'reset_subscription', 'reset_cancel', 'unbind', 'unbind_cancel'], true)) {
                 $action = $text;
+            } elseif (StatisticsPresenter::parseAction($text) !== null) {
+                $action = $text;
             } elseif (preg_match('/\Areset:([A-Za-z0-9]{24})\z/', $text, $matches)) {
                 $action = 'reset_confirm';
                 $confirmation = $matches[1];
@@ -177,6 +179,8 @@ class UpdateDispatcher
             }
             $action = match ($command) {
                 '/start' => 'menu',
+                '/ips' => 'inbound:today:1',
+                '/traffic' => 'traffic:today:1',
                 '/unbind' => 'unbind',
                 default => str_starts_with($text, '/') ? 'unknown' : 'bind',
             };

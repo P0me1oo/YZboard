@@ -1239,6 +1239,41 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
       }
     },
     "subscribe": {
+      "client_control": {
+        "title": "客户端限制",
+        "clients": "客户端",
+        "rules": "订阅下载规则",
+        "mode": "限制模式",
+        "modes": {
+          "off": "关闭",
+          "whitelist": "白名单：仅允许选中软件",
+          "blacklist": "黑名单：禁止选中软件"
+        },
+        "name": "客户端名称",
+        "keywords": "匹配关键词",
+        "keywords_placeholder": "每行一个，包含任意一项即匹配",
+        "selected": "加入名单",
+        "select_named": "将 {{name}} 加入名单",
+        "remove": "删除",
+        "remove_named": "删除 {{name}}",
+        "add": "添加客户端",
+        "empty": "暂无客户端规则",
+        "groups": "豁免权限组",
+        "groups_placeholder": "选择豁免权限组",
+        "missing_group": "已删除的权限组 #{{id}}",
+        "empty_whitelist": "白名单为空，未豁免用户无法下载订阅。",
+        "loading": "加载中…",
+        "retry": "重试",
+        "load_error": "读取失败，请重试。",
+        "saving": "保存中…",
+        "save_error": "保存失败，输入已保留，请重试。",
+        "errors": {
+          "mode": "请选择有效的限制模式。",
+          "too_many": "最多添加 64 个客户端。",
+          "name": "第 {{row}} 项需要填写客户端名称，最多 80 个字。",
+          "keywords": "第 {{row}} 项需要填写 1–32 个关键词，每个最多 128 个字。"
+        }
+      },
       "title": "订阅设置",
       "description": "管理用户订阅相关配置，包括订阅链接格式、更新频率、流量统计等设置。",
       "plan_change_enable": {

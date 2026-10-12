@@ -1339,6 +1339,41 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       }
     },
     "subscribe": {
+      "client_control": {
+        "title": "Client restrictions",
+        "clients": "Clients",
+        "rules": "Subscription download rules",
+        "mode": "Restriction mode",
+        "modes": {
+          "off": "Off",
+          "whitelist": "Allowlist: allow selected clients only",
+          "blacklist": "Blocklist: block selected clients"
+        },
+        "name": "Client name",
+        "keywords": "Matching keywords",
+        "keywords_placeholder": "One per line; any contained keyword matches",
+        "selected": "Include in list",
+        "select_named": "Include {{name}} in the list",
+        "remove": "Delete",
+        "remove_named": "Delete {{name}}",
+        "add": "Add client",
+        "empty": "No client rules",
+        "groups": "Exempt permission groups",
+        "groups_placeholder": "Select exempt permission groups",
+        "missing_group": "Deleted permission group #{{id}}",
+        "empty_whitelist": "The allowlist is empty. Non-exempt users cannot download subscriptions.",
+        "loading": "Loading…",
+        "retry": "Retry",
+        "load_error": "Could not load the rules. Please retry.",
+        "saving": "Saving…",
+        "save_error": "Could not save. Your input has been kept; please retry.",
+        "errors": {
+          "mode": "Select a valid restriction mode.",
+          "too_many": "Add up to 64 clients.",
+          "name": "Row {{row}} needs a client name of up to 80 characters.",
+          "keywords": "Row {{row}} needs 1–32 keywords, each up to 128 characters."
+        }
+      },
       "title": "Subscription Settings",
       "description": "Manage subscription-related configurations, including subscription link format, update frequency, traffic statistics, and other settings.",
       "plan_change_enable": {

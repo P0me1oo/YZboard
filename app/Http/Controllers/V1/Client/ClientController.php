@@ -7,6 +7,7 @@ use App\Models\Server;
 use App\Protocols\General;
 use App\Services\Plugin\HookManager;
 use App\Services\ServerService;
+use App\Services\SubscriptionClientControl;
 use App\Services\UserService;
 use App\Utils\Helper;
 use Illuminate\Http\Request;
@@ -46,6 +47,13 @@ class ClientController extends Controller
         if (!$userService->isAvailable($user)) {
             HookManager::call('client.subscribe.unavailable');
             return response('', 403, ['Content-Type' => 'text/plain']);
+        }
+
+        if (!app(SubscriptionClientControl::class)->allows($user, $request->userAgent() ?? '')) {
+            return response('当前客户端暂不支持，请联系管理员。', 403, [
+                'Content-Type' => 'text/plain; charset=UTF-8',
+                'Cache-Control' => 'private, no-store',
+            ]);
         }
 
         return $this->doSubscribe($request, $user);

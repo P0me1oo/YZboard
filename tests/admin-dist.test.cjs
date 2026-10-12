@@ -82,6 +82,9 @@ test('三种语言资源齐全，并包含两步验证文案', () => {
             assert.ok(translations.user?.extend_duration?.[key], `${locale} 缺少增加时长文案 ${key}`);
         }
         assert.equal(translations.nav?.telegramBot, 'Telegram Bot', `${locale} 缺少独立机器人侧栏入口`);
+        for (const key of ['title', 'rules', 'mode', 'keywords', 'groups', 'clients', 'select_named', 'save_error']) {
+            assert.ok(translations.settings?.subscribe?.client_control?.[key], `${locale} 缺少客户端限制文案 ${key}`);
+        }
         for (const key of ['country', 'country_unknown']) {
             assert.ok(translations.server?.toolbar?.[key], `${locale} 缺少节点地区筛选文案 ${key}`);
         }
@@ -140,6 +143,8 @@ test('产物包含全部 YZ 定制，避免误用未定制的上游管理端', (
         '用户当前连接数': 'data-yz-user-connections',
         '用户单人及批量增加时长': '/user/extendDuration',
         '独立 Telegram Bot 侧栏入口': '/config/telegram-bot',
+        '独立订阅客户端限制页面': '/finance/client-control',
+        '订阅客户端限制配置': 'subscribe_client_control',
         '独立机器人配置接口': '/telegram-bot/config',
         '独立机器人密钥显示接口': '/telegram-bot/token',
         '独立机器人绑定查询': '/telegram-bot/bindings',

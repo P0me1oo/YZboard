@@ -8,6 +8,7 @@ use App\Models\SubscribeTemplate;
 use App\Services\DeviceIpExclusion;
 use App\Services\MailService;
 use App\Services\NodeSyncService;
+use App\Services\SubscriptionClientControl;
 use App\Services\TelegramService;
 use App\Services\ThemeService;
 use App\Utils\Dict;
@@ -132,6 +133,7 @@ class ConfigController extends Controller
                 'default_remind_expire' => (bool) admin_setting('default_remind_expire', 1),
                 'default_remind_traffic' => (bool) admin_setting('default_remind_traffic', 1),
                 'subscribe_path' => admin_setting('subscribe_path', 's'),
+                SubscriptionClientControl::SETTING => SubscriptionClientControl::settings(),
             ],
             'frontend' => [
                 'frontend_theme' => admin_setting('frontend_theme', 'Xboard'),
@@ -214,6 +216,10 @@ class ConfigController extends Controller
     public function save(ConfigSave $request)
     {
         $data = $request->validated();
+
+        if (array_key_exists(SubscriptionClientControl::SETTING, $data)) {
+            $data[SubscriptionClientControl::SETTING] = SubscriptionClientControl::normalize($data[SubscriptionClientControl::SETTING]);
+        }
 
         // 设置页整组自动保存，只有名单内容实际变化时才向节点推送新配置，只调换顺序不算变化。
         $deviceIpExcludeChanged = false;

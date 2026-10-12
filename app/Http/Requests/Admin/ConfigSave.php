@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Admin;
 
 use App\Services\DeviceIpExclusion;
+use App\Services\SubscriptionClientControl;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -48,6 +49,16 @@ class ConfigSave extends FormRequest
         'show_info_to_server_enable' => '',
         'show_protocol_to_server_enable' => '',
         'subscribe_path' => '',
+        'subscribe_client_control' => 'sometimes|array:mode,clients,exempt_group_ids|required_array_keys:mode,clients,exempt_group_ids',
+        'subscribe_client_control.mode' => 'in:off,whitelist,blacklist',
+        'subscribe_client_control.clients' => 'array|list|max:64',
+        'subscribe_client_control.clients.*' => 'array:name,enabled,keywords|required_array_keys:name,enabled,keywords',
+        'subscribe_client_control.clients.*.name' => 'required|string|max:80',
+        'subscribe_client_control.clients.*.enabled' => 'required|boolean',
+        'subscribe_client_control.clients.*.keywords' => 'required|array|list|min:1|max:32',
+        'subscribe_client_control.clients.*.keywords.*' => 'required|string|max:128',
+        'subscribe_client_control.exempt_group_ids' => 'array|list|max:1000',
+        'subscribe_client_control.exempt_group_ids.*' => 'integer|min:1|distinct|exists:v2_server_group,id',
         // server
         'server_token' => 'nullable|min:16',
         'server_pull_interval' => 'integer',
@@ -158,6 +169,21 @@ class ConfigSave extends FormRequest
             'recaptcha_v3_score_threshold.numeric' => 'reCAPTCHA v3 分数阈值必须为数字',
             'recaptcha_v3_score_threshold.min' => 'reCAPTCHA v3 分数阈值不能小于0',
             'recaptcha_v3_score_threshold.max' => 'reCAPTCHA v3 分数阈值不能大于1'
+        ];
+    }
+
+    public function attributes(): array
+    {
+        return [
+            SubscriptionClientControl::SETTING => '订阅客户端限制',
+            'subscribe_client_control.mode' => '限制模式',
+            'subscribe_client_control.clients' => '客户端名单',
+            'subscribe_client_control.clients.*.name' => '客户端名称',
+            'subscribe_client_control.clients.*.enabled' => '客户端选中状态',
+            'subscribe_client_control.clients.*.keywords' => '客户端匹配关键词',
+            'subscribe_client_control.clients.*.keywords.*' => '客户端匹配关键词',
+            'subscribe_client_control.exempt_group_ids' => '豁免权限组',
+            'subscribe_client_control.exempt_group_ids.*' => '豁免权限组',
         ];
     }
 }

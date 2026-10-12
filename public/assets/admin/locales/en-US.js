@@ -13,7 +13,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     "wholeHours": "Use whole hours for past dates or ranges spanning multiple days.", "searchNode": "Search nodes", "nodeName": "Node name", "asc": "Ascending", "desc": "Descending",
     "direct": "Direct", "effectiveRate": "Applied rate",
     "hour": "Hourly", "perPage": "Rows per page", "backToUsers": "Back to user ranking",
-    "navigation": "Statistics", "overview": "Traffic overview", "userStatistics": "User statistics",
+    "navigation": "Statistics", "overview": "Traffic statistics", "nodeStatistics": "Node statistics", "userStatistics": "User statistics",
     "trend": "Total traffic trend", "nodeRank": "Node traffic ranking", "userRank": "User traffic ranking", "userDetails": "Traffic by user and node",
     "period": "Date range", "last30": "Last 30 days", "last7": "Last 7 days", "today": "Today", "custom": "Custom",
     "unit": "Group by", "day": "Day", "week": "Week", "month": "Month", "metric": "Traffic measure", "actual": "Actual traffic", "billed": "Billed traffic",

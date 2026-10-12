@@ -13,7 +13,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     "wholeHours": "跨日或历史查询请选择整点。", "searchNode": "搜索节点", "nodeName": "节点名称", "asc": "升序", "desc": "降序",
     "direct": "直出", "effectiveRate": "生效倍率",
     "hour": "按小时", "perPage": "每页显示", "backToUsers": "返回用户排行",
-    "navigation": "统计分析", "overview": "流量概览", "userStatistics": "用户统计",
+    "navigation": "统计分析", "overview": "流量统计", "nodeStatistics": "节点统计", "userStatistics": "用户统计",
     "trend": "总流量趋势", "nodeRank": "节点流量排行", "userRank": "用户流量排行", "userDetails": "用户节点明细",
     "period": "时间范围", "last30": "最近 30 天", "last7": "最近 7 天", "today": "今天", "custom": "自定义",
     "unit": "统计单位", "day": "按天", "week": "按周", "month": "按月", "metric": "流量口径", "actual": "实际流量", "billed": "扣费流量",

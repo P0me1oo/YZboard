@@ -1,6 +1,6 @@
 # Xboard
 
-版本 `1.67.0` 新增「Telegram Bot / 管理员通知」：指定多个接收人，分别开启设备与连接限制告警，重复间隔默认 60 分钟；用户无需绑定 Telegram。配套管理端 `0.40.0`，新增管理员告警迁移，并包含下方入站 IP 搜索及后台无订阅账户修复。无需升级 Node 或核心，配置方法见 [Telegram Bot](docs/telegram-bot.md)，发布状态与固定来源见 [兼容矩阵](YZ_COMPATIBILITY.md)。
+面板 [`1.67.0`](https://github.com/P0me1oo/YZboard/releases/tag/v1.67.0) 已正式发布，新增「Telegram Bot / 管理员通知」：指定多个接收人，分别开启设备与连接限制告警，重复间隔默认 60 分钟；用户无需绑定 Telegram。配套管理端 `0.40.0`，新增管理员告警迁移，并包含下方入站 IP 搜索及后台无订阅账户修复。双架构镜像、`latest` 与关键文件已核验，生产 PHP 两套数据库各 717 项及完整浏览器 141 项测试通过。无需升级 Node 或核心，配置方法见 [Telegram Bot](docs/telegram-bot.md)，固定来源与回滚版本见 [兼容矩阵](YZ_COMPATIBILITY.md)。
 
 `1.66.1` 开发改动纳入 `1.67.0`：修复后台创建账户选择“无订阅”仍赠送试用套餐及权限组的问题，自行注册的试用规则不变。使用说明见 [用户管理](docs/user-management.md)。
 

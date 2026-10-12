@@ -11,6 +11,10 @@ class TelegramBotConfig extends Model
     protected $guarded = ['id'];
     protected $hidden = ['token', 'webhook_secret'];
     protected $casts = [
+        'notify_admin_device' => 'boolean',
+        'notify_admin_connection' => 'boolean',
+        'notify_admin_recipients' => 'array',
+        'notify_admin_interval_minutes' => 'integer',
         'remind_expiring' => 'boolean',
         'remind_expired' => 'boolean',
         'remind_device' => 'boolean',

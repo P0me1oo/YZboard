@@ -7,7 +7,7 @@ use Carbon\CarbonImmutable;
 
 class LimitReminderPresenter
 {
-    public function render(string $kind, array $details): string
+    public function render(string $kind, array $details, bool $forAdmin = false): string
     {
         $events = $details['events'] ?? [];
         $addresses = [];
@@ -22,7 +22,9 @@ class LimitReminderPresenter
         } catch (\Throwable) {
             $locations = [];
         }
-        $lines = [$kind === 'device' ? '设备数超限提醒' : '连接数超限提醒'];
+        $lines = [$kind === 'device'
+            ? ($forAdmin ? '用户设备数限制告警' : '设备数超限提醒')
+            : ($forAdmin ? '用户连接数限制告警' : '连接数超限提醒')];
         foreach ($events as $type => $event) {
             $snapshot = $event['snapshot'] ?? null;
             $limit = $snapshot['limit'] ?? $event['limit'];
@@ -51,11 +53,15 @@ class LimitReminderPresenter
             }
         }
         $lines[] = '';
-        $lines[] = $kind === 'device'
-            ? '请减少同时使用的设备或网络后重试。'
-            : '请减少同时连接数或降低新建连接频率后重试。';
-        $lines[] = '如有误报，请向管理员反馈。';
-        $lines[] = '如发现陌生 IP，可能是订阅泄露，请在 Bot → 订阅信息 → 重置订阅中重置。';
+        if ($forAdmin) {
+            $lines[] = '节点已触发限制，请检查该账号的使用情况。';
+        } else {
+            $lines[] = $kind === 'device'
+                ? '请减少同时使用的设备或网络后重试。'
+                : '请减少同时连接数或降低新建连接频率后重试。';
+            $lines[] = '如有误报，请向管理员反馈。';
+            $lines[] = '如发现陌生 IP，可能是订阅泄露，请在 Bot → 订阅信息 → 重置订阅中重置。';
+        }
         if (collect($locations)->contains(fn ($location) => ($location['location_source'] ?? '') === 'ip2location')) {
             $lines[] = 'IP 位置来源：https://www.ip2location.io/';
         }

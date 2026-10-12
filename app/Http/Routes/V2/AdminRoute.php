@@ -54,6 +54,7 @@ class AdminRoute
                 $router->get('/token', [TelegramBotController::class, 'token']);
                 $router->post('/save', [TelegramBotController::class, 'save']);
                 $router->post('/reminders', [TelegramBotController::class, 'reminders']);
+                $router->post('/admin-notifications', [TelegramBotController::class, 'adminNotifications']);
                 $router->post('/check', [TelegramBotController::class, 'check']);
                 $router->post('/test-message', [TelegramBotController::class, 'testMessage']);
                 $router->post('/enable', [TelegramBotController::class, 'enable']);

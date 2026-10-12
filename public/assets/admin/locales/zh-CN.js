@@ -22,10 +22,17 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     "viewDetails": "查看明细", "loading": "加载中", "empty": "暂无数据", "loadFailed": "读取失败，请重试。", "retry": "重试",
     "page": "第 {{page}} / {{pages}} 页，共 {{count}} 条", "previous": "上一页", "next": "下一页",
     "searchUser": "搜索用户", "searchPlaceholder": "用户邮箱或 ID", "search": "搜索", "clear": "清除",
+    "inboundSearchPlaceholder": "用户邮箱、ID 或 IP", "searchIp": "搜索 IP", "ipSearchPlaceholder": "完整或部分 IP 地址",
     "chooseUser": "搜索用户或从排行中选择用户查看明细。", "filterNode": "筛选节点", "allNodes": "全部节点",
-    "entryTotal": "入口合计", "relayTotal": "落地合计", "date": "日期", "position": "统计位置", "entry": "入口", "relay": "落地"
+    "entryTotal": "入口合计", "relayTotal": "落地合计", "date": "日期", "position": "流量类型", "entry": "入口", "relay": "中转"
   },
   "telegramBot": {
+    "adminNotifications": "管理员通知", "adminNotificationSaved": "管理员通知设置已保存",
+    "adminNotificationTypes": { "device": "设备数限制告警", "connection": "连接数限制告警" },
+    "adminRecipients": "管理员接收人（Telegram 数字 ID）",
+    "adminRecipientsPlaceholder": "每行一个数字 ID，接收人需先私聊机器人发送 /start",
+    "adminRecipientsInvalid": "最多填写 20 个不同的有效 Telegram 数字 ID；开启告警时至少填写一个",
+    "adminNotificationInterval": "重复告警间隔（分钟）",
     "reminders": "提醒设置", "reminderSaved": "提醒设置已保存",
     "reminderTypes": { "expiring": "到期提醒", "expired": "过期提醒", "device": "设备数超限提醒", "connection": "连接数超限提醒" },
     "reminderDays": "提前提醒天数", "reminderInterval": "超限提醒间隔（分钟）",

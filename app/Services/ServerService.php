@@ -512,6 +512,7 @@ class ServerService
         }
 
         app(\App\Services\TelegramBot\ReminderService::class)->recordLimits($normalized);
+        app(\App\Services\TelegramBot\AdminNotificationService::class)->recordLimits($node, $normalized);
 
         HookManager::call('server.limit.exceeded', [
             'node_id' => (int) $node->id,

@@ -37,9 +37,11 @@ class InboundIpStatistics
         $search = trim($range['search'] ?? '');
         if ($search !== '') {
             $escaped = str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search);
-            $query->where(function ($part) use ($escaped, $search): void {
+            $matchingUsers = $this->searchIps($this->base($range), $search)->select('h.user_id');
+            $query->where(function ($part) use ($escaped, $search, $matchingUsers): void {
                 $part->whereRaw("u.email LIKE ? ESCAPE '!'", ['%' . $escaped . '%']);
                 if (ctype_digit($search)) $part->orWhere('h.user_id', $search);
+                $part->orWhereIn('h.user_id', $matchingUsers);
             });
         }
         $query->selectRaw('h.user_id AS id, u.email AS name, COUNT(DISTINCT h.ip) AS ip_count, MIN(h.first_seen_at) AS first_seen_at, MAX(h.last_seen_at) AS last_seen_at')
@@ -74,6 +76,7 @@ class InboundIpStatistics
         $region = "CASE WHEN i.ip_version = 6 AND i.external_expires_at <= $now THEN '未知' ELSE i.region END";
         $query = clone $base;
         if (!empty($range['province'])) $query->whereRaw("($province) = ?", [$range['province']]);
+        $this->searchIps($query, trim($range['search'] ?? ''));
         $query->selectRaw("i.ip, i.ip_version, $region AS region, $province AS province,
             CASE WHEN i.external_expires_at > $now THEN i.asn ELSE NULL END AS asn,
             CASE WHEN i.external_expires_at > $now THEN i.as_name ELSE NULL END AS as_name,
@@ -94,6 +97,18 @@ class InboundIpStatistics
     private function provinceExpression(int $now): string
     {
         return "CASE WHEN i.ip_version = 6 AND i.external_expires_at <= $now THEN '未知' ELSE i.province END";
+    }
+
+    private function searchIps(Builder $query, string $search): Builder
+    {
+        if ($search === '') return $query;
+        $escaped = str_replace(['!', '%', '_'], ['!!', '!%', '!_'], strtolower($search));
+        $normalized = PublicDeviceIp::normalize($search);
+        return $query->where(function (Builder $part) use ($escaped, $normalized): void {
+            $part->whereRaw("LOWER(h.ip) LIKE ? ESCAPE '!'", ['%' . $escaped . '%']);
+            // 完整 IPv6 的压缩和展开写法，以及映射 IPv4，匹配同一条已标准化记录。
+            if ($normalized !== null) $part->orWhere('h.ip', $normalized);
+        });
     }
 
     private function refreshLocalLocations(Builder $base): void

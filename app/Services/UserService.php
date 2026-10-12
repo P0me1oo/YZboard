@@ -190,7 +190,8 @@ class UserService
         // 处理计划
         if (isset($data['plan_id'])) {
             $this->setPlanForUser($user, $data['plan_id'], $data['expired_at'] ?? null);
-        } else {
+        } elseif (!array_key_exists('plan_id', $data)) {
+            // 后台明确传入空套餐时保持无订阅；自行注册未指定套餐时才赠送试用。
             $this->setTryOutPlan(user: $user);
         }
 

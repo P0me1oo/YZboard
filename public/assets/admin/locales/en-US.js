@@ -22,10 +22,17 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     "viewDetails": "View details", "loading": "Loading", "empty": "No data", "loadFailed": "Could not load data. Try again.", "retry": "Retry",
     "page": "Page {{page}} / {{pages}}, {{count}} records", "previous": "Previous", "next": "Next",
     "searchUser": "Search users", "searchPlaceholder": "User email or ID", "search": "Search", "clear": "Clear",
+    "inboundSearchPlaceholder": "User email, ID or IP", "searchIp": "Search IPs", "ipSearchPlaceholder": "Full or partial IP address",
     "chooseUser": "Search for a user or select one from the ranking.", "filterNode": "Filter nodes", "allNodes": "All nodes",
-    "entryTotal": "Entry total", "relayTotal": "Relay total", "date": "Date", "position": "Position", "entry": "Entry", "relay": "Relay"
+    "entryTotal": "Entry total", "relayTotal": "Relay total", "date": "Date", "position": "Traffic type", "entry": "Entry", "relay": "Relay"
   },
   "telegramBot": {
+    "adminNotifications": "Admin notifications", "adminNotificationSaved": "Admin notification settings saved",
+    "adminNotificationTypes": { "device": "Device limit alerts", "connection": "Connection limit alerts" },
+    "adminRecipients": "Admin recipients (Telegram numeric IDs)",
+    "adminRecipientsPlaceholder": "One ID per line; each recipient must first send /start to the bot privately",
+    "adminRecipientsInvalid": "Enter up to 20 distinct valid Telegram numeric IDs; at least one is required when alerts are enabled",
+    "adminNotificationInterval": "Repeat alert interval (minutes)",
     "reminders": "Reminders", "reminderSaved": "Reminder settings saved",
     "reminderTypes": { "expiring": "Upcoming expiry", "expired": "Expired subscription", "device": "Device limit exceeded", "connection": "Connection limit exceeded" },
     "reminderDays": "Days before expiry", "reminderInterval": "Limit reminder interval (minutes)",

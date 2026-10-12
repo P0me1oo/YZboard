@@ -4,6 +4,7 @@ namespace App\Services\TelegramBot;
 
 use App\Exceptions\ApiException;
 use App\Models\TelegramBotConfig;
+use App\Models\TelegramAdminNotification;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -48,7 +49,29 @@ class ConfigService
             'remind_connection' => $config->remind_connection,
             'remind_days' => $config->remind_days,
             'remind_interval_minutes' => $config->remind_interval_minutes,
+            'notify_admin_device' => $config->notify_admin_device,
+            'notify_admin_connection' => $config->notify_admin_connection,
+            'notify_admin_recipients' => $config->notify_admin_recipients ?? [],
+            'notify_admin_interval_minutes' => $config->notify_admin_interval_minutes,
         ];
+    }
+
+    public function saveAdminNotifications(array $input): array
+    {
+        return $this->locked(fn () => DB::transaction(function () use ($input) {
+            $config = TelegramBotConfig::whereKey(1)->lockForUpdate()->firstOrFail();
+            $input['notify_admin_recipients'] = array_values(array_unique(array_map('strval', $input['notify_admin_recipients'])));
+            $config->fill($input)->save();
+            // 移除接收人后连同其冷却记录一起清除，旧排队任务不能继续投递。
+            TelegramAdminNotification::whereNotIn('telegram_id', $input['notify_admin_recipients'])->delete();
+            foreach (['device', 'connection'] as $kind) {
+                if (!$config->{'notify_admin_' . $kind}) {
+                    TelegramAdminNotification::where('kind', $kind)->where('status', 'pending')
+                        ->update(['status' => 'cancelled', 'details' => null]);
+                }
+            }
+            return $this->view($config);
+        }));
     }
 
     public function saveReminders(array $input): array
@@ -181,6 +204,8 @@ class ConfigService
             $config = $this->current();
             $config->enabled = false;
             $config->save();
+            TelegramAdminNotification::where('status', 'pending')
+                ->update(['status' => 'cancelled', 'details' => null]);
             if (!$config->token) {
                 return $this->view($config);
             }

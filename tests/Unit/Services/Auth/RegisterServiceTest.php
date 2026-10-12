@@ -65,6 +65,22 @@ class RegisterServiceTest extends TestCase
         $this->assertNull($result);
     }
 
+    public function test_registration_still_grants_the_configured_trial(): void
+    {
+        $plan = \App\Models\Plan::create([
+            'name' => '注册试用', 'group_id' => 1, 'group_ids' => [1, 2],
+            'transfer_enable' => 10, 'prices' => [],
+        ]);
+        admin_setting(['email_verify' => 0, 'try_out_plan_id' => $plan->id, 'try_out_hour' => 24]);
+        [$success, $user] = $this->service->register($this->makeRequest());
+        $this->assertTrue($success);
+        $user->refresh();
+        $this->assertSame($plan->id, $user->plan_id);
+        $this->assertSame([1, 2], $user->effectiveGroupIds());
+        $this->assertSame(10 * 1073741824, (int) $user->transfer_enable);
+        $this->assertEqualsWithDelta(time() + 86400, $user->expired_at, 5);
+    }
+
     private function makeRequest(array $overrides = []): Request
     {
         return Request::create('/api/v1/passport/auth/register', 'POST', array_merge([

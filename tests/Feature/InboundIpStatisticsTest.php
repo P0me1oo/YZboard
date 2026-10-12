@@ -138,6 +138,69 @@ class InboundIpStatisticsTest extends TestCase
         Http::assertSentCount(4);
     }
 
+    public function test_ip_search_finds_users_before_pagination_and_preserves_their_complete_counts(): void
+    {
+        $a = $this->user(); $b = $this->user(); $old = $this->user();
+        $this->record($a->id, ['8.8.8.8', '1.1.1.1', '2400:cb00:1:2::1']);
+        $this->record($a->id, ['8.8.8.8'], now()->subDay()->timestamp);
+        $this->record($b->id, ['8.8.8.8']);
+        $this->record($old->id, ['8.8.8.8'], now()->subDay()->timestamp);
+        foreach (['8.8.8.8', '8.8.'] as $search) {
+            $response = $this->getJson($this->path('inboundUsers', ['search' => $search, 'page_size' => 1]))->assertOk()
+                ->assertJsonPath('data.total', 2)->assertJsonPath('data.last_page', 2)
+                ->assertJsonPath('data.list.0.id', $a->id)->assertJsonPath('data.list.0.ip_count', 3);
+            $this->assertEqualsCanonicalizing(['广东省', '浙江省', '未知'], $response->json('data.list.0.provinces'));
+            $this->getJson($this->path('inboundUsers', ['search' => $search, 'page_size' => 1, 'page' => 2]))->assertOk()
+                ->assertJsonPath('data.list.0.id', $b->id)->assertJsonPath('data.list.0.ip_count', 1);
+        }
+        $b->delete();
+        $this->getJson($this->path('inboundUsers', ['search' => '8.8.8.8', 'page_size' => 1, 'page' => 2]))->assertOk()
+            ->assertJsonPath('data.list.0.name', '#' . $b->id);
+        $this->getJson($this->path('inboundUsers', ['search' => '8.8.8.8', 'period' => '7d']))->assertOk()
+            ->assertJsonPath('data.total', 3)->assertJsonPath('data.list.0.ip_count', 3);
+        admin_setting(['device_ip_exclude' => ['8.8.8.8']]);
+        $this->getJson($this->path('inboundUsers', ['search' => '8.8.8.8', 'period' => '7d']))->assertOk()
+            ->assertJsonPath('data.total', 0);
+        $this->getJson($this->path('inboundUsers', ['search' => $a->email]))->assertOk()
+            ->assertJsonPath('data.list.0.ip_count', 2);
+        Http::assertNothingSent();
+    }
+
+    public function test_ip_search_normalizes_complete_addresses_and_treats_wildcards_literally(): void
+    {
+        $user = $this->user();
+        $user->update(['email' => 'ip-search@example.test']);
+        $this->record($user->id, ['8.8.8.8', '2400:cb00:1:2::1', '2400:cb00:1:2::2']);
+        foreach (['2400:CB00:1:2' => 2, '2400:cb00:0001:0002:0000:0000:0000:0001' => 1, '::ffff:8.8.8.8' => 1] as $search => $count) {
+            $this->getJson($this->path('inboundUsers', ['search' => $search]))->assertOk()
+                ->assertJsonPath('data.total', 1)->assertJsonPath('data.list.0.ip_count', 3);
+            $this->getJson($this->path('inboundUser', ['user_id' => $user->id, 'search' => $search]))->assertOk()
+                ->assertJsonPath('data.total', $count)->assertJsonPath('data.ip_count', 3);
+        }
+        foreach (['%', '_', '!', "8.8.8.8' OR 1=1 --"] as $search) {
+            $this->getJson($this->path('inboundUsers', ['search' => $search]))->assertOk()->assertJsonPath('data.total', 0);
+            $this->getJson($this->path('inboundUser', ['user_id' => $user->id, 'search' => $search]))->assertOk()
+                ->assertJsonPath('data.total', 0)->assertJsonPath('data.ip_count', 3);
+        }
+    }
+
+    public function test_detail_ip_search_combines_with_province_and_preserves_groups_across_reload_and_clear(): void
+    {
+        $user = $this->user();
+        $this->record($user->id, ['8.8.8.8', '1.1.1.1', '2400:cb00:1:2::1', '2400:cb00:1:2::2']);
+        $params = ['user_id' => $user->id, 'search' => '2400:cb00', 'province' => '广东省', 'page_size' => 1, 'page' => 2];
+        foreach ([1, 2] as $attempt) {
+            $response = $this->getJson($this->path('inboundUser', $params))->assertOk()
+                ->assertJsonPath('data.total', 2)->assertJsonPath('data.ip_count', 4)->assertJsonPath('data.last_page', 2)
+                ->assertJsonPath('data.list.0.ip', '2400:cb00:1:2::2');
+            $this->assertEquals(['广东省' => 3, '浙江省' => 1], array_column($response->json('data.provinces'), 'count', 'name'));
+        }
+        $this->getJson($this->path('inboundUser', array_replace($params, ['province' => '浙江省'])))->assertOk()
+            ->assertJsonPath('data.total', 0)->assertJsonPath('data.ip_count', 4)->assertJsonPath('data.page', 1);
+        $this->getJson($this->path('inboundUser', ['user_id' => $user->id]))->assertOk()->assertJsonPath('data.total', 4);
+        $this->getJson($this->path('inboundUser', ['user_id' => $user->id, 'search' => str_repeat('1', 101)]))->assertUnprocessable();
+    }
+
     public function test_upgrade_refreshes_unknown_ipv4_provinces_without_changing_other_cached_data(): void
     {
         $user = $this->user();

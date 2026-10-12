@@ -177,6 +177,46 @@ class UserManageTest extends TestCase
         $this->assertSame(2, (int) $user->fresh()->device_limit);
     }
 
+    public function test_generation_without_plan_never_grants_the_configured_trial(): void
+    {
+        $trial = $this->plan('注册试用', ['group_ids' => [1, 2]]);
+        admin_setting(['try_out_plan_id' => $trial->id, 'try_out_hour' => 24]);
+
+        foreach ([['plan_id' => null], ['plan_id' => ''], []] as $index => $selection) {
+            $rows = $this->postJson('/_tests/admin-user/generate', $selection + [
+                'email_prefix' => "without-plan-{$index}",
+                'email_suffix' => 'example.invalid',
+                'generate_count' => $index === 2 ? 2 : null,
+            ])->assertOk()->json('data');
+            $this->assertCount($index === 2 ? 2 : 1, $rows);
+            foreach ($rows as $row) {
+                $user = User::byEmail($row['email'])->firstOrFail();
+                $this->assertNull($user->plan_id);
+                $this->assertNull($user->group_id);
+                $this->assertSame([], $user->effectiveGroupIds());
+                $this->assertSame(0, (int) $user->transfer_enable);
+                $this->assertNull($user->expired_at);
+            }
+        }
+    }
+
+    public function test_explicit_plan_wins_over_the_configured_trial(): void
+    {
+        $trial = $this->plan('注册试用');
+        $selected = $this->plan('指定套餐', ['group_id' => 3, 'group_ids' => [3, 4]]);
+        admin_setting(['try_out_plan_id' => $trial->id]);
+        $expiry = time() + 86400;
+        $this->postJson('/_tests/admin-user/generate', [
+            'email_prefix' => 'selected-plan', 'email_suffix' => 'example.invalid',
+            'plan_id' => $selected->id, 'expired_at' => $expiry,
+        ])->assertOk();
+        $user = User::byEmail('selected-plan@example.invalid')->firstOrFail();
+        $this->assertSame($selected->id, $user->plan_id);
+        $this->assertSame([3, 4], $user->effectiveGroupIds());
+        $this->assertSame(100 * 1073741824, (int) $user->transfer_enable);
+        $this->assertSame($expiry, $user->expired_at);
+    }
+
     public function test_single_generation_returns_a_random_password_once(): void
     {
         $plan = $this->plan('生成套餐', ['device_limit' => 4]);

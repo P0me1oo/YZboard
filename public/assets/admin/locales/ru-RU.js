@@ -22,10 +22,17 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
     "viewDetails": "Подробнее", "loading": "Загрузка", "empty": "Нет данных", "loadFailed": "Не удалось загрузить данные. Повторите попытку.", "retry": "Повторить",
     "page": "Страница {{page}} / {{pages}}, записей: {{count}}", "previous": "Назад", "next": "Далее",
     "searchUser": "Поиск пользователей", "searchPlaceholder": "Почта или ID пользователя", "search": "Поиск", "clear": "Сбросить",
+    "inboundSearchPlaceholder": "Почта, ID или IP пользователя", "searchIp": "Поиск IP", "ipSearchPlaceholder": "Полный IP-адрес или его часть",
     "chooseUser": "Найдите пользователя или выберите его в рейтинге.", "filterNode": "Фильтр узлов", "allNodes": "Все узлы",
-    "entryTotal": "Всего на входе", "relayTotal": "Всего на выходе", "date": "Дата", "position": "Позиция", "entry": "Вход", "relay": "Выход"
+    "entryTotal": "Всего на входе", "relayTotal": "Всего на выходе", "date": "Дата", "position": "Тип передачи", "entry": "Вход", "relay": "Ретрансляция"
   },
   "telegramBot": {
+    "adminNotifications": "Уведомления администраторам", "adminNotificationSaved": "Настройки уведомлений администраторам сохранены",
+    "adminNotificationTypes": { "device": "Предупреждения о лимите устройств", "connection": "Предупреждения о лимите соединений" },
+    "adminRecipients": "Получатели (числовые Telegram ID)",
+    "adminRecipientsPlaceholder": "Один ID в строке; каждый получатель должен сначала отправить боту /start в личном чате",
+    "adminRecipientsInvalid": "Укажите до 20 разных действительных Telegram ID; при включённых предупреждениях нужен хотя бы один",
+    "adminNotificationInterval": "Интервал повторных предупреждений (минуты)",
     "reminders": "Напоминания", "reminderSaved": "Настройки напоминаний сохранены",
     "reminderTypes": { "expiring": "Скорое окончание подписки", "expired": "Подписка истекла", "device": "Превышен лимит устройств", "connection": "Превышен лимит соединений" },
     "reminderDays": "Дней до окончания подписки", "reminderInterval": "Интервал уведомлений о лимитах (минуты)",

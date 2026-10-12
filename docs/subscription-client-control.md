@@ -1,6 +1,6 @@
 # 订阅客户端限制
 
-面板 `1.68.3`，配套管理端 `0.41.3`，随面板镜像交付。正式发布状态与固定来源见 [兼容矩阵](../YZ_COMPATIBILITY.md)。
+面板 [`1.68.3`](https://github.com/P0me1oo/YZboard/releases/tag/v1.68.3) 已发布，配套管理端 `0.41.3`，随面板镜像交付。固定来源与回滚参考见 [兼容矩阵](../YZ_COMPATIBILITY.md)。
 
 ## 使用方法
 
@@ -34,7 +34,7 @@
 
 ## 维护与交付
 
-配置沿用管理员设置接口，以完整对象 `subscribe_client_control` 保存：`mode` 为 `off`、`whitelist` 或 `blacklist`，`clients` 保存展示名称、选择状态和关键词，`exempt_group_ids` 保存豁免权限组编号。后端校验结构、长度与权限组存在性；对象一次写入现有设置表，不需要数据库迁移。
+配置沿用管理员设置接口，将整份客户端限制规则（配置项 `subscribe_client_control`）一次保存。限制模式（`mode`）为关闭 `off`、白名单 `whitelist` 或黑名单 `blacklist`；软件名单（`clients`）保存展示名称、选择状态和关键词，豁免组列表（`exempt_group_ids`）保存权限组编号。后端校验结构、长度与权限组存在性，一次写入现有设置表，不需要数据库迁移。
 
 前端独立页面为 `/finance/client-control`，保存失败保留输入，可直接重试。原「系统设置 → 订阅设置」的自动保存排除此对象，避免覆盖独立页面已保存的规则。
 

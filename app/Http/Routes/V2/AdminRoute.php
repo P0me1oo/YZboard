@@ -99,6 +99,7 @@ class AdminRoute
             ], function ($router) {
                 $router->get('/fetch', [RouteController::class, 'fetch']);
                 $router->post('/save', [RouteController::class, 'save']);
+                $router->post('/update', [RouteController::class, 'update']);
                 $router->post('/drop', [RouteController::class, 'drop']);
             });
             // 节点管理接口

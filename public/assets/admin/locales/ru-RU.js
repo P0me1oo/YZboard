@@ -2881,6 +2881,7 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
     "description": "Управление группами маршрутов, включая добавление, удаление и редактирование.",
     "columns": {
       "id": "ID группы",
+      "enabled": "Включён",
       "remarks": "Примечание",
       "action": "Действие",
       "actions": "Действия",
@@ -2910,6 +2911,7 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
       "add": "Добавить маршрут",
       "edit": "Изменить маршрут",
       "create": "Создать маршрут",
+      "enabled": "Включить маршрут",
       "remarks": "Примечание",
       "remarksPlaceholder": "Введите примечание",
       "match": "Совпадение (домен или IP)",
@@ -2949,6 +2951,9 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
     "messages": {
       "deleteConfirm": "Подтверждение удаления",
       "deleteDescription": "Это действие навсегда удалит эту группу маршрутов. Продолжить?",
+      "enableRoute": "Включить маршрут: {{name}}",
+      "disableRoute": "Отключить маршрут: {{name}}",
+      "updateFailed": "Не удалось сохранить состояние маршрута. Повторите попытку.",
       "deleteButton": "Удалить",
       "deleteSuccess": "Удалено успешно",
       "createSuccess": "Создано успешно",

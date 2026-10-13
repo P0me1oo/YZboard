@@ -2966,6 +2966,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     "description": "Manage all route groups, including adding, deleting, and editing operations.",
     "columns": {
       "id": "Group ID",
+      "enabled": "Enabled",
       "remarks": "Remarks",
       "action": "Action",
       "actions": "Actions",
@@ -2995,6 +2996,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "add": "Add Route",
       "edit": "Edit Route",
       "create": "Create Route",
+      "enabled": "Enable route",
       "remarks": "Remarks",
       "remarksPlaceholder": "Please enter remarks",
       "match": "Match (domain or IP)",
@@ -3034,6 +3036,9 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     "messages": {
       "deleteConfirm": "Confirm Delete",
       "deleteDescription": "This action will permanently delete this route group and cannot be recovered. Are you sure you want to continue?",
+      "enableRoute": "Enable route: {{name}}",
+      "disableRoute": "Disable route: {{name}}",
+      "updateFailed": "Could not save route status. Please retry.",
       "deleteButton": "Delete",
       "deleteSuccess": "Deleted Successfully",
       "createSuccess": "Created Successfully",

@@ -2995,6 +2995,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     "description": "管理所有路由组，包括添加、删除、编辑等操作。",
     "columns": {
       "id": "组ID",
+      "enabled": "启用",
       "remarks": "备注",
       "action": "动作",
       "actions": "操作",
@@ -3024,6 +3025,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
       "add": "添加路由",
       "edit": "编辑路由",
       "create": "创建路由",
+      "enabled": "启用路由",
       "remarks": "备注",
       "remarksPlaceholder": "请输入备注",
       "match": "匹配值（域名或 IP）",
@@ -3063,6 +3065,9 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     "messages": {
       "deleteConfirm": "确认删除",
       "deleteDescription": "此操作将永久删除该路由组，删除后无法恢复。确定要继续吗？",
+      "enableRoute": "启用路由：{{name}}",
+      "disableRoute": "停用路由：{{name}}",
+      "updateFailed": "路由状态保存失败，请重试",
       "deleteButton": "删除",
       "deleteSuccess": "删除成功",
       "createSuccess": "创建成功",

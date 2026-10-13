@@ -39,6 +39,7 @@ class RouteController extends Controller
             'network' => 'nullable|string|in:' . implode(',', ServerRoute::NETWORKS),
             'action' => 'required|in:block,direct,dns,proxy',
             'action_value' => 'nullable',
+            'enabled' => 'sometimes|boolean',
             'apply_to_new_nodes' => 'nullable|boolean',
             'node_ids' => 'nullable|array',
             'node_ids.*' => 'integer|distinct',
@@ -107,6 +108,26 @@ class RouteController extends Controller
             Log::error($e);
             return $this->fail([500, $request->input('id') ? '保存失败' : '创建失败']);
         }
+    }
+
+    public function update(Request $request)
+    {
+        $params = $request->validate([
+            'id' => 'required|integer|min:1',
+            'enabled' => 'required|boolean',
+        ]);
+
+        return DB::transaction(function () use ($params) {
+            $route = ServerRoute::whereKey($params['id'])->lockForUpdate()->first();
+            if (!$route) throw new ApiException('路由不存在');
+            $route->enabled = $params['enabled'];
+            // 显式设置目标状态，重复请求不翻转，也不重复触发配置推送。
+            if ($route->isDirty('enabled')) {
+                $route->save();
+            }
+
+            return $this->success(true);
+        }, 3);
     }
 
     public function drop(Request $request)

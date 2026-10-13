@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property string|null $network tcp 或 udp，空值表示不限
  * @property string $action 动作：block/direct/dns/proxy
  * @property string|null $action_value 动作参数
+ * @property bool $enabled 是否启用
  * @property bool $apply_to_new_nodes 新建节点时是否默认选中
  */
 class ServerRoute extends Model
@@ -29,11 +30,13 @@ class ServerRoute extends Model
     protected $table = 'v2_server_route';
     protected $dateFormat = 'U';
     protected $guarded = ['id'];
+    protected $attributes = ['enabled' => true];
     protected $casts = [
         'created_at' => 'timestamp',
         'updated_at' => 'timestamp',
         'match' => 'array',
         'protocol' => 'array',
+        'enabled' => 'boolean',
         'apply_to_new_nodes' => 'boolean',
     ];
 

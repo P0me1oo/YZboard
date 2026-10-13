@@ -1,15 +1,19 @@
 # YZboard 兼容矩阵
 
-## 1.70.1 客户端限制图标与累计改动（发布准备）
+## 1.70.1 客户端限制图标与累计改动（已发布）
 
 - 面板开发基线 `master` / `3b444031ceb36339f1d48e4c8d7212213063dcfd`；管理端开发基线 `master` / `e9fa22391bb0afb55fba09886c37aa9f82ddb765`，无独立远程仓库。用户确认纳入 `1.69.0` 入站 IP 属性卡片、`1.70.0` 外观设置及对应管理端的全部未提交改动。正式配套版本为面板 `1.70.1`、管理端 `0.43.1`。
 - 管理端固定源码 `521b7e3d16dcb1b6afa9ceba3411171bd20d0c25`，本地标签 `v0.43.1`；通过面板仓库 `public/assets/admin` 随镜像交付，不创建独立远程仓库。
+- 面板正式来源 `b923e5626538620f87e9500e9904477cb3b856cd`，Git Tag `v1.70.1`、应用版本、Release 与镜像来源一致；后续发布记录提交不改变正式来源。[Release v1.70.1](https://github.com/P0me1oo/YZboard/releases/tag/v1.70.1) 无独立安装附件，面板通过 GHCR 镜像交付。
 - 客户端限制使用已有 Lucide 带勾盾牌，与系统配置的调整滑块图标区分，保留 18 像素尺寸及菜单配色。桌面、320 像素手机及折叠菜单的实际图标和导航均通过核验，截图已查看。
 - 本次包含入站 IP 属性存储迁移，保留地区、ASN、历史 IP 和出现时间；旧记录在原限额下分批补齐。外观设置使用已有设置表，只影响菜单显示。无需升级 Node 或代理核心，规则见[统计分析](docs/statistics.md)与[外观设置](docs/admin-appearance.md)。
 - 发布前 PHP `8.4.21` / SQLite：`php -d extension=sodium vendor/bin/phpunit --do-not-cache-result --filter 'AdminAppearanceTest|DeviceIpLocationServiceTest|InboundIpStatisticsTest|DeviceIpExcludeTest|SubscriptionClientControlTest'` 全部 57 项、646 次断言通过；全部变更 PHP 语法检查通过。
 - 管理端源码检查 3,053 个文件、77 项行为测试、正式构建与资源检查通过；40 项相关浏览器检查全部通过，包含 29 个管理路由内容对照、外观显隐、客户端限制、入站属性、在线设备和统计返回位置。15 个交付文件逐字节一致，3,055 项映射源码一致，面板资源检查五项全部通过。主脚本 `admin-B8KDDjgo.js`；详细范围见[管理端维护说明](../YZboard-Dash/docs/maintenance.md)。
-- 未运行全量浏览器、开发模式或完整 `npm run verify`，未做真实后端浏览器联调。正式 PHP `8.2` / SQLite / MariaDB 完整回归及双架构镜像核验待发布流程完成后补充；测试浏览器和本次模拟服务已退出，未连接或更新生产服务器。
+- [正式发布流程 38388710223](https://github.com/P0me1oo/YZboard/actions/runs/38388710223) 全部成功，生产 PHP `8.2.34` 完整回归通过：SQLite、MariaDB `11.4.8` 各 754 项、7,467 次断言，无失败或跳过；面板资源检查五项全部通过。
+- 不可变镜像 `ghcr.io/p0me1oo/yzboard:1.70.1-b923e56`，版本别名 `1.70.1` 与 `latest` 同为 `sha256:50acc3a56693ba11de46286b88034ff87d7bc2904e1b78d5d9e1938120e952ed`，两个目标架构为 `linux/amd64`、`linux/arm64`。已匿名核对 OCI 来源、配置、每个架构全部 25 个镜像层可获取，以及应用层完整长度和摘要；每个架构 45 个文件与固定提交逐字节一致，包含全部 15 个管理端资源、外观设置、入站 IP 属性实现与迁移。主脚本 SHA-256 为 `4e28d5bee57cdbd5574d29aeb3ec96cdc124a660150d80107fe1021a972c7291`。
+- 未运行全量浏览器、开发模式或完整 `npm run verify`，未做真实后端浏览器联调。测试浏览器和本次模拟服务已退出，未连接或更新生产服务器。
 - 回滚参考 `ghcr.io/p0me1oo/yzboard:1.68.5-825a663`，来源 `825a6638a14f58b29740c8b7637a3419f6eebd19`，摘要 `sha256:48cd05993d686e3e54cda0119f9f7db7647d3f18ae0761f92ff80910232ba5e0`。已重新匿名核对两个目标架构、OCI 来源与全部镜像层可获取；旧代码可保留本次新增的属性列，历史 IP 不需要回退迁移。
+- 发布开始后出现的新一轮中转计费开发修改不属于本次固定来源，继续保留在各工作区。镜像下载缓存清理后，非敏感核验记录和截图保留本机，不进入项目提交。
 
 ## 1.70.0 管理侧边栏外观设置（开发记录，纳入 1.70.1）
 

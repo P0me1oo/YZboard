@@ -1,5 +1,7 @@
 # Xboard
 
+面板 [`1.73.0`](https://github.com/P0me1oo/YZboard/releases/tag/v1.73.0) 已发布：入站 IP 后台分批读取官网公开网页，补齐网络类型、运营商及页面明确提供的检测结果；列表和卡片直接读取缓存，不在点击时查询，也不启动浏览器。保留原 ASN 与历史数据，在线设备和 Telegram 等场景继续使用原接口，沿用管理端 `0.45.0`，无需升级 Node 或核心。两套数据库各 777 项完整回归通过，双架构镜像与 `latest` 已核验。规则见 [统计分析](docs/statistics.md)，固定来源、摘要与回退信息见 [兼容矩阵](YZ_COMPATIBILITY.md)。
+
 面板 [`1.72.0`](https://github.com/P0me1oo/YZboard/releases/tag/v1.72.0) 已发布，配套管理端 `0.45.0`：每条路由可以单独启用或停用，关闭时保留配置和节点绑定，重新开启后恢复。已有路由升级后保持开启，无需升级 Node 或核心。两套数据库各 764 项完整回归通过，双架构镜像及 `latest` 已核验。使用说明见 [路由管理](docs/server-routes.md)，固定来源、摘要与回退记录见 [兼容矩阵](YZ_COMPATIBILITY.md)。
 
 面板 [`1.71.2`](https://github.com/P0me1oo/YZboard/releases/tag/v1.71.2) 已发布，配套管理端 `0.44.0`：中转落地默认跟随前置倍率，可开启独立倍率；节点列表和订阅显示实际生效值，基础倍率与日计费汇总支持 8 位小数。两套数据库各 760 项完整回归通过，双架构镜像及 `latest` 已核验。包含独立倍率开关和精度迁移，无需升级 Node 或核心；使用规则见 [中转节点](docs/relay-nodes.md)，固定来源、摘要与回滚说明见 [兼容矩阵](YZ_COMPATIBILITY.md)。

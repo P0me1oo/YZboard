@@ -18,7 +18,7 @@ class DeviceIpLocationService
     /** 同一用户的公网 IP 并发查询，避免逐个等待外部接口超时。 */
     public function lookupMany(array $ips): array
     {
-        $unknown = ['asn' => null, 'as_name' => null];
+        $unknown = ['asn' => null, 'as_name' => null, 'ip_properties' => IpProperties::fromResponse()];
         $result = [];
         $pending = [];
         foreach (array_unique($ips) as $ip) {
@@ -26,7 +26,7 @@ class DeviceIpLocationService
             if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
                 continue;
             }
-            $key = 'device_location:v3:' . hash('sha256', $ip);
+            $key = 'device_location:v4:' . hash('sha256', $ip);
             try {
                 $cached = Cache::get($key);
                 if (is_array($cached)) {
@@ -91,7 +91,7 @@ class DeviceIpLocationService
 
     private function parseLocation(string $ip, mixed $response, string $key): array
     {
-        $unknown = ['asn' => null, 'as_name' => null];
+        $unknown = ['asn' => null, 'as_name' => null, 'ip_properties' => IpProperties::fromResponse()];
         try {
             if (!$response instanceof Response) {
                 Cache::put('device_asn:backoff', true, 300);
@@ -121,6 +121,7 @@ class DeviceIpLocationService
             $result = [
                 'asn' => $number !== false ? 'AS' . $number : null,
                 'as_name' => is_string($name) ? mb_substr(trim($name), 0, 200) : null,
+                'ip_properties' => IpProperties::fromResponse($body),
             ];
             foreach (['country_code', 'country_name', 'region_name'] as $field) {
                 $value = $body[$field] ?? null;

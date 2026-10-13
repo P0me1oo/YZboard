@@ -4,6 +4,7 @@ namespace App\Http\Requests\Admin;
 
 use App\Services\DeviceIpExclusion;
 use App\Services\SubscriptionClientControl;
+use App\Support\AdminAppearance;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -69,6 +70,7 @@ class ConfigSave extends FormRequest
         'device_ip_exclude' => 'nullable|array',
         'device_ip_exclude.*' => 'nullable|string|max:64',
         // frontend
+        'admin_sidebar_hidden' => 'sometimes|array|list|max:24',
         'frontend_theme' => '',
         'frontend_theme_sidebar' => 'nullable|in:dark,light',
         'frontend_theme_header' => 'nullable|in:dark,light',
@@ -135,7 +137,9 @@ class ConfigSave extends FormRequest
      */
     public function rules()
     {
-        return self::RULES;
+        return self::RULES + [
+            'admin_sidebar_hidden.*' => 'required|string|distinct|in:' . implode(',', AdminAppearance::ITEMS),
+        ];
     }
 
     /** 校验不计入设备数的来源名单，逐项给出错误。 */

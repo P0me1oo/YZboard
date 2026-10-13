@@ -12,6 +12,7 @@ use App\Services\SubscriptionClientControl;
 use App\Services\TelegramService;
 use App\Services\ThemeService;
 use App\Utils\Dict;
+use App\Support\AdminAppearance;
 use Illuminate\Http\Request;
 
 class ConfigController extends Controller
@@ -134,6 +135,9 @@ class ConfigController extends Controller
                 'default_remind_traffic' => (bool) admin_setting('default_remind_traffic', 1),
                 'subscribe_path' => admin_setting('subscribe_path', 's'),
                 SubscriptionClientControl::SETTING => SubscriptionClientControl::settings(),
+            ],
+            'appearance' => [
+                AdminAppearance::SETTING => AdminAppearance::hidden(),
             ],
             'frontend' => [
                 'frontend_theme' => admin_setting('frontend_theme', 'Xboard'),

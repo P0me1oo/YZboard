@@ -23,6 +23,7 @@ class InboundIpStatisticsTest extends TestCase
 {
     use RefreshDatabase;
     private bool $networkFails = false;
+    private array $externalProperties = [];
 
     protected function setUp(): void
     {
@@ -36,7 +37,7 @@ class InboundIpStatisticsTest extends TestCase
                 'province' => $ip === '8.8.8.8' ? '广东省' : '浙江省',
             ]);
         });
-        Http::fake(fn ($request) => $this->networkFails ? Http::response([], 429) : Http::response(['ip' => $request->data()['ip'], 'asn' => 4134, 'as' => '测试网络',
+        Http::fake(fn ($request) => $this->networkFails ? Http::response([], 429) : Http::response($this->externalProperties + ['ip' => $request->data()['ip'], 'asn' => 4134, 'as' => '测试网络',
             'country_code' => 'CN', 'country_name' => 'China', 'region_name' => 'Guangdong', 'city_name' => 'Guangzhou']));
     }
 
@@ -44,6 +45,59 @@ class InboundIpStatisticsTest extends TestCase
     {
         return User::create(['email' => Str::random(12) . '@example.test', 'password' => Str::random(32),
             'uuid' => (string) Str::uuid(), 'token' => Str::random(32), 'is_admin' => $admin]);
+    }
+
+    public function test_properties_survive_cache_reload_and_expire_without_changing_observed_times(): void
+    {
+        $user = $this->user();
+        $this->record($user->id, ['8.8.8.8']);
+        // 模拟升级前已有有效的地区与 ASN，但尚未保存属性。
+        DB::table('v2_inbound_ip')->where('ip', '8.8.8.8')->update([
+            'external_expires_at' => now()->addDays(20)->timestamp, 'lookup_after' => 0,
+        ]);
+        $this->externalProperties = [
+            'isp' => '中国电信', 'usage_type' => 'ISP/MOB', 'is_proxy' => false, 'proxy' => ['is_vpn' => true, 'is_tor' => false],
+        ];
+        $url = $this->path('inboundUser', ['user_id' => $user->id]);
+        $first = $this->getJson($url)->assertOk()
+            ->assertJsonPath('data.list.0.ip_properties.isp', '中国电信')
+            ->assertJsonPath('data.list.0.ip_properties.usage_type', 'ISP/MOB')
+            ->assertJsonPath('data.list.0.ip_properties.is_proxy', false)
+            ->assertJsonPath('data.list.0.ip_properties.proxy.is_vpn', true)
+            ->assertJsonPath('data.list.0.ip_properties.proxy.is_tor', false)
+            ->assertJsonPath('data.list.0.ip_properties.proxy.is_botnet', null)
+            ->assertJsonPath('data.list.0.region', '广东省广州市');
+        Cache::flush();
+        $this->getJson($url)->assertOk()->assertJsonPath('data.list', $first->json('data.list'));
+        Http::assertSentCount(1);
+        DB::table('v2_inbound_ip')->where('ip', '8.8.8.8')->update([
+            'external_expires_at' => now()->subSecond()->timestamp, 'lookup_after' => now()->addMinutes(5)->timestamp,
+        ]);
+        $this->getJson($url)->assertOk()->assertJsonPath('data.list.0.ip_properties.usage_type', null)
+            ->assertJsonPath('data.list.0.ip_properties.isp', null)
+            ->assertJsonPath('data.list.0.ip_properties.proxy.is_vpn', null)
+            ->assertJsonPath('data.list.0.first_seen_at', $first->json('data.list.0.first_seen_at'));
+        Http::assertSentCount(1);
+        $this->travel(301)->seconds();
+        $this->networkFails = true;
+        $this->getJson($url)->assertOk()->assertJsonPath('data.list.0.ip_properties.is_proxy', null);
+        $this->getJson($url)->assertOk()->assertJsonPath('data.list.0.ip_properties.is_proxy', null);
+        Http::assertSentCount(2);
+    }
+
+    public function test_operator_uses_local_name_when_external_provider_is_missing(): void
+    {
+        $user = $this->user();
+        $this->record($user->id, ['8.8.8.8']);
+        $this->mock(\App\Services\DeviceIpLocationService::class, function ($mock): void {
+            $mock->shouldReceive('lookupMany')->once()->with(['8.8.8.8'])->andReturn(['8.8.8.8' => [
+                'asn' => 'AS64500', 'as_name' => '测试网络', 'isp' => '中国移动',
+                'region' => '广东省广州市', 'location_source' => 'local',
+            ]]);
+        });
+        $this->getJson($this->path('inboundUser', ['user_id' => $user->id]))->assertOk()
+            ->assertJsonPath('data.list.0.ip_properties.isp', '中国移动')
+            ->assertJsonPath('data.list.0.ip_properties.usage_type', null);
     }
 
     private function path(string $endpoint, array $params = []): string

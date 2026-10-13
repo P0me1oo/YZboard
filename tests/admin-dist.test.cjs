@@ -145,6 +145,8 @@ test('产物包含全部 YZ 定制，避免误用未定制的上游管理端', (
         '独立 Telegram Bot 侧栏入口': '/config/telegram-bot',
         '独立订阅客户端限制页面': '/finance/client-control',
         '订阅客户端限制配置': 'subscribe_client_control',
+        '管理侧栏显隐配置': 'admin_sidebar_hidden',
+        '系统外观设置入口': '/config/system/appearance',
         '独立机器人配置接口': '/telegram-bot/config',
         '独立机器人密钥显示接口': '/telegram-bot/token',
         '独立机器人绑定查询': '/telegram-bot/bindings',

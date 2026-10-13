@@ -1,6 +1,50 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['ru-RU'] = {
   "statistics": {
+    "operator": "Оператор",
+    "ipProperties": {
+      "title": "Свойства IP",
+      "view": "Свойства IP {ip}",
+      "close": "Закрыть свойства IP",
+      "networkType": "Тип сети",
+      "networkName": "Название сети",
+      "proxyTitle": "Проверка прокси",
+      "riskTitle": "Риски и роботы",
+      "yes": "Да",
+      "no": "Нет",
+      "unknown": "Недоступно",
+      "is_proxy": "Прокси",
+      "is_vpn": "VPN",
+      "is_tor": "Выход Tor",
+      "is_data_center": "Дата-центр",
+      "is_public_proxy": "Публичный прокси",
+      "is_web_proxy": "Веб-прокси",
+      "is_residential_proxy": "Резидентный прокси",
+      "is_consumer_privacy_network": "Сеть конфиденциальности",
+      "is_enterprise_private_network": "Корпоративная сеть",
+      "is_spammer": "Спам",
+      "is_scanner": "Сканер",
+      "is_botnet": "Ботнет",
+      "is_bogon": "Некорректный адрес",
+      "is_web_crawler": "Поисковый робот",
+      "is_ai_crawler": "ИИ-робот",
+      "types": {
+        "COM": "Коммерческая сеть",
+        "ORG": "Организация",
+        "GOV": "Государственная сеть",
+        "MIL": "Военная сеть",
+        "EDU": "Образование",
+        "LIB": "Библиотека",
+        "CDN": "Сеть доставки контента",
+        "ISP": "Фиксированный доступ",
+        "MOB": "Мобильная сеть",
+        "ISP/MOB": "Фиксированный / мобильный доступ",
+        "DCH": "Дата-центр",
+        "SES": "Поисковый робот",
+        "AIC": "ИИ-робот",
+        "RSV": "Зарезервировано"
+      }
+    },
     "minimumTraffic": "Скрыть трафик меньше (МБ)", "trafficFilter": "Фильтр трафика", "hideTrafficBelow": "Скрыть меньше",
     "trafficMinimumSuffix": "МБ", "trafficFilterApplied": "Скрыть записи меньше {{value}} МБ",
     "showAllTraffic": "Показать всё", "applyTrafficFilter": "Применить",
@@ -965,6 +1009,7 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
     }
   },
   "settings": {
+    "appearance": {"title":"Внешний вид","sidebar":"Боковое меню","restore":"Показать всё","saving":"Сохранение","retry":"Повторить","load_error":"Не удалось загрузить настройки","save_error":"Не удалось сохранить. Повторите попытку.","loading":"Загрузка"},
     "title": "Системные настройки",
     "description": "Управление основными конфигурациями системы, включая сайт, безопасность, подписки, реферальную программу, узлы и уведомления.",
     "server": {

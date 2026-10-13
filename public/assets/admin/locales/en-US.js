@@ -1,6 +1,50 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['en-US'] = {
   "statistics": {
+    "operator": "Provider",
+    "ipProperties": {
+      "title": "IP properties",
+      "view": "View IP properties for {ip}",
+      "close": "Close IP properties",
+      "networkType": "Network type",
+      "networkName": "Network name",
+      "proxyTitle": "Proxy detection",
+      "riskTitle": "Risk and crawler detection",
+      "yes": "Yes",
+      "no": "No",
+      "unknown": "Unavailable",
+      "is_proxy": "Proxy",
+      "is_vpn": "VPN",
+      "is_tor": "Tor exit",
+      "is_data_center": "Data center",
+      "is_public_proxy": "Public proxy",
+      "is_web_proxy": "Web proxy",
+      "is_residential_proxy": "Residential proxy",
+      "is_consumer_privacy_network": "Consumer privacy network",
+      "is_enterprise_private_network": "Enterprise private network",
+      "is_spammer": "Spammer",
+      "is_scanner": "Scanner",
+      "is_botnet": "Botnet",
+      "is_bogon": "Bogon",
+      "is_web_crawler": "Search crawler",
+      "is_ai_crawler": "AI crawler",
+      "types": {
+        "COM": "Commercial",
+        "ORG": "Organization",
+        "GOV": "Government",
+        "MIL": "Military",
+        "EDU": "Education",
+        "LIB": "Library",
+        "CDN": "Content delivery network",
+        "ISP": "Fixed-line ISP",
+        "MOB": "Mobile ISP",
+        "ISP/MOB": "Fixed-line / mobile ISP",
+        "DCH": "Data center",
+        "SES": "Search crawler",
+        "AIC": "AI crawler",
+        "RSV": "Reserved"
+      }
+    },
     "minimumTraffic": "Hide traffic below (MB)", "trafficFilter": "Traffic filter", "hideTrafficBelow": "Hide below",
     "trafficMinimumSuffix": "MB", "trafficFilterApplied": "Hide records below {{value}} MB",
     "showAllTraffic": "Show all", "applyTrafficFilter": "Apply",
@@ -1023,6 +1067,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     }
   },
   "settings": {
+    "appearance": {"title":"Appearance","sidebar":"Sidebar","restore":"Show all","saving":"Saving","retry":"Retry","load_error":"Failed to load appearance settings","save_error":"Could not save. Please retry.","loading":"Loading"},
     "title": "System Settings",
     "description": "Manage core system configurations, including site, security, subscription, invite commission, nodes, email, and notifications",
     "server": {

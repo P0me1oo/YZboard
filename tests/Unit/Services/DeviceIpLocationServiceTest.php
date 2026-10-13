@@ -9,6 +9,45 @@ use Tests\TestCase;
 
 class DeviceIpLocationServiceTest extends TestCase
 {
+    public function test_ip_properties_keep_true_false_and_unknown_and_share_the_location_cache(): void
+    {
+        Cache::flush();
+        Http::fake(['api.ip2location.io/*' => Http::response([
+            'ip' => '8.8.8.8', 'country_name' => '美国', 'isp' => 'Google LLC', 'usage_type' => 'DCH', 'is_proxy' => false,
+            'proxy' => ['is_vpn' => true, 'is_tor' => false, 'is_scanner' => 'false', 'is_botnet' => 0],
+        ])]);
+        $first = app(DeviceIpLocationService::class)->lookup('8.8.8.8');
+        $this->assertSame('DCH', $first['ip_properties']['usage_type']);
+        $this->assertSame('Google LLC', $first['ip_properties']['isp']);
+        $this->assertFalse($first['ip_properties']['is_proxy']);
+        $this->assertTrue($first['ip_properties']['proxy']['is_vpn']);
+        $this->assertFalse($first['ip_properties']['proxy']['is_tor']);
+        foreach (['is_scanner', 'is_botnet', 'is_spammer'] as $field) {
+            $this->assertNull($first['ip_properties']['proxy'][$field]);
+        }
+        $this->travel(29)->days();
+        $this->assertSame($first, (new DeviceIpLocationService())->lookup('8.8.8.8'));
+        Http::assertSentCount(1);
+        $this->travel(1)->days();
+        (new DeviceIpLocationService())->lookup('8.8.8.8');
+        Http::assertSentCount(2);
+    }
+
+    public function test_missing_properties_are_cached_as_unknown_and_do_not_infer_from_asn(): void
+    {
+        foreach ([[], ['isp' => '-', 'usage_type' => '-', 'is_proxy' => 'false', 'proxy' => 'invalid'], ['isp' => [], 'usage_type' => ['DCH']]] as $extra) {
+            Cache::flush();
+            Http::fake(['api.ip2location.io/*' => Http::response($extra + [
+                'ip' => '8.8.8.8', 'country_name' => '美国', 'as' => 'Data Center Network', 'asn' => '15169',
+            ])]);
+            $service = new DeviceIpLocationService();
+            $first = $service->lookup('8.8.8.8');
+            $this->assertSame(\App\Services\IpProperties::fromResponse(), $first['ip_properties']);
+            $this->assertSame($first, $service->lookup('8.8.8.8'));
+            Http::assertSentCount(1);
+        }
+    }
+
     public function test_asn_is_cached_and_private_addresses_are_not_queried(): void
     {
         Cache::flush();

@@ -83,6 +83,14 @@ class InboundIpStatistics
             MIN(h.first_seen_at) AS first_seen_at, MAX(h.last_seen_at) AS last_seen_at")
             ->groupBy('i.ip', 'i.ip_version', 'i.region', 'i.province', 'i.asn', 'i.as_name', 'i.external_expires_at');
         $result = $this->paginate($query, $range, 'province', 'asc');
+        // 属性在本页汇总后批量读取，不把 JSON 放进跨日分组，也不增加外部查询。
+        $properties = DB::table('v2_inbound_ip')->whereIn('ip', array_column($result['list'], 'ip'))
+            ->where('external_expires_at', '>', $now)->pluck('ip_properties', 'ip');
+        foreach ($result['list'] as &$row) {
+            $stored = json_decode($properties->get($row['ip']) ?? 'null', true);
+            $row['ip_properties'] = IpProperties::fromResponse(is_array($stored) ? $stored : []);
+        }
+        unset($row);
         // 先算出最终分类再汇总，兼容 MariaDB 严格分组，并合并归为“未知”的过期地址。
         $classified = (clone $base)->selectRaw("h.ip, $province AS province");
         $groups = DB::query()->fromSub($classified, 'inbound_provinces')

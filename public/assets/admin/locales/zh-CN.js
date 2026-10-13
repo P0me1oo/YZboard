@@ -1,6 +1,50 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['zh-CN'] = {
   "statistics": {
+    "operator": "运营商",
+    "ipProperties": {
+      "title": "IP 属性",
+      "view": "查看 {ip} 的 IP 属性",
+      "close": "关闭 IP 属性",
+      "networkType": "网络类型",
+      "networkName": "网络名称",
+      "proxyTitle": "代理检测",
+      "riskTitle": "风险与爬虫检测",
+      "yes": "是",
+      "no": "否",
+      "unknown": "无法查询",
+      "is_proxy": "代理",
+      "is_vpn": "VPN",
+      "is_tor": "Tor 出口",
+      "is_data_center": "数据中心",
+      "is_public_proxy": "公共代理",
+      "is_web_proxy": "网页代理",
+      "is_residential_proxy": "住宅代理",
+      "is_consumer_privacy_network": "消费隐私网络",
+      "is_enterprise_private_network": "企业专用网络",
+      "is_spammer": "垃圾邮件",
+      "is_scanner": "网络扫描",
+      "is_botnet": "僵尸网络",
+      "is_bogon": "非法地址",
+      "is_web_crawler": "搜索引擎爬虫",
+      "is_ai_crawler": "AI 爬虫",
+      "types": {
+        "COM": "商业网络",
+        "ORG": "组织网络",
+        "GOV": "政府网络",
+        "MIL": "军事网络",
+        "EDU": "教育网络",
+        "LIB": "图书馆",
+        "CDN": "内容分发网络",
+        "ISP": "固定宽带",
+        "MOB": "移动网络",
+        "ISP/MOB": "固定 / 移动网络",
+        "DCH": "数据中心",
+        "SES": "搜索引擎爬虫",
+        "AIC": "AI 爬虫",
+        "RSV": "保留地址"
+      }
+    },
     "minimumTraffic": "隐藏小于多少 MB 的记录", "trafficFilter": "流量筛选", "hideTrafficBelow": "隐藏小于",
     "trafficMinimumSuffix": "MB 的记录", "trafficFilterApplied": "隐藏小于 {{value}} MB 的记录",
     "showAllTraffic": "显示全部", "applyTrafficFilter": "应用",
@@ -1024,6 +1068,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     }
   },
   "settings": {
+    "appearance": {"title":"外观设置","sidebar":"侧边栏","restore":"全部显示","saving":"保存中","retry":"重试","load_error":"外观设置读取失败","save_error":"保存失败，请重试","loading":"加载中"},
     "title": "系统设置",
     "description": "管理系统核心配置，包括站点、安全、订阅、邀请佣金、节点、邮件和通知等设置",
     "site": {

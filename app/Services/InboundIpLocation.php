@@ -27,14 +27,19 @@ class InboundIpLocation
         $now = now()->timestamp;
         $this->refreshLocal($ips);
         $rows = DB::table('v2_inbound_ip')->whereIn('ip', array_unique($ips))->get();
-        $pending = $rows->filter(fn ($row) => $row->external_expires_at <= $now && $row->lookup_after <= $now)->pluck('ip')->all();
+        $pending = $rows->filter(fn ($row) => ($row->external_expires_at <= $now || $row->ip_properties === null)
+            && $row->lookup_after <= $now)->pluck('ip')->all();
         $locations = $pending === [] ? [] : $this->external->lookupMany($pending);
         foreach ($rows as $row) {
             $update = [];
             if (isset($locations[$row->ip])) {
                 $location = $locations[$row->ip];
                 $expires = (int) ($location['expires_at'] ?? $now + 300);
+                $properties = $location['ip_properties'] ?? IpProperties::fromResponse();
+                // 优先使用接口提供的运营商，缺失时补本地运营商，不用 ASN 编号猜测。
+                $properties['isp'] ??= IpProperties::fromResponse(['isp' => $location['isp'] ?? null])['isp'];
                 $update += ['asn' => $location['asn'], 'as_name' => $location['as_name'],
+                    'ip_properties' => json_encode($properties, JSON_THROW_ON_ERROR),
                     'external_expires_at' => $expires, 'lookup_after' => $expires];
                 if ((int) $row->ip_version === 6) {
                     $update += ['region' => $location['location_source'] === 'ip2location' ? mb_substr($location['region'], 0, 512) : '未知',

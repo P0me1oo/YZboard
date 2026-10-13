@@ -25,8 +25,9 @@ class ManageController extends Controller
 
         // 前置入口一定也在这份全量列表里，用内存映射解析名称，避免逐行再查一次库。
         $nameById = $servers->pluck('name', 'id');
+        $rateById = $servers->mapWithKeys(fn (Server $server) => [$server->id => $server->getCurrentRate()]);
 
-        $servers = $servers->map(function ($item) use ($nameById, $portConflicts) {
+        $servers = $servers->map(function ($item) use ($nameById, $rateById, $portConflicts) {
             $item['port_conflict'] = $portConflicts[$item->id] ?? null;
             $item['groups'] = ServerGroup::whereIn('id', $item['group_ids'] ?? [])
                 ->orderedForDisplay()
@@ -36,6 +37,9 @@ class ManageController extends Controller
             $entryId = $item->relayEntryId();
             $item['relay_entry_name'] = $entryId === null ? null : $nameById->get($entryId);
             $item['relay_entry_supported'] = ServerRelayService::isSupportedEntry($item);
+            $item['effective_rate'] = $item->isRelayChild() && !$item->relay_rate_override
+                ? $rateById->get($entryId, $rateById->get($item->id))
+                : $rateById->get($item->id);
             return $item;
         });
 

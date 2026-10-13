@@ -115,6 +115,8 @@ class ProcessNodeReportBatch implements ShouldQueue
         $serverId = (int) ($server['id'] ?? $batch->server_id);
         $serverType = (string) ($batch->server_type ?: ($server['type'] ?? ''));
         $rate = max(0.0, (float) ($server['rate'] ?? 1));
+        $billing = !empty($server['relay_rates'])
+            ? app(\App\Services\RelayTrafficBilling::class)->lines($batch) : null;
         $recordAt = (int) $batch->record_at;
         $now = time();
         $totalU = 0;
@@ -135,12 +137,21 @@ class ProcessNodeReportBatch implements ShouldQueue
             $userId = (int) $userId;
             $ratedU = (int) ($u * $rate);
             $ratedD = (int) ($d * $rate);
+            if ($billing !== null) {
+                $lines = $billing[$userId] ?? [];
+                $ratedU = array_sum(array_column($lines, 'billed_u'));
+                $ratedD = array_sum(array_column($lines, 'billed_d'));
+                foreach ($lines as $line) {
+                    $this->incrementUserStat($userId, $line['rate'], $recordAt, $line['billed_u'], $line['billed_d'], $now);
+                }
+            } else {
+                $this->incrementUserStat($userId, $rate, $recordAt, $ratedU, $ratedD, $now);
+            }
 
             DB::table('v2_user')
                 ->where('id', $userId)
                 ->incrementEach(['u' => $ratedU, 'd' => $ratedD], ['t' => $now]);
 
-            $this->incrementUserStat($userId, $rate, $recordAt, $ratedU, $ratedD, $now);
             app(TrafficStatisticsRecorder::class)->add($userId, $serverId, 'entry', $recordAt, $u, $d, $ratedU, $ratedD, $batch->created_at?->timestamp);
             $totalU += $u;
             $totalD += $d;

@@ -136,6 +136,7 @@ class ServerService
     private static function projectRelayChild(Server $child, Server $entry, User $user): Server
     {
         $routeId = ServerRelayService::ensureRouteId($child);
+        $effectiveRate = $child->relay_rate_override ? $child->getCurrentRate() : $entry->getCurrentRate();
 
         $child->type = $entry->type;
         $child->host = $entry->host;
@@ -155,8 +156,7 @@ class ServerService
         }
 
         $child->password = Helper::applyVlessRoute($user->uuid, $routeId);
-        // 逻辑节点强制继承入口的基础倍率和动态时段倍率。
-        $child->rate = $entry->getCurrentRate();
+        $child->rate = $effectiveRate;
 
         // 拓扑判定过程中加载的入口节点关联会被一并序列化，其中包含 Reality 私钥等
         // 服务端配置，必须在返回前解除。
@@ -251,6 +251,7 @@ class ServerService
     {
         return ServerRoute::select(['id', 'match', 'protocol', 'port', 'network', 'action', 'action_value'])
             ->whereIn('id', $routeIds)
+            ->where('enabled', true)
             ->get()
             ->map(fn (ServerRoute $route) => $route->toNodeConfig())
             ->values();

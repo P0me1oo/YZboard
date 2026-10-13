@@ -189,5 +189,5 @@ return [
     | The only modification by laravel config
     |
     */
-    'version' => '1.70.1'
+    'version' => '1.71.0'
 ];

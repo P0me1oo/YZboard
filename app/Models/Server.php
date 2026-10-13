@@ -29,6 +29,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
  * @property string|null $network 网络类型
  * @property int|null $parent_id 父节点ID（共享运行状态与SS2022服务端密钥，语义同上游）
  * @property int|null $relay_entry_id 前置入口节点ID（非空表示本节点是中转逻辑节点）
+ * @property boolean $relay_rate_override 是否使用独立中转倍率
  * @property string|null $kernel_type 节点内核（xray/singbox，空值按 xray 处理）
  * @property int|null $vless_route VLESS/HY2 路由编号（写入客户端认证 UUID 的第 7、8 字节）
  * @property float|null $rate 倍率
@@ -161,6 +162,7 @@ class Server extends Model
         'machine_id' => 'integer',
         'kernel_type' => 'string',
         'relay_entry_id' => 'integer',
+        'relay_rate_override' => 'boolean',
         'vless_route' => 'integer',
     ];
 
@@ -530,11 +532,11 @@ class Server extends Model
     /**
      * 实际参与用户扣费的倍率。
      *
-     * 中转逻辑节点强制继承入口节点的基础倍率和动态时段倍率，自身填写的倍率不生效。
+     * 中转默认跟随入口；开启独立倍率后使用本节点的基础倍率及动态时段。
      */
     public function getEffectiveRate(): float
     {
-        if ($this->isRelayChild() && $this->relayEntry) {
+        if ($this->isRelayChild() && !$this->relay_rate_override && $this->relayEntry) {
             return $this->relayEntry->getCurrentRate();
         }
         return $this->getCurrentRate();

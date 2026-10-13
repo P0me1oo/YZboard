@@ -15,6 +15,15 @@ class UserRouteTraffic
     public function recordBatch(NodeReportBatch $batch): void
     {
         $snapshot = (array) $batch->server_snapshot;
+        if (!empty($snapshot['relay_rates'])) {
+            foreach (app(RelayTrafficBilling::class)->lines($batch) as $uid => $lines) {
+                foreach ($lines as $line) {
+                    $this->record($uid, (int) $batch->server_id, $line['server_id'], $line['kind'], $line['rate'],
+                        (int) $batch->record_at, $line['u'], $line['d'], $line['billed_u'], $line['billed_d'], $batch->created_at?->timestamp);
+                }
+            }
+            return;
+        }
         $rate = max(0.0, (float) ($snapshot['rate'] ?? 1));
         $entry = (int) $batch->server_id;
         foreach ((array) $batch->traffic as $uid => $traffic) {
@@ -74,19 +83,20 @@ class UserRouteTraffic
                 CASE WHEN entry_source.u > COALESCE(relay_source.u, 0) THEN entry_source.u - COALESCE(relay_source.u, 0) ELSE 0 END AS u,
                 CASE WHEN entry_source.d > COALESCE(relay_source.d, 0) THEN entry_source.d - COALESCE(relay_source.d, 0) ELSE 0 END AS d');
         $entry->unionAll($this->source($range)->where('kind', 'relay')->select('user_id', 'server_id', 'record_at', 'u', 'd'));
+        $entry->unionAll($this->source($range)->whereIn('kind', ['direct', 'transit'])->select('user_id', 'server_id', 'record_at', 'u', 'd'));
         return DB::query()->fromSub($entry, 'route_actual')->whereRaw('u + d > 0');
     }
 
     public function billedQuery(array $range): Builder
     {
-        return $this->source($range)->where('kind', 'entry');
+        return $this->source($range)->whereIn('kind', ['entry', 'direct', 'transit']);
     }
 
     /** 将已扣费量归属到线路，不能再次按落地倍率计算或改变用户余额。 */
     public function details(int $uid, array $range): array
     {
         $groups = [];
-        foreach ($this->source($range)->where('user_id', $uid)->orderBy('server_id')->get() as $row) {
+        foreach ($this->source($range)->where('user_id', $uid)->whereIn('kind', ['entry', 'relay'])->orderBy('server_id')->get() as $row) {
             $key = $row->entry_id . ':' . $row->record_at . ':' . $row->rate;
             $groups[$key][] = $row;
         }
@@ -131,6 +141,22 @@ class UserRouteTraffic
                 foreach (['upload', 'download', 'billed_upload', 'billed_download'] as $column) {
                     $result[$key][$column] += $route[$column];
                 }
+            }
+        }
+        // 独立倍率批次已在结算时分配到线路，历史查询只相加，不按当前倍率重新计算。
+        foreach ($this->source($range)->where('user_id', $uid)->whereIn('kind', ['direct', 'transit'])->get() as $row) {
+            $day = CarbonImmutable::createFromTimestamp($row->record_at, config('app.timezone'));
+            $date = match ($range['unit']) {
+                'week' => $day->startOfWeek()->toDateString(),
+                'month' => $day->startOfMonth()->toDateString(),
+                default => $day->toDateString(),
+            };
+            $kind = $row->kind === 'transit' ? 'relay' : 'direct';
+            $key = $date . ':' . $row->server_id . ':' . $kind . ':' . $row->rate;
+            $result[$key] ??= ['date' => $date, 'server_id' => (int) $row->server_id, 'kind' => $kind,
+                'rate' => (float) $row->rate, 'upload' => 0, 'download' => 0, 'billed_upload' => 0, 'billed_download' => 0];
+            foreach (['upload' => 'u', 'download' => 'd', 'billed_upload' => 'billed_u', 'billed_download' => 'billed_d'] as $target => $source) {
+                $result[$key][$target] += (int) $row->$source;
             }
         }
         foreach ($result as &$row) {

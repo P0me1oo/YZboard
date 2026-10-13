@@ -116,10 +116,10 @@ class UserService
 
     public function prepareTraffic(Server $server, string $protocol, array $data): array
     {
-        // 中转逻辑节点强制使用入口节点的倍率；正常情况下逻辑节点不会上报用户流量，
-        // 这里作为兜底，避免逻辑节点自身填写的倍率进入用户扣费。
-        $server->rate = $server->getEffectiveRate();
+        // 不改写模型的基础倍率，避免同一模型再次使用时把动态倍率当作基础值。
+        $rate = $server->getEffectiveRate();
         $server = $server->toArray();
+        $server['rate'] = $rate;
 
         list($server, $protocol, $data) = HookManager::filter('traffic.process.before', [$server, $protocol, $data]);
         // Compatible with legacy hook

@@ -2267,6 +2267,8 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       },
       "rate": {
         "label": "Base Rate",
+        "effective_label": "Entry rate",
+        "independent_label": "Independent rate",
         "error": "Base rate is required",
         "error_numeric": "Base rate must be a number",
         "error_gte_zero": "Base rate must be greater than or equal to 0",

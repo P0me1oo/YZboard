@@ -58,6 +58,10 @@ class NodeReportService
 
         $relayTraffic = ServerService::normalizeRelayTraffic($node, $relayTraffic);
         $relayUserTraffic = ServerService::normalizeRelayUserTraffic($node, $relayUserTraffic);
+        $relayRates = app(RelayTrafficBilling::class)->snapshotRates($node, $relayUserTraffic);
+        if ($relayRates !== []) {
+            $serverSnapshot['relay_rates'] = $relayRates;
+        }
         if ($traffic === [] && $relayTraffic === [] && $relayUserTraffic === []) {
             return null;
         }

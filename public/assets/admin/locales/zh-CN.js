@@ -2255,6 +2255,8 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
       },
       "rate": {
         "label": "基础倍率",
+        "effective_label": "前置倍率",
+        "independent_label": "独立倍率",
         "error": "基础倍率不能为空",
         "error_numeric": "基础倍率必须是数字",
         "error_gte_zero": "基础倍率必须大于或等于0",

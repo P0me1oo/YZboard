@@ -76,7 +76,7 @@ class RelayRateTest extends TestCase
         $entry = $this->node();
         $child = $this->node(['relay_entry_id' => $entry->id]);
         $payload = $child->toArray();
-        foreach ([0, 0.125, 4] as $rate) {
+        foreach ([0, 0.125, 0.12345678, 4] as $rate) {
             $this->postJson($this->adminPath() . '/server/manage/save', array_replace($payload,
                 ['id' => $child->id, 'relay_rate_override' => true, 'rate' => $rate]))->assertOk()->assertJsonPath('data', true);
             $this->assertTrue($child->fresh()->relay_rate_override);
@@ -166,6 +166,37 @@ class RelayRateTest extends TestCase
             $this->getJson($path . 'users?' . http_build_query($range))->assertOk()->assertJsonPath('data.list.0.total', 330);
             $this->getJson($path . 'users?' . http_build_query($range + ['metric' => 'billed']))->assertOk()->assertJsonPath('data.list.0.total', 720);
         }
+    }
+
+    public function test_fractional_rates_remain_distinct_in_billing_and_history(): void
+    {
+        Bus::fake();
+        $entry = $this->node(['rate' => 1]);
+        $first = $this->node(['relay_entry_id' => $entry->id, 'relay_rate_override' => true, 'rate' => 0.125]);
+        $second = $this->node(['relay_entry_id' => $entry->id, 'relay_rate_override' => true, 'rate' => 0.126]);
+        $user = $this->user();
+        $this->assertSame(0.125, $first->fresh()->getEffectiveRate());
+        $this->assertSame(0.126, $second->fresh()->getEffectiveRate());
+        $batch = app(NodeReportService::class)->accept($entry, 'fractional-rate-test', [$user->id => [2500, 5000]], [],
+            [$user->id => [$first->id => [1000, 2000], $second->id => [1000, 2000]]]);
+        Redis::shouldReceive('sadd')->once()->andReturn(1);
+        (new ProcessNodeReportBatch($batch->id))->handle();
+        (new ProcessNodeReportBatch($batch->id))->handle();
+
+        $this->assertSame(751, (int) $user->fresh()->u);
+        $this->assertSame(1502, (int) $user->fresh()->d);
+        $this->assertSame(3, StatUser::where('user_id', $user->id)->count());
+        foreach ([0.125, 0.126, 1.0] as $index => $rate) {
+            $row = StatUser::where('user_id', $user->id)->where('server_rate', $rate)->sole();
+            $this->assertSame($rate, (float) $row->server_rate);
+            $this->assertSame([125, 126, 500][$index], (int) $row->u);
+            $this->assertSame([250, 252, 1000][$index], (int) $row->d);
+        }
+        $rates = DB::table(UserRouteTraffic::TABLE)->where('user_id', $user->id)
+            ->where('kind', 'transit')->pluck('rate', 'server_id');
+        $this->assertSame(0.125, (float) $rates[$first->id]);
+        $this->assertSame(0.126, (float) $rates[$second->id]);
+        $this->assertSame(2253, (int) StatUser::where('user_id', $user->id)->sum(DB::raw('u + d')));
     }
 
     public function test_sampling_overflow_and_rounding_never_add_or_duplicate_billable_bytes(): void

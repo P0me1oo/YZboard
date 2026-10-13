@@ -83,12 +83,19 @@ class InboundIpStatistics
             MIN(h.first_seen_at) AS first_seen_at, MAX(h.last_seen_at) AS last_seen_at")
             ->groupBy('i.ip', 'i.ip_version', 'i.region', 'i.province', 'i.asn', 'i.as_name', 'i.external_expires_at');
         $result = $this->paginate($query, $range, 'province', 'asc');
-        // 属性在本页汇总后批量读取，不把 JSON 放进跨日分组，也不增加外部查询。
+        // 属性在本页汇总后批量读取；网页数据只由后台补齐，列表和卡片不请求网页。
         $properties = DB::table('v2_inbound_ip')->whereIn('ip', array_column($result['list'], 'ip'))
-            ->where('external_expires_at', '>', $now)->pluck('ip_properties', 'ip');
+            ->get(['ip', 'ip_properties', 'external_expires_at', 'web_data', 'web_expires_at'])->keyBy('ip');
         foreach ($result['list'] as &$row) {
-            $stored = json_decode($properties->get($row['ip']) ?? 'null', true);
+            $details = $properties->get($row['ip']);
+            $stored = $details && $details->external_expires_at > $now ? json_decode($details->ip_properties ?? 'null', true) : [];
             $row['ip_properties'] = IpProperties::fromResponse(is_array($stored) ? $stored : []);
+            $web = $details && $details->web_expires_at > $now ? json_decode($details->web_data ?? 'null', true) : null;
+            if (is_array($web)) {
+                $row['ip_properties'] = IpProperties::merge($row['ip_properties'], is_array($web['ip_properties'] ?? null) ? $web['ip_properties'] : []);
+                $row['asn'] ??= $web['asn'] ?? null;
+                $row['as_name'] ??= $web['as_name'] ?? null;
+            }
         }
         unset($row);
         // 先算出最终分类再汇总，兼容 MariaDB 严格分组，并合并归为“未知”的过期地址。

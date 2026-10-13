@@ -37,8 +37,8 @@ class InboundIpStatisticsTest extends TestCase
                 'province' => $ip === '8.8.8.8' ? '广东省' : '浙江省',
             ]);
         });
-        Http::fake(fn ($request) => $this->networkFails ? Http::response([], 429) : Http::response($this->externalProperties + ['ip' => $request->data()['ip'], 'asn' => 4134, 'as' => '测试网络',
-            'country_code' => 'CN', 'country_name' => 'China', 'region_name' => 'Guangdong', 'city_name' => 'Guangzhou']));
+        Http::fake(['api.ip2location.io/*' => fn ($request) => $this->networkFails ? Http::response([], 429) : Http::response($this->externalProperties + ['ip' => $request->data()['ip'], 'asn' => 4134, 'as' => '测试网络',
+            'country_code' => 'CN', 'country_name' => 'China', 'region_name' => 'Guangdong', 'city_name' => 'Guangzhou'])]);
     }
 
     private function user(bool $admin = false): User
@@ -391,13 +391,14 @@ class InboundIpStatisticsTest extends TestCase
         $user = $this->user();
         $this->record($user->id, ['8.8.8.8', '1.1.1.1']);
         admin_setting(['device_ip_exclude' => ['1.1.1.1']]);
+        Http::fake(['www.ip2location.io/*' => Http::response(file_get_contents(base_path('tests/Fixtures/ip2location-web.html')), 200)]);
         $this->artisan('inbound-ip:refresh')->assertSuccessful();
         $this->assertDatabaseHas('v2_inbound_ip', ['ip' => '8.8.8.8', 'asn' => 'AS4134']);
         $this->assertDatabaseHas('v2_inbound_ip', ['ip' => '1.1.1.1', 'asn' => null]);
-        Http::assertSentCount(1);
+        Http::assertSentCount(2);
         DB::table('v2_inbound_ip')->where('ip', '8.8.8.8')->update(['external_expires_at' => 0, 'lookup_after' => 0]);
         $this->artisan('inbound-ip:refresh')->assertSuccessful();
-        Http::assertSentCount(1);
+        Http::assertSentCount(2);
         $this->assertSame(now()->addDays(30)->timestamp, (int) DB::table('v2_inbound_ip')->where('ip', '8.8.8.8')->value('external_expires_at'));
     }
 

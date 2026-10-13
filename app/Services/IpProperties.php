@@ -24,4 +24,18 @@ class IpProperties
         }
         return $result;
     }
+
+    /** 新来源只覆盖明确给出的字段，保留其他来源已知的真、假判断。 */
+    public static function merge(array $base, array $extra): array
+    {
+        $base = self::fromResponse($base);
+        $extra = self::fromResponse($extra);
+        foreach (['isp', 'usage_type', 'is_proxy'] as $field) {
+            if ($extra[$field] !== null) $base[$field] = $extra[$field];
+        }
+        foreach ($extra['proxy'] as $field => $value) {
+            if ($value !== null) $base['proxy'][$field] = $value;
+        }
+        return $base;
+    }
 }

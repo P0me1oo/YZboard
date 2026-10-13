@@ -49,4 +49,21 @@ class InboundIpLocation
             if ($update !== []) DB::table('v2_inbound_ip')->where('ip', $row->ip)->update($update);
         }
     }
+
+    /** 网页补查只在定时任务执行，不写入在线设备共用的接口缓存。 */
+    public function refreshWeb(array $ips): void
+    {
+        $now = now()->timestamp;
+        $pending = DB::table('v2_inbound_ip')->whereIn('ip', array_unique($ips))
+            ->where('web_expires_at', '<=', $now)->where('web_lookup_after', '<=', $now)->pluck('ip')->all();
+        if ($pending === []) return;
+        foreach (app(InboundIpWebService::class)->lookupMany($pending) as $ip => $result) {
+            $update = ['web_lookup_after' => $result['retry_at']];
+            if (is_array($result['data'])) {
+                $update += ['web_data' => json_encode($result['data'], JSON_THROW_ON_ERROR), 'web_expires_at' => $result['expires_at']];
+            }
+            DB::table('v2_inbound_ip')->where('ip', $ip)->where('web_expires_at', '<=', $now)
+                ->where('web_lookup_after', '<=', $now)->update($update);
+        }
+    }
 }

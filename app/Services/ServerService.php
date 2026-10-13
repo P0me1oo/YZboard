@@ -251,7 +251,6 @@ class ServerService
     {
         return ServerRoute::select(['id', 'match', 'protocol', 'port', 'network', 'action', 'action_value'])
             ->whereIn('id', $routeIds)
-            ->where('enabled', true)
             ->get()
             ->map(fn (ServerRoute $route) => $route->toNodeConfig())
             ->values();

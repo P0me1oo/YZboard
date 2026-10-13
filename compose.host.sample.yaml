@@ -2,6 +2,11 @@ services:
   xboard:
     image: ghcr.io/cedar2025/xboard:latest
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
     network_mode: host
     volumes:
       - ./.env:/www/.env

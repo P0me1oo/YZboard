@@ -50,7 +50,7 @@ class ClientController extends Controller
         }
 
         if (!app(SubscriptionClientControl::class)->allows($user, $request->userAgent() ?? '')) {
-            return response('当前客户端暂不支持，请联系管理员。', 403, [
+            return response('该客户端暂时不在支持范围内，请联系管理员', 403, [
                 'Content-Type' => 'text/plain; charset=UTF-8',
                 'Cache-Control' => 'private, no-store',
             ]);

@@ -8,10 +8,17 @@
 #                  └─→ ws-server  (WebSocket)   /api/v2/server/ws → :8076
 #   horizon      (queue worker, no public port)
 #   redis        (state)
+x-panel-logging: &panel-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    logging: *panel-logging
     ports:
       - "7001:7001"
     depends_on:
@@ -23,6 +30,7 @@ services:
   web:
     image: ghcr.io/cedar2025/xboard:latest
     restart: unless-stopped
+    logging: *panel-logging
     depends_on:
       - redis
     volumes: &shared-volumes
@@ -40,6 +48,7 @@ services:
   horizon:
     image: ghcr.io/cedar2025/xboard:latest
     restart: unless-stopped
+    logging: *panel-logging
     depends_on:
       - redis
     volumes: *shared-volumes
@@ -52,6 +61,7 @@ services:
   ws-server:
     image: ghcr.io/cedar2025/xboard:latest
     restart: unless-stopped
+    logging: *panel-logging
     depends_on:
       - redis
     volumes: *shared-volumes
@@ -65,6 +75,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    logging: *panel-logging
     command: redis-server --unixsocket /data/redis.sock --unixsocketperm 777 --save 900 1 --save 300 10 --save 60 10000
     volumes:
       - redis-data:/data

@@ -146,14 +146,6 @@ class MachineController extends Controller
 
         ServerMachineLoadHistory::create($historyData);
 
-        // Time-based cleanup: keep 24h of data, runs on ~5% of requests
-        if (random_int(1, 20) === 1) {
-            ServerMachineLoadHistory::query()
-                ->where('machine_id', $machine->id)
-                ->where('recorded_at', '<', now()->subDay()->timestamp)
-                ->delete();
-        }
-
         return response()->json(['data' => true]);
     }
 

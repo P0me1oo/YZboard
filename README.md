@@ -1,5 +1,9 @@
 # Xboard
 
+本地开发版本 `1.68.5`：流量报告按到期时间分批清空详细内容，永久保留防重编号；机器监控历史自动保留最近 24 小时，Compose 样例增加容器日志上限。需要新增数据库迁移，沿用管理端 `0.41.4`，不修改 Node 或核心；尚未发布，见 [运行数据清理](docs/runtime-cleanup.md) 与 [兼容矩阵](YZ_COMPATIBILITY.md)。
+
+保留 `1.68.4` 未发布修改，配套管理端 `0.41.4`：修复入站 IP 和用户流量列表返回时丢失滚动位置，更新客户端拦截提示及 Telegram 管理员通知文案。使用与验证记录见 [兼容矩阵](YZ_COMPATIBILITY.md)。
+
 面板 [`1.68.3`](https://github.com/P0me1oo/YZboard/releases/tag/v1.68.3) 已发布，配套管理端 `0.41.3`：新增「订阅管理 → 客户端限制」，按下载软件上报名称设置黑白名单，用户全部有效权限组均在豁免名单内才跳过限制。列表采用紧凑行，输入完整后自动保存，关键词标签不再附带大小写说明。两套数据库完整回归各通过 735 项，双架构镜像、`latest` 和关键文件均已核对；默认关闭，无需数据库迁移或升级 Node。固定来源与回滚参考见 [兼容矩阵](YZ_COMPATIBILITY.md)，使用方法见 [订阅客户端限制](docs/subscription-client-control.md)。
 
 面板 [`1.67.0`](https://github.com/P0me1oo/YZboard/releases/tag/v1.67.0) 已正式发布，新增「Telegram Bot / 管理员通知」：指定多个接收人，分别开启设备与连接限制告警，重复间隔默认 60 分钟；用户无需绑定 Telegram。配套管理端 `0.40.0`，新增管理员告警迁移，并包含下方入站 IP 搜索及后台无订阅账户修复。双架构镜像、`latest` 与关键文件已核验，生产 PHP 两套数据库各 717 项及完整浏览器 141 项测试通过。无需升级 Node 或核心，配置方法见 [Telegram Bot](docs/telegram-bot.md)，固定来源与回滚版本见 [兼容矩阵](YZ_COMPATIBILITY.md)。

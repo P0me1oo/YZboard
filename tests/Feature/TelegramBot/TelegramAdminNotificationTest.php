@@ -147,8 +147,9 @@ class TelegramAdminNotificationTest extends TestCase
         Queue::assertPushed(SendTelegramAdminNotification::class, 4);
         Http::assertSentCount(4);
         Http::assertSent(fn ($request) => $request['chat_id'] === 900000001 && str_contains($request['text'], $user->email)
-            && str_contains($request['text'], $node->name) && str_contains($request['text'], '用户设备数限制告警'));
+            && str_contains($request['text'], $node->name) && str_contains($request['text'], '用户设备数超限通知'));
         Http::assertSent(fn ($request) => $request['chat_id'] === 900000002
+            && str_contains($request['text'], '用户连接数超限通知')
             && str_contains($request['text'], '同时连接数上限：10') && str_contains($request['text'], '每秒新建连接数上限：10')
             && !str_contains($request['text'], '您的订阅') && !str_contains($request['text'], '请向管理员反馈'));
         $this->assertSame(0, TelegramAdminNotification::whereNotNull('details')->count());

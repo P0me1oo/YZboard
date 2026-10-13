@@ -79,9 +79,11 @@ class ProcessNodeReportBatch implements ShouldQueue
                 Redis::sadd('traffic:pending_check', ...$userIds);
             }
 
+            $processedAt = now();
             $batch->forceFill([
                 'status' => NodeReportBatch::STATUS_PROCESSED,
-                'processed_at' => now(),
+                'processed_at' => $processedAt,
+                'payload_cleanup_at' => $processedAt->copy()->addDays(NodeReportBatch::PAYLOAD_RETENTION_DAYS)->timestamp,
                 'last_error' => null,
             ])->save();
         }, 5);

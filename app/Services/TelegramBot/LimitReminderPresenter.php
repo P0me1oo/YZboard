@@ -23,8 +23,8 @@ class LimitReminderPresenter
             $locations = [];
         }
         $lines = [$kind === 'device'
-            ? ($forAdmin ? '用户设备数限制告警' : '设备数超限提醒')
-            : ($forAdmin ? '用户连接数限制告警' : '连接数超限提醒')];
+            ? ($forAdmin ? '用户设备数超限通知' : '设备数超限提醒')
+            : ($forAdmin ? '用户连接数超限通知' : '连接数超限提醒')];
         foreach ($events as $type => $event) {
             $snapshot = $event['snapshot'] ?? null;
             $limit = $snapshot['limit'] ?? $event['limit'];

@@ -265,6 +265,7 @@ class ServerHandshakeTest extends TestCase
         $this->assertSame(100, (int) $server->u);
         $this->assertSame(200, (int) $server->d);
         $this->assertSame(NodeReportBatch::STATUS_PROCESSED, $batch->status);
+        $this->assertSame($batch->processed_at->copy()->addDays(7)->timestamp, $batch->payload_cleanup_at);
         $this->assertSame(1, StatUser::count());
         $this->assertSame(1, StatServer::count());
     }
@@ -294,7 +295,7 @@ class ServerHandshakeTest extends TestCase
         (new ProcessNodeReportBatch($batch->id))->handle();
 
         $this->travel(8)->days();
-        $this->artisan('node:retry-reports')->assertExitCode(0);
+        $this->artisan('node:prune-reports')->assertExitCode(0);
         $batch->refresh();
         $this->assertSame(NodeReportBatch::STATUS_PROCESSED, $batch->status);
         $this->assertNull($batch->traffic);

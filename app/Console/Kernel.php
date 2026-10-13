@@ -37,6 +37,8 @@ class Kernel extends ConsoleKernel
         $schedule->command('check:traffic-exceeded')->everyMinute()->onOneServer()->withoutOverlapping(10)->runInBackground();
         $schedule->command('node:sync-users')->everyFiveMinutes()->onOneServer()->withoutOverlapping(10)->runInBackground();
         $schedule->command('node:retry-reports')->everyMinute()->onOneServer()->withoutOverlapping(5)->runInBackground();
+        $schedule->command('node:prune-reports')->hourly()->onOneServer()->withoutOverlapping(10)->runInBackground();
+        $schedule->command('machine:prune-history')->hourlyAt(30)->onOneServer()->withoutOverlapping(10)->runInBackground();
         // reset
         $schedule->command('reset:traffic')->everyMinute()->onOneServer()->withoutOverlapping(10);
         $schedule->command('reset:log')->daily()->onOneServer();

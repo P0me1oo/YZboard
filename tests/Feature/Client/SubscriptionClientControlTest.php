@@ -90,7 +90,7 @@ class SubscriptionClientControlTest extends TestCase
                 $response = $this->download($user, $agent, $legacy);
                 $response->assertStatus($allowed ? 200 : 403);
                 if (!$allowed) {
-                    $this->assertSame('当前客户端暂不支持，请联系管理员。', $response->getContent());
+                    $this->assertSame('该客户端暂时不在支持范围内，请联系管理员', $response->getContent());
                     $response->assertHeader('Content-Type', 'text/plain; charset=UTF-8');
                     $this->assertStringContainsString('no-store', $response->headers->get('Cache-Control'));
                     $response->assertDontSee($user->uuid)->assertDontSee($user->token);

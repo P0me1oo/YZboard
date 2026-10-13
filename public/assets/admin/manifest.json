@@ -1,6 +1,6 @@
 {
   "index.html": {
-    "file": "assets/index-ti9ceCkm.js",
+    "file": "assets/index-BEDd8hqR.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
@@ -35,7 +35,7 @@
     "src": "src/runtime/ts.worker-sc26f_2L.js"
   },
   "src/runtime/vendor-runtime.js": {
-    "file": "assets/admin-D2Srv1OE.js",
+    "file": "assets/admin-bv-9a-cL.js",
     "name": "admin",
     "src": "src/runtime/vendor-runtime.js",
     "isDynamicEntry": true,

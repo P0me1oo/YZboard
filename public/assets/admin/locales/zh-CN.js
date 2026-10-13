@@ -28,7 +28,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
   },
   "telegramBot": {
     "adminNotifications": "管理员通知", "adminNotificationSaved": "管理员通知设置已保存",
-    "adminNotificationTypes": { "device": "设备数限制告警", "connection": "连接数限制告警" },
+    "adminNotificationTypes": { "device": "用户设备数超限通知", "connection": "用户连接数超限通知" },
     "adminRecipients": "管理员接收人（Telegram 数字 ID）",
     "adminRecipientsPlaceholder": "每行一个数字 ID，接收人需先私聊机器人发送 /start",
     "adminRecipientsInvalid": "最多填写 20 个不同的有效 Telegram 数字 ID；开启告警时至少填写一个",

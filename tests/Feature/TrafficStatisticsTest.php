@@ -102,6 +102,7 @@ class TrafficStatisticsTest extends TestCase
         $this->assertSame(0, DB::table('v2_stat_user_server')->count());
         $this->assertSame(0, StatUser::count());
         $this->assertSame(0, (int) $user->fresh()->u);
+        $this->assertSame(0, $batch->fresh()->payload_cleanup_at);
         Redis::shouldReceive('sadd')->once()->andReturn(1);
         (new ProcessNodeReportBatch($batch->id))->handle();
         $this->assertSame(2, DB::table('v2_stat_user_server')->count());

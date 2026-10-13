@@ -190,7 +190,9 @@ class MachineController extends Controller
         ]);
 
         $query = ServerMachineLoadHistory::query()
-            ->where('machine_id', $params['machine_id']);
+            ->where('machine_id', $params['machine_id'])
+            // 即使定时清理暂未执行，也不展示 24 小时以前的历史。
+            ->where('recorded_at', '>=', now()->subHours(24)->timestamp);
 
         if (!empty($params['range_hours'])) {
             $query->where('recorded_at', '>=', now()->subHours((int) $params['range_hours'])->timestamp);

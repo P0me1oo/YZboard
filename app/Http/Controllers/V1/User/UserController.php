@@ -9,6 +9,7 @@ use App\Http\Requests\User\UserUpdate;
 use App\Models\Order;
 use App\Models\Plan;
 use App\Models\Ticket;
+use App\Models\TelegramBotBinding;
 use App\Models\User;
 use App\Services\Auth\LoginService;
 use App\Services\AuthService;
@@ -102,13 +103,14 @@ class UserController extends Controller
                 'plan_id',
                 'discount',
                 'commission_rate',
-                'telegram_id',
                 'uuid'
             ])
             ->first();
         if (!$user) {
             return $this->fail([400, __('The user does not exist')]);
         }
+        // 沿用用户端返回格式，只展示新版绑定，不改写旧接入的数据。
+        $user['telegram_id'] = TelegramBotBinding::where('user_id', $request->user()->id)->value('telegram_id');
         $user['avatar_url'] = 'https://cdn.v2ex.com/gravatar/' . md5($user->email) . '?s=64&d=identicon';
         return $this->success($user);
     }

@@ -171,6 +171,30 @@ class TelegramBotTest extends TestCase
         $this->assertDatabaseMissing('v2_plugins', ['code' => 'telegram', 'is_enabled' => 1]);
     }
 
+    public function test_user_page_bind_command_uses_new_binding_and_deduplicates_retries(): void
+    {
+        $user = $this->user(['telegram_id' => 800001]);
+        $update = $this->message('/bind@yz_test_bot ' . $this->link($user));
+        $this->webhook($update)->assertOk();
+        $this->webhook($update)->assertOk();
+        $this->assertDatabaseCount('v2_telegram_bot_bindings', 1);
+        $this->assertDatabaseHas('v2_telegram_bot_bindings', ['user_id' => $user->id, 'telegram_id' => self::TELEGRAM_ID]);
+        $this->assertSame(800001, $user->fresh()->telegram_id);
+        $this->webhook($this->message('/bind ' . $this->link($this->user())))->assertOk();
+        $this->assertDatabaseCount('v2_telegram_bot_bindings', 1);
+    }
+
+    public function test_bind_command_keeps_link_validation_and_private_chat_restrictions(): void
+    {
+        foreach (['/bind', '/bind https://external.example.test/s/invalid', '/bind@other_bot invalid'] as $text) {
+            $this->webhook($this->message($text))->assertOk();
+        }
+        $update = $this->message('/bind ' . $this->link($this->user()));
+        $update['message']['chat'] = ['id' => -123, 'type' => 'group'];
+        $this->webhook($update)->assertOk();
+        $this->assertDatabaseCount('v2_telegram_bot_bindings', 0);
+    }
+
     public function test_connection_check_exposes_delivery_failure_even_when_registration_matches(): void
     {
         $this->asAdmin();

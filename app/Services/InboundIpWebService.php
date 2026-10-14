@@ -22,7 +22,8 @@ class InboundIpWebService
         try {
             foreach (array_unique($ips) as $ip) {
                 if (PublicDeviceIp::normalize($ip) !== $ip) continue;
-                $key = 'inbound_ip_web:v1:' . hash('sha256', $ip);
+                // 避免重新补查时复用旧摘要结果；数据库里的完整有效结果继续使用。
+                $key = 'inbound_ip_web:v2:' . hash('sha256', $ip);
                 try {
                     $cached = Cache::get($key);
                     if (is_array($cached)) { $result[$ip] = $cached; continue; }
@@ -64,7 +65,8 @@ class InboundIpWebService
                             'progress' => static function ($total, $downloaded): void {
                                 if ($downloaded > self::MAX_BODY) throw new \RuntimeException('IP web lookup response too large');
                             },
-                        ])->get('https://www.ip2location.io/' . rawurlencode($ip));
+                        // 官网 IPv6 路径保留冒号；前面已验证为规范化公网地址。
+                        ])->get('https://www.ip2location.com/' . $ip);
                 }
             }, 4);
             foreach ($allowed as $ip) {

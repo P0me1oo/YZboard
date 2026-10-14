@@ -82,6 +82,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     "entryTotal": "Entry total", "relayTotal": "Relay total", "date": "Date", "position": "Traffic type", "entry": "Entry", "relay": "Relay"
   },
   "telegramBot": {
+    "groupLink": "Telegram group link", "groupLinkInvalid": "Enter a complete HTTP or HTTPS group link.",
     "groupNodeSettings": "Groups & nodes", "groupNodeSaved": "Group and node settings saved",
     "auto_approve_join": "Review join requests automatically", "notify_node_offline": "Node offline alerts",
     "joinGroups": "Group IDs to review", "joinGroupsPlaceholder": "One group ID per line, e.g. -1001234567890",

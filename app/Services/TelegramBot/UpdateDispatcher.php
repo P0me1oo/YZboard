@@ -180,13 +180,15 @@ class UpdateDispatcher
                 return null;
             }
             $text = trim($text);
-            $command = preg_split('/\s+/', $text, 2)[0];
+            $parts = preg_split('/\s+/', $text, 2);
+            $command = $parts[0];
             $suffix = '@' . strtolower((string) $config->bot_username);
             if (str_ends_with(strtolower($command), $suffix)) {
                 $command = substr($command, 0, -strlen($suffix));
             }
             $action = match ($command) {
                 '/start' => 'menu',
+                '/bind' => 'bind',
                 '/ips' => 'inbound:today:1',
                 '/traffic' => 'traffic:today:1',
                 '/unbind' => 'unbind',
@@ -212,6 +214,8 @@ class UpdateDispatcher
             if ($message['date'] < time() - 7 * 86400 || $message['date'] > time() + 300) {
                 $action = 'stale';
             }
+            // 兼容用户端绑定指令；工单回复保留原正文，身份校验继续走新版链接解析。
+            if ($action === 'bind' && $command === '/bind') $text = trim($parts[1] ?? '');
         }
         return [
             'update_id' => $update['update_id'],

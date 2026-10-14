@@ -82,6 +82,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     "entryTotal": "入口合计", "relayTotal": "落地合计", "date": "日期", "position": "流量类型", "entry": "入口", "relay": "中转"
   },
   "telegramBot": {
+    "groupLink": "Telegram 群组链接", "groupLinkInvalid": "请输入完整的 HTTP 或 HTTPS 群组链接。",
     "groupNodeSettings": "群组与节点", "groupNodeSaved": "群组与节点设置已保存",
     "auto_approve_join": "自动审核入群", "notify_node_offline": "节点掉线通知",
     "joinGroups": "审核群组 ID", "joinGroupsPlaceholder": "每行一个群组 ID，例如 -1001234567890",

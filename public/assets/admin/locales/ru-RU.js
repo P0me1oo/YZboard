@@ -82,6 +82,7 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
     "entryTotal": "Всего на входе", "relayTotal": "Всего на выходе", "date": "Дата", "position": "Тип передачи", "entry": "Вход", "relay": "Ретрансляция"
   },
   "telegramBot": {
+    "groupLink": "Ссылка на группу Telegram", "groupLinkInvalid": "Укажите полную HTTP или HTTPS ссылку на группу.",
     "groupNodeSettings": "Группы и узлы", "groupNodeSaved": "Настройки групп и узлов сохранены",
     "auto_approve_join": "Автоматическая проверка заявок", "notify_node_offline": "Уведомления об отключении узлов",
     "joinGroups": "ID групп для проверки", "joinGroupsPlaceholder": "Один ID группы на строку, например -1001234567890",

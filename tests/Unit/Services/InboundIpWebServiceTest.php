@@ -23,7 +23,12 @@ class InboundIpWebServiceTest extends TestCase
         return str_replace('8.8.8.8', $ip, file_get_contents(base_path('tests/Fixtures/ip2location-web.html')));
     }
 
-    public function test_public_html_is_parsed_without_guessing_missing_security_results(): void
+    private function jsonPage(array $body): string
+    {
+        return '<pre id="code2">' . htmlspecialchars(json_encode($body, JSON_THROW_ON_ERROR), ENT_QUOTES | ENT_HTML5, 'UTF-8') . '</pre>';
+    }
+
+    public function test_full_page_preserves_explicit_positive_and_negative_security_results(): void
     {
         $parser = app(Ip2LocationWebParser::class);
         $data = $parser->parse($this->page(), '8.8.8.8');
@@ -31,18 +36,56 @@ class InboundIpWebServiceTest extends TestCase
         $this->assertSame('Test Carrier & Transit', $data['ip_properties']['isp']);
         $this->assertSame('DCH', $data['ip_properties']['usage_type']);
         $this->assertFalse($data['ip_properties']['is_proxy']);
-        foreach ($data['ip_properties']['proxy'] as $value) $this->assertNull($value);
+        $this->assertSame('ip2location.com', $data['source']);
+        foreach ($data['ip_properties']['proxy'] as $field => $value) $this->assertSame($field === 'is_data_center', $value);
 
-        $html = str_replace('<p class="ip-result">-</p>', '<p class="ip-result">VPN TOR SPAM SCANNER</p>', $this->page());
+        $html = $this->jsonPage(['ip' => '8.8.8.8', 'usage_type' => 'ISP/MOB', 'is_proxy' => true,
+            'proxy' => ['is_vpn' => true, 'is_tor' => false, 'is_spammer' => true, 'is_scanner' => true,
+                'is_data_center' => 'false', 'is_botnet' => 0]]);
         $data = $parser->parse($html, '8.8.8.8');
+        $this->assertSame('ISP/MOB', $data['ip_properties']['usage_type']);
         $this->assertTrue($data['ip_properties']['proxy']['is_vpn']);
-        $this->assertTrue($data['ip_properties']['proxy']['is_tor']);
+        $this->assertFalse($data['ip_properties']['proxy']['is_tor']);
         $this->assertTrue($data['ip_properties']['proxy']['is_spammer']);
         $this->assertTrue($data['ip_properties']['proxy']['is_scanner']);
         $this->assertNull($data['ip_properties']['proxy']['is_data_center']);
         $this->assertNull($data['ip_properties']['proxy']['is_botnet']);
+        $this->assertNull($data['ip_properties']['proxy']['is_ai_crawler']);
         $this->assertNull($parser->parse($html, '1.1.1.1'));
         $this->assertNull($parser->parse('<html><body>Access denied</body></html>', '8.8.8.8'));
+    }
+
+    public function test_network_codes_do_not_infer_missing_proxy_results(): void
+    {
+        $parser = app(Ip2LocationWebParser::class);
+        foreach (['COM', 'ORG', 'GOV', 'MIL', 'EDU', 'LIB', 'CDN', 'ISP', 'MOB', 'ISP/MOB', 'DCH', 'SES', 'AIC', 'RSV'] as $code) {
+            $html = $this->jsonPage(['ip' => '8.8.8.8', 'usage_type' => $code, 'is_proxy' => false,
+                'proxy' => ['proxy_type' => '-', 'threat' => '-']]);
+            $data = $parser->parse($html, '8.8.8.8');
+            $this->assertSame($code, $data['ip_properties']['usage_type']);
+            $this->assertFalse($data['ip_properties']['is_proxy']);
+            foreach ($data['ip_properties']['proxy'] as $value) $this->assertNull($value);
+        }
+        foreach (['', '-', 'UNKNOWN', 'isp/mob', 'ISP/MOB extra', '(ISP/MOB) Example', ['ISP/MOB']] as $value) {
+            $html = $this->jsonPage(['ip' => '8.8.8.8', 'usage_type' => $value, 'is_proxy' => false]);
+            $this->assertNull($parser->parse($html, '8.8.8.8')['ip_properties']['usage_type']);
+        }
+    }
+
+    public function test_wrong_missing_duplicate_or_malformed_json_is_not_used_as_ip_data(): void
+    {
+        $parser = app(Ip2LocationWebParser::class);
+        foreach (['<pre id="code2">invalid json</pre>', '<pre id="code2">null</pre>',
+            '<pre id="code2">[]</pre>', $this->jsonPage(['ip' => ['8.8.8.8']]), $this->jsonPage(['ip' => '8.8.8.8']),
+            $this->page() . $this->jsonPage(['ip' => '1.1.1.1', 'isp' => 'Wrong Network']),
+            '<script type="application/json">{"ip":"8.8.8.8","isp":"Script Network"}</script>',
+            str_replace('id="code2"', 'id="code1"', $this->page())] as $html) {
+            $this->assertNull($parser->parse($html, '8.8.8.8'));
+        }
+        $ipv6 = '2606:4700:4700::1111';
+        $data = $parser->parse($this->jsonPage(['ip' => '2606:4700:4700:0:0:0:0:1111',
+            'usage_type' => 'DCH', 'asn' => 13335, 'as' => 'Cloudflare']), $ipv6);
+        $this->assertSame('AS13335', $data['asn']);
     }
 
     public function test_cache_deduplicates_addresses_for_thirty_days_without_changing_device_api_state(): void
@@ -51,7 +94,7 @@ class InboundIpWebServiceTest extends TestCase
         Cache::put($key, ['asn' => 'AS64501'], 30 * 86400);
         Cache::put('device_asn:backoff', true, 86400);
         Cache::put('device_asn:quota:' . now('UTC')->toDateString(), 1000, 86400);
-        Http::fake(['www.ip2location.io/*' => Http::response($this->page(), 200, ['Content-Type' => 'text/html'])]);
+        Http::fake(['www.ip2location.com/*' => Http::response($this->page(), 200, ['Content-Type' => 'text/html'])]);
         $service = app(InboundIpWebService::class);
         $first = $service->lookupMany(['8.8.8.8', '8.8.8.8', '192.168.1.1', '203.0.113.1', 'invalid']);
         $this->assertSame(['8.8.8.8'], array_keys($first));
@@ -86,7 +129,7 @@ class InboundIpWebServiceTest extends TestCase
 
     public function test_throttling_honors_retry_after_only_in_the_website_query_scope(): void
     {
-        Http::fake(['www.ip2location.io/*' => Http::sequence()->push('limited', 429, ['Retry-After' => '600'])
+        Http::fake(['www.ip2location.com/*' => Http::sequence()->push('limited', 429, ['Retry-After' => '600'])
             ->push($this->page('1.1.1.1'), 200)]);
         $service = app(InboundIpWebService::class);
         $result = $service->lookupMany(['8.8.8.8']);
@@ -127,16 +170,16 @@ class InboundIpWebServiceTest extends TestCase
         Http::assertSentCount(2);
     }
 
-    public function test_ipv6_is_encoded_and_wrong_oversized_or_redirected_pages_are_not_cached_as_success(): void
+    public function test_ipv6_keeps_colons_and_wrong_oversized_or_redirected_pages_are_not_cached_as_success(): void
     {
         $ip = '2606:4700:4700::1111';
-        Http::fake(['www.ip2location.io/*' => Http::response($this->page($ip), 200)]);
+        Http::fake(['www.ip2location.com/*' => Http::response($this->page($ip), 200)]);
         $this->assertNotNull(app(InboundIpWebService::class)->lookupMany([$ip])[$ip]['data']);
-        Http::assertSent(fn ($request) => $request->url() === 'https://www.ip2location.io/' . rawurlencode($ip));
+        Http::assertSent(fn ($request) => $request->url() === 'https://www.ip2location.com/' . $ip);
         foreach ([Http::response($this->page('1.1.1.1'), 200), Http::response(str_repeat('x', 262145), 200),
             Http::response('', 302, ['Location' => 'http://127.0.0.1/']), Http::failedConnection()] as $response) {
             Cache::flush();
-            Http::fake(['www.ip2location.io/*' => $response]);
+            Http::fake(['www.ip2location.com/*' => $response]);
             $result = app(InboundIpWebService::class)->lookupMany(['8.8.8.8']);
             $this->assertNull($result['8.8.8.8']['data']);
             $this->assertSame(now()->addMinutes(5)->timestamp, $result['8.8.8.8']['retry_at']);

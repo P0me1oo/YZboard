@@ -24,7 +24,7 @@ class AppController extends Controller
             'features' => [
                 'enable_register' => (bool) admin_setting('app_enable_register', true), // 是否开启注册功能
                 'enable_invite_system' => (bool) admin_setting('app_enable_invite_system', true), // 是否开启邀请系统
-                'enable_telegram_bot' => (bool) admin_setting('telegram_bot_enable', false), // 是否开启 Telegram 机器人
+                'enable_telegram_bot' => (bool) app(\App\Services\TelegramBot\UserEntryService::class)->settings()['is_telegram'], // 是否开启 Telegram 机器人
                 'enable_ticket_system' => (bool) admin_setting('app_enable_ticket_system', true), // 是否开启工单系统
                 'ticket_must_wait_reply' => (bool) admin_setting('ticket_must_wait_reply', 0), // 工单是否需要等待管理员回复后才可继续发消息
                 'enable_commission_system' => (bool) admin_setting('app_enable_commission_system', true), // 是否开启佣金系统

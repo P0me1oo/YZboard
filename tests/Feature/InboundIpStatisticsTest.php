@@ -391,7 +391,7 @@ class InboundIpStatisticsTest extends TestCase
         $user = $this->user();
         $this->record($user->id, ['8.8.8.8', '1.1.1.1']);
         admin_setting(['device_ip_exclude' => ['1.1.1.1']]);
-        Http::fake(['www.ip2location.io/*' => Http::response(file_get_contents(base_path('tests/Fixtures/ip2location-web.html')), 200)]);
+        Http::fake(['www.ip2location.com/*' => Http::response(file_get_contents(base_path('tests/Fixtures/ip2location-web.html')), 200)]);
         $this->artisan('inbound-ip:refresh')->assertSuccessful();
         $this->assertDatabaseHas('v2_inbound_ip', ['ip' => '8.8.8.8', 'asn' => 'AS4134']);
         $this->assertDatabaseHas('v2_inbound_ip', ['ip' => '1.1.1.1', 'asn' => null]);

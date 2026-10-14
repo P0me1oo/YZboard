@@ -5,6 +5,7 @@ namespace App\Http\Controllers\V1\User;
 use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Models\Payment;
+use App\Services\TelegramBot\UserEntryService;
 use App\Utils\Dict;
 use Illuminate\Http\Request;
 
@@ -13,8 +14,7 @@ class CommController extends Controller
     public function config()
     {
         $data = [
-            'is_telegram' => (int)admin_setting('telegram_bot_enable', 0),
-            'telegram_discuss_link' => admin_setting('telegram_discuss_link'),
+            ...app(UserEntryService::class)->settings(),
             'stripe_pk' => admin_setting('stripe_pk_live'),
             'withdraw_methods' => admin_setting('commission_withdraw_method', Dict::WITHDRAW_METHOD_WHITELIST_DEFAULT),
             'withdraw_close' => (int)admin_setting('withdraw_close_enable', 0),

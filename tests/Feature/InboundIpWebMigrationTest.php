@@ -48,4 +48,33 @@ class InboundIpWebMigrationTest extends TestCase
         $this->assertSame($history, (array) DB::table('v2_stat_user_inbound_ip')->first());
         $migration->up();
     }
+
+    public function test_details_cache_repair_handles_multiple_batches_and_preserves_full_results(): void
+    {
+        $incomplete = json_encode(['asn' => 'AS64500', 'ip_properties' => ['usage_type' => null, 'is_proxy' => false]]);
+        $complete = json_encode(['source' => 'ip2location.com', 'ip_properties' => ['usage_type' => 'ISP/MOB']]);
+        $rows = [];
+        foreach (range(1, 205) as $n) {
+            $ip = '1.1.1.' . $n;
+            $rows[] = ['ip' => $ip, 'ip_key' => bin2hex(str_pad(inet_pton($ip), 16, "\0")), 'ip_version' => 4,
+                'web_data' => $incomplete, 'web_expires_at' => 2000000000, 'web_lookup_after' => 2000000000];
+        }
+        foreach (['8.8.8.8' => $complete, '9.9.9.9' => null] as $ip => $data) {
+            $rows[] = ['ip' => $ip, 'ip_key' => bin2hex(str_pad(inet_pton($ip), 16, "\0")), 'ip_version' => 4,
+                'web_data' => $data, 'web_expires_at' => 2000000000, 'web_lookup_after' => 2000000000];
+        }
+        DB::table('v2_inbound_ip')->insert($rows);
+        // 即使原网络类型已知，旧摘要的细分检测项仍需重新补齐。
+        $rows[0]['web_data'] = json_encode(['ip_properties' => ['usage_type' => 'DCH', 'is_proxy' => false]]);
+        DB::table('v2_inbound_ip')->where('ip', $rows[0]['ip'])->update(['web_data' => $rows[0]['web_data']]);
+        $unaffected = DB::table('v2_inbound_ip')->whereIn('ip', ['8.8.8.8', '9.9.9.9'])->orderBy('ip')->get()->toArray();
+        $migration = require database_path('migrations/2026_10_14_000003_refresh_inbound_ip_web_details.php');
+        $migration->up();
+        $migration->up();
+        $migration->down();
+        $this->assertSame(205, DB::table('v2_inbound_ip')->where('web_expires_at', 0)->where('web_lookup_after', 0)->count());
+        $this->assertSame(204, DB::table('v2_inbound_ip')->where('web_data', $incomplete)->count());
+        $this->assertSame($rows[0]['web_data'], DB::table('v2_inbound_ip')->where('ip', $rows[0]['ip'])->value('web_data'));
+        $this->assertEquals($unaffected, DB::table('v2_inbound_ip')->whereIn('ip', ['8.8.8.8', '9.9.9.9'])->orderBy('ip')->get()->toArray());
+    }
 }

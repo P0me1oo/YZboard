@@ -50,6 +50,7 @@ class ConfigService
             'last_checked_at' => $config->last_checked_at,
             'last_received_at' => $config->last_received_at,
             'last_error' => $config->last_error,
+            'group_link' => $config->group_link,
             'auto_approve_join' => $config->auto_approve_join,
             'join_group_ids' => $config->join_group_ids ?? [],
             'notify_node_offline' => $config->notify_node_offline,
@@ -99,7 +100,7 @@ class ConfigService
                 ]);
             }
             $config->fill(array_intersect_key($input, array_flip([
-                'auto_approve_join', 'join_group_ids', 'notify_node_offline', 'node_offline_minutes',
+                'group_link', 'auto_approve_join', 'join_group_ids', 'notify_node_offline', 'node_offline_minutes',
             ])))->save();
             if (!$config->notify_node_offline) {
                 \App\Models\TelegramBusinessNotification::where('kind', 'node_offline')->where('status', 'pending')

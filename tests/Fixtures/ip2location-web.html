@@ -1,14 +1,31 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><title>IP Address Details</title></head><body>
-<h5>IP Geolocation</h5>
-<div><label>IP Address</label><p class="ip-result"><a href="https://www.ip2location.io/8.8.8.8">8.8.8.8</a></p></div>
-<div><label>ASN</label><p class="ip-result"><a href="https://www.ip2location.com/as64500">64500</a></p></div>
-<div><label>AS</label><p class="ip-result">Test Network</p></div>
-<div><label>ISP</label><p class="ip-result">Test Carrier &amp; Transit</p></div>
-<div><label>Usage Type</label><p class="ip-result">(DCH) Data Center/Web Hosting/Transit</p></div>
-<h5>Proxy Detection</h5>
-<div><label>Proxy</label><p class="ip-result"><i class="icon"></i> No</p></div>
-<div><label>Proxy Type</label><p class="ip-result">-</p></div>
-<div><label>Threat</label><p class="ip-result">-</p></div>
-<div><label>Fraud Score</label><p class="ip-result">0</p></div>
+<h2>IP2Location.io IP Geolocation API</h2>
+<pre id="code1">curl "https://api.ip2location.io?key={YOUR API KEY}&amp;ip=8.8.8.8&amp;format=json"</pre>
+<pre id="code2" style="height:310px;margin-top:0;border:0;padding:1.5em;font-size:13px;">{
+    "ip": "8.8.8.8",
+    "asn": "64500",
+    "as": "Test Network",
+    "isp": "Test Carrier &amp; Transit",
+    "usage_type": "DCH",
+    "is_proxy": false,
+    "proxy": {
+        "proxy_type": "DCH",
+        "threat": "-",
+        "is_vpn": false,
+        "is_tor": false,
+        "is_data_center": true,
+        "is_public_proxy": false,
+        "is_web_proxy": false,
+        "is_web_crawler": false,
+        "is_ai_crawler": false,
+        "is_residential_proxy": false,
+        "is_consumer_privacy_network": false,
+        "is_enterprise_private_network": false,
+        "is_spammer": false,
+        "is_scanner": false,
+        "is_botnet": false,
+        "is_bogon": false
+    }
+}</pre>
 </body></html>

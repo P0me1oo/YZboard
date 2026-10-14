@@ -4,19 +4,14 @@ namespace App\Http\Controllers\V1\User;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
-use App\Services\TelegramService;
+use App\Services\TelegramBot\UserEntryService;
 use Illuminate\Http\Request;
 
 class TelegramController extends Controller
 {
     public function getBotInfo()
     {
-        $telegramService = new TelegramService();
-        $response = $telegramService->getMe();
-        $data = [
-            'username' => $response->result->username
-        ];
-        return $this->success($data);
+        return $this->success(app(UserEntryService::class)->botInfo());
     }
 
     public function unbind(Request $request)

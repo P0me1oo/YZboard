@@ -332,6 +332,18 @@ class TelegramBusinessNotificationTest extends TestCase
         $this->assertSame(Ticket::REPLY_STATUS_REPLIED, (int) $ticket->fresh()->reply_status);
     }
 
+    public function test_bind_command_in_ticket_reply_preserves_the_complete_reply_text(): void
+    {
+        [$actor, $binding, $ticket, $notification] = $this->sentTicket();
+        $text = '/bind https://example.test/s/example';
+        $update = $this->replyUpdate($notification, ['text' => $text]);
+        $this->webhook($update)->assertOk();
+        $this->webhook($update)->assertOk();
+        $this->assertSame(2, $ticket->messages()->count());
+        $this->assertSame($text, $ticket->messages()->orderByDesc('id')->first()->message);
+        $this->assertSame(1, TelegramBotBinding::count());
+    }
+
     public static function rejectedReplies(): array
     {
         return [['role'], ['banned'], ['unbind'], ['rebind'], ['closed'], ['disabled'], ['ordinary'],

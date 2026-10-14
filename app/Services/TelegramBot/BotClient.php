@@ -37,9 +37,11 @@ class BotClient
                 429 => 'Telegram 请求过于频繁，请稍后重试。',
                 default => 'Telegram 未接受请求，请检查机器人设置后重试。',
             };
-            throw new BotApiException($message, $status);
+            $retryAfter = $data['parameters']['retry_after'] ?? 0;
+            throw new BotApiException($message, $status,
+                $status === 429 && is_int($retryAfter) ? min(86400, max(0, $retryAfter)) : 0);
         }
-        if (in_array($method, ['setWebhook', 'deleteWebhook', 'setMyCommands', 'answerCallbackQuery'], true)
+        if (in_array($method, ['setWebhook', 'deleteWebhook', 'setMyCommands', 'answerCallbackQuery', 'approveChatJoinRequest', 'declineChatJoinRequest'], true)
             && ($data['result'] ?? null) !== true) {
             throw new BotApiException('Telegram 未确认操作成功，请重新检查连接。');
         }

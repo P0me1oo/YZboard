@@ -55,6 +55,7 @@ class ProcessNodeReportBatch implements ShouldQueue
             $userIds = $this->applyUserTraffic($batch);
             $this->applyRelayTraffic($batch);
             app(\App\Services\UserRouteTraffic::class)->recordBatch($batch);
+            app(\App\Services\ProxyTrafficRecorder::class)->recordBatch($batch);
 
             foreach ((array) $batch->relay_user_traffic as $userId => $nodes) {
                 foreach ($nodes as $serverId => $traffic) {

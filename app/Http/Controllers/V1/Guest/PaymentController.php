@@ -42,7 +42,7 @@ class PaymentController extends Controller
         if ($order->status !== Order::STATUS_PENDING)
             return true;
         $orderService = new OrderService($order);
-        if (!$orderService->paid($callbackNo)) {
+        if (!$orderService->paid($callbackNo, true)) {
             return false;
         }
 

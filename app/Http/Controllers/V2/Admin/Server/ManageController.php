@@ -409,6 +409,8 @@ class ManageController extends Controller
         $copiedServer->code = null;
         $copiedServer->u = 0;
         $copiedServer->d = 0;
+        $copiedServer->usage_u = 0;
+        $copiedServer->usage_d = 0;
         $copiedServer->save();
 
         return $this->success(true);

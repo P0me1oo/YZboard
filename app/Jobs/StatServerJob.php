@@ -23,6 +23,7 @@ class StatServerJob implements ShouldQueue
     protected string $protocol;
     protected string $recordType;
     protected ?int $receivedAt = null;
+    protected ?array $proxySnapshot = null;
 
     public $tries = 3;
     public $timeout = 60;
@@ -47,6 +48,10 @@ class StatServerJob implements ShouldQueue
         $this->protocol = $protocol;
         $this->recordType = $recordType;
         $this->receivedAt = now()->timestamp;
+        $node = Server::find($server['id']);
+        if ($node !== null) {
+            $this->proxySnapshot = app(\App\Services\ProxyTrafficRecorder::class)->snapshot($node, [], []);
+        }
     }
 
     public function handle(): void
@@ -66,6 +71,13 @@ class StatServerJob implements ShouldQueue
                 $this->updateServerTraffic($u, $d);
                 if ($this->recordType === 'd') {
                     app(\App\Services\NodeTrafficHour::class)->add($recordAt, $u, $d, $this->receivedAt, (int) $this->server['id']);
+                    if ($this->proxySnapshot !== null) {
+                        $batch = new \App\Models\NodeReportBatch([
+                            'server_snapshot' => ['proxy_traffic' => $this->proxySnapshot], 'traffic' => $this->data,
+                            'record_at' => $recordAt, 'created_at' => $this->receivedAt,
+                        ]);
+                        app(\App\Services\ProxyTrafficRecorder::class)->recordBatch($batch);
+                    }
                 }
             }, 3);
         } catch (\Exception $e) {

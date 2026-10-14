@@ -66,6 +66,8 @@ class NodeReportService
             return null;
         }
 
+        $serverSnapshot['proxy_traffic'] = app(ProxyTrafficRecorder::class)->snapshot($node, $relayTraffic, $relayUserTraffic);
+
         $reportId = trim((string) $reportId);
         if ($reportId === '') {
             // 兼容未携带 report_id 的旧 Node；这类请求无法跨 HTTP 重试去重。

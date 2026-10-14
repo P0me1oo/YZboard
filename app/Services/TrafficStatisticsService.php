@@ -19,6 +19,7 @@ class TrafficStatisticsService
             'end_date' => 'required_if:period,custom|date_format:Y-m-d|after_or_equal:start_date',
             'unit' => 'sometimes|in:day,week,month',
             'metric' => 'sometimes|in:actual,billed',
+            'scope' => 'sometimes|in:node,machine,legacy',
             'page' => 'sometimes|integer|min:1|max:1000000',
             'page_size' => 'sometimes|integer|min:1|max:100',
             'search' => 'nullable|string|max:100',
@@ -81,6 +82,9 @@ class TrafficStatisticsService
 
     public function overview(array $range): array
     {
+        if (in_array($range['scope'] ?? '', ['node', 'machine'], true)) {
+            return app(ProxyTrafficStatistics::class)->overview($range);
+        }
         if (($range['precision'] ?? '') === 'auto') { return $this->fineOverview($range); }
         $query = $this->between(DB::table('v2_stat_server')->where('record_type', 'd'), $range);
         $summary = $this->summary($query);
@@ -175,6 +179,9 @@ class TrafficStatisticsService
 
     public function nodes(array $range): array
     {
+        if (in_array($range['scope'] ?? '', ['node', 'machine'], true)) {
+            return app(ProxyTrafficStatistics::class)->ranking($range);
+        }
         $fine = ($range['precision'] ?? '') === 'auto';
         $query = $fine ? app(FineTrafficStatistics::class)->source($range, 'node')
             : $this->between(DB::table('v2_stat_server')->where('record_type', 'd'), $range);

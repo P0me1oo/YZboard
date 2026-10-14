@@ -160,6 +160,8 @@ class Server extends Model
         'u' => 'integer',
         'd' => 'integer',
         'machine_id' => 'integer',
+        'usage_u' => 'integer',
+        'usage_d' => 'integer',
         'kernel_type' => 'string',
         'relay_entry_id' => 'integer',
         'relay_rate_override' => 'boolean',

@@ -11,6 +11,13 @@ class TelegramBotConfig extends Model
     protected $guarded = ['id'];
     protected $hidden = ['token', 'webhook_secret'];
     protected $casts = [
+        'auto_approve_join' => 'boolean',
+        'join_group_ids' => 'array',
+        'notify_node_offline' => 'boolean',
+        'node_offline_minutes' => 'integer',
+        'notify_ticket' => 'boolean',
+        'allow_ticket_reply' => 'boolean',
+        'notify_payment' => 'boolean',
         'notify_admin_device' => 'boolean',
         'notify_admin_connection' => 'boolean',
         'notify_admin_recipients' => 'array',

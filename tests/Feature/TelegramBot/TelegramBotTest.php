@@ -838,6 +838,63 @@ class TelegramBotTest extends TestCase
         $this->assertSame($path, $audit->uri);
     }
 
+    public function test_base_url_generates_the_new_receiver_without_changing_token_binding_or_secret(): void
+    {
+        $user = $this->user();
+        $this->bind($user);
+        $this->asAdmin();
+        TelegramBotConfig::whereKey(1)->update(['enabled' => false, 'webhook_registered' => false]);
+        $before = TelegramBotConfig::first();
+        $this->calls = [];
+        $base = 'https://receiver.example.test:8443/panel';
+        for ($attempt = 0; $attempt < 2; $attempt++) {
+            $this->postJson($this->adminPath('save'), ['webhook_base_url' => $base . '/'])
+                ->assertOk()->assertJsonPath('data.webhook_base_url', $base)
+                ->assertJsonPath('data.webhook_url', $base . ConfigService::WEBHOOK_PATH)
+                ->assertJsonMissingPath('data.token')->assertJsonMissingPath('data.webhook_secret');
+        }
+        $current = TelegramBotConfig::first();
+        $this->assertSame($before->token, $current->token);
+        $this->assertSame($before->webhook_secret, $current->webhook_secret);
+        $this->assertDatabaseHas('v2_telegram_bot_bindings', ['user_id' => $user->id]);
+        $this->assertSame([], $this->calls);
+        $this->getJson($this->adminPath('config'))->assertOk()->assertJsonPath('data.webhook_base_url', $base);
+        $this->postJson($this->adminPath('enable'))->assertOk();
+        $registration = array_values(array_filter($this->calls, fn ($call) => $call['method'] === 'setWebhook'))[0]['data'];
+        $this->assertSame($base . ConfigService::WEBHOOK_PATH, $registration['url']);
+        $this->assertSame($before->webhook_secret, $registration['secret_token']);
+        $this->postJson(ConfigService::WEBHOOK_PATH, $this->message('/start'))->assertStatus(403);
+        $this->webhook($this->message('/start'))->assertOk();
+    }
+
+    public function test_existing_full_receiver_and_default_site_are_returned_as_base_urls(): void
+    {
+        $this->asAdmin();
+        $this->getJson($this->adminPath('config'))->assertOk()->assertJsonPath('data.webhook_base_url', self::SITE);
+        TelegramBotConfig::whereKey(1)->update(['webhook_url' => null]);
+        $this->getJson($this->adminPath('config'))->assertOk()
+            ->assertJsonPath('data.webhook_base_url', self::SITE)
+            ->assertJsonPath('data.webhook_url', self::SITE . ConfigService::WEBHOOK_PATH);
+    }
+
+    public function test_invalid_or_ambiguous_base_urls_leave_the_saved_configuration_unchanged(): void
+    {
+        $this->asAdmin();
+        TelegramBotConfig::whereKey(1)->update(['enabled' => false]);
+        $before = TelegramBotConfig::first()->getRawOriginal();
+        foreach (['', 'http://receiver.example.test', 'https://receiver.example.test?x=1',
+            'https://receiver.example.test#part', 'https://user@receiver.example.test',
+            self::SITE . ConfigService::WEBHOOK_PATH, self::SITE . '/api/v1/guest/telegram/webhook/'] as $base) {
+            $this->postJson($this->adminPath('save'), ['webhook_base_url' => $base])->assertUnprocessable();
+            $this->assertSame($before, TelegramBotConfig::first()->getRawOriginal());
+        }
+        $this->postJson($this->adminPath('save'), [
+            'webhook_base_url' => self::SITE, 'webhook_url' => self::SITE . ConfigService::WEBHOOK_PATH,
+        ])->assertUnprocessable();
+        $this->assertSame($before, TelegramBotConfig::first()->getRawOriginal());
+        Http::assertNothingSent();
+    }
+
     public function test_saved_token_is_available_only_through_the_admin_reveal_endpoint(): void
     {
         $this->getJson($this->adminPath('token'))->assertStatus(403);

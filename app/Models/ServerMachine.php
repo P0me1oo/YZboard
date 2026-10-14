@@ -29,6 +29,8 @@ class ServerMachine extends Model
 
     protected $casts = [
         'is_active' => 'boolean',
+        'proxy_u' => 'integer',
+        'proxy_d' => 'integer',
         'last_seen_at' => 'integer',
         'load_status' => 'array',
         'agent_runtime' => 'array',

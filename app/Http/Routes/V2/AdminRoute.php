@@ -55,6 +55,8 @@ class AdminRoute
                 $router->post('/save', [TelegramBotController::class, 'save']);
                 $router->post('/reminders', [TelegramBotController::class, 'reminders']);
                 $router->post('/admin-notifications', [TelegramBotController::class, 'adminNotifications']);
+                $router->post('/business-notifications', [TelegramBotController::class, 'businessNotifications']);
+                $router->post('/group-node-settings', [TelegramBotController::class, 'groupNodeSettings']);
                 $router->post('/check', [TelegramBotController::class, 'check']);
                 $router->post('/test-message', [TelegramBotController::class, 'testMessage']);
                 $router->post('/enable', [TelegramBotController::class, 'enable']);

@@ -109,6 +109,8 @@ class TelegramController extends Controller
         if (!$chatId || !$userId)
             return;
 
+        if (\App\Services\TelegramBot\JoinRequestService::ownsGroup((int) $chatId)) return;
+
         $user = User::where('telegram_id', $userId)->first();
 
         if (!$user) {

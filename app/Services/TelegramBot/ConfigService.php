@@ -29,6 +29,12 @@ class ConfigService
         return $config->webhook_url ?: rtrim((string) admin_setting('app_url', config('app.url')), '/') . self::WEBHOOK_PATH;
     }
 
+    public function webhookBaseUrl(TelegramBotConfig $config): string
+    {
+        $url = $this->webhookUrl($config);
+        return str_ends_with($url, self::WEBHOOK_PATH) ? substr($url, 0, -strlen(self::WEBHOOK_PATH)) : $url;
+    }
+
     public function view(?TelegramBotConfig $config = null): array
     {
         $config ??= $this->current();
@@ -36,6 +42,7 @@ class ConfigService
             'configured' => $config->getRawOriginal('token') !== null,
             'enabled' => $config->enabled,
             'webhook_registered' => $config->webhook_registered,
+            'webhook_base_url' => $this->webhookBaseUrl($config),
             'webhook_url' => $this->webhookUrl($config),
             'bot_username' => $config->bot_username,
             'webhook_matches' => $config->webhook_matches,
@@ -43,6 +50,13 @@ class ConfigService
             'last_checked_at' => $config->last_checked_at,
             'last_received_at' => $config->last_received_at,
             'last_error' => $config->last_error,
+            'auto_approve_join' => $config->auto_approve_join,
+            'join_group_ids' => $config->join_group_ids ?? [],
+            'notify_node_offline' => $config->notify_node_offline,
+            'node_offline_minutes' => $config->node_offline_minutes,
+            'notify_ticket' => $config->notify_ticket,
+            'allow_ticket_reply' => $config->allow_ticket_reply,
+            'notify_payment' => $config->notify_payment,
             'remind_expiring' => $config->remind_expiring,
             'remind_expired' => $config->remind_expired,
             'remind_device' => $config->remind_device,
@@ -54,6 +68,45 @@ class ConfigService
             'notify_admin_recipients' => $config->notify_admin_recipients ?? [],
             'notify_admin_interval_minutes' => $config->notify_admin_interval_minutes,
         ];
+    }
+
+    public function saveBusinessNotifications(array $input): array
+    {
+        return $this->locked(fn () => DB::transaction(function () use ($input) {
+            $config = TelegramBotConfig::whereKey(1)->lockForUpdate()->firstOrFail();
+            $config->fill(array_intersect_key($input, array_flip(['notify_ticket', 'allow_ticket_reply', 'notify_payment'])))->save();
+            foreach (['ticket', 'payment'] as $kind) {
+                if (!$config->{'notify_' . $kind}) {
+                    \App\Models\TelegramBusinessNotification::where('kind', $kind)->where('status', 'pending')
+                        ->update(['status' => 'cancelled']);
+                }
+            }
+            return $this->view($config);
+        }));
+    }
+
+    public function saveGroupNodeSettings(array $input): array
+    {
+        return $this->locked(fn () => DB::transaction(function () use ($input) {
+            $config = TelegramBotConfig::whereKey(1)->lockForUpdate()->firstOrFail();
+            // 已启用的旧配置需要增加入群事件订阅，保存成功后即可处理，无需重新停启。
+            if ($input['auto_approve_join'] && !$config->auto_approve_join && $config->enabled) {
+                $this->inspect($config);
+                if (!$config->webhook_matches) throw new ApiException('机器人接收地址不匹配，请先检查连接。', 409);
+                $this->client->request($config->token, 'setWebhook', [
+                    'url' => $this->webhookUrl($config), 'secret_token' => $config->webhook_secret,
+                    'allowed_updates' => ['message', 'callback_query', 'chat_join_request'], 'drop_pending_updates' => false,
+                ]);
+            }
+            $config->fill(array_intersect_key($input, array_flip([
+                'auto_approve_join', 'join_group_ids', 'notify_node_offline', 'node_offline_minutes',
+            ])))->save();
+            if (!$config->notify_node_offline) {
+                \App\Models\TelegramBusinessNotification::where('kind', 'node_offline')->where('status', 'pending')
+                    ->update(['status' => 'cancelled']);
+            }
+            return $this->view($config);
+        }));
     }
 
     public function saveAdminNotifications(array $input): array
@@ -99,7 +152,9 @@ class ConfigService
             if ($config->enabled || $config->webhook_registered) {
                 throw new ApiException('请先停用机器人，再修改配置。', 409);
             }
-            $url = trim($input['webhook_url'] ?? $this->webhookUrl($config));
+            $url = array_key_exists('webhook_base_url', $input)
+                ? $this->resolveBaseUrl($input['webhook_base_url'])
+                : trim($input['webhook_url'] ?? $this->webhookUrl($config));
             $this->validateUrl($url);
             $token = trim($input['token'] ?? '');
             if ($token !== '' && $token !== $config->token) {
@@ -152,7 +207,7 @@ class ConfigService
                 $this->client->request($config->token, 'setWebhook', [
                     'url' => $config->webhook_url,
                     'secret_token' => $config->webhook_secret,
-                    'allowed_updates' => ['message', 'callback_query'],
+                    'allowed_updates' => ['message', 'callback_query', ...($config->auto_approve_join ? ['chat_join_request'] : [])],
                     'drop_pending_updates' => false,
                 ]);
                 $this->client->request($config->token, 'setMyCommands', [
@@ -309,6 +364,20 @@ class ConfigService
             || !str_ends_with($parts['path'] ?? '', self::WEBHOOK_PATH)) {
             throw new ApiException('请填写本面板的 HTTPS 消息接收地址。');
         }
+    }
+
+    private function resolveBaseUrl(string $baseUrl): string
+    {
+        $baseUrl = rtrim(trim($baseUrl), '/');
+        $parts = parse_url($baseUrl);
+        if (!$parts || ($parts['scheme'] ?? '') !== 'https' || empty($parts['host'])
+            || isset($parts['user']) || isset($parts['pass']) || isset($parts['query']) || isset($parts['fragment'])
+            || str_ends_with($parts['path'] ?? '', self::WEBHOOK_PATH)
+            || str_ends_with($parts['path'] ?? '', '/api/v1/guest/telegram/webhook')) {
+            throw new ApiException('请输入有效的 HTTPS Webhook Base URL，仅填写基础地址。', 422);
+        }
+        // 沿用新版接收接口和请求头校验；数据库继续保存完整地址，兼容已有配置。
+        return $baseUrl . self::WEBHOOK_PATH;
     }
 
     private function recordError(TelegramBotConfig $config, ApiException $error): void

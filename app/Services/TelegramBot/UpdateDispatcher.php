@@ -21,6 +21,10 @@ class UpdateDispatcher
 
     public function handle(array $update, TelegramBotConfig $config): void
     {
+        if (array_key_exists('chat_join_request', $update)) {
+            app(JoinRequestService::class)->handle($update, $config);
+            return;
+        }
         $context = $this->context($update, $config);
         if (!$context) {
             return;
@@ -83,6 +87,9 @@ class UpdateDispatcher
         $sender = $context['sender_id'];
         $binding = $this->bindings->current($sender);
         $action = $context['action'];
+        if ($action === 'ticket_reply') {
+            return [app(BusinessNotificationService::class)->reply($context, $binding), $binding?->id];
+        }
         if ($action === 'bind') {
             if ($binding) {
                 return ['already_bound', $binding->id];
@@ -151,6 +158,7 @@ class UpdateDispatcher
         }
         $action = 'unknown';
         $confirmation = '';
+        $replyMessageId = null;
         if ($callback !== null) {
             if (!is_string($callback['id'] ?? null) || strlen($callback['id']) > 256
                 || ($message['from']['id'] ?? null) !== $config->bot_id) {
@@ -184,6 +192,22 @@ class UpdateDispatcher
                 '/unbind' => 'unbind',
                 default => str_starts_with($text, '/') ? 'unknown' : 'bind',
             };
+            $reply = $message['reply_to_message'] ?? null;
+            if (is_array($reply) && is_int($reply['message_id'] ?? null)
+                && \App\Models\TelegramBusinessNotification::where('bot_id', $config->bot_id)
+                    ->where('telegram_id', $from['id'])->where('kind', 'ticket')
+                    ->where('telegram_message_id', $reply['message_id'])->where('status', 'sent')->exists()) {
+                // 只有已投递的工单提醒进入回复流程，回复其他菜单消息仍可绑定或查询。
+                // 不解析引用正文中的编号，也不接受转发或其他机器人的消息。
+                $action = 'ticket_reply_invalid';
+                if (($reply['from']['id'] ?? null) === $config->bot_id
+                    && ($reply['from']['is_bot'] ?? false) === true && !isset($reply['forward_origin'])
+                    && !isset($reply['forward_from']) && !isset($reply['forward_date'])
+                    && is_int($reply['message_id'] ?? null) && $reply['message_id'] > 0 && $text !== '') {
+                    $action = 'ticket_reply';
+                    $replyMessageId = $reply['message_id'];
+                }
+            }
             // 清理七天前的防重记录后，旧文本仍不得重新建立绑定。
             if ($message['date'] < time() - 7 * 86400 || $message['date'] > time() + 300) {
                 $action = 'stale';
@@ -200,6 +224,7 @@ class UpdateDispatcher
             'action' => $action,
             'confirmation' => $confirmation,
             'text' => $text,
+            'reply_message_id' => $replyMessageId,
         ];
     }
 }

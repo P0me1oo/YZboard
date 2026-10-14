@@ -11,6 +11,11 @@ class MessagePresenter
     public function render(string $action, ?TelegramBotBinding $binding): array
     {
         $notices = [
+            'ticket_replied' => '工单回复已提交。',
+            'ticket_reply_disabled' => '工单回复功能暂未开启。',
+            'ticket_reply_forbidden' => '仅已绑定的管理员或员工可以回复工单。',
+            'ticket_reply_invalid' => '请直接回复本机器人发送给你的工单提醒。',
+            'ticket_closed' => '工单已关闭，无法回复。',
             'private_only' => '请私聊机器人后发送 /start。',
             'invalid_link' => '订阅链接无效，请发送本面板当前的订阅链接。',
             'occupied' => '该账号或当前 Telegram 已有绑定，请先解除原绑定。',

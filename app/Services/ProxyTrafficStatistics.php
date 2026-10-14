@@ -1,0 +1,149 @@
+<?php
+
+namespace App\Services;
+
+use Carbon\CarbonImmutable;
+use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+
+class ProxyTrafficStatistics
+{
+    private function started(): int
+    {
+        return (int) DB::table('v2_settings')->where('name', 'proxy_traffic_started_at')->value('value');
+    }
+
+    private function meta(array $range): array
+    {
+        $started = $this->started();
+        return array_replace($range['meta'], [
+            'scope' => $range['scope'],
+            'started_at' => $started ? CarbonImmutable::createFromTimestamp($started, config('app.timezone'))->toIso8601String() : null,
+            'partial' => $range['start']->timestamp < $started && $range['end']->timestamp > $started,
+        ]);
+    }
+
+    private function source(array $range, bool $trend = false): Builder
+    {
+        $today = CarbonImmutable::today(config('app.timezone'));
+        $fine = ($range['precision'] ?? '') === 'auto';
+        $unit = $range['start'] >= $today ? 'minute' : 'hour';
+        $union = null;
+        $started = CarbonImmutable::createFromTimestamp($this->started(), config('app.timezone'));
+        $boundary = $unit === 'minute' ? $started->startOfMinute() : $started->startOfHour();
+        if ($boundary < $started) { $boundary = $boundary->addSeconds($unit === 'minute' ? 60 : 3600); }
+        for ($day = $range['start']->startOfDay(); $day < $range['end']; $day = $day->addDay()) {
+            $start = $range['start']->max($day); $end = $range['end']->min($day->addDay());
+            $whole = $start->equalTo($day) && $end->equalTo($day->addDay());
+            if (!$whole && (!$fine || $start < $boundary)) {
+                throw ValidationException::withMessages(['start_time' => '该时段没有完整的新口径记录，请选择完整日期或启用后的时段。']);
+            }
+            $selected = !$whole || ($fine && $trend && $range['end']->timestamp - $range['start']->timestamp <= 172800) ? $unit : 'day';
+            $query = DB::table(ProxyTrafficRecorder::TABLE)->where('scope', $range['scope'])->where('unit', $selected)
+                ->where('record_at', '>=', $start->timestamp)->where('record_at', '<', $end->timestamp)
+                ->select('entity_id', 'entity_name', 'record_at', 'unit', 'u', 'd');
+            $union === null ? $union = $query : $union->unionAll($query);
+        }
+        return DB::query()->fromSub($union, 'proxy_source');
+    }
+
+    /** 先按实体汇总有符号差值，再限制为非负数，采样迟到不会累计虚假直出。 */
+    private function totals(Builder $source): Builder
+    {
+        return $source->selectRaw('entity_id, MAX(entity_name) AS entity_name,
+            CASE WHEN SUM(u) > 0 THEN SUM(u) ELSE 0 END AS upload,
+            CASE WHEN SUM(d) > 0 THEN SUM(d) ELSE 0 END AS download')->groupBy('entity_id');
+    }
+
+    public function ranking(array $range): array
+    {
+        $scope = $range['scope'];
+        $table = $scope === 'node' ? 'v2_server' : 'v2_server_machine';
+        $query = DB::query()->fromSub($this->totals($this->source($range)), 'totals')
+            ->leftJoin($table . ' as current_entity', 'current_entity.id', '=', 'totals.entity_id')
+            ->selectRaw("totals.entity_id AS id, COALESCE(current_entity.name, totals.entity_name) AS name,
+                CASE WHEN current_entity.id IS NULL THEN 1 ELSE 0 END AS deleted,
+                upload, download, upload + download AS total")
+            ->whereRaw('upload + download > 0');
+        $search = trim($range['search'] ?? '');
+        if ($search !== '') {
+            $pattern = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($search)) . '%';
+            $query->whereRaw("LOWER(COALESCE(current_entity.name, totals.entity_name)) LIKE ? ESCAPE '!'", [$pattern]);
+        }
+        $sort = $range['sort'] ?? 'total'; $direction = $range['direction'] ?? 'desc';
+        if ($sort === 'node') {
+            $query->orderBy('deleted')->orderBy($scope === 'node' ? 'current_entity.sort' : 'totals.entity_id', $direction);
+        } else {
+            $query->orderBy($sort, $direction);
+        }
+        $page = $query->orderBy('totals.entity_id')->paginate((int) $range['page_size'], ['*'], 'page', (int) $range['page']);
+        return [
+            'list' => array_map(fn ($row) => [
+                'id' => (int) $row->id, 'name' => $row->name . ($row->deleted ? '（已删除）' : ''),
+                'upload' => (int) $row->upload, 'download' => (int) $row->download, 'total' => (int) $row->total,
+            ], $page->items()),
+            'total' => $page->total(), 'page' => $page->currentPage(), 'last_page' => $page->lastPage(),
+            'page_size' => $page->perPage(), 'meta' => $this->meta($range),
+        ];
+    }
+
+    public function overview(array $range): array
+    {
+        $rows = $this->source($range, true)->orderBy('record_at')->get();
+        $unit = $rows->contains('unit', 'day') || $range['end']->timestamp - $range['start']->timestamp > 172800
+            ? 'day' : ($range['start'] >= CarbonImmutable::today(config('app.timezone')) ? 'minute' : 'hour');
+        if (($range['precision'] ?? '') !== 'auto') { $unit = $range['unit']; }
+        $series = [];
+        // 按节点分别消化迟到的扣减；回收前面时间桶中的同方向直出，趋势与排行合计一致。
+        foreach ($rows->groupBy('entity_id') as $entityRows) {
+            foreach (['u' => 'upload', 'd' => 'download'] as $column => $direction) {
+                $raw = 0; $visible = 0; $stack = [];
+                foreach ($entityRows as $row) {
+                    $time = CarbonImmutable::createFromTimestamp((int) $row->record_at, config('app.timezone'));
+                    $time = match ($unit) {
+                        'month' => $time->startOfMonth(), 'week' => $time->startOfWeek(), 'day' => $time->startOfDay(), default => $time,
+                    };
+                    $key = $time->timestamp;
+                    $series[$key] ??= ['date' => in_array($unit, ['hour', 'minute'], true) ? $time->toIso8601String() : $time->toDateString(), 'upload' => 0, 'download' => 0, 'total' => 0];
+                    $raw += (int) $row->$column;
+                    $next = max(0, $raw);
+                    $delta = $next - $visible;
+                    $visible = $next;
+                    if ($delta > 0) {
+                        $series[$key][$direction] += $delta;
+                        $stack[] = [$key, $delta];
+                    } elseif ($delta < 0) {
+                        $remaining = -$delta;
+                        while ($remaining > 0 && $stack !== []) {
+                            [$previousKey, $amount] = array_pop($stack);
+                            $removed = min($amount, $remaining);
+                            $series[$previousKey][$direction] -= $removed;
+                            $remaining -= $removed;
+                            if ($amount > $removed) { $stack[] = [$previousKey, $amount - $removed]; }
+                        }
+                    }
+                }
+            }
+        }
+        $started = $this->started();
+        if ($series !== []) {
+            for ($time = $range['start']; $time->timestamp < min($range['end']->timestamp, now()->timestamp + 1); $time = match ($unit) {
+                'minute' => $time->addSeconds(60), 'hour' => $time->addSeconds(3600), 'week' => $time->addWeek(), 'month' => $time->addMonthNoOverflow(), default => $time->addDay(),
+            }) {
+                $bucket = match ($unit) { 'week' => $time->startOfWeek(), 'month' => $time->startOfMonth(), default => $time };
+                $empty = $bucket->timestamp < $started ? null : 0;
+                $series[$bucket->timestamp] ??= ['date' => in_array($unit, ['hour', 'minute'], true) ? $bucket->toIso8601String() : $bucket->toDateString(), 'upload' => $empty, 'download' => $empty, 'total' => $empty];
+            }
+        }
+        ksort($series);
+        $summary = ['upload' => 0, 'download' => 0, 'total' => 0];
+        foreach ($series as &$row) {
+            if ($row['upload'] === null) { continue; }
+            $row['total'] = $row['upload'] + $row['download'];
+            foreach (array_keys($summary) as $key) { $summary[$key] += $row[$key]; }
+        }
+        unset($row);
+        return ['list' => array_values($series), 'summary' => $summary, 'meta' => $this->meta($range) + ['unit' => $unit]];
+    }
+}

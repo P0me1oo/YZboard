@@ -46,6 +46,8 @@ class MachineController extends Controller
                     'agent_runtime' => \App\Services\MachineAgentService::runtimeView($machine->agent_runtime),
                     'agent_operation' => $this->operationState($machine),
                     'servers_count' => $machine->servers_count,
+                    'proxy_u' => (int) $machine->proxy_u,
+                    'proxy_d' => (int) $machine->proxy_d,
                     'created_at' => $machine->created_at,
                     'updated_at' => $machine->updated_at,
                 ];

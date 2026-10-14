@@ -324,10 +324,10 @@ class OrderService
         }
     }
 
-    public function paid(string $callbackNo)
+    public function paid(string $callbackNo, bool $notifyPayment = false)
     {
         try {
-            [$order, $shouldDispatch] = DB::transaction(function () use ($callbackNo) {
+            [$order, $shouldDispatch] = DB::transaction(function () use ($callbackNo, $notifyPayment) {
                 $order = $this->lockCurrentOrder();
                 if (!$order) {
                     throw new \RuntimeException('Order not found.');
@@ -341,6 +341,10 @@ class OrderService
                 $order->callback_no = $callbackNo;
                 if (!$order->save()) {
                     throw new \RuntimeException('Failed to save order status.');
+                }
+
+                if ($notifyPayment) {
+                    app(\App\Services\TelegramBot\BusinessNotificationService::class)->recordPayment($order);
                 }
 
                 return [$order, true];

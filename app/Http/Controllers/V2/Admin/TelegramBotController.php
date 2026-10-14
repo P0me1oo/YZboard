@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\TelegramBotConfigRequest;
 use App\Http\Requests\Admin\TelegramBotReminderRequest;
 use App\Http\Requests\Admin\TelegramAdminNotificationRequest;
+use App\Http\Requests\Admin\TelegramBusinessNotificationRequest;
+use App\Http\Requests\Admin\TelegramGroupNodeRequest;
 use App\Models\TelegramBotBinding;
 use App\Services\TelegramBot\ConfigService;
 use Illuminate\Http\JsonResponse;
@@ -47,6 +49,16 @@ class TelegramBotController extends Controller
     public function adminNotifications(TelegramAdminNotificationRequest $request): JsonResponse
     {
         return response()->json(['data' => $this->config->saveAdminNotifications($request->validated())]);
+    }
+
+    public function businessNotifications(TelegramBusinessNotificationRequest $request): JsonResponse
+    {
+        return response()->json(['data' => $this->config->saveBusinessNotifications($request->validated())]);
+    }
+
+    public function groupNodeSettings(TelegramGroupNodeRequest $request): JsonResponse
+    {
+        return response()->json(['data' => $this->config->saveGroupNodeSettings($request->validated())]);
     }
 
     public function enable(): JsonResponse

@@ -49,6 +49,9 @@ class ResetLog extends Command
         DB::table('v2_inbound_ip')->whereNotExists(fn ($query) => $query->selectRaw('1')->from('v2_stat_user_inbound_ip')
             ->whereColumn('v2_stat_user_inbound_ip.ip', 'v2_inbound_ip.ip'))->delete();
         StatServer::where('record_at', '<', $cutoff)->delete();
+        DB::table('v2_stat_proxy_traffic')->where('record_at', '<', $cutoff)
+            ->orWhere(fn ($query) => $query->where('unit', 'minute')->where('record_at', '<', now()->startOfDay()->timestamp))
+            ->delete();
         DB::table('v2_stat_user_server')->where('record_at', '<', $cutoff)->delete();
         DB::table('v2_stat_traffic_hour')->where('record_at', '<', $cutoff)->delete();
         DB::table('v2_stat_node_hour')->where('record_at', '<', $cutoff)->delete();

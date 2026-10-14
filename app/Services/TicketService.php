@@ -30,6 +30,7 @@ class TicketService
             if (!$ticketMessage || !$ticket->save()) {
                 throw new \Exception();
             }
+            app(\App\Services\TelegramBot\BusinessNotificationService::class)->recordTicket($ticketMessage);
             DB::commit();
             return $ticketMessage;
         } catch (\Exception $e) {
@@ -48,6 +49,11 @@ class TicketService
         if (!$ticketMessage) {
             throw new ApiException('工单回复失败');
         }
+        $this->notifyAdminReply($ticket, $ticketMessage);
+    }
+
+    public function notifyAdminReply(Ticket $ticket, TicketMessage $ticketMessage): void
+    {
         HookManager::call('ticket.reply.admin.after', [$ticket, $ticketMessage]);
         $this->sendEmailNotify($ticket, $ticketMessage);
     }
@@ -79,6 +85,7 @@ class TicketService
                 DB::rollBack();
                 throw new ApiException('工单消息创建失败');
             }
+            app(\App\Services\TelegramBot\BusinessNotificationService::class)->recordTicket($ticketMessage);
             DB::commit();
             return $ticket;
         } catch (\Exception $e) {

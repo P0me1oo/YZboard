@@ -9,6 +9,7 @@ use App\Services\Plugin\AbstractPlugin;
 use App\Services\Plugin\HookManager;
 use App\Services\TelegramService;
 use App\Services\TicketService;
+use App\Services\TelegramBot\BusinessNotificationService;
 use App\Utils\Helper;
 use Illuminate\Support\Facades\Log;
 
@@ -41,7 +42,7 @@ class Plugin extends AbstractPlugin
 
   public function sendPaymentNotify(Order $order): void
   {
-    if (!$this->getConfig('enable_payment_notify', true)) {
+    if (BusinessNotificationService::owns('payment') || !$this->getConfig('enable_payment_notify', true)) {
       return;
     }
 
@@ -62,12 +63,12 @@ class Plugin extends AbstractPlugin
       Helper::escapeMarkdown($payment->name),
       $order->trade_no
     );
-    $this->telegramService->sendMessageWithAdmin($message, true);
+    $this->telegramService->sendMessageWithAdmin($message, true, 'payment');
   }
 
   public function sendTicketNotify(Ticket $ticket): void
   {
-    if (!$this->getConfig('enable_ticket_notify', true)) {
+    if (BusinessNotificationService::owns('ticket') || !$this->getConfig('enable_ticket_notify', true)) {
       return;
     }
 
@@ -105,7 +106,7 @@ class Plugin extends AbstractPlugin
     $TGmessage .= "━━━━━━━━━━━━━━━━━━━━\n";
     $TGmessage .= "📝 *主题*: `" . Helper::escapeMarkdown($ticket->subject) . "`\n";
     $TGmessage .= "💬 *内容*: `" . Helper::escapeMarkdown($message->message) . "`";
-    $this->telegramService->sendMessageWithAdmin($TGmessage, true);
+    $this->telegramService->sendMessageWithAdmin($TGmessage, true, 'ticket');
   }
 
   protected function registerDefaultCommands(): void
@@ -386,6 +387,10 @@ class Plugin extends AbstractPlugin
 
   public function handleTicketReply(object $msg, array $matches): void
   {
+    if (BusinessNotificationService::owns('ticket_reply')) {
+      $this->sendMessage($msg, '工单回复已迁入 Telegram Bot，请使用新版机器人。');
+      return;
+    }
     $user = $this->getBoundUser($msg);
     if (!$user) {
       return;

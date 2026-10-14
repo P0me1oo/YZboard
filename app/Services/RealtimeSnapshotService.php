@@ -102,11 +102,13 @@ class RealtimeSnapshotService
         }
 
         if ($subscription['nodes'] !== []) {
-            $nodes = Server::query()->whereIn('id', $subscription['nodes'])->get(['id', 'type', 'parent_id', 'enabled', 'u', 'd']);
+            $nodes = Server::query()->whereIn('id', $subscription['nodes'])->get(['id', 'type', 'parent_id', 'enabled', 'u', 'd', 'usage_u', 'usage_d']);
             $demand->renew($nodes->map(fn ($node) => 'node:' . ($node->parent_id ?: $node->id))->all());
             $sources = $this->states->readMany($nodes->map(fn ($node) => 'node:' . ($node->parent_id ?: $node->id))->unique()->all());
             foreach ($nodes as $node) {
                 $data = ['id' => (int) $node->id, 'u' => (int) $node->u, 'd' => (int) $node->d];
+                $data['usage_u'] = (int) $node->usage_u;
+                $data['usage_d'] = (int) $node->usage_d;
                 foreach (['last_check_at', 'last_push_at', 'online', 'is_online', 'available_status', 'load_status', 'metrics', 'online_conn'] as $field) {
                     $data[$field] = $node->$field;
                 }
@@ -127,7 +129,7 @@ class RealtimeSnapshotService
 
         if ($subscription['machines'] !== []) {
             $machines = ServerMachine::query()->whereIn('id', $subscription['machines'])
-                ->get(['id', 'is_active', 'last_seen_at', 'load_status', 'agent_runtime', 'agent_operation']);
+                ->get(['id', 'is_active', 'last_seen_at', 'load_status', 'agent_runtime', 'agent_operation', 'proxy_u', 'proxy_d']);
             $sources = $this->states->readMany($machines->map(fn ($machine) => 'machine:' . $machine->id)->all());
             foreach ($machines as $machine) {
                 $operation = $machine->agent_operation;
@@ -140,6 +142,8 @@ class RealtimeSnapshotService
                     'load_status' => $machine->load_status,
                     'agent_runtime' => MachineAgentService::runtimeView($machine->agent_runtime),
                     'agent_operation' => $operation,
+                    'proxy_u' => (int) $machine->proxy_u,
+                    'proxy_d' => (int) $machine->proxy_d,
                 ];
                 $state = $sources['machine:' . $machine->id] ?? null;
                 if ($state !== null) {

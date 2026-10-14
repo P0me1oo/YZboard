@@ -46,6 +46,7 @@ class CheckServer extends Command
 
     private function checkOffline()
     {
+        if (\App\Services\TelegramBot\BusinessNotificationService::owns('node_offline')) return;
         $servers = ServerService::getAllServers();
         foreach ($servers as $server) {
             if ($server['parent_id']) continue;

@@ -11,6 +11,15 @@ class TelegramGroupLinkMigrationTest extends TestCase
 {
     use DatabaseTruncation;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // MariaDB 的截表复用会删除迁移创建的配置行，升级测试需要显式准备它。
+        DB::table('v2_telegram_bot_configs')->insertOrIgnore([
+            'id' => 1, 'created_at' => time(), 'updated_at' => time(),
+        ]);
+    }
+
     protected function beforeTruncatingDatabase(): void
     {
         if (DB::connection()->getDriverName() === 'sqlite') RefreshDatabaseState::$migrated = false;

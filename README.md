@@ -1,6 +1,6 @@
 # Xboard
 
-面板 `1.78.1` 准备发布，配套管理端 `0.50.0`：包含下方 Telegram 用户端统一接入和入站 IP 修复。已补齐 MariaDB 迁移测试的配置初始记录，重新执行发布前完整检查；尚未更新镜像或 `latest`。使用规则见 [Telegram Bot](docs/telegram-bot.md)。
+面板 [`1.78.1`](https://github.com/P0me1oo/YZboard/releases/tag/v1.78.1) 已发布，配套管理端 `0.50.0`：用户端 Telegram 入口、账号和绑定状态统一使用新版，群组链接迁入“Telegram Bot / 群组与节点”，旧设置网址跳到新版。包含下方入站 IP 完整属性修复，保留旧配置和绑定；生产 PHP 两套数据库回归各 881 项通过，双架构镜像、`latest` 及关键文件已核验。无需升级 Node 或核心，使用规则见 [Telegram Bot](docs/telegram-bot.md)，固定来源及回退参考见 [兼容矩阵](YZ_COMPATIBILITY.md)。
 
 面板 `1.78.0` 本地开发，尚未发布，配套管理端 `0.50.0`：用户端 Telegram 入口、账号及绑定状态统一使用新版，群组链接移到“Telegram Bot / 群组与节点”。升级保留原链接和历史绑定，移除旧设置入口，旧网址跳到新版；兼容 `/bind` 指令，包含下方 `1.77.1` 入站 IP 修复，无需升级 Node 或核心。见 [Telegram Bot](docs/telegram-bot.md)。
 

@@ -1,5 +1,7 @@
 # Xboard
 
+面板 [`1.82.0`](https://github.com/P0me1oo/YZboard/releases/tag/v1.82.0) 已发布，包含管理端 `0.54.0`，配套 Node [`v2.11.0`](https://github.com/P0me1oo/YZ-Agent/releases/tag/v2.11.0)。新增服务器外网网卡流量保护，移除节点旧额度与承载量展示，并一并交付订阅用户限频、限制管理及 Telegram 提醒。旧服务器默认不限，首次启用从 0 开始，无手动校准；用户套餐扣费和历史统计保留。双数据库完整回归、双核心实连、双架构产物及 `latest` 已核验。见[使用规则](docs/server-traffic-protection.md)和[发布记录](YZ_COMPATIBILITY.md)。
+
 面板 [`1.78.1`](https://github.com/P0me1oo/YZboard/releases/tag/v1.78.1) 已发布，配套管理端 `0.50.0`：用户端 Telegram 入口、账号和绑定状态统一使用新版，群组链接迁入“Telegram Bot / 群组与节点”，旧设置网址跳到新版。包含下方入站 IP 完整属性修复，保留旧配置和绑定；生产 PHP 两套数据库回归各 881 项通过，双架构镜像、`latest` 及关键文件已核验。无需升级 Node 或核心，使用规则见 [Telegram Bot](docs/telegram-bot.md)，固定来源及回退参考见 [兼容矩阵](YZ_COMPATIBILITY.md)。
 
 面板 `1.78.0` 本地开发，尚未发布，配套管理端 `0.50.0`：用户端 Telegram 入口、账号及绑定状态统一使用新版，群组链接移到“Telegram Bot / 群组与节点”。升级保留原链接和历史绑定，移除旧设置入口，旧网址跳到新版；兼容 `/bind` 指令，包含下方 `1.77.1` 入站 IP 修复，无需升级 Node 或核心。见 [Telegram Bot](docs/telegram-bot.md)。

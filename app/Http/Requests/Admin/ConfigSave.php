@@ -4,6 +4,8 @@ namespace App\Http\Requests\Admin;
 
 use App\Services\DeviceIpExclusion;
 use App\Services\SubscriptionClientControl;
+use App\Services\SubscriptionProtection;
+use App\Support\SubscriptionProtectionIp;
 use App\Support\AdminAppearance;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -138,6 +140,23 @@ class ConfigSave extends FormRequest
     public function rules()
     {
         return self::RULES + [
+            SubscriptionProtection::SETTING => 'sometimes|array:' . implode(',', array_keys(SubscriptionProtection::defaults())) . '|required_array_keys:' . implode(',', array_keys(SubscriptionProtection::defaults())),
+            'subscribe_protection.block_browser' => 'boolean',
+            'subscribe_protection.brute_force_enabled' => 'boolean',
+            'subscribe_protection.brute_force_max_failures' => 'integer|min:1|max:10000',
+            'subscribe_protection.brute_force_window_minutes' => 'integer|min:1|max:10080',
+            'subscribe_protection.brute_force_block_minutes' => 'integer|min:1|max:43200',
+            'subscribe_protection.rate_limit_enabled' => 'boolean',
+            'subscribe_protection.rate_limit_max_requests' => 'integer|min:1|max:10000',
+            'subscribe_protection.rate_limit_window_minutes' => 'integer|min:1|max:10080',
+            'subscribe_protection.whitelist_ips' => 'array|list|max:256',
+            'subscribe_protection.whitelist_ips.*' => ['required', 'string', 'max:64', function ($attribute, $value, $fail) {
+                if (!is_string($value) || SubscriptionProtectionIp::normalize($value) === null) {
+                    $fail('白名单 IP 必须是有效的 IPv4、IPv6 地址或网段。');
+                }
+            }],
+            'subscribe_protection.whitelist_user_ids' => 'array|list|max:1000',
+            'subscribe_protection.whitelist_user_ids.*' => 'integer|min:1|distinct|exists:v2_user,id',
             'admin_sidebar_hidden.*' => 'required|string|distinct|in:' . implode(',', AdminAppearance::ITEMS),
         ];
     }
@@ -179,6 +198,18 @@ class ConfigSave extends FormRequest
     public function attributes(): array
     {
         return [
+            SubscriptionProtection::SETTING => '订阅防护',
+            'subscribe_protection.block_browser' => '禁止浏览器访问订阅',
+            'subscribe_protection.brute_force_enabled' => '订阅暴力探测防护',
+            'subscribe_protection.brute_force_max_failures' => '最大失败次数',
+            'subscribe_protection.brute_force_window_minutes' => '失败统计窗口',
+            'subscribe_protection.brute_force_block_minutes' => '封禁时长',
+            'subscribe_protection.rate_limit_enabled' => '订阅频率限制',
+            'subscribe_protection.rate_limit_max_requests' => '最大请求次数',
+            'subscribe_protection.rate_limit_window_minutes' => '请求统计窗口',
+            'subscribe_protection.whitelist_ips' => '白名单 IP',
+            'subscribe_protection.whitelist_user_ids' => '白名单用户',
+            'subscribe_protection.whitelist_user_ids.*' => '白名单用户',
             SubscriptionClientControl::SETTING => '订阅客户端限制',
             'subscribe_client_control.mode' => '限制模式',
             'subscribe_client_control.clients' => '客户端名单',

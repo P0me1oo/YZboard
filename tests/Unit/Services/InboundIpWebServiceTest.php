@@ -37,6 +37,12 @@ class InboundIpWebServiceTest extends TestCase
         $this->assertSame('DCH', $data['ip_properties']['usage_type']);
         $this->assertFalse($data['ip_properties']['is_proxy']);
         $this->assertSame('ip2location.com', $data['source']);
+        $this->assertSame(2, $data['properties_version']);
+        $this->assertSame(0, $data['ip_properties']['fraud_score']);
+        $this->assertSame('network.example', $data['ip_properties']['as_domain']);
+        $this->assertSame('DSL', $data['ip_properties']['net_speed']);
+        $this->assertSame('Test Mobile', $data['ip_properties']['mobile_brand']);
+        $this->assertSame('Test District', $data['ip_properties']['district']);
         foreach ($data['ip_properties']['proxy'] as $field => $value) $this->assertSame($field === 'is_data_center', $value);
 
         $html = $this->jsonPage(['ip' => '8.8.8.8', 'usage_type' => 'ISP/MOB', 'is_proxy' => true,

@@ -40,6 +40,33 @@ class RealtimeAdminTest extends TestCase
         $this->assertArrayNotHasKey('token', $frame['machines'][$machine->id]);
     }
 
+    public function test_machine_heartbeat_expires_without_duplicate_extension_and_recovers(): void
+    {
+        $this->freezeTime();
+        $machine = ServerMachine::create(['name' => '心跳测试机器', 'token' => 'test-only', 'is_active' => true]);
+        $source = 'machine:' . $machine->id;
+        $store = app(RealtimeStateStore::class);
+        $epoch = $store->begin($source, str_repeat('d', 32))['epoch'];
+        // 无人查看时允许空心跳；没有负载采样不代表机器离线。
+        $store->accept($source, $epoch, 1, []);
+        $receivedAt = now()->timestamp;
+        $snapshots = app(RealtimeSnapshotService::class);
+        $subscription = $snapshots->validate(['machines' => [$machine->id]]);
+        $read = fn () => $snapshots->snapshot($subscription)['machines'][$machine->id];
+        $this->assertFalse($read()['realtime_stale']);
+        $this->assertNull($read()['load_status']);
+        $this->travel(35)->seconds();
+        $this->assertFalse($read()['realtime_stale']);
+        $this->travel(1)->seconds();
+        $store->accept($source, $epoch, 1, []);
+        $this->assertTrue($read()['realtime_stale']);
+        $this->assertSame($receivedAt, $read()['last_seen_at']);
+        $store->accept($source, $epoch, 2, []);
+        $this->assertFalse($read()['realtime_stale']);
+        $this->assertSame(now()->timestamp, $read()['last_seen_at']);
+        $this->travelBack();
+    }
+
     public function test_ticket_is_single_use_and_checks_current_permissions(): void
     {
         $admin = $this->user(true);

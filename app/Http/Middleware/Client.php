@@ -18,6 +18,15 @@ class Client
      */
     public function handle($request, Closure $next)
     {
+        if ($request->routeIs('client.subscribe', 'client.subscribe.legacy', 'client.subscribe.app')) {
+            $result = app(\App\Services\SubscriptionProtection::class)->authenticate($request);
+            if ($result instanceof \Symfony\Component\HttpFoundation\Response) {
+                return $result;
+            }
+            Auth::setUser($result);
+            return $next($request);
+        }
+
         $token = $request->input('token', $request->route('token'));
         if (empty($token)) {
             throw new ApiException('token is null',403);

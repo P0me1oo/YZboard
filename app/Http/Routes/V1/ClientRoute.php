@@ -16,7 +16,7 @@ class ClientRoute
             // Client
             $router->get('/subscribe', [ClientController::class, 'subscribe'])->name('client.subscribe.legacy');
             // App
-            $router->get('/app/getConfig', [AppController::class, 'getConfig']);
+            $router->get('/app/getConfig', [AppController::class, 'getConfig'])->name('client.subscribe.app');
             $router->get('/app/getVersion', [AppController::class, 'getVersion']);
         });
     }

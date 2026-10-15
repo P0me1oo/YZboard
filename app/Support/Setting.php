@@ -13,6 +13,7 @@ class Setting
 
     private Repository $cache;
     private ?array $loadedSettings = null; // 请求内缓存
+    private ?\Throwable $loadFailure = null;
 
     public function __construct()
     {
@@ -25,6 +26,16 @@ class Setting
     public function get(string $key, mixed $default = null): mixed
     {
         $this->load();
+        return Arr::get($this->loadedSettings, strtolower($key), $default);
+    }
+
+    /** 安全规则不能把读取故障当成“尚未配置”。 */
+    public function getOrFail(string $key, mixed $default = null): mixed
+    {
+        $this->load();
+        if ($this->loadFailure !== null) {
+            throw $this->loadFailure;
+        }
         return Arr::get($this->loadedSettings, strtolower($key), $default);
     }
 
@@ -124,7 +135,8 @@ class Setting
             }
             
             $this->loadedSettings = $settings;
-        } catch (\Throwable) {
+        } catch (\Throwable $exception) {
+            $this->loadFailure = $exception;
             $this->loadedSettings = [];
         }
     }
@@ -136,5 +148,6 @@ class Setting
     {
         $this->cache->forget(self::CACHE_KEY);
         $this->loadedSettings = null;
+        $this->loadFailure = null;
     }
 }

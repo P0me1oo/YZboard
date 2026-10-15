@@ -9,6 +9,7 @@ use App\Services\DeviceIpExclusion;
 use App\Services\MailService;
 use App\Services\NodeSyncService;
 use App\Services\SubscriptionClientControl;
+use App\Services\SubscriptionProtection;
 use App\Services\TelegramService;
 use App\Services\ThemeService;
 use App\Utils\Dict;
@@ -135,6 +136,7 @@ class ConfigController extends Controller
                 'default_remind_traffic' => (bool) admin_setting('default_remind_traffic', 1),
                 'subscribe_path' => admin_setting('subscribe_path', 's'),
                 SubscriptionClientControl::SETTING => SubscriptionClientControl::settings(),
+                SubscriptionProtection::SETTING => SubscriptionProtection::settings(),
             ],
             'appearance' => [
                 AdminAppearance::SETTING => AdminAppearance::hidden(),
@@ -220,6 +222,10 @@ class ConfigController extends Controller
     public function save(ConfigSave $request)
     {
         $data = $request->validated();
+
+        if (array_key_exists(SubscriptionProtection::SETTING, $data)) {
+            $data[SubscriptionProtection::SETTING] = SubscriptionProtection::normalize($data[SubscriptionProtection::SETTING]);
+        }
 
         if (array_key_exists(SubscriptionClientControl::SETTING, $data)) {
             $data[SubscriptionClientControl::SETTING] = SubscriptionClientControl::normalize($data[SubscriptionClientControl::SETTING]);

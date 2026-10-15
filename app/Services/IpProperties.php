@@ -9,11 +9,21 @@ class IpProperties
     {
         $usage = $body['usage_type'] ?? null;
         $isp = $body['isp'] ?? null;
+        $score = $body['fraud_score'] ?? null;
+        $connection = $body['net_speed'] ?? null;
+        $asInfo = is_array($body['as_info'] ?? null) ? $body['as_info'] : [];
+        $asDomain = $body['as_domain'] ?? $asInfo['as_domain'] ?? null;
         $types = ['COM', 'ORG', 'GOV', 'MIL', 'EDU', 'LIB', 'CDN', 'ISP', 'MOB', 'ISP/MOB', 'DCH', 'SES', 'AIC', 'RSV'];
         $result = [
             'isp' => is_string($isp) && !in_array(trim($isp), ['', '-', '未知', '0'], true) ? mb_substr(trim($isp), 0, 200) : null,
             'usage_type' => is_string($usage) && in_array($usage, $types, true) ? $usage : null,
             'is_proxy' => is_bool($body['is_proxy'] ?? null) ? $body['is_proxy'] : null,
+            'fraud_score' => is_int($score) && $score >= 0 && $score <= 99 ? $score : null,
+            'as_domain' => is_string($asDomain) && filter_var(trim($asDomain), FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME)
+                ? mb_substr(trim($asDomain), 0, 253) : null,
+            'net_speed' => is_string($connection) && in_array($connection, ['DIAL', 'DSL', 'COMP', 'T1', 'SAT'], true) ? $connection : null,
+            'mobile_brand' => self::text($body['mobile_brand'] ?? null),
+            'district' => self::text($body['district'] ?? null),
             'proxy' => [],
         ];
         $proxy = is_array($body['proxy'] ?? null) ? $body['proxy'] : [];
@@ -25,12 +35,17 @@ class IpProperties
         return $result;
     }
 
+    private static function text(mixed $value): ?string
+    {
+        return is_string($value) && !in_array(trim($value), ['', '-', '未知', '0'], true) ? mb_substr(trim($value), 0, 200) : null;
+    }
+
     /** 新来源只覆盖明确给出的字段，保留其他来源已知的真、假判断。 */
     public static function merge(array $base, array $extra): array
     {
         $base = self::fromResponse($base);
         $extra = self::fromResponse($extra);
-        foreach (['isp', 'usage_type', 'is_proxy'] as $field) {
+        foreach (['isp', 'usage_type', 'is_proxy', 'fraud_score', 'as_domain', 'net_speed', 'mobile_brand', 'district'] as $field) {
             if ($extra[$field] !== null) $base[$field] = $extra[$field];
         }
         foreach ($extra['proxy'] as $field => $value) {

@@ -29,8 +29,8 @@ class Ip2LocationWebParser
         }
         $name = $body['as'] ?? null;
         $name = is_string($name) && !in_array(trim($name), ['', '-'], true) ? mb_substr(trim($name), 0, 200) : null;
-        if ($asn === null && $name === null && $properties['isp'] === null && $properties['usage_type'] === null
-            && $properties['is_proxy'] === null && !in_array(true, array_map('is_bool', $properties['proxy']), true)) return null;
-        return ['source' => 'ip2location.com', 'asn' => $asn, 'as_name' => $name, 'ip_properties' => $properties];
+        $known = array_filter(array_diff_key($properties, ['proxy' => true]), static fn ($value) => $value !== null);
+        if ($asn === null && $name === null && $known === [] && !in_array(true, array_map('is_bool', $properties['proxy']), true)) return null;
+        return ['source' => 'ip2location.com', 'properties_version' => 2, 'asn' => $asn, 'as_name' => $name, 'ip_properties' => $properties];
     }
 }

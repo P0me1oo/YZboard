@@ -77,4 +77,27 @@ class InboundIpWebMigrationTest extends TestCase
         $this->assertSame($rows[0]['web_data'], DB::table('v2_inbound_ip')->where('ip', $rows[0]['ip'])->value('web_data'));
         $this->assertEquals($unaffected, DB::table('v2_inbound_ip')->whereIn('ip', ['8.8.8.8', '9.9.9.9'])->orderBy('ip')->get()->toArray());
     }
+
+    public function test_extended_repair_handles_batches_and_keeps_already_queried_missing_fields(): void
+    {
+        $old = json_encode(['source' => 'ip2location.com', 'ip_properties' => ['usage_type' => 'ISP']]);
+        $rows = [];
+        foreach (range(1, 205) as $n) {
+            $ip = '1.1.1.' . $n;
+            $rows[] = ['ip' => $ip, 'ip_key' => bin2hex(str_pad(inet_pton($ip), 16, "\0")), 'ip_version' => 4,
+                'web_data' => $old, 'web_expires_at' => 2000000000, 'web_lookup_after' => 2000000000];
+        }
+        DB::table('v2_inbound_ip')->insert($rows);
+        $current = json_encode(['source' => 'ip2location.com', 'properties_version' => 2,
+            'ip_properties' => \App\Services\IpProperties::fromResponse()]);
+        DB::table('v2_inbound_ip')->where('ip', '1.1.1.1')->update(['web_data' => $current]);
+        $unaffected = DB::table('v2_inbound_ip')->where('ip', '1.1.1.1')->first();
+        $migration = require database_path('migrations/2026_10_15_000001_refresh_inbound_ip_extended_properties.php');
+        $migration->up();
+        $migration->up();
+        $migration->down();
+        $this->assertSame(204, DB::table('v2_inbound_ip')->where('web_expires_at', 0)->where('web_lookup_after', 0)->count());
+        $this->assertEquals($unaffected, DB::table('v2_inbound_ip')->where('ip', '1.1.1.1')->first());
+        $this->assertSame(204, DB::table('v2_inbound_ip')->where('web_data', $old)->count());
+    }
 }

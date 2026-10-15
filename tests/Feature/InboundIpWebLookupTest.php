@@ -65,12 +65,19 @@ class InboundIpWebLookupTest extends TestCase
         $this->details()->assertOk()->assertJsonPath('data.list.0.ip_properties.usage_type', 'DCH')
             ->assertJsonPath('data.list.0.ip_properties.isp', 'Test Carrier & Transit')
             ->assertJsonPath('data.list.0.ip_properties.is_proxy', false)
+            ->assertJsonPath('data.list.0.ip_properties.fraud_score', 0)
+            ->assertJsonPath('data.list.0.ip_properties.as_domain', 'network.example')
+            ->assertJsonPath('data.list.0.ip_properties.net_speed', 'DSL')
+            ->assertJsonPath('data.list.0.ip_properties.mobile_brand', 'Test Mobile')
+            ->assertJsonPath('data.list.0.ip_properties.district', 'Test District')
             ->assertJsonPath('data.list.0.ip_properties.proxy.is_vpn', false)
             ->assertJsonPath('data.list.0.ip_properties.proxy.is_tor', false)
             ->assertJsonPath('data.list.0.asn', 'AS64501')->assertJsonPath('data.list.0.region', '广东省广州市');
         Cache::flush();
         $this->artisan('inbound-ip:refresh')->assertSuccessful();
-        $this->details()->assertOk()->assertJsonPath('data.list.0.ip_properties.usage_type', 'DCH');
+        $this->details()->assertOk()->assertJsonPath('data.list.0.ip_properties.usage_type', 'DCH')
+            ->assertJsonPath('data.list.0.ip_properties.fraud_score', 0)
+            ->assertJsonPath('data.list.0.ip_properties.as_domain', 'network.example');
         Http::assertSentCount(2);
         $this->assertEquals($before, DB::table('v2_stat_user_inbound_ip')->orderBy('ip')->get()->toArray());
         $this->assertSame(now()->addDays(30)->timestamp, (int) DB::table('v2_inbound_ip')->where('ip', '8.8.8.8')->value('external_expires_at'));
@@ -143,6 +150,46 @@ class InboundIpWebLookupTest extends TestCase
         $this->assertSame(0, (int) DB::table('v2_inbound_ip')->value('web_lookup_after'));
     }
 
+    public function test_extended_upgrade_bypasses_old_cache_and_retries_without_changing_history_or_quota(): void
+    {
+        $this->record(['8.8.8.8']);
+        $expires = now()->addDays(30)->timestamp;
+        $old = ['source' => 'ip2location.com', 'asn' => 'AS64500', 'ip_properties' => ['usage_type' => 'ISP']];
+        DB::table('v2_inbound_ip')->update(['web_data' => json_encode($old), 'web_expires_at' => $expires, 'web_lookup_after' => $expires]);
+        $before = (array) DB::table('v2_inbound_ip')->first();
+        $history = DB::table('v2_stat_user_inbound_ip')->get()->toArray();
+        $oldKey = 'inbound_ip_web:v2:' . hash('sha256', '8.8.8.8');
+        Cache::put($oldKey, ['data' => $old, 'expires_at' => $expires, 'retry_at' => $expires], 86400);
+        $quota = 'inbound_ip_web:quota:' . now('UTC')->toDateString();
+        Cache::put($quota, 7, 86400);
+        $migration = require database_path('migrations/2026_10_15_000001_refresh_inbound_ip_extended_properties.php');
+        $migration->up();
+        $migration->up();
+        $expected = $before;
+        $expected['web_expires_at'] = $expected['web_lookup_after'] = 0;
+        $this->assertEquals($expected, (array) DB::table('v2_inbound_ip')->first());
+        Http::assertNothingSent();
+        $this->assertSame(7, Cache::get($quota));
+        Http::fake(['www.ip2location.com/*' => Http::sequence()->push('', 500)->push($this->page('8.8.8.8'), 200)]);
+        $this->artisan('inbound-ip:refresh')->assertSuccessful();
+        $this->details()->assertOk()->assertJsonPath('data.list.0.ip_properties.fraud_score', null);
+        $this->artisan('inbound-ip:refresh')->assertSuccessful();
+        Http::assertSentCount(1);
+        $this->travel(301)->seconds();
+        $this->artisan('inbound-ip:refresh')->assertSuccessful();
+        $this->details()->assertOk()->assertJsonPath('data.list.0.ip_properties.fraud_score', 0);
+        $this->assertSame(9, Cache::get($quota));
+        $this->assertSame($old, Cache::get($oldKey)['data']);
+        $saved = DB::table('v2_inbound_ip')->get()->toArray();
+        $migration->down();
+        $migration->up();
+        Cache::flush();
+        $this->artisan('inbound-ip:refresh')->assertSuccessful();
+        $this->assertEquals($saved, DB::table('v2_inbound_ip')->get()->toArray());
+        $this->assertEquals($history, DB::table('v2_stat_user_inbound_ip')->get()->toArray());
+        Http::assertSentCount(2);
+    }
+
     public function test_web_failure_retries_without_erasing_api_data_and_expired_web_properties_are_hidden(): void
     {
         $this->record(['8.8.8.8']);
@@ -159,6 +206,8 @@ class InboundIpWebLookupTest extends TestCase
         Http::assertSentCount(2);
         DB::table('v2_inbound_ip')->update(['web_expires_at' => now()->subSecond()->timestamp]);
         $this->details()->assertOk()->assertJsonPath('data.list.0.ip_properties.usage_type', null)
+            ->assertJsonPath('data.list.0.ip_properties.fraud_score', null)
+            ->assertJsonPath('data.list.0.ip_properties.as_domain', null)
             ->assertJsonPath('data.list.0.asn', 'AS64501');
         Http::assertSentCount(2);
         $this->assertEquals($before, DB::table('v2_stat_user_inbound_ip')->first());

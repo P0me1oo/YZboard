@@ -23,7 +23,7 @@ class InboundIpWebService
             foreach (array_unique($ips) as $ip) {
                 if (PublicDeviceIp::normalize($ip) !== $ip) continue;
                 // 避免重新补查时复用旧摘要结果；数据库里的完整有效结果继续使用。
-                $key = 'inbound_ip_web:v2:' . hash('sha256', $ip);
+                $key = 'inbound_ip_web:v3:' . hash('sha256', $ip);
                 try {
                     $cached = Cache::get($key);
                     if (is_array($cached)) { $result[$ip] = $cached; continue; }

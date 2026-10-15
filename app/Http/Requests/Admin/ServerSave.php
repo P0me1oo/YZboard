@@ -187,7 +187,6 @@ class ServerSave extends FormRequest
             'rate_time_ranges.*.end' => 'required_with:rate_time_ranges|string|date_format:H:i',
             'rate_time_ranges.*.rate' => 'required_with:rate_time_ranges|numeric|min:0',
             'protocol_settings' => 'array',
-            'transfer_enable' => 'nullable|integer|min:0',
         ];
     }
 
@@ -406,8 +405,6 @@ class ServerSave extends FormRequest
             'protocol_settings.*.string' => ':attribute 必须是字符串',
             'protocol_settings.*.integer' => ':attribute 必须是整数',
             'protocol_settings.*.in' => ':attribute 的值不合法',
-            'transfer_enable.integer' => '流量上限必须是整数',
-            'transfer_enable.min' => '流量上限不能小于0',
         ];
     }
 }

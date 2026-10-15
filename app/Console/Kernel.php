@@ -42,6 +42,8 @@ class Kernel extends ConsoleKernel
         // reset
         $schedule->command('reset:traffic')->everyMinute()->onOneServer()->withoutOverlapping(10);
         $schedule->command('reset:log')->daily()->onOneServer();
+        $schedule->call(fn () => app(\App\Services\SubscriptionRestrictionService::class)->prune())
+            ->name('subscription-protection:prune')->hourly()->onOneServer()->withoutOverlapping(10);
         $schedule->command('inbound-ip:refresh')->everyMinute()->onOneServer()->withoutOverlapping(5)->runInBackground();
         $schedule->command('telegram-bot:prune-updates')->daily()->onOneServer()->withoutOverlapping(10);
         // send

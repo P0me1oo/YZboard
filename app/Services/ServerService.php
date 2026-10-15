@@ -52,6 +52,9 @@ class ServerService
      */
     public static function getMachineNodes(ServerMachine $machine): Collection
     {
+        if (MachineTrafficService::blocked($machine)) {
+            return collect();
+        }
         return Server::where('machine_id', $machine->id)
             ->where('enabled', true)
             ->orderBy('sort', 'ASC')
@@ -76,16 +79,14 @@ class ServerService
                 }
             })
             ->where('show', true)
-            ->where(function ($query) {
-                $query->whereNull('transfer_enable')
-                    ->orWhere('transfer_enable', 0)
-                    ->orWhereRaw('u + d < transfer_enable');
-            })
             ->orderBy('sort', 'ASC')
             ->get()
             ->append(['last_check_at', 'last_push_at', 'online', 'is_online', 'available_status', 'cache_key', 'server_key']);
 
         $servers = collect($servers)->map(function ($server) use ($user) {
+            if (MachineTrafficService::nodeBlocked($server)) {
+                return null;
+            }
             if ($server->type === Server::TYPE_WIREGUARD && !$server->isRelayChild()) {
                 if ($server->enabled === false || $user->banned
                     || ($user->expired_at !== null && $user->expired_at <= time())
@@ -97,7 +98,7 @@ class ServerService
             if ($server->isRelayChild()) {
                 $entry = ServerRelayService::entryFor($server);
                 // 拓扑不完整或节点被禁用时直接丢弃，绝不把落地服务器的内部连接信息下发给客户端。
-                if (!$entry || $server->enabled === false) {
+                if (!$entry || $server->enabled === false || MachineTrafficService::nodeBlocked($entry)) {
                     return null;
                 }
                 return self::projectRelayChild($server, $entry, $user);
@@ -172,6 +173,9 @@ class ServerService
      */
     public static function getAvailableUsers(Server $node, ?int $userId = null)
     {
+        if (MachineTrafficService::nodeBlocked($node)) {
+            return collect();
+        }
         // 插件可能依赖完整名单；普通单用户准入直接查询一行，避免每次换网加载整节点用户。
         if ($userId !== null && isset(HookManager::getFilters()['server.users.get'])) {
             return self::getAvailableUsers($node)->filter(fn ($user) => (int) $user->id === $userId)->values();

@@ -17,6 +17,7 @@ class SubscriptionProtectionConcurrencyTest extends TestCase
         return [
             '请求限频' => [['rate_limit_enabled' => true, 'rate_limit_max_requests' => 5], 5],
             '失败封禁' => [['brute_force_enabled' => true, 'brute_force_max_failures' => 5], 4],
+            '跨 IP 用户限频' => [['user_rate_limit_enabled' => true, 'user_rate_limit_max_requests' => 5], 5],
         ];
     }
 
@@ -32,6 +33,9 @@ class SubscriptionProtectionConcurrencyTest extends TestCase
         $workers = [];
         $makeWorker = fn () => new Process([PHP_BINARY, base_path('tests/Fixtures/subscription-protection-worker.php'), $directory], base_path(), ['APP_ENV' => 'testing'], timeout: 60);
         try {
+            touch($directory . '/test.sqlite');
+            (new Process([PHP_BINARY, base_path('tests/Fixtures/subscription-protection-worker.php'), $directory, '--prepare'],
+                base_path(), ['APP_ENV' => 'testing'], timeout: 60))->mustRun();
             for ($index = 0; $index < 8; $index++) {
                 $worker = $makeWorker();
                 $worker->start();
@@ -43,7 +47,8 @@ class SubscriptionProtectionConcurrencyTest extends TestCase
                 array_push($statuses, ...array_filter(explode("\n", trim($worker->getOutput()))));
             }
             $this->assertCount(32, $statuses);
-            $this->assertSame($allowed, count(array_filter($statuses, fn ($status) => $status === '403')));
+            $accepted = ($rules['user_rate_limit_enabled'] ?? false) ? '200' : '403';
+            $this->assertSame($allowed, count(array_filter($statuses, fn ($status) => $status === $accepted)));
             $this->assertSame(32 - $allowed, count(array_filter($statuses, fn ($status) => $status === '429')), json_encode(array_count_values($statuses)));
             $restart = $makeWorker();
             $restart->mustRun();

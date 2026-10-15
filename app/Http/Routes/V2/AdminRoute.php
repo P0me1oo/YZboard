@@ -43,6 +43,8 @@ class AdminRoute
                 $router->get('/fetch', [ConfigController::class, 'fetch']);
                 $router->post('/save', [ConfigController::class, 'save']);
                 $router->get('/subscription-protection/users', [\App\Http\Controllers\V2\Admin\SubscriptionProtectionController::class, 'users']);
+                $router->get('/subscription-protection/restrictions', [\App\Http\Controllers\V2\Admin\SubscriptionProtectionController::class, 'restrictions']);
+                $router->post('/subscription-protection/release', [\App\Http\Controllers\V2\Admin\SubscriptionProtectionController::class, 'release']);
                 $router->get('/getEmailTemplate', [ConfigController::class, 'getEmailTemplate']);
                 $router->get('/getThemeTemplate', [ConfigController::class, 'getThemeTemplate']);
                 $router->post('/setTelegramWebhook', [ConfigController::class, 'setTelegramWebhook']);

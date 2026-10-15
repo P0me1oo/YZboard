@@ -188,7 +188,7 @@ class ServerRelayService
             })
             ->orderBy('sort', 'ASC')
             ->get()
-            ->filter(fn(Server $child) => self::isSupportedLanding($child, $entry))
+            ->filter(fn(Server $child) => self::isSupportedLanding($child, $entry) && !MachineTrafficService::nodeBlocked($child))
             ->values();
     }
 
@@ -197,14 +197,14 @@ class ServerRelayService
         return self::childrenOf($entry)->isNotEmpty() || self::blockedWireGuardRoutes($entry) !== [];
     }
 
-    /** 保留停用 WG 的编号，拒绝缓存订阅继续从前置直连出网。 */
+    /** 保留停用和保护中线路的编号，拒绝缓存订阅回退直出。保留旧方法名兼容调用方。 */
     public static function blockedWireGuardRoutes(Server $entry): array
     {
         if (!self::isSupportedEntry($entry)) {
             return [];
         }
-        return Server::where('relay_entry_id', $entry->id)->where('type', Server::TYPE_WIREGUARD)
-            ->where('enabled', false)->orderBy('id')->get()
+        return Server::where('relay_entry_id', $entry->id)->orderBy('id')->get()
+            ->filter(fn (Server $child) => $child->enabled === false || MachineTrafficService::nodeBlocked($child))
             ->map(fn (Server $child) => self::ensureRouteId($child))->all();
     }
 

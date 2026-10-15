@@ -60,7 +60,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
  * @property int|null $total 总流量
  * @property-read array|null $load_status 负载状态（包含CPU、内存、交换区、磁盘信息）
  * 
- * @property int $transfer_enable 流量上限，0或者null表示不限制
+ * @property int $transfer_enable 历史节点额度，仅保留旧值，不再执行节点流量限制
  * @property int $u 当前上传流量
  * @property int $d 当前下载流量
  */

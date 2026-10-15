@@ -23,6 +23,10 @@ class SubscriptionProtection
             'rate_limit_enabled' => false,
             'rate_limit_max_requests' => 60,
             'rate_limit_window_minutes' => 1,
+            'user_rate_limit_enabled' => false,
+            'user_rate_limit_max_requests' => 60,
+            'user_rate_limit_window_minutes' => 1,
+            'notify_telegram' => false,
             'whitelist_ips' => [],
             'whitelist_user_ids' => [],
         ];
@@ -78,14 +82,14 @@ class SubscriptionProtection
         $browser = $settings['block_browser'] && $this->isBrowser($request);
         if (!$settings['brute_force_enabled'] && !$settings['rate_limit_enabled']) {
             $user = $resolved ? $user : $lookup();
-            return $user ? ($browser ? $this->browserDenied() : $user) : $this->invalid();
+            return $user ? $this->checkUser($user, $settings, $browser) : $this->invalid();
         }
 
         // 共享 Redis 保存有过期时间的计数；锁覆盖读取、判定和写入，防止并发穿透。
         $key = 'subscription-protection:' . hash('sha256', $ip);
         try {
             $cache = Cache::store('redis');
-            return $cache->lock($key . ':lock', 10)->block(2, function () use ($cache, $key, $settings, $resolved, $user, $lookup, $browser) {
+            $result = $cache->lock($key . ':lock', 10)->block(2, function () use ($cache, $key, $ip, $settings, $resolved, $user, $lookup) {
                 $now = now()->getTimestamp();
                 $state = $cache->get($key, []);
                 $bruteRule = implode(':', [$settings['brute_force_max_failures'], $settings['brute_force_window_minutes'], $settings['brute_force_block_minutes']]);
@@ -94,6 +98,12 @@ class SubscriptionProtection
                 $rate = ($state['rate']['rule'] ?? null) === $rateRule ? $state['rate'] : [];
 
                 if ($settings['brute_force_enabled'] && ($brute['blocked_until'] ?? 0) > $now) {
+                    // 升级前已存在的缓存限制在再次命中时补齐管理索引。
+                    if (!isset($brute['event_id'])) {
+                        app(SubscriptionRestrictionService::class)->record('ip_ban', $ip, $brute, false);
+                        $state['brute'] = $brute;
+                        $cache->put($key, $state, max($brute['blocked_until'], $state['rate']['expires'] ?? 0) - $now);
+                    }
                     return $this->limited($brute['blocked_until'] - $now, true);
                 }
                 if (($brute['blocked_until'] ?? 0) > 0
@@ -102,10 +112,14 @@ class SubscriptionProtection
                     $brute = ['rule' => $bruteRule, 'count' => 0, 'expires' => 0];
                 }
                 if (($rate['expires'] ?? 0) <= $now) {
-                    $rate = ['rule' => $rateRule, 'count' => 0, 'expires' => $now + $settings['rate_limit_window_minutes'] * 60];
+                    $rate = ['rule' => $rateRule, 'count' => 0, 'expires' => $now + $settings['rate_limit_window_minutes'] * 60, 'tracked' => true];
                 }
                 if ($settings['rate_limit_enabled']) {
                     if ($rate['count'] >= $settings['rate_limit_max_requests']) {
+                        if (!isset($rate['event_id'])) {
+                            app(SubscriptionRestrictionService::class)->record('ip_rate', $ip, $rate, $rate['tracked'] ?? false);
+                            $cache->put($key, ['brute' => $brute, 'rate' => $rate], max($brute['expires'] ?? 0, $brute['blocked_until'] ?? 0, $rate['expires']) - $now);
+                        }
                         return $this->limited($rate['expires'] - $now);
                     }
                     $rate['count']++;
@@ -119,6 +133,7 @@ class SubscriptionProtection
                     $brute['count']++;
                     if ($brute['count'] >= $settings['brute_force_max_failures']) {
                         $brute['blocked_until'] = $now + $settings['brute_force_block_minutes'] * 60;
+                        app(SubscriptionRestrictionService::class)->record('ip_ban', $ip, $brute);
                     }
                 }
 
@@ -129,12 +144,46 @@ class SubscriptionProtection
                 if (($brute['blocked_until'] ?? 0) > $now && $settings['brute_force_enabled']) {
                     return $this->limited($brute['blocked_until'] - $now, true);
                 }
-                return $user ? ($browser ? $this->browserDenied() : $user) : $this->invalid();
+                return $user ?? $this->invalid();
             });
+            return $result instanceof User ? $this->checkUser($result, $settings, $browser) : $result;
         } catch (\Exception) {
             // 缓存不可用或同来源请求争用锁时拒绝本次下载，不静默关闭防护。
             return $this->unavailable();
         }
+    }
+
+    private function checkUser(User $user, array $settings, bool $browser): User|Response
+    {
+        if ($settings['user_rate_limit_enabled']) {
+            $key = SubscriptionRestrictionService::key('user_rate', (string) $user->id);
+            try {
+                $cache = Cache::store('redis');
+                $denied = $cache->lock($key . ':lock', 10)->block(2, function () use ($cache, $key, $user, $settings) {
+                    $now = now()->timestamp;
+                    $rule = SubscriptionRestrictionService::rule('user_rate', $settings);
+                    $state = $cache->get($key, []);
+                    $rate = $state['rate'] ?? [];
+                    if (($rate['rule'] ?? null) !== $rule || ($rate['expires'] ?? 0) <= $now) {
+                        $rate = ['rule' => $rule, 'count' => 0, 'expires' => $now + $settings['user_rate_limit_window_minutes'] * 60];
+                    }
+                    if ($rate['count'] >= $settings['user_rate_limit_max_requests']) {
+                        if (!isset($rate['event_id'])) {
+                            app(SubscriptionRestrictionService::class)->record('user_rate', (string) $user->id, $rate);
+                            $cache->put($key, ['rate' => $rate], $rate['expires'] - $now);
+                        }
+                        return $this->limited($rate['expires'] - $now);
+                    }
+                    $rate['count']++;
+                    $cache->put($key, ['rate' => $rate], $rate['expires'] - $now);
+                    return null;
+                });
+                if ($denied) return $denied;
+            } catch (\Exception) {
+                return $this->unavailable();
+            }
+        }
+        return $browser ? $this->browserDenied() : $user;
     }
 
     private function isBrowser(Request $request): bool

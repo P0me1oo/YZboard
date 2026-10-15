@@ -252,6 +252,10 @@ class ConfigController extends Controller
         ];
 
         foreach ($data as $k => $v) {
+            if ($k === SubscriptionProtection::SETTING) {
+                app(\App\Services\SubscriptionRestrictionService::class)->saveSettings($v);
+                continue;
+            }
             if (isset($templateKeys[$k])) {
                 SubscribeTemplate::setContent($templateKeys[$k], $v);
                 continue;

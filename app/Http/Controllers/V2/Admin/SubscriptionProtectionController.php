@@ -4,10 +4,26 @@ namespace App\Http\Controllers\V2\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\SubscriptionRestrictionService;
 use Illuminate\Http\Request;
 
 class SubscriptionProtectionController extends Controller
 {
+    public function restrictions(Request $request, SubscriptionRestrictionService $service)
+    {
+        $data = $request->validate(['after' => 'sometimes|integer|min:0']);
+        return $this->success($service->listing((int) ($data['after'] ?? 0)));
+    }
+
+    public function release(Request $request, SubscriptionRestrictionService $service)
+    {
+        $data = $request->validate([
+            'id' => 'required|integer|min:1', 'event_id' => 'required|string|size:26',
+            'whitelist' => 'required|boolean',
+        ]);
+        return $this->success($service->release((int) $data['id'], $data['event_id'], (bool) $data['whitelist']));
+    }
+
     /** 白名单选择器只返回用户编号和邮箱，避免传送订阅凭据。 */
     public function users(Request $request)
     {

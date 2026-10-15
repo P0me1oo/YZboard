@@ -15,6 +15,26 @@ use Illuminate\Http\Request;
  */
 class MachineController extends Controller
 {
+    public function traffic(Request $request): JsonResponse
+    {
+        $machine = $this->authenticateMachine($request, true);
+        $data = $request->validate([
+            'sample' => 'nullable|array|min:1',
+            'sample.epoch' => 'required_with:sample|integer|min:1',
+            'sample.period_start' => 'required_with:sample|integer|min:1',
+            'sample.sequence' => 'required_with:sample|integer|min:1|max:9007199254740991',
+            'sample.rx' => 'required_with:sample|integer|min:0|max:9007199254740991',
+            'sample.tx' => 'required_with:sample|integer|min:0|max:9007199254740991',
+            'sample.initialized' => 'required_with:sample|boolean',
+            'sample.error' => 'nullable|in:interfaces_unavailable,state_lost,state_write_failed',
+            'sample.interfaces' => 'sometimes|array|max:32',
+            'sample.interfaces.*' => ['string', 'distinct', 'regex:/\A[a-zA-Z0-9_.:-]{1,15}\z/'],
+        ]);
+        return response()->json(['traffic' => \App\Services\MachineTrafficService::exchange(
+            $machine->id, $data['sample'] ?? null
+        )]);
+    }
+
     public function runtimeBegin(Request $request): JsonResponse
     {
         $data = $request->validate(['run' => ['required', 'string', 'regex:/\A[a-f0-9]{32,64}\z/']]);
@@ -70,6 +90,7 @@ class MachineController extends Controller
 
         return response()->json([
             'nodes' => $nodes,
+            'traffic' => \App\Services\MachineTrafficService::view($machine),
             'base_config' => [
                 'push_interval' => (int) admin_setting('server_push_interval', 60),
                 'pull_interval' => (int) admin_setting('server_pull_interval', 60),
@@ -149,7 +170,7 @@ class MachineController extends Controller
         return response()->json(['data' => true]);
     }
 
-    private function authenticateMachine(Request $request): ServerMachine
+    private function authenticateMachine(Request $request, bool $allowDisabled = false): ServerMachine
     {
         $request->validate([
             'machine_id' => 'required|integer',
@@ -160,7 +181,7 @@ class MachineController extends Controller
             ->where('token', $request->input('token'))
             ->first();
 
-        if (!$machine || !$machine->is_active) {
+        if (!$machine || (!$machine->is_active && !$allowDisabled)) {
             abort(403, 'Machine not found or disabled');
         }
 

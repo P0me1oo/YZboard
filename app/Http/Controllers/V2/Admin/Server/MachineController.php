@@ -8,6 +8,8 @@ use App\Models\Server;
 use App\Models\ServerMachine;
 use App\Models\ServerMachineLoadHistory;
 use App\Services\NodeSyncService;
+use App\Services\MachineTrafficService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 
 class MachineController extends Controller
@@ -48,6 +50,7 @@ class MachineController extends Controller
                     'servers_count' => $machine->servers_count,
                     'proxy_u' => (int) $machine->proxy_u,
                     'proxy_d' => (int) $machine->proxy_d,
+                    'traffic' => MachineTrafficService::view($machine),
                     'created_at' => $machine->created_at,
                     'updated_at' => $machine->updated_at,
                 ];
@@ -66,27 +69,31 @@ class MachineController extends Controller
             'name' => 'required|string|max:255',
             'notes' => 'nullable|string',
             'is_active' => 'nullable|boolean',
+            'traffic_limit_gb' => 'sometimes|required|numeric|min:0|max:8388607',
+            'traffic_mode' => 'sometimes|required|in:outbound,both',
+            'traffic_reset_day' => 'sometimes|required|integer|min:1|max:31',
+            'traffic_interfaces' => 'sometimes|array|max:32',
+            'traffic_interfaces.*' => ['string', 'distinct', 'regex:/\A[a-zA-Z0-9_.:-]{1,15}\z/'],
         ]);
 
         if (!empty($params['id'])) {
-            $machine = ServerMachine::find($params['id']);
-            $update = ['name' => $params['name']];
-            if (array_key_exists('notes', $params)) {
-                $update['notes'] = $params['notes'];
-            }
-            if (array_key_exists('is_active', $params)) {
-                $update['is_active'] = $params['is_active'];
-            }
-            $machine->update($update);
+            DB::transaction(function () use ($params) {
+                $machine = ServerMachine::whereKey($params['id'])->lockForUpdate()->firstOrFail();
+                MachineTrafficService::configure($machine, $params);
+                $machine->fill(array_intersect_key($params, array_flip(['name', 'notes', 'is_active'])))->save();
+                DB::afterCommit(fn () => MachineTrafficService::notify($machine->id));
+            }, 3);
             return $this->success(true);
         }
 
-        $machine = ServerMachine::create([
+        $machine = new ServerMachine([
             'name' => $params['name'],
             'notes' => $params['notes'] ?? null,
             'is_active' => $params['is_active'] ?? true,
             'token' => ServerMachine::generateToken(),
         ]);
+        MachineTrafficService::configure($machine, $params);
+        $machine->save();
 
         return $this->success([
             'id' => $machine->id,

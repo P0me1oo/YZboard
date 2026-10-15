@@ -4,10 +4,12 @@ namespace App\Services\TelegramBot;
 
 use App\Jobs\SendTelegramAdminNotification;
 use App\Models\Server;
+use App\Models\SubscriptionRestriction;
 use App\Models\TelegramAdminNotification;
 use App\Models\TelegramBotConfig;
 use App\Models\User;
 use App\Services\LimitEventSnapshot;
+use App\Services\SubscriptionProtection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 
@@ -15,6 +17,36 @@ class AdminNotificationService
 {
     public function __construct(private BotClient $client)
     {
+    }
+
+    /** 复用管理员接收人、投递队列和冷却；未知账号的 IP 事件无需伪造用户。 */
+    public function recordSubscription(SubscriptionRestriction $restriction): void
+    {
+        DB::transaction(function () use ($restriction): void {
+            $config = TelegramBotConfig::whereKey(1)->lockForUpdate()->first();
+            app()->forgetInstance(\App\Support\Setting::class);
+            if (!$config?->enabled || !$config->notify_admin_recipients || !SubscriptionProtection::settings()['notify_telegram']) return;
+            $now = now()->timestamp;
+            $kind = 'sub_' . $restriction->kind;
+            $subject = hash('sha256', $restriction->kind . ':' . $restriction->target);
+            foreach ($config->notify_admin_recipients as $recipient) {
+                $notification = TelegramAdminNotification::firstOrNew([
+                    'subject' => $subject, 'telegram_id' => (int) $recipient, 'kind' => $kind,
+                ]);
+                if ($notification->exists && ($notification->status === 'pending'
+                    || ($notification->sent_at !== null && $now < $notification->sent_at + $config->notify_admin_interval_minutes * 60)
+                    || ($notification->status === 'failed' && $now < $notification->retry_at))) continue;
+                $notification->fill([
+                    'user_id' => $restriction->kind === 'user_rate' ? (int) $restriction->target : null,
+                    'status' => 'pending', 'attempts' => 0, 'retry_at' => $now,
+                    'details' => [
+                        'target' => $restriction->target, 'event_at' => $restriction->triggered_at,
+                        'expires_at' => $restriction->expires_at, 'count' => $restriction->count,
+                        'event_id' => $restriction->event_id,
+                    ],
+                ])->save();
+            }
+        });
     }
 
     /** 只消费节点实际拒绝的事件，不要求受影响用户绑定 Telegram。 */
@@ -95,8 +127,10 @@ class AdminNotificationService
             if (!$notification || $notification->status !== 'pending' || $notification->retry_at > $now) return;
             $config = TelegramBotConfig::find(1);
             $user = $notification->user;
-            if (!$config?->enabled || !$config->getRawOriginal('token') || !$user
-                || !$config->{'notify_admin_' . $notification->kind}
+            $subscription = in_array($notification->kind, ['sub_ip_ban', 'sub_ip_rate', 'sub_user_rate'], true);
+            $enabled = $subscription ? SubscriptionProtection::settings()['notify_telegram'] : $config?->{'notify_admin_' . $notification->kind};
+            if (!$config?->enabled || !$config->getRawOriginal('token') || (!$subscription && !$user)
+                || !$enabled
                 || !in_array((string) $notification->telegram_id, $config->notify_admin_recipients ?? [], true)
                 || ($notification->details['event_at'] ?? 0) + max(300, $config->notify_admin_interval_minutes * 60) <= $now
                 || ($notification->sent_at !== null && $now < $notification->sent_at + $config->notify_admin_interval_minutes * 60)) {
@@ -110,7 +144,7 @@ class AdminNotificationService
             }
             RateLimiter::hit('telegram-bot:reminders:send', 1);
             try {
-                $text = implode("\n", [
+                $text = $subscription ? $this->subscriptionText($notification, $user) : implode("\n", [
                     '面板：' . $this->text(admin_setting('app_name', 'YZboard'), 80),
                     '用户：' . $this->text($user->email, 128) . '（编号 ' . $user->id . '）',
                     '节点：' . $notification->details['node_name'] . '（编号 ' . $notification->details['node_id'] . '）',
@@ -136,6 +170,25 @@ class AdminNotificationService
                 ]);
             }
         });
+    }
+
+    private function subscriptionText(TelegramAdminNotification $notification, ?User $user): string
+    {
+        $details = $notification->details;
+        $kind = match ($notification->kind) {
+            'sub_ip_ban' => 'IP 探测封禁', 'sub_ip_rate' => 'IP 订阅限频', 'sub_user_rate' => '用户订阅限频',
+        };
+        $time = fn ($value) => \Carbon\CarbonImmutable::createFromTimestamp($value, config('app.timezone'))->format('Y-m-d H:i:s');
+        return implode("\n", [
+            '面板：' . $this->text(admin_setting('app_name', 'YZboard'), 80),
+            '订阅防护通知：' . $kind,
+            $notification->kind === 'sub_user_rate'
+                ? '用户：' . ($user ? $this->text($user->email, 128) . '（编号 ' . $user->id . '）' : '已删除')
+                : 'IP：' . $details['target'],
+            '窗口内次数：' . $details['count'],
+            '触发时间：' . $time($details['event_at']),
+            '解除时间：' . $time($details['expires_at']),
+        ]);
     }
 
     private function text(mixed $value, int $max): string

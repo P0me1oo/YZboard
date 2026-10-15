@@ -149,6 +149,10 @@ class ConfigSave extends FormRequest
             'subscribe_protection.rate_limit_enabled' => 'boolean',
             'subscribe_protection.rate_limit_max_requests' => 'integer|min:1|max:10000',
             'subscribe_protection.rate_limit_window_minutes' => 'integer|min:1|max:10080',
+            'subscribe_protection.user_rate_limit_enabled' => 'boolean',
+            'subscribe_protection.user_rate_limit_max_requests' => 'integer|min:1|max:10000',
+            'subscribe_protection.user_rate_limit_window_minutes' => 'integer|min:1|max:10080',
+            'subscribe_protection.notify_telegram' => 'boolean',
             'subscribe_protection.whitelist_ips' => 'array|list|max:256',
             'subscribe_protection.whitelist_ips.*' => ['required', 'string', 'max:64', function ($attribute, $value, $fail) {
                 if (!is_string($value) || SubscriptionProtectionIp::normalize($value) === null) {

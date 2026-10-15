@@ -29,6 +29,8 @@ class SubscriptionProtectionTest extends TestCase
             Route::get('/_tests/protection/config', [ConfigController::class, 'fetch']);
             Route::post('/_tests/protection/config', [ConfigController::class, 'save']);
             Route::get('/_tests/protection/users', [SubscriptionProtectionController::class, 'users']);
+            Route::get('/_tests/protection/restrictions', [SubscriptionProtectionController::class, 'restrictions']);
+            Route::post('/_tests/protection/release', [SubscriptionProtectionController::class, 'release']);
         });
         Route::get('/_tests/custom-sub/{token}', [\App\Http\Controllers\V1\Client\ClientController::class, 'subscribe'])
             ->middleware('client')->name('client.subscribe');
@@ -362,6 +364,8 @@ class SubscriptionProtectionTest extends TestCase
             ['block_browser', null], ['block_browser', 'yes'], ['brute_force_max_failures', 0],
             ['brute_force_window_minutes', 10081], ['brute_force_block_minutes', -1],
             ['rate_limit_max_requests', 1.2], ['rate_limit_window_minutes', ''],
+            ['user_rate_limit_enabled', null], ['user_rate_limit_max_requests', 0],
+            ['user_rate_limit_window_minutes', 10081], ['notify_telegram', 'yes'],
             ['whitelist_ips', ['example.com']], ['whitelist_ips', ['192.0.2.1:443']],
             ['whitelist_ips', ['192.0.2.0/33']], ['whitelist_ips', ['2001:db8::/129']],
             ['whitelist_ips', ['*']], ['whitelist_ips', [['invalid']]],
@@ -394,7 +398,7 @@ class SubscriptionProtectionTest extends TestCase
 
     public function test_user_search_and_hydration_return_only_identifiers_and_emails(): void
     {
-        $admin = $this->user(['is_admin' => true]);
+        $admin = $this->user(['is_admin' => true, 'email' => 'admin@example.invalid']);
         $member = $this->user(['email' => 'subscription-member@example.invalid']);
         $this->actingAs($admin, 'sanctum');
         foreach (['subscription-member', (string) $member->id] as $search) {
@@ -406,5 +410,233 @@ class SubscriptionProtectionTest extends TestCase
         $this->getJson('/_tests/protection/users?search=%25')->assertJsonPath('data', []);
         $this->getJson('/_tests/protection/users')->assertJsonPath('data', []);
         $this->getJson('/_tests/protection/users?search%5B%5D=x')->assertUnprocessable();
+    }
+
+    public function test_account_limit_combines_ips_and_all_download_routes_but_isolates_other_accounts(): void
+    {
+        $this->configure(['user_rate_limit_enabled' => true, 'user_rate_limit_max_requests' => 2]);
+        $user = $this->user();
+        $this->download($user)->assertOk();
+        $this->download($user, '198.51.100.11', true)->assertOk();
+        $this->get('/api/v1/client/app/getConfig?' . http_build_query(['token' => $user->token]))
+            ->assertStatus(429)->assertHeader('Retry-After', '60');
+        $this->download($user, '2001:db8::1')->assertStatus(429);
+        $this->download($this->user())->assertOk();
+        $this->app->forgetInstance(Setting::class);
+        $this->travel(30)->seconds();
+        $this->download($user)->assertStatus(429)->assertHeader('Retry-After', '30');
+        $this->travel(30)->seconds();
+        $this->download($user)->assertOk();
+    }
+
+    public function test_account_limit_whitelists_and_invalid_tokens_do_not_consume_account_quota(): void
+    {
+        $user = $this->user();
+        $settings = $this->configure(['user_rate_limit_enabled' => true, 'user_rate_limit_max_requests' => 1,
+            'whitelist_ips' => ['192.0.2.0/24']]);
+        $this->download()->assertForbidden();
+        $this->download($user, '192.0.2.1')->assertOk();
+        $this->download($user, '192.0.2.1')->assertOk();
+        $this->download($user)->assertOk();
+        $this->download($user)->assertStatus(429);
+        $this->configure($settings + []);
+        $this->download($user)->assertStatus(429);
+        $settings['whitelist_user_ids'] = [$user->id];
+        $this->configure($settings);
+        $this->download($user)->assertOk();
+        $user->update(['banned' => true]);
+        $this->download($user)->assertForbidden();
+    }
+
+    public function test_account_rule_changes_reset_only_that_rule_and_switch_retains_counter(): void
+    {
+        $settings = $this->configure(['user_rate_limit_enabled' => true, 'user_rate_limit_max_requests' => 1]);
+        $user = $this->user();
+        $this->download($user)->assertOk();
+        $this->download($user)->assertStatus(429);
+        $settings['user_rate_limit_enabled'] = false;
+        $this->configure($settings);
+        $this->download($user)->assertOk();
+        $settings['user_rate_limit_enabled'] = true;
+        $this->configure($settings);
+        $this->download($user)->assertStatus(429);
+        $settings['user_rate_limit_max_requests'] = 2;
+        $this->configure($settings);
+        $this->download($user)->assertOk();
+        $this->download($user)->assertOk();
+        $this->download($user)->assertStatus(429);
+    }
+
+    public function test_account_limit_counts_browser_denials_and_cache_errors_fail_closed(): void
+    {
+        $this->configure(['block_browser' => true, 'user_rate_limit_enabled' => true, 'user_rate_limit_max_requests' => 1]);
+        $user = $this->user();
+        $this->download($user, headers: ['User-Agent' => 'Mozilla/5.0'])->assertForbidden();
+        $this->download($user)->assertStatus(429);
+        Cache::shouldReceive('store')->with('redis')->andThrow(new \RuntimeException('测试缓存不可用'));
+        $this->download($user)->assertStatus(503);
+    }
+
+    private function restrictions(): array
+    {
+        $this->actingAs(User::where('is_admin', true)->firstOrFail(), 'sanctum');
+        return $this->getJson('/_tests/protection/restrictions')->assertOk()->json('data.items');
+    }
+
+    private function release(array $row, bool $whitelist = false)
+    {
+        $this->actingAs(User::where('is_admin', true)->firstOrFail(), 'sanctum');
+        return $this->postJson('/_tests/protection/release', ['id' => $row['id'], 'event_id' => $row['event_id'], 'whitelist' => $whitelist]);
+    }
+
+    public function test_restriction_list_and_temporary_release_isolate_both_ip_rules_and_other_ips(): void
+    {
+        $this->actingAs($this->user(['is_admin' => true]), 'sanctum');
+        $this->configure(['brute_force_enabled' => true, 'brute_force_max_failures' => 1,
+            'rate_limit_enabled' => true, 'rate_limit_max_requests' => 1]);
+        $this->download()->assertStatus(429);
+        $this->download(ip: '198.51.100.11')->assertStatus(429);
+        $rows = $this->restrictions();
+        $this->assertCount(2, $rows);
+        $this->release($rows[0])->assertOk();
+        // 解探测封禁不清除此 IP 的请求次数。
+        $user = $this->user();
+        $this->download($user)->assertStatus(429);
+        $rows = $this->restrictions();
+        $rate = collect($rows)->firstWhere('kind', 'ip_rate');
+        $this->release($rate)->assertOk();
+        $this->download($user)->assertOk();
+        $this->download($user, '198.51.100.11')->assertStatus(429);
+    }
+
+    public function test_user_release_does_not_reset_ip_or_other_user_limits_and_stale_release_is_rejected(): void
+    {
+        $this->actingAs($this->user(['is_admin' => true]), 'sanctum');
+        $this->configure(['user_rate_limit_enabled' => true, 'user_rate_limit_max_requests' => 1]);
+        $user = $this->user();
+        $other = $this->user();
+        foreach ([$user, $other] as $member) {
+            $this->download($member)->assertOk();
+            $this->download($member)->assertStatus(429);
+        }
+        $row = $this->restrictions()[0];
+        $this->assertSame($user->email, $row['email']);
+        $this->release($row)->assertOk();
+        $this->release($row)->assertStatus(409);
+        $this->download($user)->assertOk();
+        $this->download($user)->assertStatus(429);
+        $this->release($row)->assertStatus(409);
+        $this->download($other, '198.51.100.20')->assertStatus(429);
+        $this->assertCount(2, $this->restrictions());
+    }
+
+    public function test_permanent_user_whitelist_resets_account_only_and_preserves_other_settings(): void
+    {
+        $this->actingAs($this->user(['is_admin' => true]), 'sanctum');
+        $settings = $this->configure(['user_rate_limit_enabled' => true, 'user_rate_limit_max_requests' => 1,
+            'rate_limit_enabled' => true, 'rate_limit_max_requests' => 3]);
+        $user = $this->user();
+        $this->download($user)->assertOk();
+        $this->download($user)->assertStatus(429);
+        $this->release($this->restrictions()[0], true)->assertOk();
+        $this->assertSame([$user->id], SubscriptionProtection::settings()['whitelist_user_ids']);
+        $this->download($user)->assertOk();
+        $other = $this->user();
+        $this->download($other)->assertOk();
+        $this->download($other)->assertStatus(429);
+        $this->configure($settings);
+        $this->download($user, '198.51.100.99')->assertOk();
+        $this->assertNull($this->restrictions()[0]['email']);
+    }
+
+    public function test_permanent_ip_whitelist_resets_that_ip_and_keeps_other_ips_blocked(): void
+    {
+        $this->actingAs($this->user(['is_admin' => true]), 'sanctum');
+        $settings = $this->configure(['brute_force_enabled' => true, 'brute_force_max_failures' => 1]);
+        foreach (['198.51.100.10', '198.51.100.11'] as $ip) $this->download(ip: $ip)->assertStatus(429);
+        $this->release($this->restrictions()[0], true)->assertOk();
+        $this->assertSame(['198.51.100.10'], SubscriptionProtection::settings()['whitelist_ips']);
+        $this->download($this->user())->assertOk();
+        $this->download($this->user(), '198.51.100.11')->assertStatus(429);
+        $this->configure($settings);
+        $this->download($this->user())->assertOk();
+        $this->assertCount(1, $this->restrictions());
+    }
+
+    public function test_list_ignores_expiry_cache_loss_disabled_rules_and_whitelisted_targets(): void
+    {
+        $this->actingAs($this->user(['is_admin' => true]), 'sanctum');
+        $settings = $this->configure(['rate_limit_enabled' => true, 'rate_limit_max_requests' => 1]);
+        $user = $this->user();
+        $this->download($user)->assertOk();
+        $this->download($user)->assertStatus(429);
+        $row = $this->restrictions()[0];
+        $this->configure(array_replace($settings, ['rate_limit_enabled' => false]));
+        $this->assertSame([], $this->restrictions());
+        $this->configure($settings);
+        $this->assertCount(1, $this->restrictions());
+        $this->configure(array_replace($settings, ['whitelist_ips' => ['198.51.100.0/24']]));
+        $this->assertSame([], $this->restrictions());
+        $this->configure($settings);
+        Cache::store('redis')->forget(\App\Services\SubscriptionRestrictionService::key('ip_rate', '198.51.100.10'));
+        $this->assertSame([], $this->restrictions());
+        $this->release($row)->assertStatus(409);
+        $this->download($user)->assertOk();
+        $this->download($user)->assertStatus(429);
+        $this->release($row)->assertStatus(409);
+        $this->travel(60)->seconds();
+        $this->assertSame([], $this->restrictions());
+    }
+
+    public function test_list_and_release_require_administrator_and_validate_input(): void
+    {
+        $this->getJson('/_tests/protection/restrictions')->assertForbidden();
+        $this->postJson('/_tests/protection/release', [])->assertForbidden();
+        $this->actingAs($this->user(), 'sanctum');
+        $this->getJson('/_tests/protection/restrictions')->assertForbidden();
+        $this->postJson('/_tests/protection/release', [])->assertForbidden();
+        $this->actingAs($this->user(['is_admin' => true]), 'sanctum');
+        $this->postJson('/_tests/protection/release', [])->assertUnprocessable();
+        $this->getJson('/_tests/protection/restrictions?after=-1')->assertUnprocessable();
+    }
+
+    public function test_full_whitelist_does_not_clear_limit_when_action_is_rejected(): void
+    {
+        $this->actingAs($this->user(['is_admin' => true]), 'sanctum');
+        $this->configure(['brute_force_enabled' => true, 'brute_force_max_failures' => 1,
+            'whitelist_ips' => array_map(fn ($index) => '192.0.2.' . $index, range(0, 255))]);
+        $this->download()->assertStatus(429);
+        $this->release($this->restrictions()[0], true)->assertStatus(422);
+        $this->download($this->user())->assertStatus(429);
+        $this->assertCount(1, $this->restrictions());
+    }
+
+    public function test_releasing_user_limit_keeps_an_active_ip_limit_on_the_same_request(): void
+    {
+        $this->actingAs($this->user(['is_admin' => true]), 'sanctum');
+        $this->configure(['user_rate_limit_enabled' => true, 'user_rate_limit_max_requests' => 1,
+            'rate_limit_enabled' => true, 'rate_limit_max_requests' => 2]);
+        $user = $this->user();
+        $this->download($user)->assertOk();
+        $this->download($user)->assertStatus(429);
+        $this->download($user)->assertStatus(429);
+        $rows = collect($this->restrictions());
+        $this->assertCount(2, $rows);
+        $this->release($rows->firstWhere('kind', 'user_rate'))->assertOk();
+        $this->download($user)->assertStatus(429);
+        $this->release($rows->firstWhere('kind', 'ip_rate'))->assertOk();
+        $this->download($user)->assertOk();
+    }
+
+    public function test_user_limit_survives_subscription_reset_and_record_failure_does_not_open_download(): void
+    {
+        $this->configure(['user_rate_limit_enabled' => true, 'user_rate_limit_max_requests' => 1]);
+        $user = $this->user();
+        $this->download($user)->assertOk();
+        $user->update(['token' => Str::random(32)]);
+        $this->failNextQueryMatching('/insert into ["`]?v2_subscription_restrictions/i');
+        $this->download($user)->assertStatus(503);
+        $this->download($user)->assertStatus(429);
+        $this->assertSame(1, \App\Models\SubscriptionRestriction::count());
     }
 }

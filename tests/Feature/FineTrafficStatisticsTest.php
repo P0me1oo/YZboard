@@ -8,7 +8,6 @@ use App\Models\Server;
 use App\Models\StatServer;
 use App\Models\User;
 use App\Services\FineTrafficStatistics;
-use App\Services\NodeTrafficHour;
 use App\Services\UserRouteTraffic;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -25,7 +24,7 @@ class FineTrafficStatisticsTest extends TestCase
     {
         parent::setUp();
         $this->travelTo(now()->startOfDay()->setTime(14, 35));
-        DB::table('v2_settings')->whereIn('name', ['fine_traffic_started_at', 'user_route_statistics_started_at', 'node_hourly_started_at'])
+        DB::table('v2_settings')->whereIn('name', ['fine_traffic_started_at', 'user_route_statistics_started_at', 'proxy_traffic_started_at'])
             ->update(['value' => (string) now()->startOfDay()->subDays(29)->timestamp]);
         Sanctum::actingAs(User::create(['email' => 'fine-admin@example.test', 'password' => Str::random(32),
             'uuid' => (string) Str::uuid(), 'token' => Str::random(32), 'is_admin' => true]));
@@ -49,10 +48,23 @@ class FineTrafficStatisticsTest extends TestCase
             'start_time' => $start, 'end_time' => $end];
     }
 
+    private function proxyRecord(int $sid, int $at, int $u, int $d): void
+    {
+        $node = Server::find($sid);
+        $received = \Carbon\CarbonImmutable::createFromTimestamp($at, config('app.timezone'));
+        $batch = new \App\Models\NodeReportBatch([
+            'server_snapshot' => ['proxy_traffic' => ['version' => 1, 'entry_id' => $sid,
+                'nodes' => [$sid => ['name' => $node?->name ?? '', 'machine_id' => null]], 'machines' => []]],
+            'traffic' => [101 => [$u, $d]], 'relay_traffic' => [],
+            'record_at' => $received->startOfDay()->timestamp, 'created_at' => $received,
+        ]);
+        app(\App\Services\ProxyTrafficRecorder::class)->recordBatch($batch);
+    }
+
     private function record(int $sid, int $at, int $u, int $d): void
     {
         $day = \Carbon\CarbonImmutable::createFromTimestamp($at, config('app.timezone'))->startOfDay()->timestamp;
-        app(NodeTrafficHour::class)->add($day, $u, $d, $at, $sid);
+        $this->proxyRecord($sid, $at, $u, $d);
         app(UserRouteTraffic::class)->record(101, $sid, $sid, 'entry', 2, $day, $u, $d, $u * 2, $d * 2, $at);
         $row = StatServer::firstOrCreate(['server_id' => $sid, 'server_type' => 'vless', 'record_type' => 'd', 'record_at' => $day], ['u' => 0, 'd' => 0]);
         StatServer::whereKey($row->id)->incrementEach(['u' => $u, 'd' => $d]);
@@ -79,7 +91,7 @@ class FineTrafficStatisticsTest extends TestCase
         $this->travelTo(now()->addDay()->setTime(10, 0));
         $this->artisan('reset:log')->assertSuccessful();
         $this->assertSame(0, DB::table('v2_stat_route_minute')->count());
-        $this->assertSame(0, DB::table('v2_stat_node_minute_detail')->count());
+        $this->assertSame(0, DB::table('v2_stat_proxy_traffic')->where('unit', 'minute')->count());
         $this->assertSame(1, DB::table('v2_stat_route_hour')->count());
         $this->getStats('nodes', $this->slice('09:00', '10:00', $date))->assertOk()->assertJsonPath('data.list.0.total', 30);
         $this->getStats('user', $this->slice('09:00', '10:00', $date) + ['user_id' => 101])->assertOk()->assertJsonPath('data.actual_summary.total', 30);
@@ -110,7 +122,7 @@ class FineTrafficStatisticsTest extends TestCase
     public function test_trend_leaves_time_before_statistics_enabled_unknown(): void
     {
         $node = $this->node();
-        DB::table('v2_settings')->where('name', 'fine_traffic_started_at')->update(['value' => (string) now()->setTime(9, 0, 30)->timestamp]);
+        DB::table('v2_settings')->whereIn('name', ['fine_traffic_started_at', 'proxy_traffic_started_at'])->update(['value' => (string) now()->setTime(9, 0, 30)->timestamp]);
         $this->record($node->id, now()->setTime(9, 10)->timestamp, 10, 20);
         $this->getStats('traffic')->assertOk()->assertJsonPath('data.list.0.date', now()->startOfDay()->toIso8601String())
             ->assertJsonPath('data.list.0.total', null)->assertJsonPath('data.list.540.total', null)
@@ -292,9 +304,10 @@ class FineTrafficStatisticsTest extends TestCase
     public function test_old_daily_history_is_preserved_without_fabricating_fine_data(): void
     {
         $node = $this->node();
-        DB::table('v2_settings')->where('name', 'fine_traffic_started_at')->update(['value' => (string) now()->timestamp]);
+        DB::table('v2_settings')->whereIn('name', ['fine_traffic_started_at', 'proxy_traffic_started_at'])->update(['value' => (string) now()->timestamp]);
         $this->record($node->id, now()->subDay()->timestamp, 10, 20);
         $date = now()->subDay()->toDateString();
+        DB::table('v2_stat_proxy_traffic')->where('unit', 'hour')->delete();
         $this->getStats('traffic', ['period' => 'custom', 'start_date' => $date, 'end_date' => $date])->assertOk()->assertJsonPath('data.summary.total', 30)->assertJsonPath('data.meta.unit', 'day');
         $this->getStats('nodes', $this->slice('09:00', '10:00', $date))->assertUnprocessable();
         $this->getStats('users', $this->slice('09:00', '10:00', $date))->assertUnprocessable();
@@ -322,14 +335,14 @@ class FineTrafficStatisticsTest extends TestCase
             'relay_user_traffic' => [101 => [$relay->id => [8, 16]]], 'record_at' => now()->startOfDay()->timestamp, 'status' => 'pending', 'attempts' => 0]);
         Redis::shouldReceive('sadd')->once()->andThrow(new \RuntimeException('测试回滚'));
         try { (new ProcessNodeReportBatch($batch->id))->handle(); $this->fail('应回滚'); } catch (\RuntimeException $e) { $this->assertSame('测试回滚', $e->getMessage()); }
-        foreach (['route_minute', 'route_hour', 'node_minute_detail', 'node_hour_detail'] as $table) { $this->assertSame(0, DB::table('v2_stat_' . $table)->count()); }
+        foreach (['route_minute', 'route_hour'] as $table) { $this->assertSame(0, DB::table('v2_stat_' . $table)->count()); }
         $this->travelTo(now()->addDay());
         Redis::shouldReceive('sadd')->once()->andReturn(1);
         (new ProcessNodeReportBatch($batch->id))->handle(); (new ProcessNodeReportBatch($batch->id))->handle();
         $this->assertSame(0, DB::table('v2_stat_route_minute')->count());
-        $this->assertSame(0, DB::table('v2_stat_node_minute_detail')->count());
+        $this->assertFalse(\Illuminate\Support\Facades\Schema::hasTable('v2_stat_node_minute_detail'));
         $this->assertSame(2, DB::table('v2_stat_route_hour')->count());
-        $this->assertSame(54, (int) DB::table('v2_stat_node_hour_detail')->selectRaw('SUM(u + d) AS total')->value('total'));
+        $this->assertSame(54, (int) \App\Models\StatServer::sum(DB::raw('u + d')));
     }
 
     public function test_retention_keeps_today_minutes_and_thirty_day_hour_boundary(): void
@@ -339,7 +352,7 @@ class FineTrafficStatisticsTest extends TestCase
         $this->artisan('reset:log')->assertSuccessful();
         $this->assertSame(2, DB::table('v2_stat_route_hour')->count());
         $this->assertSame(1, DB::table('v2_stat_route_minute')->count());
-        $this->getStats('traffic', ['period' => 'all'])->assertOk()->assertJsonPath('data.summary.total', 6);
+        $this->getStats('traffic', ['period' => 'all'])->assertOk()->assertJsonPath('data.summary.total', 9);
         $this->getStats('metadata')->assertOk()->assertJsonStructure(['data' => ['presets' => ['today', '24h', '7d', '14d', '30d', 'all']]]);
     }
 

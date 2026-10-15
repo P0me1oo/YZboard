@@ -36,8 +36,22 @@ class DeletedServerStatisticsTest extends TestCase
             'port' => 443, 'server_port' => 443, 'rate' => 1, 'group_ids' => [], 'enabled' => false, 'show' => false]);
     }
 
+    private function proxyRecord(int $sid, int $at, int $u, int $d): void
+    {
+        $node = Server::find($sid);
+        $received = \Carbon\CarbonImmutable::createFromTimestamp($at, config('app.timezone'));
+        $batch = new \App\Models\NodeReportBatch([
+            'server_snapshot' => ['proxy_traffic' => ['version' => 1, 'entry_id' => $sid,
+                'nodes' => [$sid => ['name' => $node?->name ?? '', 'machine_id' => null]], 'machines' => []]],
+            'traffic' => [101 => [$u, $d]], 'relay_traffic' => [],
+            'record_at' => $received->startOfDay()->timestamp, 'created_at' => $received,
+        ]);
+        app(\App\Services\ProxyTrafficRecorder::class)->recordBatch($batch);
+    }
+
     private function record(int $id, int $amount = 100): void
     {
+        $this->proxyRecord($id, now()->timestamp, $amount, 0);
         app(TrafficStatisticsRecorder::class)->add(101, $id, 'entry', now()->startOfDay()->timestamp, $amount, 0, $amount, 0);
         app(\App\Services\UserRouteTraffic::class)->record(101, $id, $id, 'entry', 1,
             now()->startOfDay()->timestamp, $amount, 0, $amount, 0, now()->timestamp);
@@ -128,7 +142,7 @@ class DeletedServerStatisticsTest extends TestCase
     public function test_expired_names_are_removed_only_after_their_statistics_expire(): void
     {
         $this->record(201);
-        foreach ([201 => 30, 202 => 30, 203 => 29] as $id => $days) {
+        foreach ([201 => 365, 202 => 365, 203 => 364] as $id => $days) {
             DB::table('v2_stat_server_name')->insert(['server_id' => $id, 'name' => '历史节点 ' . $id,
                 'deleted_at' => now()->startOfDay()->subDays($days)->timestamp]);
         }
@@ -136,7 +150,7 @@ class DeletedServerStatisticsTest extends TestCase
         $this->assertDatabaseHas('v2_stat_server_name', ['server_id' => 201]);
         $this->assertDatabaseHas('v2_stat_server_name', ['server_id' => 203]);
         $this->assertDatabaseMissing('v2_stat_server_name', ['server_id' => 202]);
-        $this->travel(30)->days();
+        $this->travel(365)->days();
         $this->artisan('reset:log')->assertSuccessful();
         $this->assertDatabaseCount('v2_stat_server_name', 0);
         $this->assertDatabaseCount('v2_stat_user_server', 0);

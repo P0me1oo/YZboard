@@ -179,7 +179,6 @@ class ProcessNodeReportBatch implements ShouldQueue
 
         if ($totalU > 0 || $totalD > 0) {
             $this->incrementServerStat($serverId, $serverType, $recordAt, $totalU, $totalD, $now);
-            app(\App\Services\NodeTrafficHour::class)->add($recordAt, $totalU, $totalD, $batch->created_at?->timestamp, $serverId);
             DB::table('v2_server')
                 ->where('id', $serverId)
                 ->incrementEach(['u' => $totalU, 'd' => $totalD], ['updated_at' => now()]);
@@ -191,8 +190,6 @@ class ProcessNodeReportBatch implements ShouldQueue
     private function applyRelayTraffic(NodeReportBatch $batch): void
     {
         $now = time();
-        $hours = [];
-        $batchStatistics = $this->canBatchStatistics();
         foreach ((array) $batch->relay_traffic as $item) {
             if (!is_array($item)) {
                 continue;
@@ -214,20 +211,16 @@ class ProcessNodeReportBatch implements ShouldQueue
                 $d,
                 $now
             );
-            $item = [(int) $batch->record_at, $u, $d, $batch->created_at?->timestamp, $serverId];
-            if ($batchStatistics) $hours[] = $item;
-            else app(\App\Services\NodeTrafficHour::class)->add(...$item);
             DB::table('v2_server')
                 ->where('id', $serverId)
                 ->incrementEach(['u' => $u, 'd' => $d], ['updated_at' => now()]);
         }
-        if ($batchStatistics) app(\App\Services\NodeTrafficHour::class)->addMany($hours);
     }
 
     /** 模型事件或扩展服务可读取中间结果；存在这些扩展时保留原逐项写入顺序。 */
     private function canBatchStatistics(): bool
     {
-        foreach ([TrafficStatisticsRecorder::class, \App\Services\NodeTrafficHour::class, \App\Services\FineTrafficStatistics::class] as $class) {
+        foreach ([TrafficStatisticsRecorder::class, \App\Services\FineTrafficStatistics::class] as $class) {
             if (get_class(app($class)) !== $class) return false;
         }
         foreach ([new StatUser(), new StatServer()] as $model) {

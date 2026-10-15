@@ -24,6 +24,9 @@ class SubscriptionRestrictionService
             try {
                 DB::transaction(function () use ($settings) {
                     TelegramBotConfig::whereKey(1)->lockForUpdate()->first();
+                    // 持锁后读取数据库，两个设置页面互不覆盖未管理的字段。
+                    $current = \App\Models\Setting::where('name', SubscriptionProtection::SETTING)->first()?->value ?? [];
+                    $settings = array_replace(SubscriptionProtection::defaults(), $current, $settings);
                     admin_setting([SubscriptionProtection::SETTING => $settings]);
                     if (!$settings['notify_telegram']) {
                         TelegramAdminNotification::whereNotNull('subject')->where('status', 'pending')

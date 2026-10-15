@@ -89,7 +89,7 @@ class ProxyTrafficStatisticsTest extends TestCase
         // 原承载量、上限与用户计费仍使用原来的处理路径。
         $this->assertSame(5 * $gb, (int) $entry->fresh()->u + (int) $entry->fresh()->d);
         $this->assertSame(39 * $gb, (int) $this->user->fresh()->u + (int) $this->user->fresh()->d);
-        $this->getJson($this->path('traffic', ['scope' => 'legacy']))->assertOk()->assertJsonPath('data.summary.total', 9 * $gb);
+        $this->getJson($this->path('traffic', ['scope' => 'legacy']))->assertUnprocessable();
     }
 
     public function test_same_machine_relay_counts_once_and_multiple_nodes_are_added(): void
@@ -167,7 +167,8 @@ class ProxyTrafficStatisticsTest extends TestCase
         $batch->update(['server_snapshot' => $snapshot]);
         $this->process($batch);
         $this->getJson($this->path('traffic'))->assertOk()->assertJsonCount(0, 'data.list')->assertJsonPath('data.summary.total', 0);
-        $this->getJson($this->path('traffic', ['scope' => 'legacy']))->assertOk()->assertJsonPath('data.summary.total', 30);
+        $this->getJson($this->path('traffic', ['scope' => 'legacy']))->assertUnprocessable();
+        $this->assertSame(30, (int) \App\Models\StatServer::sum(DB::raw('u + d')));
         $this->assertSame(0, $entry->fresh()->usage_u);
     }
 
@@ -195,6 +196,9 @@ class ProxyTrafficStatisticsTest extends TestCase
         $this->assertSame(2, DB::table(ProxyTrafficRecorder::TABLE)->where('scope', 'node')->count());
         $this->getJson($this->path('traffic', ['period' => '7d']))->assertOk()->assertJsonPath('data.summary.total', 30);
         $this->travel(30)->days();
+        $this->artisan('reset:log')->assertExitCode(0);
+        $this->assertDatabaseCount(ProxyTrafficRecorder::TABLE, 2);
+        $this->travel(335)->days();
         $this->artisan('reset:log')->assertExitCode(0);
         $this->assertDatabaseCount(ProxyTrafficRecorder::TABLE, 0);
         $this->assertSame(30, $entry->fresh()->usage_u + $entry->fresh()->usage_d);

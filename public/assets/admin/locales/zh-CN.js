@@ -1,16 +1,14 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['zh-CN'] = {
   "statistics": {
+    "lastYear": "最近一年", "dailyHeatmap": "每日用量", "trafficIntensity": "用量深浅", "less": "少", "more": "多",
+    "noRecord": "暂无记录", "wholeDays": "30 天前仅保留日汇总，请选择完整日期。",
     "nodeUsage": "节点用量",
-    "nodeAccounting": "节点统计口径",
-    "machineStatistics": "服务器代理流量",
+    "machineStatistics": "服务器用量",
     "machine": "服务器",
     "machineName": "服务器名称",
     "searchMachine": "搜索服务器",
-    "machineRank": "服务器代理流量排行",
-    "legacyTraffic": "旧口径",
-    "legacyRank": "节点承载量排行（旧口径）",
-    "legacyTrafficNotice": "旧口径分别累计入口和落地承载量，用于核对历史记录及流量上限。",
+    "machineRank": "服务器用量排行",
     "operator": "运营商",
     "ipProperties": {
       "fraudScore": "欺诈风险评分",
@@ -1358,7 +1356,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
         "refresh": "刷新",
         "no_restrictions": "暂无生效中的限制",
         "restrictions_load_error": "限制列表读取失败，请刷新重试。",
-        "save_before_release": "请先保存设置，再处理限制。",
+        "save_before_release": "请等待设置自动保存后，再处理限制。",
         "kind_ip_ban": "IP 封禁",
         "kind_ip_rate": "IP 限频",
         "kind_user_rate": "用户限频",
@@ -3317,7 +3315,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
       "nodes": "节点数",
       "nodesHosted": "已承载节点",
       "nodesIdle": "暂无承载",
-      "proxyTraffic": "服务器代理流量",
+      "proxyTraffic": "服务器用量",
       "proxyTrafficTooltip": "原始上传和下载之和，包含直出、前置转发和落地承载；同机中转只计一次，不含其他程序流量。",
       "load": "负载",
       "lastSeen": "最后心跳",

@@ -88,6 +88,44 @@ class SubscriptionProtectionTest extends TestCase
         $this->postJson('/_tests/protection/config', ['admin_sidebar_hidden' => ['subscription-protection']])->assertOk();
     }
 
+    public function test_both_default_limits_allow_twenty_requests_and_recover_after_one_minute(): void
+    {
+        $this->assertSame(20, SubscriptionProtection::defaults()['rate_limit_max_requests']);
+        $this->assertSame(20, SubscriptionProtection::defaults()['user_rate_limit_max_requests']);
+        $user = $this->user();
+        foreach (['rate_limit_enabled', 'user_rate_limit_enabled'] as $toggle) {
+            $this->configure([$toggle => true]);
+            for ($index = 0; $index < 20; $index++) {
+                $ip = $toggle === 'user_rate_limit_enabled' ? '198.51.100.' . ($index + 50) : '198.51.100.10';
+                $this->download($user, $ip)->assertOk();
+            }
+            $this->download($user)->assertStatus(429)->assertHeader('Retry-After', '60');
+            $this->travel(60)->seconds();
+            $this->download($user)->assertOk();
+        }
+    }
+
+    public function test_rule_and_notification_pages_save_independently_without_overwriting_each_other(): void
+    {
+        $this->actingAs($this->user(['is_admin' => true]), 'sanctum');
+        $original = $this->configure(['rate_limit_max_requests' => 60, 'user_rate_limit_max_requests' => 45]);
+        $rules = $original;
+        unset($rules['notify_telegram']);
+        $this->postJson('/_tests/protection/config', [SubscriptionProtection::SETTING => ['notify_telegram' => true]])->assertOk();
+        $rules['block_browser'] = true;
+        $this->postJson('/_tests/protection/config', [SubscriptionProtection::SETTING => $rules])->assertOk();
+        $this->assertTrue(SubscriptionProtection::settings()['notify_telegram']);
+        $this->assertTrue(SubscriptionProtection::settings()['block_browser']);
+        $this->postJson('/_tests/protection/config', [SubscriptionProtection::SETTING => ['notify_telegram' => false]])->assertOk();
+        $this->getJson('/_tests/protection/config?key=subscribe')->assertOk()
+            ->assertJsonPath('data.subscribe.subscribe_protection.block_browser', true)
+            ->assertJsonPath('data.subscribe.subscribe_protection.notify_telegram', false)
+            ->assertJsonPath('data.subscribe.subscribe_protection.rate_limit_max_requests', 60)
+            ->assertJsonPath('data.subscribe.subscribe_protection.user_rate_limit_max_requests', 45);
+        $this->postJson('/_tests/protection/config', [SubscriptionProtection::SETTING => ['notify_telegram' => 'yes']])->assertUnprocessable();
+        $this->postJson('/_tests/protection/config', [SubscriptionProtection::SETTING => ['notify_telegram' => true, 'block_browser' => false]])->assertUnprocessable();
+    }
+
     public static function agents(): array
     {
         return [

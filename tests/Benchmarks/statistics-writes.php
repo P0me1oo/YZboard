@@ -11,7 +11,7 @@ foreach (['APP_ENV' => 'testing', 'DB_CONNECTION' => $driver, 'DB_DATABASE' => '
 if ($driver === 'mysql') require __DIR__ . '/../bootstrap-mariadb.php';
 $baseline = getenv('YZ_BENCH_BASELINE');
 if ($baseline) {
-    foreach (['InboundIpRecorder', 'TrafficStatisticsRecorder', 'FineTrafficStatistics', 'NodeTrafficHour',
+    foreach (['InboundIpRecorder', 'TrafficStatisticsRecorder', 'FineTrafficStatistics',
         'UserRouteTraffic', 'ProxyTrafficRecorder', 'ProcessNodeReportBatch'] as $class) {
         require $baseline . '/' . $class . '.php';
     }

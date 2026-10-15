@@ -114,7 +114,8 @@ class StatisticsWriteConcurrencyTest extends TestCase
         $second = $this->worker('batch', 'second', $batch->id);
         touch($this->directory . '/start');
         $this->finish($first, $second);
-        $this->assertSame(306, (int) DB::table('v2_stat_traffic_hour')->sum('u'));
+        $this->assertSame(306, (int) DB::table('v2_stat_user_route_source')->sum('u'));
+        $this->assertSame(306, (int) DB::table('v2_stat_proxy_traffic')->where('scope', 'node')->where('unit', 'day')->sum('u'));
         $this->assertSame('processed', $batch->fresh()->status);
     }
 
@@ -125,10 +126,11 @@ class StatisticsWriteConcurrencyTest extends TestCase
         $second = $this->worker('batch', 'second', $other->id);
         touch($this->directory . '/start');
         $this->finish($first, $second);
-        foreach (['v2_stat_traffic_hour', 'v2_stat_user_route_source', 'v2_stat_route_hour', 'v2_stat_route_minute'] as $table) {
+        foreach (['v2_stat_user_route_source', 'v2_stat_route_hour', 'v2_stat_route_minute'] as $table) {
             $this->assertSame(612, (int) DB::table($table)->sum('u'));
         }
-        $this->assertSame(864, (int) DB::table('v2_stat_node_hour')->sum('u'));
+        $this->assertSame(864, (int) DB::table('v2_stat_server')->sum('u'));
+        $this->assertSame(612, (int) DB::table('v2_stat_proxy_traffic')->where('scope', 'node')->where('unit', 'day')->sum('u'));
         $this->assertSame('processed', $batch->fresh()->status);
         $this->assertSame('processed', $other->fresh()->status);
     }

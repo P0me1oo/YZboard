@@ -23,7 +23,7 @@ class UserRouteTrafficTest extends TestCase
     {
         parent::setUp();
         $this->travelTo(now()->startOfSecond());
-        DB::table('v2_settings')->whereIn('name', ['user_route_statistics_started_at', 'node_hourly_started_at'])
+        DB::table('v2_settings')->whereIn('name', ['user_route_statistics_started_at'])
             ->update(['value' => (string) now()->startOfDay()->timestamp]);
         Sanctum::actingAs(User::create(['email' => 'route-admin@example.test', 'password' => Str::random(32),
             'uuid' => (string) Str::uuid(), 'token' => Str::random(32), 'is_admin' => true]));
@@ -158,7 +158,7 @@ class UserRouteTrafficTest extends TestCase
         try { (new ProcessNodeReportBatch($batch->id))->handle(); $this->fail('应当回滚'); }
         catch (\RuntimeException $error) { $this->assertSame('测试回滚', $error->getMessage()); }
         $this->assertDatabaseCount(UserRouteTraffic::TABLE, 0);
-        $this->assertDatabaseCount('v2_stat_node_hour', 0);
+        $this->assertDatabaseCount('v2_stat_proxy_traffic', 0);
         $this->assertSame(300, (int) $user->fresh()->u + (int) $user->fresh()->d);
         $this->travel(1)->days();
         Redis::shouldReceive('sadd')->once()->andReturn(1);
@@ -167,8 +167,8 @@ class UserRouteTrafficTest extends TestCase
         $this->assertSame(500, (int) $entry->fresh()->u + (int) $entry->fresh()->d);
         $this->assertSame(400, (int) $relay->fresh()->u + (int) $relay->fresh()->d);
         $this->assertSame(900, (int) StatServer::sum(DB::raw('u + d')));
-        $this->assertSame(900, (int) DB::table('v2_stat_node_hour')->sum(DB::raw('u + d')));
-        $this->getStats('traffic', ['period' => '7d'])->assertJsonPath('data.summary.total', 900);
+        $this->assertFalse(\Illuminate\Support\Facades\Schema::hasTable('v2_stat_node_hour'));
+        $this->getStats('traffic', ['period' => '7d'])->assertJsonPath('data.summary.total', 0);
         $this->getStats('user', ['period' => '7d'])->assertJsonPath('data.actual_summary.total', 500)
             ->assertJsonPath('data.billed_summary.total', 1000);
     }

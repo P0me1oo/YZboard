@@ -31,14 +31,15 @@ class FineTrafficStatistics
         $started = (int) DB::table('v2_settings')->where('name', 'fine_traffic_started_at')->value('value');
         $tables = [];
         foreach ($items as [$type, $keys, $values, $day, $receivedAt]) {
+            if ($type !== 'route') throw new \InvalidArgumentException('仅支持用户线路细分记录。');
             if (!$started || !$receivedAt || $receivedAt < $started || array_sum($values) === 0) { continue; }
             $received = CarbonImmutable::createFromTimestamp($receivedAt, config('app.timezone'));
             $today = CarbonImmutable::today(config('app.timezone'));
-            if ($received->startOfDay()->timestamp !== $day || $received < $today->subDays(29) || $received >= $today->addDay()) { continue; }
+            if ($received->startOfDay()->timestamp !== $day || $received < TrafficStatisticsRetention::hourlyStart() || $received >= $today->addDay()) { continue; }
             foreach (['hour', 'minute'] as $unit) {
                 // 延迟到次日处理的上报只补小时记录，不重新创建已过期的分钟行。
                 if ($unit === 'minute' && $received < $today) { continue; }
-                $table = $type === 'node' ? 'v2_stat_node_' . $unit . '_detail' : 'v2_stat_route_' . $unit;
+                $table = 'v2_stat_route_' . $unit;
                 $recordAt = $unit === 'minute' ? $received->startOfMinute()->timestamp : $received->startOfHour()->timestamp;
                 $tables[$table]['keys'] = [...array_keys($keys), 'record_at'];
                 $tables[$table]['columns'] = array_keys($values);
@@ -50,42 +51,43 @@ class FineTrafficStatistics
         }
     }
 
-    /** 全日沿用原记录；只有日内边界才查询细分表，旧历史不伪造小时或分钟。 */
-    public function source(array $range, string $type, bool $trend = false): Builder
+    /** 整日直接读取日汇总，仅首尾不完整日期读取仍在保留期内的细分记录。 */
+    public function source(array $range): Builder
     {
-        $union = null;
-        $today = CarbonImmutable::today(config('app.timezone'));
-        $minute = $range['start'] >= $today && $range['end'] <= $today->addDay();
-        $unit = $minute ? 'minute' : 'hour';
+        $dailyStart = $range['start']->startOfDay();
+        if (!$dailyStart->equalTo($range['start'])) $dailyStart = $dailyStart->addDay();
+        $dailyEnd = $range['end']->startOfDay();
+        $daily = DB::table(UserRouteTraffic::TABLE)->where('record_at', '>=', $dailyStart->timestamp)
+            ->where('record_at', '<', $dailyEnd->timestamp)
+            ->select('user_id', 'entry_id', 'server_id', 'kind', 'rate', 'record_at', 'u', 'd', 'billed_u', 'billed_d');
+        $windows = [];
+        if (!$range['start']->equalTo($range['start']->startOfDay())) {
+            $windows[] = [$range['start'], $range['end']->min($dailyStart)];
+        }
+        if (!$range['end']->equalTo($dailyEnd) && $dailyEnd >= $dailyStart) {
+            $windows[] = [$dailyEnd, $range['end']];
+        }
+        // 同日从零点开始、结束在日内时，没有完整日期。
+        if ($windows === [] && $dailyStart->equalTo($dailyEnd) && $range['end'] > $dailyEnd) {
+            $windows[] = [$range['start'], $range['end']];
+        }
+        $union = $daily;
         $started = (int) DB::table('v2_settings')->where('name', 'fine_traffic_started_at')->value('value');
-        $enabled = CarbonImmutable::createFromTimestamp($started, config('app.timezone'));
-        $boundary = $minute ? $enabled->startOfMinute() : $enabled->startOfHour();
-        if ($boundary < $enabled) { $boundary = $boundary->addSeconds($minute ? 60 : 3600); }
-        for ($day = $range['start']->startOfDay(); $day < $range['end']; $day = $day->addDay()) {
-            $start = $range['start']->max($day); $end = $range['end']->min($day->addDay());
-            $whole = $start->equalTo($day) && $end->equalTo($day->addDay());
-            $daily = $type === 'node' ? DB::table('v2_stat_server')->where('record_type', 'd') : DB::table(UserRouteTraffic::TABLE);
-            $daily->where('record_at', $day->timestamp);
-            $table = $type === 'node' ? 'v2_stat_node_' . $unit . '_detail' : 'v2_stat_route_' . $unit;
-            $fine = DB::table($table)->where('record_at', '>=', $start->timestamp)->where('record_at', '<', $end->timestamp);
-            $query = $whole ? $daily : $fine;
-            if (!$whole && (!$started || $start < $boundary)) {
+        foreach ($windows as [$start, $end]) {
+            $minute = $start >= TrafficStatisticsRetention::today();
+            $unit = $minute ? 'minute' : 'hour';
+            $boundary = CarbonImmutable::createFromTimestamp($started, config('app.timezone'));
+            $boundary = $minute ? $boundary->startOfMinute() : $boundary->startOfHour();
+            if ($boundary->timestamp < $started) $boundary = $boundary->addSeconds($minute ? 60 : 3600);
+            if (!$started || $start < $boundary || $start < TrafficStatisticsRetention::hourlyStart()) {
                 throw ValidationException::withMessages(['start_time' => '该时段没有完整的细分记录，请选择完整日期或记录启用后的时段。']);
             }
-            if ($whole && $trend && $range['end']->timestamp - $range['start']->timestamp <= 172800) {
-                // 升级日和旧队列可能只有日数据；核对两个方向后才绘制细分趋势。
-                $totals = fn ($q) => (array) (clone $q)->selectRaw('COALESCE(SUM(u), 0) AS u, COALESCE(SUM(d), 0) AS d')->first();
-                if ((clone $fine)->exists() && $totals($fine) == $totals($daily)) { $query = $fine; }
-            }
-            if ($type === 'node') {
-                $query->select('record_at', 'server_id', 'u', 'd')->selectRaw('? AS bucket_unit', [$query === $daily ? 'day' : $unit]);
-            } else {
-                // 先汇总所选范围在同一天内的采样值，再计算直出差值和整数分配，避免逐分钟截断放大用量。
-                $query->select('user_id', 'entry_id', 'server_id', 'kind', 'rate')
-                    ->selectRaw('? AS record_at, SUM(u) AS u, SUM(d) AS d, SUM(billed_u) AS billed_u, SUM(billed_d) AS billed_d', [$day->timestamp])
-                    ->groupBy('user_id', 'entry_id', 'server_id', 'kind', 'rate');
-            }
-            $union === null ? $union = $query : $union->unionAll($query);
+            $fine = DB::table('v2_stat_route_' . $unit)->where('record_at', '>=', $start->timestamp)
+                ->where('record_at', '<', $end->timestamp)
+                ->select('user_id', 'entry_id', 'server_id', 'kind', 'rate')
+                ->selectRaw('? AS record_at, SUM(u) AS u, SUM(d) AS d, SUM(billed_u) AS billed_u, SUM(billed_d) AS billed_d', [$start->startOfDay()->timestamp])
+                ->groupBy('user_id', 'entry_id', 'server_id', 'kind', 'rate');
+            $union->unionAll($fine);
         }
         return DB::query()->fromSub($union, 'fine_source');
     }

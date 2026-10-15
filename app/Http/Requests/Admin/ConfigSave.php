@@ -139,8 +139,13 @@ class ConfigSave extends FormRequest
      */
     public function rules()
     {
+        // 两个页面分别维护防护规则和提醒开关，旧版完整配置仍可保存。
+        $requiredProtectionKeys = array_diff(array_keys(SubscriptionProtection::defaults()), ['notify_telegram']);
+        if (array_keys((array) $this->input(SubscriptionProtection::SETTING)) === ['notify_telegram']) {
+            $requiredProtectionKeys = ['notify_telegram'];
+        }
         return self::RULES + [
-            SubscriptionProtection::SETTING => 'sometimes|array:' . implode(',', array_keys(SubscriptionProtection::defaults())) . '|required_array_keys:' . implode(',', array_keys(SubscriptionProtection::defaults())),
+            SubscriptionProtection::SETTING => 'sometimes|array:' . implode(',', array_keys(SubscriptionProtection::defaults())) . '|required_array_keys:' . implode(',', $requiredProtectionKeys),
             'subscribe_protection.block_browser' => 'boolean',
             'subscribe_protection.brute_force_enabled' => 'boolean',
             'subscribe_protection.brute_force_max_failures' => 'integer|min:1|max:10000',

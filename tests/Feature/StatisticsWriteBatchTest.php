@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Jobs\ProcessNodeReportBatch;
 use App\Models\StatUser;
 use App\Services\FineTrafficStatistics;
-use App\Services\NodeTrafficHour;
 use App\Services\Plugin\HookManager;
 use App\Services\TrafficStatisticsRecorder;
 use App\Services\UserRouteTraffic;
@@ -56,9 +55,8 @@ class StatisticsWriteBatchTest extends TestCase
             $this->assertSame($expectedU, $totals[$table]['billed_u']);
             $this->assertSame($expectedD, $totals[$table]['billed_d']);
         }
-        $this->assertSame($rawU, $totals['v2_stat_traffic_hour']['u']);
-        $this->assertSame($rawU + 42 * 150, $totals['v2_stat_node_hour']['u']);
-        $this->assertSame($rawU + 42 * 150, $totals['v2_stat_node_hour_detail']['u']);
+        $this->assertSame($rawU + 42 * 150, $totals['v2_stat_server']['u']);
+        $this->assertSame(15, $totals['v2_stat_proxy_traffic']['rows']);
         $this->assertSame($rawU, (int) $nodes[0]->fresh()->u);
         (new ProcessNodeReportBatch($batch->id))->handle();
         $this->assertSame($totals, Fixture::totals());
@@ -99,12 +97,13 @@ class StatisticsWriteBatchTest extends TestCase
         app(TrafficStatisticsRecorder::class)->addMany($items);
         $this->assertDatabaseCount('v2_stat_user_server', 4);
         $this->assertDatabaseHas('v2_stat_user_server', ['user_id' => 1, 'server_id' => 10, 'kind' => 'entry', 'u' => 4, 'billed_u' => 2]);
-        $this->assertDatabaseCount('v2_stat_traffic_hour', 2);
-        $this->assertSame(11, (int) DB::table('v2_stat_traffic_hour')->sum('u'));
-        app(NodeTrafficHour::class)->addMany([[$day - 86400, 10, 20, $at - 86400, 10], [$day, 3, 4, $at, 11]]);
-        $this->assertDatabaseCount('v2_stat_node_hour_detail', 2);
-        $this->assertDatabaseCount('v2_stat_node_minute_detail', 1);
-        $this->assertDatabaseHas('v2_stat_node_minute_detail', ['server_id' => 11, 'u' => 3]);
+        $this->assertFalse(\Illuminate\Support\Facades\Schema::hasTable('v2_stat_traffic_hour'));
+        $this->assertFalse(\Illuminate\Support\Facades\Schema::hasTable('v2_stat_node_hour'));
+        app(UserRouteTraffic::class)->record(1, 10, 10, 'direct', 1, $day - 86400, 10, 20, 10, 20, $at - 86400);
+        app(UserRouteTraffic::class)->record(1, 10, 11, 'transit', 1, $day, 3, 4, 3, 4, $at);
+        $this->assertDatabaseCount('v2_stat_route_hour', 2);
+        $this->assertDatabaseCount('v2_stat_route_minute', 1);
+        $this->assertDatabaseHas('v2_stat_route_minute', ['server_id' => 11, 'u' => 3]);
     }
 
     public function test_relay_hook_observes_all_statistics_and_retry_keeps_original_trigger(): void
@@ -155,15 +154,17 @@ class StatisticsWriteBatchTest extends TestCase
         $this->assertSame([['route', 0], ['route', 1], ['route', 2], ['route', 3], ['route', 4], ['route', 5]], $fine->seen);
         $recorder = new class extends TrafficStatisticsRecorder {
             public int $calls = 0;
+            public array $totals = [];
             public function add(int $userId, int $serverId, string $kind, int $recordAt, int $u, int $d, int $billedU = 0, int $billedD = 0, ?int $receivedAt = null): void
             {
                 parent::add($userId, $serverId, $kind, $recordAt, $u, $d, $billedU, $billedD, $receivedAt);
-                if (++$this->calls === 1) DB::table('v2_settings')->where('name', 'traffic_hourly_started_at')->update(['value' => '0']);
+                ++$this->calls;
+                $this->totals[] = (int) DB::table('v2_stat_user_server')->sum('u');
             }
         };
         $item = [1, 10, 'entry', now()->startOfDay()->timestamp, 3, 4, 1, 2, now()->timestamp];
         $recorder->addMany([$item, $item]);
         $this->assertSame(2, $recorder->calls);
-        $this->assertSame(3, (int) DB::table('v2_stat_traffic_hour')->sum('u'));
+        $this->assertSame([3, 6], $recorder->totals);
     }
 }

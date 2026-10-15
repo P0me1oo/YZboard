@@ -1,16 +1,14 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['en-US'] = {
   "statistics": {
+    "lastYear": "Last year", "dailyHeatmap": "Daily usage", "trafficIntensity": "Usage intensity", "less": "Less", "more": "More",
+    "noRecord": "No record", "wholeDays": "Only daily totals are available before the last 30 days. Select complete days.",
     "nodeUsage": "Node usage",
-    "nodeAccounting": "Node accounting",
-    "machineStatistics": "Server proxy traffic",
+    "machineStatistics": "Server usage",
     "machine": "Server",
     "machineName": "Server name",
     "searchMachine": "Search servers",
-    "machineRank": "Server proxy traffic ranking",
-    "legacyTraffic": "Legacy accounting",
-    "legacyRank": "Node carried traffic (legacy)",
-    "legacyTrafficNotice": "Legacy accounting counts entry and landing traffic separately for historical records and traffic limits.",
+    "machineRank": "Server usage ranking",
     "operator": "Provider",
     "ipProperties": {
       "fraudScore": "Fraud risk score",
@@ -1458,7 +1456,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
         "refresh": "Refresh",
         "no_restrictions": "No active restrictions",
         "restrictions_load_error": "Could not load restrictions. Refresh to retry.",
-        "save_before_release": "Save settings before managing restrictions.",
+        "save_before_release": "Wait for settings to save automatically before managing restrictions.",
         "kind_ip_ban": "IP ban",
         "kind_ip_rate": "IP rate limit",
         "kind_user_rate": "User rate limit",
@@ -3288,7 +3286,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "nodes": "Nodes",
       "nodesHosted": "hosting nodes",
       "nodesIdle": "idle",
-      "proxyTraffic": "Server proxy traffic",
+      "proxyTraffic": "Server usage",
       "proxyTrafficTooltip": "Raw upload plus download for direct, forwarded and landing traffic. Same-server relay counts once. Excludes other programs.",
       "load": "Load",
       "lastSeen": "Last Seen",

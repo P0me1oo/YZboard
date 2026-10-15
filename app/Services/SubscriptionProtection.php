@@ -21,10 +21,10 @@ class SubscriptionProtection
             'brute_force_window_minutes' => 10,
             'brute_force_block_minutes' => 30,
             'rate_limit_enabled' => false,
-            'rate_limit_max_requests' => 60,
+            'rate_limit_max_requests' => 20,
             'rate_limit_window_minutes' => 1,
             'user_rate_limit_enabled' => false,
-            'user_rate_limit_max_requests' => 60,
+            'user_rate_limit_max_requests' => 20,
             'user_rate_limit_window_minutes' => 1,
             'notify_telegram' => false,
             'whitelist_ips' => [],
@@ -40,14 +40,19 @@ class SubscriptionProtection
     public static function normalize(array $settings): array
     {
         foreach (self::defaults() as $key => $default) {
+            if (!array_key_exists($key, $settings)) continue;
             if (is_bool($default)) {
                 $settings[$key] = (bool) $settings[$key];
             } elseif (is_int($default)) {
                 $settings[$key] = (int) $settings[$key];
             }
         }
-        $settings['whitelist_ips'] = array_values(array_unique(array_map(SubscriptionProtectionIp::normalize(...), $settings['whitelist_ips'])));
-        $settings['whitelist_user_ids'] = array_values(array_unique(array_map('intval', $settings['whitelist_user_ids'])));
+        if (isset($settings['whitelist_ips'])) {
+            $settings['whitelist_ips'] = array_values(array_unique(array_map(SubscriptionProtectionIp::normalize(...), $settings['whitelist_ips'])));
+        }
+        if (isset($settings['whitelist_user_ids'])) {
+            $settings['whitelist_user_ids'] = array_values(array_unique(array_map('intval', $settings['whitelist_user_ids'])));
+        }
         return $settings;
     }
 

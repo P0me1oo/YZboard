@@ -1,16 +1,14 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['ru-RU'] = {
   "statistics": {
+    "lastYear": "Последний год", "dailyHeatmap": "Расход по дням", "trafficIntensity": "Интенсивность расхода", "less": "Меньше", "more": "Больше",
+    "noRecord": "Нет данных", "wholeDays": "Для дат старше 30 дней доступны только суточные итоги. Выберите полные дни.",
     "nodeUsage": "Использование узлов",
-    "nodeAccounting": "Учёт трафика узлов",
-    "machineStatistics": "Прокси-трафик серверов",
+    "machineStatistics": "Использование серверов",
     "machine": "Сервер",
     "machineName": "Имя сервера",
     "searchMachine": "Поиск серверов",
-    "machineRank": "Рейтинг прокси-трафика серверов",
-    "legacyTraffic": "Прежний учёт",
-    "legacyRank": "Трафик узлов (прежний учёт)",
-    "legacyTrafficNotice": "Прежний учёт отдельно суммирует трафик входного и выходного узлов для истории и лимитов.",
+    "machineRank": "Рейтинг расхода серверов",
     "operator": "Оператор",
     "ipProperties": {
       "fraudScore": "Оценка риска мошенничества",
@@ -1400,7 +1398,7 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
         "refresh": "Обновить",
         "no_restrictions": "Нет активных ограничений",
         "restrictions_load_error": "Не удалось загрузить ограничения. Обновите список.",
-        "save_before_release": "Сохраните настройки перед изменением ограничений.",
+        "save_before_release": "Дождитесь автоматического сохранения настроек перед изменением ограничений.",
         "kind_ip_ban": "Блокировка IP",
         "kind_ip_rate": "Частота по IP",
         "kind_user_rate": "Частота по пользователю",
@@ -3203,7 +3201,7 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
       "nodes": "Узлы",
       "nodesHosted": "размещено узлов",
       "nodesIdle": "нет узлов",
-      "proxyTraffic": "Прокси-трафик серверов",
+      "proxyTraffic": "Использование серверов",
       "proxyTrafficTooltip": "Сумма отправленных и полученных данных. Транзит внутри сервера учитывается один раз. Другие программы не учитываются.",
       "load": "Нагрузка",
       "lastSeen": "Последний отклик",

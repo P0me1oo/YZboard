@@ -90,8 +90,9 @@ class ProxyTrafficRecorder
     {
         $received = CarbonImmutable::createFromTimestamp($receivedAt, config('app.timezone'));
         $today = CarbonImmutable::today(config('app.timezone'));
-        if ($received < $today->subDays(29)) { return []; }
-        $buckets = ['day' => $day, 'hour' => $received->startOfHour()->timestamp];
+        if ($received < TrafficStatisticsRetention::dailyStart() || $received >= $today->addDay()) { return []; }
+        $buckets = ['day' => $day];
+        if ($received >= TrafficStatisticsRetention::hourlyStart()) { $buckets['hour'] = $received->startOfHour()->timestamp; }
         if ($received >= $today) { $buckets['minute'] = $received->startOfMinute()->timestamp; }
         $rows = [];
         foreach ($buckets as $unit => $recordAt) {

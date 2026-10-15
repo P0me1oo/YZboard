@@ -17,7 +17,7 @@ class InboundIpStatistics
             'province' => 'nullable|string|max:128',
         ]);
         if (!$request->has('period')) $request->merge(['period' => 'today']);
-        $range = app(TrafficStatisticsService::class)->range($request) + ['province' => $request->input('province')];
+        $range = app(TrafficStatisticsService::class)->range($request, 30) + ['province' => $request->input('province')];
         // 流量开始时间不代表入站 IP 开始时间，不向本接口提供无关的历史起点。
         unset($range['meta']['started_at']);
         return $range;

@@ -58,9 +58,6 @@ class RelayNodeTrafficJob implements ShouldQueue
                 DB::table('v2_server')->where('id', $this->serverId)->incrementEach(
                     ['u' => $this->u, 'd' => $this->d], ['updated_at' => Carbon::now()]
                 );
-                if ($this->recordType === 'd') {
-                    app(\App\Services\NodeTrafficHour::class)->add($recordAt, $this->u, $this->d, $this->receivedAt, $this->serverId);
-                }
             }, 3);
         } catch (\Throwable $e) {
             Log::error("RelayNodeTrafficJob failed for server {$this->serverId}: {$e->getMessage()}");

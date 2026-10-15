@@ -13,7 +13,7 @@ class StatisticsWriteFixture
 {
     public static function enable(): void
     {
-        foreach (['traffic_hourly_started_at', 'node_hourly_started_at', 'user_route_statistics_started_at', 'fine_traffic_started_at'] as $name) {
+        foreach (['proxy_traffic_started_at', 'user_route_statistics_started_at', 'fine_traffic_started_at'] as $name) {
             DB::table('v2_settings')->updateOrInsert(['name' => $name], ['value' => (string) now()->startOfDay()->subDays(29)->timestamp]);
         }
     }
@@ -66,8 +66,8 @@ class StatisticsWriteFixture
     public static function totals(): array
     {
         $result = [];
-        foreach (['v2_stat_user', 'v2_stat_server', 'v2_stat_user_server', 'v2_stat_traffic_hour', 'v2_stat_node_hour',
-            'v2_stat_node_hour_detail', 'v2_stat_node_minute_detail', 'v2_stat_user_route_source',
+        foreach (['v2_stat_user', 'v2_stat_server', 'v2_stat_user_server',
+            'v2_stat_user_route_source',
             'v2_stat_route_hour', 'v2_stat_route_minute', 'v2_stat_proxy_traffic'] as $table) {
             $columns = in_array($table, ['v2_stat_user_server', 'v2_stat_user_route_source', 'v2_stat_route_hour', 'v2_stat_route_minute'])
                 ? ['u', 'd', 'billed_u', 'billed_d'] : ['u', 'd'];

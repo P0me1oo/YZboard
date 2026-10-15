@@ -28,11 +28,11 @@ class ProxyTrafficStatistics
     {
         $today = CarbonImmutable::today(config('app.timezone'));
         $fine = ($range['precision'] ?? '') === 'auto';
-        $unit = $range['start'] >= $today ? 'minute' : 'hour';
-        $union = null;
+        $unit = $range['start'] < TrafficStatisticsRetention::hourlyStart() ? 'day' : ($range['start'] >= $today ? 'minute' : 'hour');
+        $union = null; $windows = [];
         $started = CarbonImmutable::createFromTimestamp($this->started(), config('app.timezone'));
-        $boundary = $unit === 'minute' ? $started->startOfMinute() : $started->startOfHour();
-        if ($boundary < $started) { $boundary = $boundary->addSeconds($unit === 'minute' ? 60 : 3600); }
+        $boundary = match ($unit) { 'minute' => $started->startOfMinute(), 'hour' => $started->startOfHour(), default => $started->startOfDay() };
+        if ($boundary < $started) { $boundary = $unit === 'day' ? $boundary->addDay() : $boundary->addSeconds($unit === 'minute' ? 60 : 3600); }
         for ($day = $range['start']->startOfDay(); $day < $range['end']; $day = $day->addDay()) {
             $start = $range['start']->max($day); $end = $range['end']->min($day->addDay());
             $whole = $start->equalTo($day) && $end->equalTo($day->addDay());
@@ -40,9 +40,28 @@ class ProxyTrafficStatistics
                 throw ValidationException::withMessages(['start_time' => '该时段没有完整的新口径记录，请选择完整日期或启用后的时段。']);
             }
             $selected = !$whole || ($fine && $trend && $range['end']->timestamp - $range['start']->timestamp <= 172800) ? $unit : 'day';
+            if ($whole && $selected !== 'day') {
+                $base = DB::table(ProxyTrafficRecorder::TABLE)->where('scope', $range['scope'])
+                    ->where('record_at', '>=', $start->timestamp)->where('record_at', '<', $end->timestamp);
+                $totals = fn (string $bucket) => (clone $base)->where('unit', $bucket)->select('entity_id')
+                    ->selectRaw('SUM(u) AS u, SUM(d) AS d')->groupBy('entity_id')->orderBy('entity_id')->get()->toJson();
+                if ($totals($selected) !== $totals('day')) $selected = 'day';
+            }
+            $last = count($windows[$selected] ?? []) - 1;
+            if ($last >= 0 && $windows[$selected][$last][1] === $start->timestamp) {
+                $windows[$selected][$last][1] = $end->timestamp;
+            } else {
+                $windows[$selected][] = [$start->timestamp, $end->timestamp];
+            }
+        }
+        // 整日窗口合并为同一查询，全年范围不展开为数百个 UNION。
+        foreach ($windows as $selected => $ranges) {
             $query = DB::table(ProxyTrafficRecorder::TABLE)->where('scope', $range['scope'])->where('unit', $selected)
-                ->where('record_at', '>=', $start->timestamp)->where('record_at', '<', $end->timestamp)
-                ->select('entity_id', 'entity_name', 'record_at', 'unit', 'u', 'd');
+                ->where(function (Builder $query) use ($ranges): void {
+                    foreach ($ranges as [$start, $end]) {
+                        $query->orWhere(fn (Builder $part) => $part->where('record_at', '>=', $start)->where('record_at', '<', $end));
+                    }
+                })->select('entity_id', 'entity_name', 'record_at', 'unit', 'u', 'd');
             $union === null ? $union = $query : $union->unionAll($query);
         }
         return DB::query()->fromSub($union, 'proxy_source');
@@ -60,20 +79,24 @@ class ProxyTrafficStatistics
     {
         $scope = $range['scope'];
         $table = $scope === 'node' ? 'v2_server' : 'v2_server_machine';
+        $name = $scope === 'node' ? 'COALESCE(current_entity.name, old_name.name, totals.entity_name)' : 'COALESCE(current_entity.name, totals.entity_name)';
         $query = DB::query()->fromSub($this->totals($this->source($range)), 'totals')
-            ->leftJoin($table . ' as current_entity', 'current_entity.id', '=', 'totals.entity_id')
-            ->selectRaw("totals.entity_id AS id, COALESCE(current_entity.name, totals.entity_name) AS name,
+            ->leftJoin($table . ' as current_entity', 'current_entity.id', '=', 'totals.entity_id');
+        if ($scope === 'node') $query->leftJoin('v2_stat_server_name as old_name', 'old_name.server_id', '=', 'totals.entity_id');
+        $query->selectRaw("totals.entity_id AS id, {$name} AS name,
                 CASE WHEN current_entity.id IS NULL THEN 1 ELSE 0 END AS deleted,
                 upload, download, upload + download AS total")
             ->whereRaw('upload + download > 0');
+        $query->whereRaw("TRIM({$name}) <> ''");
         $search = trim($range['search'] ?? '');
         if ($search !== '') {
             $pattern = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($search)) . '%';
-            $query->whereRaw("LOWER(COALESCE(current_entity.name, totals.entity_name)) LIKE ? ESCAPE '!'", [$pattern]);
+            $query->whereRaw("LOWER({$name}) LIKE ? ESCAPE '!'", [$pattern]);
         }
         $sort = $range['sort'] ?? 'total'; $direction = $range['direction'] ?? 'desc';
         if ($sort === 'node') {
-            $query->orderBy('deleted')->orderBy($scope === 'node' ? 'current_entity.sort' : 'totals.entity_id', $direction);
+            $query->orderBy('deleted')->orderBy($scope === 'node' ? 'current_entity.sort' : 'totals.entity_id', $direction)
+                ->orderBy('totals.entity_id', $direction);
         } else {
             $query->orderBy($sort, $direction);
         }
@@ -91,9 +114,10 @@ class ProxyTrafficStatistics
     public function overview(array $range): array
     {
         $rows = $this->source($range, true)->orderBy('record_at')->get();
-        $unit = $rows->contains('unit', 'day') || $range['end']->timestamp - $range['start']->timestamp > 172800
+        $unit = $rows->contains('unit', 'day') || $range['start'] < TrafficStatisticsRetention::hourlyStart() || $range['end']->timestamp - $range['start']->timestamp > 172800
             ? 'day' : ($range['start'] >= CarbonImmutable::today(config('app.timezone')) ? 'minute' : 'hour');
         if (($range['precision'] ?? '') !== 'auto') { $unit = $range['unit']; }
+        if ($range['start'] < TrafficStatisticsRetention::hourlyStart()) { $unit = 'day'; }
         $series = [];
         // 按节点分别消化迟到的扣减；回收前面时间桶中的同方向直出，趋势与排行合计一致。
         foreach ($rows->groupBy('entity_id') as $entityRows) {
@@ -127,7 +151,7 @@ class ProxyTrafficStatistics
             }
         }
         $started = $this->started();
-        if ($series !== []) {
+        if ($series !== [] || $range['start'] < TrafficStatisticsRetention::hourlyStart()) {
             for ($time = $range['start']; $time->timestamp < min($range['end']->timestamp, now()->timestamp + 1); $time = match ($unit) {
                 'minute' => $time->addSeconds(60), 'hour' => $time->addSeconds(3600), 'week' => $time->addWeek(), 'month' => $time->addMonthNoOverflow(), default => $time->addDay(),
             }) {
@@ -144,6 +168,8 @@ class ProxyTrafficStatistics
             foreach (array_keys($summary) as $key) { $summary[$key] += $row[$key]; }
         }
         unset($row);
-        return ['list' => array_values($series), 'summary' => $summary, 'meta' => $this->meta($range) + ['unit' => $unit]];
+        return ['list' => array_values($series), 'summary' => $summary, 'meta' => $this->meta($range) + [
+            'unit' => $unit, 'visualization' => $range['start'] < TrafficStatisticsRetention::hourlyStart() ? 'heatmap' : 'trend',
+        ]];
     }
 }

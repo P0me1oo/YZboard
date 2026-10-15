@@ -118,14 +118,20 @@ class SubscriptionNotificationTest extends TestCase
         Http::assertNothingSent();
     }
 
-    public function test_saving_disabled_switch_cancels_pending_events_even_if_immediately_reenabled(): void
+    public static function notificationSettingPayloads(): array
+    {
+        return [[false], [true]];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('notificationSettingPayloads')]
+    public function test_saving_disabled_switch_cancels_pending_events_even_if_immediately_reenabled(bool $independent): void
     {
         $this->hit();
         $admin = User::create(['email' => 'admin@example.invalid', 'password' => Str::random(32), 'is_admin' => true,
             'uuid' => (string) Str::uuid(), 'token' => Str::random(32)]);
         $this->actingAs($admin, 'sanctum');
         $path = '/api/v2/' . hash('crc32b', config('app.key')) . '/config/save';
-        $settings = SubscriptionProtection::settings();
+        $settings = $independent ? [] : SubscriptionProtection::settings();
         $settings['notify_telegram'] = false;
         $this->postJson($path, [SubscriptionProtection::SETTING => $settings])->assertOk();
         $settings['notify_telegram'] = true;

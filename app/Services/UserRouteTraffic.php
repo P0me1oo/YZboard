@@ -81,7 +81,7 @@ class UserRouteTraffic
 
     private function source(array $range): Builder
     {
-        if (($range['precision'] ?? '') === 'auto') { return app(FineTrafficStatistics::class)->source($range, 'route'); }
+        if (($range['precision'] ?? '') === 'auto') { return app(FineTrafficStatistics::class)->source($range); }
         return DB::table(self::TABLE)->where('record_at', '>=', $range['start']->timestamp)
             ->where('record_at', '<', $range['end']->timestamp);
     }

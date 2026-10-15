@@ -27,6 +27,52 @@ class RealtimeAdminTest extends TestCase
         ]);
     }
 
+    public function test_combined_subscription_reuses_nodes_runtime_and_parent_fallbacks(): void
+    {
+        Cache::flush();
+        $user = $this->user();
+        $parent = Server::create(['name' => '父节点', 'type' => 'vless', 'host' => 'example.invalid',
+            'port' => 443, 'server_port' => 443, 'group_ids' => [1], 'enabled' => true, 'rate' => 1]);
+        $child = Server::create(['name' => '共享节点', 'type' => 'vless', 'host' => 'example.invalid',
+            'port' => 443, 'server_port' => 443, 'group_ids' => [1], 'enabled' => true, 'rate' => 1,
+            'parent_id' => $parent->id, 'u' => 50, 'usage_u' => 70]);
+        $store = app(RealtimeStateStore::class);
+        $source = 'node:' . $parent->id;
+        $epoch = $store->begin($source, str_repeat('f', 32))['epoch'];
+        $store->accept($source, $epoch, 1, ['alive' => [$user->id => ['8.8.8.8']],
+            'online' => [$user->id => 1], 'status' => ['cpu' => 25], 'metrics' => ['active_connections' => 7]]);
+        foreach (['LAST_CHECK_AT', 'LAST_PUSH_AT'] as $suffix) {
+            Cache::put(\App\Utils\CacheKey::get('SERVER_VLESS_' . $suffix, $parent->id), time(), 600);
+        }
+        \Illuminate\Support\Facades\Redis::shouldReceive('pipeline')->once()->andReturnUsing(function ($callback) use ($user, $parent, $child) {
+            $pipe = \Mockery::mock();
+            $pipe->shouldReceive('hgetall')->once()->with('user_devices:' . $user->id);
+            $callback($pipe);
+            return [[$parent->id . ':8.8.8.8' => time(), $child->id . ':1.1.1.1' => time()]];
+        });
+        $queries = 0;
+        \Illuminate\Support\Facades\DB::listen(function ($event) use (&$queries) {
+            if (preg_match('/from ["`]v2_server["`]/', $event->sql)) $queries++;
+        });
+        $reads = [];
+        app('events')->listen([\Illuminate\Cache\Events\CacheHit::class, \Illuminate\Cache\Events\CacheMissed::class],
+            function ($event) use (&$reads) { $reads[$event->key] = ($reads[$event->key] ?? 0) + 1; });
+        $service = app(RealtimeSnapshotService::class);
+        $frame = $service->snapshot($service->validate(['users' => [$user->id], 'devices' => [$user->id], 'nodes' => [$parent->id, $child->id]]));
+        $this->assertSame(1, $queries);
+        $this->assertSame(1, $reads['realtime:v1:' . $source]);
+        $this->assertSame(1, $reads['realtime:v1:node:' . $child->id]);
+        foreach (['LAST_CHECK_AT', 'LAST_PUSH_AT'] as $suffix) {
+            $this->assertSame(1, $reads[\App\Utils\CacheKey::get('SERVER_VLESS_' . $suffix, $parent->id)]);
+        }
+        $this->assertSame(['1.1.1.1', '8.8.8.8'], $frame['devices'][$user->id]['ips']);
+        $this->assertSame(7, $frame['nodes'][$child->id]['online_conn']);
+        $this->assertSame(25.0, $frame['nodes'][$child->id]['load_status']['cpu']);
+        $this->assertSame(50, $frame['nodes'][$child->id]['u']);
+        $this->assertSame(70, $frame['nodes'][$child->id]['usage_u']);
+        $this->assertSame(Server::STATUS_ONLINE, $frame['nodes'][$child->id]['available_status']);
+    }
+
     public function test_optional_machine_samples_keep_the_existing_display_shape(): void
     {
         $machine = ServerMachine::create(['name' => '测试机器', 'token' => 'test-only', 'is_active' => true]);

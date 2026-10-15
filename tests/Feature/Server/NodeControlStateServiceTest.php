@@ -175,4 +175,99 @@ class NodeControlStateServiceTest extends TestCase
             $this->assertSame([], $this->service->devices($this->node)['users']);
         }
     }
+
+    public function test_full_sync_reuses_eligibility_but_next_sync_rechecks_restrictions(): void
+    {
+        $this->node->update(['group_ids' => [1]]);
+        $user = User::withoutEvents(fn () => User::create([
+            'email' => 'full-sync@example.invalid', 'password' => 'test-only',
+            'uuid' => \App\Utils\Helper::guid(true), 'token' => \App\Utils\Helper::guid(),
+            'group_id' => 1, 'group_ids' => [1], 'u' => 0, 'd' => 0,
+            'transfer_enable' => 1000, 'banned' => false, 'expired_at' => null,
+        ]));
+        Redis::shouldReceive('hgetall')->with('user_devices:' . $user->id)->andReturn([$this->node->id . ':8.8.8.8' => time()]);
+        $queries = 0;
+        \Illuminate\Support\Facades\DB::listen(function ($event) use (&$queries) {
+            if (str_contains($event->sql, 'u + d < transfer_enable')) $queries++;
+        });
+        $first = $this->service->fullSnapshot($this->node);
+        $this->assertSame(1, $queries);
+        $this->assertSame([$user->id], array_column($first['control']['users'], 'id'));
+        $this->assertSame([$user->id => ['8.8.8.8']], $first['devices']['users']);
+        foreach ([['banned' => true], ['banned' => false, 'expired_at' => time() - 1],
+            ['expired_at' => null, 'u' => 1000], ['u' => 0, 'group_id' => 2, 'group_ids' => [2]]] as $attributes) {
+            User::withoutEvents(fn () => $user->forceFill($attributes)->save());
+            $snapshot = $this->service->fullSnapshot($this->node);
+            $this->assertSame([], $snapshot['control']['users']);
+            $this->assertSame([], $snapshot['devices']['users']);
+        }
+        User::withoutEvents(fn () => $user->forceFill(['group_id' => 1, 'group_ids' => [1]])->save());
+        $restored = (new NodeControlStateService())->fullSnapshot($this->node);
+        $this->assertSame($first['devices']['users'], $restored['devices']['users']);
+        $this->assertGreaterThan($first['devices']['sequence'], $restored['devices']['sequence']);
+    }
+
+    public function test_full_sync_keeps_plugin_filter_invocations_and_node_specific_results(): void
+    {
+        $this->node->update(['group_ids' => [1]]);
+        $calls = 0;
+        $filter = function ($users, $node) use (&$calls) {
+            $calls++;
+            $this->assertSame($this->node->id, $node->id);
+            return $calls % 2 === 1 ? collect([(object) ['id' => 900001]]) : collect();
+        };
+        \App\Services\Plugin\HookManager::registerFilter('server.users.get', $filter);
+        try {
+            $snapshot = $this->service->fullSnapshot($this->node);
+            $this->assertSame(2, $calls);
+            $this->assertSame([900001], array_column($snapshot['control']['users'], 'id'));
+            $this->assertSame([], $snapshot['devices']['users']);
+        } finally {
+            \App\Services\Plugin\HookManager::remove('server.users.get', $filter);
+        }
+    }
+
+    public function test_full_sync_holds_device_version_lock_before_reading_shared_eligibility(): void
+    {
+        $this->node->update(['group_ids' => [1]]);
+        $key = 'realtime:control:devices:' . $this->node->id . ':lock';
+        $checked = false;
+        \Illuminate\Support\Facades\DB::listen(function ($event) use ($key, &$checked) {
+            if (str_contains($event->sql, 'u + d < transfer_enable')) {
+                $checked = true;
+                $this->assertFalse(Cache::lock($key, 30)->get(), '并发设备捕获不能越过共享名单的读取');
+            }
+        });
+        $sent = [];
+        $snapshot = $this->service->fullSnapshot($this->node, function ($control) use ($key, &$sent) {
+            $this->assertFalse(Cache::lock($key, 30)->get());
+            $sent[] = $control;
+        });
+        $this->assertTrue($checked);
+        $this->assertSame([$snapshot['control']], $sent);
+        $lock = Cache::lock($key, 30);
+        $this->assertTrue($lock->get());
+        $lock->release();
+    }
+
+    public function test_full_sync_device_failure_keeps_version_and_releases_lock_for_retry(): void
+    {
+        $before = $this->service->devices($this->node);
+        $key = 'realtime:control:devices:' . $this->node->id;
+        $metadata = Cache::get($key);
+        $this->mock(\App\Services\DeviceStateService::class, function ($mock) {
+            $mock->shouldReceive('getUsersDevices')->once()->andThrow(new \RuntimeException('设备读取失败'));
+            $mock->shouldReceive('getUsersDevices')->once()->andReturn([]);
+        });
+        $sent = 0;
+        try {
+            $this->service->fullSnapshot($this->node, function () use (&$sent) { $sent++; });
+            $this->fail('Must fail');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('设备读取失败', $exception->getMessage());
+        }
+        $this->assertSame(1, $sent, '保留先发送配置、再发送设备的次序');
+        $this->assertSame($metadata, Cache::get($key));
+        $this->assertSame($before, $this->service->fullSnapshot($this->node)['devices']);
+    }
 }

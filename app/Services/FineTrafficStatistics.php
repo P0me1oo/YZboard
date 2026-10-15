@@ -12,22 +12,41 @@ class FineTrafficStatistics
     /** 与日统计一起提交；小时直接累计，清理分钟数据不参与结算或转存。 */
     public function record(string $type, array $keys, array $values, int $day, ?int $receivedAt): void
     {
+        $this->writeMany([[$type, $keys, $values, $day, $receivedAt]]);
+    }
+
+    /** @param list<array{string, array, array, int, ?int}> $items 与 record 参数顺序一致。 */
+    public function recordMany(array $items): void
+    {
+        if (get_class($this) !== self::class) {
+            foreach ($items as $item) $this->record(...$item);
+            return;
+        }
+        $this->writeMany($items);
+    }
+
+    private function writeMany(array $items): void
+    {
+        if ($items === []) return;
         $started = (int) DB::table('v2_settings')->where('name', 'fine_traffic_started_at')->value('value');
-        if (!$started || !$receivedAt || $receivedAt < $started || array_sum($values) === 0) { return; }
-        $received = CarbonImmutable::createFromTimestamp($receivedAt, config('app.timezone'));
-        $today = CarbonImmutable::today(config('app.timezone'));
-        if ($received->startOfDay()->timestamp !== $day || $received < $today->subDays(29) || $received >= $today->addDay()) { return; }
-        foreach (['hour', 'minute'] as $unit) {
-            // 延迟到次日处理的上报只补小时记录，不重新创建已过期的分钟行。
-            if ($unit === 'minute' && $received < $today) { continue; }
-            $table = $type === 'node' ? 'v2_stat_node_' . $unit . '_detail' : 'v2_stat_route_' . $unit;
-            $recordAt = $unit === 'minute' ? $received->startOfMinute()->timestamp : $received->startOfHour()->timestamp;
-            $updates = [];
-            foreach (array_keys($values) as $column) {
-                $updates[$column] = DB::raw(in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)
-                    ? "{$column} + VALUES({$column})" : "{$table}.{$column} + excluded.{$column}");
+        $tables = [];
+        foreach ($items as [$type, $keys, $values, $day, $receivedAt]) {
+            if (!$started || !$receivedAt || $receivedAt < $started || array_sum($values) === 0) { continue; }
+            $received = CarbonImmutable::createFromTimestamp($receivedAt, config('app.timezone'));
+            $today = CarbonImmutable::today(config('app.timezone'));
+            if ($received->startOfDay()->timestamp !== $day || $received < $today->subDays(29) || $received >= $today->addDay()) { continue; }
+            foreach (['hour', 'minute'] as $unit) {
+                // 延迟到次日处理的上报只补小时记录，不重新创建已过期的分钟行。
+                if ($unit === 'minute' && $received < $today) { continue; }
+                $table = $type === 'node' ? 'v2_stat_node_' . $unit . '_detail' : 'v2_stat_route_' . $unit;
+                $recordAt = $unit === 'minute' ? $received->startOfMinute()->timestamp : $received->startOfHour()->timestamp;
+                $tables[$table]['keys'] = [...array_keys($keys), 'record_at'];
+                $tables[$table]['columns'] = array_keys($values);
+                $tables[$table]['rows'][] = $keys + ['record_at' => $recordAt] + $values;
             }
-            DB::table($table)->upsert([$keys + ['record_at' => $recordAt] + $values], [...array_keys($keys), 'record_at'], $updates);
+        }
+        foreach ($tables as $table => $data) {
+            TrafficStatWriter::add($table, $data['rows'], $data['keys'], $data['columns']);
         }
     }
 

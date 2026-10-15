@@ -57,14 +57,16 @@ class ProcessNodeReportBatch implements ShouldQueue
             app(\App\Services\UserRouteTraffic::class)->recordBatch($batch);
             app(\App\Services\ProxyTrafficRecorder::class)->recordBatch($batch);
 
+            $relayRows = [];
             foreach ((array) $batch->relay_user_traffic as $userId => $nodes) {
                 foreach ($nodes as $serverId => $traffic) {
-                    app(TrafficStatisticsRecorder::class)->add(
+                    $relayRows[] = [
                         (int) $userId, (int) $serverId, 'relay', (int) $batch->record_at,
-                        (int) $traffic[0], (int) $traffic[1]
-                    );
+                        (int) $traffic[0], (int) $traffic[1], 0, 0, null,
+                    ];
                 }
             }
+            app(TrafficStatisticsRecorder::class)->addMany($relayRows);
 
             if ((array) $batch->relay_user_traffic !== []) {
                 HookManager::call('traffic.relay_user.processed', [
@@ -123,6 +125,8 @@ class ProcessNodeReportBatch implements ShouldQueue
         $totalU = 0;
         $totalD = 0;
         $userIds = [];
+        $statistics = [];
+        $batchStatistics = $this->canBatchStatistics();
 
         foreach ($traffic as $userId => $value) {
             if (!is_numeric($userId) || !is_array($value) || count($value) !== 2) {
@@ -142,7 +146,18 @@ class ProcessNodeReportBatch implements ShouldQueue
                 $lines = $billing[$userId] ?? [];
                 $ratedU = array_sum(array_column($lines, 'billed_u'));
                 $ratedD = array_sum(array_column($lines, 'billed_d'));
-                foreach ($lines as $line) {
+                $statLines = $lines;
+                if ($batchStatistics) {
+                    $statLines = [];
+                    // 线路已经按原顺序算好整数扣费，只合并同一用户、同一倍率的日账本增量。
+                    foreach ($lines as $line) {
+                        $key = (string) $line['rate'];
+                        $statLines[$key] ??= ['rate' => $line['rate'], 'billed_u' => 0, 'billed_d' => 0];
+                        $statLines[$key]['billed_u'] += $line['billed_u'];
+                        $statLines[$key]['billed_d'] += $line['billed_d'];
+                    }
+                }
+                foreach ($statLines as $line) {
                     $this->incrementUserStat($userId, $line['rate'], $recordAt, $line['billed_u'], $line['billed_d'], $now);
                 }
             } else {
@@ -153,11 +168,14 @@ class ProcessNodeReportBatch implements ShouldQueue
                 ->where('id', $userId)
                 ->incrementEach(['u' => $ratedU, 'd' => $ratedD], ['t' => $now]);
 
-            app(TrafficStatisticsRecorder::class)->add($userId, $serverId, 'entry', $recordAt, $u, $d, $ratedU, $ratedD, $batch->created_at?->timestamp);
+            $item = [$userId, $serverId, 'entry', $recordAt, $u, $d, $ratedU, $ratedD, $batch->created_at?->timestamp];
+            if ($batchStatistics) $statistics[] = $item;
+            else app(TrafficStatisticsRecorder::class)->add(...$item);
             $totalU += $u;
             $totalD += $d;
             $userIds[] = $userId;
         }
+        if ($batchStatistics) app(TrafficStatisticsRecorder::class)->addMany($statistics);
 
         if ($totalU > 0 || $totalD > 0) {
             $this->incrementServerStat($serverId, $serverType, $recordAt, $totalU, $totalD, $now);
@@ -173,6 +191,8 @@ class ProcessNodeReportBatch implements ShouldQueue
     private function applyRelayTraffic(NodeReportBatch $batch): void
     {
         $now = time();
+        $hours = [];
+        $batchStatistics = $this->canBatchStatistics();
         foreach ((array) $batch->relay_traffic as $item) {
             if (!is_array($item)) {
                 continue;
@@ -194,11 +214,28 @@ class ProcessNodeReportBatch implements ShouldQueue
                 $d,
                 $now
             );
-            app(\App\Services\NodeTrafficHour::class)->add((int) $batch->record_at, $u, $d, $batch->created_at?->timestamp, $serverId);
+            $item = [(int) $batch->record_at, $u, $d, $batch->created_at?->timestamp, $serverId];
+            if ($batchStatistics) $hours[] = $item;
+            else app(\App\Services\NodeTrafficHour::class)->add(...$item);
             DB::table('v2_server')
                 ->where('id', $serverId)
                 ->incrementEach(['u' => $u, 'd' => $d], ['updated_at' => now()]);
         }
+        if ($batchStatistics) app(\App\Services\NodeTrafficHour::class)->addMany($hours);
+    }
+
+    /** 模型事件或扩展服务可读取中间结果；存在这些扩展时保留原逐项写入顺序。 */
+    private function canBatchStatistics(): bool
+    {
+        foreach ([TrafficStatisticsRecorder::class, \App\Services\NodeTrafficHour::class, \App\Services\FineTrafficStatistics::class] as $class) {
+            if (get_class(app($class)) !== $class) return false;
+        }
+        foreach ([new StatUser(), new StatServer()] as $model) {
+            foreach ($model->getObservableEvents() as $event) {
+                if ($model->getEventDispatcher()?->hasListeners('eloquent.' . $event . ': ' . get_class($model))) return false;
+            }
+        }
+        return true;
     }
 
     private function incrementUserStat(

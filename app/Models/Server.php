@@ -486,6 +486,59 @@ class Server extends Model
         return self::STATUS_ONLINE;
     }
 
+    private static function availableStatus(?int $lastCheckAt, ?int $lastPushAt): int
+    {
+        $now = time();
+        if (!$lastCheckAt || ($now - self::CHECK_INTERVAL) >= $lastCheckAt) {
+            return self::STATUS_OFFLINE;
+        }
+        if (!$lastPushAt || ($now - self::CHECK_INTERVAL) >= $lastPushAt) {
+            return self::STATUS_ONLINE_NO_PUSH;
+        }
+        return self::STATUS_ONLINE;
+    }
+
+    /** 一次展示读取只补齐仍需旧缓存的字段，不在模型上留下跨次读取的状态。 */
+    public function runtimeView(?array $state): array
+    {
+        $fields = ['last_push_at' => 'LAST_PUSH_AT'];
+        if ($state === null || $state['fresh']) $fields = ['last_check_at' => 'LAST_CHECK_AT'] + $fields;
+        if ($state === null) {
+            $fields += ['online' => 'ONLINE_USER', 'load_status' => 'LOAD_STATUS', 'metrics' => 'METRICS'];
+        }
+        $keys = [];
+        foreach ($fields as $field => $suffix) {
+            $keys[$field] = CacheKey::get('SERVER_' . strtoupper($this->type) . '_' . $suffix, $this->parent_id ?: $this->id);
+        }
+        $records = Cache::many(array_values($keys));
+        $legacy = [];
+        foreach ($keys as $field => $key) $legacy[$field] = $records[$key] ?? null;
+        $available = self::availableStatus($legacy['last_check_at'] ?? null, $legacy['last_push_at']);
+        if ($state === null) {
+            $legacy['online'] ??= 0;
+            return $legacy + [
+                'is_online' => time() - 300 > $legacy['last_check_at'] ? 0 : 1,
+                'available_status' => $available,
+                'online_conn' => $legacy['metrics']['active_connections'] ?? 0,
+            ];
+        }
+
+        $fresh = $state['fresh'];
+        $receivedAt = $state['received_at'] ? intdiv($state['received_at'], 1000) : null;
+        $metrics = $fresh ? ($state['data']['metrics'] ?? null) : null;
+        return [
+            'last_check_at' => $receivedAt,
+            'last_push_at' => $legacy['last_push_at'],
+            // 可用状态还依赖旧心跳和流量上报，不能由实时心跳直接替代。
+            'available_status' => $fresh ? $available : self::STATUS_OFFLINE,
+            'is_online' => $fresh ? 1 : 0,
+            'realtime_stale' => !$fresh,
+            'metrics' => $metrics,
+            'online_conn' => $fresh ? ($metrics['active_connections'] ?? null) : null,
+            'online' => $fresh && isset($state['data']['online']) ? count(array_filter($state['data']['online'])) : null,
+        ];
+    }
+
     public function parent(): BelongsTo
     {
         return $this->belongsTo(self::class, 'parent_id', 'id');

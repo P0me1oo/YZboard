@@ -49,14 +49,35 @@ class RealtimeSnapshotService
         });
         $result = ['users' => [], 'nodes' => [], 'machines' => [], 'devices' => [], 'system' => null, 'version' => $version];
         $userIds = array_values(array_unique(array_merge($subscription['users'], $subscription['devices'])));
+        $runtime = new RealtimeReadContext($this->states);
+        $displayNodes = collect();
+        $nodes = collect();
+        if ($userIds !== [] || $subscription['nodes'] !== []) {
+            $allNodes = Server::query()->where(function ($query) use ($userIds, $subscription) {
+                $query->whereIn('id', $subscription['nodes']);
+                if ($userIds !== []) {
+                    $query->orWhere(fn ($q) => $q->whereNull('relay_entry_id')->orWhere('relay_entry_id', 0));
+                }
+            })->get(['id', 'type', 'parent_id', 'relay_entry_id', 'group_ids', 'enabled', 'u', 'd', 'usage_u', 'usage_d']);
+            $displayNodes = $allNodes->whereIn('id', $subscription['nodes']);
+            $nodes = $allNodes->filter(fn ($node) => !$node->relay_entry_id);
+            $runtime->readMany(array_merge(
+                $userIds === [] ? [] : $nodes->map(fn ($node) => 'node:' . $node->id)->all(),
+                $displayNodes->map(fn ($node) => 'node:' . ($node->parent_id ?: $node->id))->all(),
+            ));
+        }
         if ($userIds !== []) {
             $users = User::query()->whereIn('id', $userIds)->get(['id', 'group_id', 'group_ids', 'online_count', 'last_online_at', 'u', 'd']);
-            $nodes = Server::query()->where(function ($query) {
-                $query->whereNull('relay_entry_id')->orWhere('relay_entry_id', 0);
-            })->get(['id', 'group_ids', 'enabled']);
-            $sources = $this->states->readMany($nodes->map(fn ($node) => 'node:' . $node->id)->all());
-            $connections = app(UserConnectionService::class)->forUsers($users, $sources);
+            $sources = $runtime->readMany($nodes->map(fn ($node) => 'node:' . $node->id)->all());
+            $connectionService = app(UserConnectionService::class);
+            $connections = get_class($connectionService) === UserConnectionService::class
+                ? $connectionService->forUsersWithNodes($users, $sources, $nodes)
+                : $connectionService->forUsers($users, $sources);
             $speeds = app(UserSpeedService::class)->forUsers($users, $sources, $nodes);
+            $devices = app(DeviceStateService::class);
+            $legacyDevices = get_class($devices) === DeviceStateService::class
+                ? $devices->readUsersDevices($users->pluck('id')->all(), $runtime, true)
+                : $users->mapWithKeys(fn ($user) => [$user->id => $devices->getDeviceIPs((int) $user->id, true)])->all();
             foreach ($users as $user) {
                 $groups = $user->effectiveGroupIds();
                 $known = false;
@@ -79,7 +100,7 @@ class RealtimeSnapshotService
                         $missing = true;
                     }
                 }
-                foreach (app(DeviceStateService::class)->getDeviceIPs((int) $user->id, true) as $ip) {
+                foreach ($legacyDevices[$user->id] ?? [] as $ip) {
                     $currentIPs[$ip] = true;
                 }
                 $ips = array_keys($currentIPs);
@@ -102,27 +123,24 @@ class RealtimeSnapshotService
         }
 
         if ($subscription['nodes'] !== []) {
-            $nodes = Server::query()->whereIn('id', $subscription['nodes'])->get(['id', 'type', 'parent_id', 'enabled', 'u', 'd', 'usage_u', 'usage_d']);
+            $nodes = $displayNodes;
             $demand->renew($nodes->map(fn ($node) => 'node:' . ($node->parent_id ?: $node->id))->all());
-            $sources = $this->states->readMany($nodes->map(fn ($node) => 'node:' . ($node->parent_id ?: $node->id))->unique()->all());
+            $sources = $runtime->readMany($nodes->map(fn ($node) => 'node:' . ($node->parent_id ?: $node->id))->all());
+            $views = [];
             foreach ($nodes as $node) {
                 $data = ['id' => (int) $node->id, 'u' => (int) $node->u, 'd' => (int) $node->d];
                 $data['usage_u'] = (int) $node->usage_u;
                 $data['usage_d'] = (int) $node->usage_d;
-                foreach (['last_check_at', 'last_push_at', 'online', 'is_online', 'available_status', 'load_status', 'metrics', 'online_conn'] as $field) {
-                    $data[$field] = $node->$field;
-                }
                 $state = $sources['node:' . ($node->parent_id ?: $node->id)] ?? null;
-                if ($state !== null) {
-                    $data['realtime_stale'] = !$state['fresh'];
-                    $data['is_online'] = $state['fresh'] ? 1 : 0;
-                    $data['last_check_at'] = $state['received_at'] ? intdiv($state['received_at'], 1000) : null;
-                    $data['metrics'] = $state['fresh'] ? ($state['data']['metrics'] ?? null) : null;
-                    $data['load_status'] = $state['fresh'] ? $this->loadView($state['data']['status'] ?? null, $data['last_check_at']) : null;
-                    $data['online_conn'] = $state['fresh'] ? ($data['metrics']['active_connections'] ?? null) : null;
-                    $data['online'] = $state['fresh'] && isset($state['data']['online']) ? count(array_filter($state['data']['online'])) : null;
-                    if (!$state['fresh']) $data['available_status'] = Server::STATUS_OFFLINE;
+                $viewKey = $node->type . ':' . ($node->parent_id ?: $node->id);
+                if (!isset($views[$viewKey])) {
+                    $view = $node->runtimeView($state);
+                    if ($state !== null) {
+                        $view['load_status'] = $state['fresh'] ? $this->loadView($state['data']['status'] ?? null, $view['last_check_at']) : null;
+                    }
+                    $views[$viewKey] = $view;
                 }
+                $data += $views[$viewKey];
                 $result['nodes'][$node->id] = $data;
             }
         }
@@ -130,7 +148,7 @@ class RealtimeSnapshotService
         if ($subscription['machines'] !== []) {
             $machines = ServerMachine::query()->whereIn('id', $subscription['machines'])
                 ->get(['id', 'is_active', 'last_seen_at', 'load_status', 'agent_runtime', 'agent_operation', 'proxy_u', 'proxy_d']);
-            $sources = $this->states->readMany($machines->map(fn ($machine) => 'machine:' . $machine->id)->all());
+            $sources = $runtime->readMany($machines->map(fn ($machine) => 'machine:' . $machine->id)->all());
             foreach ($machines as $machine) {
                 $operation = $machine->agent_operation;
                 if ($operation && in_array($operation['status'] ?? null, ['pending', 'running'], true) && ($operation['expires_at'] ?? 0) <= time()) {

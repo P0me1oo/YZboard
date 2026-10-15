@@ -28,9 +28,6 @@ class RealtimeController extends Controller
     public function sync(Request $request, NodeControlStateService $control): JsonResponse
     {
         $node = $request->attributes->get('node_info');
-        return response()->json(['data' => [
-            'control' => $control->snapshot($node),
-            'devices' => $control->devices($node),
-        ]]);
+        return response()->json(['data' => $control->fullSnapshot($node)]);
     }
 }

@@ -301,19 +301,25 @@ class DeviceStateService
      */
     public function getUsersDevices(array $userIds): array
     {
+        return $this->readUsersDevices($userIds);
+    }
+
+    /** 展示和同步在本次处理内共享状态；扩展读取方法仍按原入口执行。 */
+    public function readUsersDevices(array $userIds, ?RealtimeReadContext $runtime = null, bool $legacyOnly = false): array
+    {
         // 保留扩展服务对单用户读取的定制，不能用批量路径绕过插件覆盖的方法。
         if (get_class($this) !== self::class
             && (new \ReflectionMethod($this, 'getDeviceIPs'))->getDeclaringClass()->getName() !== self::class) {
             $result = [];
             foreach ($userIds as $userId) {
-                $ips = $this->getDeviceIPs((int) $userId);
+                $ips = $this->getDeviceIPs((int) $userId, $legacyOnly);
                 if ($ips !== []) $result[$userId] = $ips;
             }
             return $result;
         }
         $userIds = array_values(array_unique(array_map('intval', $userIds)));
         if ($userIds === []) return [];
-        if (count($userIds) === 1) {
+        if (count($userIds) === 1 && $runtime === null && !$legacyOnly) {
             $ips = $this->getDeviceIPs($userIds[0]);
             return $ips === [] ? [] : [$userIds[0] => $ips];
         }
@@ -337,11 +343,11 @@ class DeviceStateService
         }
 
         // 只在本次调用中复用，下一次同步仍读取最新状态，并按当前时间检查过期。
-        $states = app(RealtimeStateStore::class)->readMany($this->deviceSources($records));
+        $states = ($runtime ?? app(RealtimeStateStore::class))->readMany($this->deviceSources($records));
         $now = time();
         $result = [];
         foreach ($records as $userId => $userRecords) {
-            $ips = $this->filterDeviceIPs($userRecords, $states, $now);
+            $ips = $this->filterDeviceIPs($userRecords, $states, $now, $legacyOnly);
             if ($ips !== []) {
                 $result[$userId] = $ips;
             }

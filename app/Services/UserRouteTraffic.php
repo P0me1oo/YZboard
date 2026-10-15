@@ -14,51 +14,69 @@ class UserRouteTraffic
     /** 由结算事务调用，保留采样原值，避免逐批截断采样差值而累计虚假直出。 */
     public function recordBatch(NodeReportBatch $batch): void
     {
+        $items = [];
         $snapshot = (array) $batch->server_snapshot;
         if (!empty($snapshot['relay_rates'])) {
             foreach (app(RelayTrafficBilling::class)->lines($batch) as $uid => $lines) {
                 foreach ($lines as $line) {
-                    $this->record($uid, (int) $batch->server_id, $line['server_id'], $line['kind'], $line['rate'],
-                        (int) $batch->record_at, $line['u'], $line['d'], $line['billed_u'], $line['billed_d'], $batch->created_at?->timestamp);
+                    $items[] = [$uid, (int) $batch->server_id, $line['server_id'], $line['kind'], $line['rate'],
+                        (int) $batch->record_at, $line['u'], $line['d'], $line['billed_u'], $line['billed_d'], $batch->created_at?->timestamp];
                 }
             }
+            $this->recordMany($items);
             return;
         }
         $rate = max(0.0, (float) ($snapshot['rate'] ?? 1));
         $entry = (int) $batch->server_id;
         foreach ((array) $batch->traffic as $uid => $traffic) {
             $u = max(0, (int) $traffic[0]); $d = max(0, (int) $traffic[1]);
-            $this->record((int) $uid, $entry, (int) ($snapshot['id'] ?? $entry), 'entry', $rate,
-                (int) $batch->record_at, $u, $d, (int) ($u * $rate), (int) ($d * $rate), $batch->created_at?->timestamp);
+            $items[] = [(int) $uid, $entry, (int) ($snapshot['id'] ?? $entry), 'entry', $rate,
+                (int) $batch->record_at, $u, $d, (int) ($u * $rate), (int) ($d * $rate), $batch->created_at?->timestamp];
         }
         foreach ((array) $batch->relay_user_traffic as $uid => $nodes) {
             foreach ($nodes as $sid => $traffic) {
-                $this->record((int) $uid, $entry, (int) $sid, 'relay', $rate,
-                    (int) $batch->record_at, (int) $traffic[0], (int) $traffic[1], 0, 0, $batch->created_at?->timestamp);
+                $items[] = [(int) $uid, $entry, (int) $sid, 'relay', $rate,
+                    (int) $batch->record_at, (int) $traffic[0], (int) $traffic[1], 0, 0, $batch->created_at?->timestamp];
             }
         }
+        $this->recordMany($items);
     }
 
     public function record(int $uid, int $entry, int $sid, string $kind, float $rate, int $day,
         int $u, int $d, int $billedU, int $billedD, ?int $receivedAt): void
     {
-        $started = (int) DB::table('v2_settings')->where('name', 'user_route_statistics_started_at')->value('value');
-        if (!$started || $receivedAt === null || $receivedAt < $started || ($u === 0 && $d === 0)) {
+        $this->writeMany([[$uid, $entry, $sid, $kind, $rate, $day, $u, $d, $billedU, $billedD, $receivedAt]]);
+    }
+
+    /** 批次内复用启用时间；扩展服务仍按原顺序收到逐项调用。 */
+    private function recordMany(array $items): void
+    {
+        if (get_class($this) !== self::class || get_class(app(FineTrafficStatistics::class)) !== FineTrafficStatistics::class) {
+            foreach ($items as $item) $this->record(...$item);
             return;
         }
-        app(FineTrafficStatistics::class)->record('route', [
-            'user_id' => $uid, 'entry_id' => $entry, 'server_id' => $sid, 'kind' => $kind, 'rate' => (string) $rate,
-        ], ['u' => $u, 'd' => $d, 'billed_u' => $billedU, 'billed_d' => $billedD], $day, $receivedAt);
-        $updates = [];
-        foreach (['u', 'd', 'billed_u', 'billed_d'] as $column) {
-            $updates[$column] = DB::raw(in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)
-                ? "{$column} + VALUES({$column})" : self::TABLE . ".{$column} + excluded.{$column}");
+        $this->writeMany($items);
+    }
+
+    private function writeMany(array $items): void
+    {
+        if ($items === []) return;
+        $started = (int) DB::table('v2_settings')->where('name', 'user_route_statistics_started_at')->value('value');
+        $rows = []; $fine = [];
+        foreach ($items as [$uid, $entry, $sid, $kind, $rate, $day, $u, $d, $billedU, $billedD, $receivedAt]) {
+            if (!$started || $receivedAt === null || $receivedAt < $started || ($u === 0 && $d === 0)) continue;
+            $fine[] = ['route', [
+                'user_id' => $uid, 'entry_id' => $entry, 'server_id' => $sid, 'kind' => $kind, 'rate' => (string) $rate,
+            ], ['u' => $u, 'd' => $d, 'billed_u' => $billedU, 'billed_d' => $billedD], $day, $receivedAt];
+            $rows[] = [
+                'user_id' => $uid, 'entry_id' => $entry, 'server_id' => $sid, 'kind' => $kind,
+                'rate' => (string) $rate, 'record_at' => $day, 'u' => $u, 'd' => $d,
+                'billed_u' => $billedU, 'billed_d' => $billedD,
+            ];
         }
-        DB::table(self::TABLE)->upsert([[
-            'user_id' => $uid, 'entry_id' => $entry, 'server_id' => $sid, 'kind' => $kind,
-            'rate' => (string) $rate, 'record_at' => $day, 'u' => $u, 'd' => $d,
-            'billed_u' => $billedU, 'billed_d' => $billedD,
-        ]], ['user_id', 'entry_id', 'server_id', 'kind', 'rate', 'record_at'], $updates);
+        app(FineTrafficStatistics::class)->recordMany($fine);
+        TrafficStatWriter::add(self::TABLE, $rows,
+            ['user_id', 'entry_id', 'server_id', 'kind', 'rate', 'record_at'], ['u', 'd', 'billed_u', 'billed_d']);
     }
 
     private function source(array $range): Builder

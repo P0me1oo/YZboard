@@ -71,36 +71,35 @@ class ProxyTrafficRecorder
             }
         }
         $nodeTraffic[$entryId] = $direct;
+        $rows = [];
         foreach (['node' => $nodeTraffic, 'machine' => $machineTraffic] as $scope => $items) {
             ksort($items, SORT_NUMERIC);
             foreach ($items as $id => [$u, $d]) {
                 if ($u === 0 && $d === 0) { continue; }
                 $name = $scope === 'node' ? ($snapshot['nodes'][$id]['name'] ?? '') : ($snapshot['machines'][$id] ?? '');
-                $this->add($scope, (int) $id, (string) $name, $u, $d, (int) $batch->record_at, $batch->created_at->timestamp);
+                array_push($rows, ...$this->rows($scope, (int) $id, (string) $name, $u, $d, (int) $batch->record_at, $batch->created_at->timestamp));
                 $table = $scope === 'node' ? 'v2_server' : 'v2_server_machine';
                 $prefix = $scope === 'node' ? 'usage_' : 'proxy_';
                 DB::table($table)->where('id', $id)->incrementEach([$prefix . 'u' => $u, $prefix . 'd' => $d]);
             }
         }
+        TrafficStatWriter::add(self::TABLE, $rows, ['scope', 'unit', 'record_at', 'entity_id'], ['u', 'd'], ['entity_name']);
     }
 
-    private function add(string $scope, int $id, string $name, int $u, int $d, int $day, int $receivedAt): void
+    private function rows(string $scope, int $id, string $name, int $u, int $d, int $day, int $receivedAt): array
     {
         $received = CarbonImmutable::createFromTimestamp($receivedAt, config('app.timezone'));
         $today = CarbonImmutable::today(config('app.timezone'));
-        if ($received < $today->subDays(29)) { return; }
+        if ($received < $today->subDays(29)) { return []; }
         $buckets = ['day' => $day, 'hour' => $received->startOfHour()->timestamp];
         if ($received >= $today) { $buckets['minute'] = $received->startOfMinute()->timestamp; }
+        $rows = [];
         foreach ($buckets as $unit => $recordAt) {
-            $updates = ['entity_name' => $name];
-            foreach (['u', 'd'] as $column) {
-                $updates[$column] = DB::raw(in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)
-                    ? "{$column} + VALUES({$column})" : self::TABLE . ".{$column} + excluded.{$column}");
-            }
-            DB::table(self::TABLE)->upsert([[
+            $rows[] = [
                 'scope' => $scope, 'unit' => $unit, 'record_at' => $recordAt, 'entity_id' => $id,
                 'entity_name' => $name, 'u' => $u, 'd' => $d,
-            ]], ['scope', 'unit', 'record_at', 'entity_id'], $updates);
+            ];
         }
+        return $rows;
     }
 }

@@ -30,12 +30,20 @@ class UserConnectionService
     /** 一次批量读缓存供整页使用；旧节点、超时和缓存故障不冒充零连接。 */
     public function forUsers(iterable $users, ?array $runtime = null): array
     {
-        $nodes = Server::query()->where(function ($query) {
+        return $this->forUsersWithNodes($users, $runtime);
+    }
+
+    public function forUsersWithNodes(iterable $users, ?array $runtime = null, ?iterable $nodes = null): array
+    {
+        $nodes ??= Server::query()->where(function ($query) {
             $query->whereNull('relay_entry_id')->orWhere('relay_entry_id', 0);
         })->get(['id', 'group_ids', 'enabled']);
+        $nodes = collect($nodes);
         try {
-            $snapshots = Cache::many($nodes->map(fn ($node) => $this->key((int) $node->id))->all());
             $runtime ??= app(RealtimeStateStore::class)->readMany($nodes->map(fn ($node) => 'node:' . $node->id)->all());
+            $legacyKeys = $nodes->filter(fn ($node) => ($runtime['node:' . $node->id] ?? null) === null)
+                ->map(fn ($node) => $this->key((int) $node->id))->values()->all();
+            $snapshots = $legacyKeys === [] ? [] : Cache::many($legacyKeys);
             foreach ($nodes as $node) {
                 $state = $runtime['node:' . $node->id] ?? null;
                 if ($state === null) continue;

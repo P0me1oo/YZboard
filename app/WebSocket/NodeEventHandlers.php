@@ -177,8 +177,8 @@ class NodeEventHandlers
         $nodeId = (int) $node->id;
         if (!empty($conn->realtime)) {
             $control = app(NodeControlStateService::class);
-            NodeRegistry::send($nodeId, 'sync.snapshot', $control->snapshot($node));
-            NodeRegistry::sendDevices($nodeId, $control->devices($node), true);
+            $snapshot = $control->fullSnapshot($node, fn ($data) => NodeRegistry::send($nodeId, 'sync.snapshot', $data));
+            NodeRegistry::sendDevices($nodeId, $snapshot['devices'], true);
             return;
         }
 

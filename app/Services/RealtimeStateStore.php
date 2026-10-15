@@ -100,6 +100,8 @@ class RealtimeStateStore
 
     public function readMany(array $sources): array
     {
+        $sources = array_values(array_unique($sources));
+        if ($sources === []) return [];
         $records = Cache::many(array_map($this->key(...), $sources));
         $result = [];
         $now = now()->getTimestampMs();

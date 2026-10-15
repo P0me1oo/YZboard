@@ -29,7 +29,7 @@ PHP `8.4.21`、独立 SQLite 内存库及内存缓存下，相关回归通过 14
 php vendor/bin/phpunit --do-not-cache-result --filter 'Realtime|DeviceState|DeviceSyncScheduler|NodeControlState|NodeRegistryDevice|NodeRuntimeMetadata|UserConnection|UserSpeed|TelemetryDemand|HttpPerformance|DeviceHandover|MachineTrafficTest'
 ```
 
-未执行 SQLite/MariaDB 两套完整回归或生产优化版本的部署对比；本次没有数据库迁移和结算修改。正式发布仍需遵守现有发布检查。
+第一批单独验收时未执行 SQLite/MariaDB 两套完整回归或生产优化版本的部署对比；本次没有数据库迁移和结算修改。后续 `1.82.2` 合并发布已通过 PHP 8.2 两套完整回归及双架构镜像核验，结果见兼容矩阵；生产部署后的收益尚未测量。
 
 ### Redis 隔离微基准
 

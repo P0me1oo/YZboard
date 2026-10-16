@@ -40,6 +40,7 @@ class ServerController extends Controller
         }
 
         return response()->json([
+            'access_log' => ['version' => 1, 'retention_days' => \App\Services\ProxyAccessLog::RETENTION_DAYS],
             'websocket' => $websocket,
             'settings' => [
                 'push_interval' => (int) admin_setting('server_push_interval', 60),

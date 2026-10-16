@@ -18,6 +18,7 @@ class ServerRoute
         ], function ($route) {
             $route->match(['GET', 'POST'], 'handshake', [ServerController::class, 'handshake']);
             $route->post('report', [ServerController::class, 'report']);
+            $route->post('access-log', [\App\Http\Controllers\V2\Server\AccessLogController::class, 'report']);
             $route->post('realtime/begin', [\App\Http\Controllers\V2\Server\RealtimeController::class, 'begin']);
             $route->post('realtime/state', [\App\Http\Controllers\V2\Server\RealtimeController::class, 'state']);
             $route->get('realtime/sync', [\App\Http\Controllers\V2\Server\RealtimeController::class, 'sync']);

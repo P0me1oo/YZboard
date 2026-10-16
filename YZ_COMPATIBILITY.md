@@ -1,5 +1,21 @@
 # YZboard 兼容矩阵
 
+## 1.86.0 发布前全面检查（进行中）
+
+- 保留下方访问记录开发改动；面板另修复优惠券更新的确认结果和异常回滚，新增成功、重复调用、失败和事务层级恢复回归。管理端修复旧三项检查失败，以及表单、辅助数据、排序、开关和删除确认的失败恢复，详见[管理端维护说明](../YZboard-Dash/docs/maintenance.md)。
+- 本机隔离 Linux / PHP `8.2.33` 的 SQLite 完整回归 1,035 项、10,131 断言通过，4 项行锁检查按现有条件留给 MariaDB；新增优惠券专项 2 项、20 断言通过。MariaDB 与固定来源正式 CI 仍待完成，不将本轮标为已发布。
+
+## 1.86.0 访问记录（本地开发，未发布）
+
+- 开发基线：面板 `master` / `e8227f9ab4219b0bde9723bf2c670ad52e377153`，管理端 `master` / `0898f6f7936fea1570fe6c520f09dbc3b8192e06`，Node `dev` / `c3b6b53ea1972ce87271502921bfc9a8b805fd6c`。开始时三个工作区干净，未修改分支和远程。
+- 配套管理端 `0.58.0`、Node `v2.13.0`；新增访问记录采集、独立上报、管理查询和 7×24 小时清理。仅修改这三个项目，两个核心源码及固定依赖不变。范围和丢失边界见[访问记录](docs/access-logs.md)。
+- Windows / PHP `8.4.21` 下，`php vendor/bin/phpunit --do-not-cache-result tests/Feature/ProxyAccessLogTest.php` 通过 6 项、64 断言。相同专项在独立本机 MariaDB `11.4.8` 严格分组模式下通过 6 项、64 断言，使用 `-d extension=pdo_mysql --bootstrap tests/bootstrap-mariadb.php`。覆盖认证归属、非管理员拒绝、非法输入、重复与乱序上报、查询、过期重试、清理、数据库写入失败和删除用户后的展示。
+- 最后补充分页总页数和禁止 HTTP 缓存断言后，SQLite 的 `--filter test_filters_pagination_and_snapshot_exclude_later_arrivals` 通过 1 项、22 断言。首轮发现通用文本清理会提前移除非法主机名中的控制字符，接收接口改为验证原始 JSON 后通过；跨机器拒绝状态按现有接口的 400 校准。
+- 管理端源码检查 3,078 个文件、正式构建和构建资源检查通过。`node tools/run-browser-tests.mjs access-logs.spec.mjs` 的最终 4 项全部通过，覆盖 1440 / 390 / 320 像素、严格安全策略、筛选、稳定分页、时间范围、空结果、失败重试与禁止持久保存筛选信息；已查看桌面和手机截图。初轮两项窄屏失败为测试同时匹配全局搜索与表单搜索，限定表单后通过，没有修改产品行为或放宽断言。
+- 15 个管理端资源已同步，与最终构建逐字节一致（仅移除源码映射注释）。`node --test --test-reporter=tap tests/admin-dist.test.cjs` 的 5 项全部通过。主脚本 `assets/admin-CcNYtT5w.js`，集成 SHA-256 `0c85fa19a978e87688285e05b83018e3a504a082e0022c3284e0599291cb2fbf`。
+- Node 的并发、缓存、通信、双核心实连与构建结果见[Node 兼容矩阵](../YZboard-Node/YZ_COMPATIBILITY.md)。未执行数据库全量回归、全站前端验证或真实服务器联调；这不是正式发布记录。构建与截图位于 `D:/codex-tmp/yz-access-log-20261016/`。
+- 本次 MariaDB 测试进程已停止。临时目录 `D:/codex-tmp/yz-access-log-20261016/mariadb-data` 的删除受环境策略限制，仍待手动清理；没有操作其他数据库或既有测试服务。
+
 ## 1.85.0 Reality 目标检测（已发布）
 
 - 面板基线 `master` / `5c471a74779f055e59804082ccb264fd8944e539`；管理端固定来源 `e59110c14afa95e7eb84b09246e89a1eff5fe1bf` / 本地标签 `v0.57.0`，Node 固定来源 `9892e68b18cc6aa8250d64abc782b25095431b16` / `v2.12.0`。管理端 `0.57.0`、面板 `1.85.0`、Node `v2.12.0` 配套使用，两个核心依赖不变。

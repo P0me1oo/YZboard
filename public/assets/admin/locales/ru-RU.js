@@ -1,6 +1,8 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['ru-RU'] = {
   "statistics": {
+    "accessLogs": "Журнал подключений", "destination": "Домен / IP", "targetPort": "Порт назначения", "connectedAt": "Время подключения",
+    "refreshRecords": "Обновить", "nodeSearchPlaceholder": "Имя или ID узла", "targetSearchPlaceholder": "Домен или IP целиком или частично",
     "lastYear": "Последний год", "dailyHeatmap": "Расход по дням", "trafficIntensity": "Интенсивность расхода", "less": "Меньше", "more": "Больше",
     "noRecord": "Нет данных", "wholeDays": "Для дат старше 30 дней доступны только суточные итоги. Выберите полные дни.",
     "nodeUsage": "Использование узлов",

@@ -1,6 +1,8 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['zh-CN'] = {
   "statistics": {
+    "accessLogs": "访问记录", "destination": "目标域名 / IP", "targetPort": "目标端口", "connectedAt": "连接时间",
+    "refreshRecords": "刷新", "nodeSearchPlaceholder": "节点名称或 ID", "targetSearchPlaceholder": "完整或部分域名 / IP",
     "lastYear": "最近一年", "dailyHeatmap": "每日用量", "trafficIntensity": "用量深浅", "less": "少", "more": "多",
     "noRecord": "暂无记录", "wholeDays": "30 天前仅保留日汇总，请选择完整日期。",
     "nodeUsage": "节点用量",

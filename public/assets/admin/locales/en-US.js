@@ -1,6 +1,8 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['en-US'] = {
   "statistics": {
+    "accessLogs": "Access records", "destination": "Domain / IP", "targetPort": "Target port", "connectedAt": "Connection time",
+    "refreshRecords": "Refresh", "nodeSearchPlaceholder": "Node name or ID", "targetSearchPlaceholder": "Full or partial domain / IP",
     "lastYear": "Last year", "dailyHeatmap": "Daily usage", "trafficIntensity": "Usage intensity", "less": "Less", "more": "More",
     "noRecord": "No record", "wholeDays": "Only daily totals are available before the last 30 days. Select complete days.",
     "nodeUsage": "Node usage",

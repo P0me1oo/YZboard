@@ -67,9 +67,12 @@ class CouponController extends Controller
             $coupon->update($params);
             DB::commit();
         } catch (\Exception $e) {
+            DB::rollBack();
             \Log::error($e);
             return $this->fail([500, '保存失败']);
         }
+
+        return $this->success(true);
     }
 
     public function show(Request $request)

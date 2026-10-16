@@ -172,6 +172,7 @@ class AdminRoute
             });
 
             $router->group(['prefix' => 'statistics'], function ($router) {
+                $router->get('/accessLogs', [\App\Http\Controllers\V2\Admin\AccessLogController::class, 'fetch']);
                 $router->get('/inboundUsers', [InboundIpStatisticsController::class, 'users']);
                 $router->get('/inboundUser', [InboundIpStatisticsController::class, 'user']);
                 $router->get('/metadata', [TrafficStatisticsController::class, 'metadata']);

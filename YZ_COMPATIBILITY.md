@@ -1,6 +1,12 @@
 # YZboard 兼容矩阵
 
-## 1.86.0 全面检查与发布准备
+## 1.86.0 全面检查与发布核验（已发布）
+
+- [Release v1.86.0](https://github.com/P0me1oo/YZboard/releases/tag/v1.86.0) 已发布并核对为最新正式版。Tag 固定到 `bcfffd014f587a9305df17403609fb45d06d0c7a`，配套管理端 `0.58.0` / `6de07de567b43f948592b02b66efc98d6e726279`、[Node v2.13.0](https://github.com/P0me1oo/YZ-Agent/releases/tag/v2.13.0) / `d44e61216e8873b55dfb075cf778a98b35c8ff96`；两个核心和固定依赖不变。
+- [正式发布流程 38935045953](https://github.com/P0me1oo/YZboard/actions/runs/38935045953) 全部通过。PHP `8.2.34` 下 SQLite 1,037 项、10,151 断言（4 项行锁检查按既有条件仅在 MariaDB 执行），MariaDB `11.4.8` 严格分组 1,037 项、10,183 断言，以及管理端资源 5 项均通过。
+- 不可变镜像 `ghcr.io/p0me1oo/yzboard:1.86.0-bcfffd0`，版本别名 `1.86.0` 和 `latest` 均为 `sha256:22bf8ae70750ade6025eb34a7903224bbe338a3c876a8399c67c387d9f35204f`。`linux/amd64` 清单 `sha256:70b7c9497a37167c8f3c5add6fe5f1f936c85094f81c40522d9f004c66ca90dc`，`linux/arm64` 清单 `sha256:1b8002aa53e847dd4a7f44a22f243425c6c68bb7e6b54386bd056311db23d7f3`。每架构 25 层均可匿名获取，实际下载并核验 8 个应用层，494 项后端、配置、迁移、管理端资源及 Git HEAD 与固定来源一致；OCI 来源、版本、架构与摘要均正确。
+- Node 的[正式 CI 38934603488](https://github.com/P0me1oo/YZ-Agent/actions/runs/38934603488) 全部通过，12 个附件已实际下载，11 项校验和、Linux 双架构、固定来源、核心依赖、`vcs.modified=false` 与程序实际版本均通过核对。Node 镜像 `v2.13.0`、完整提交标签及 `latest` 均为 `sha256:5775ec9d5a33472e09d1b8fc9935438227af115fc441214c22780aff4c7e4690`，两个架构的全部镜像层和内部程序构建信息均已核验。
+- 先更新面板，再更新所有相关 Node。面板回滚参考 `1.85.0-3f70260` / `sha256:13a109babaf3de2fb2b4ed57941a32d76047aa6a9317bb535b0cfd41e54eeee5`，双架构和全部镜像层已核验可获取；Node 回滚参考 `v2.12.0` / `sha256:d5f1ab5d0e55375e762377b48a5284cbc2c12a4336629d4605d639421f43e1c6`。新增访问记录表可保留，但旧面板不会清理到期记录；撤销迁移会删除记录，见[访问记录](docs/access-logs.md)。未连接或更新生产服务器；本机无 Docker，未启动面板镜像做本地容器运行检查。发布后文档提交不移动 Tag 或改变构建来源，详细核验结果保存在 `D:/codex-tmp/yz-full-audit-20261016/`。
 
 - 保留下方访问记录开发改动；面板另修复优惠券更新的确认结果和异常回滚，新增成功、重复调用、失败和事务层级恢复回归。管理端修复旧三项检查失败，以及表单、辅助数据、排序、开关和删除确认的失败恢复，详见[管理端维护说明](../YZboard-Dash/docs/maintenance.md)。
 - 本机隔离 Linux / PHP `8.2.33` 的初轮 SQLite 完整回归 1,035 项、10,131 断言通过，4 项行锁检查按现有条件留给 MariaDB；新增优惠券专项 2 项、20 断言通过。正式完整结果见后续固定来源 CI。
@@ -8,7 +14,7 @@
 - 本机端到端验证已通过：独立 SQLite 数据库和临时机器、用户、管理员身份，真实 Node 客户端向 Laravel 握手、重复上报与拒绝非法目标，再由管理端实际请求接口，在桌面和手机显示唯一记录。临时数据库、认证文件和 Node 测试入口随脚本退出清理；无凭据结果和截图保留在 `D:/codex-tmp/yz-full-audit-20261016/compat/`，未连接真实服务器。
 - 最终代码提交 `c8fc674556f72518752f4264a91866a5a31408ff` 的[完整回归 38930609761](https://github.com/P0me1oo/YZboard/actions/runs/38930609761) 再次全部通过：SQLite 1,037 项、10,151 断言（4 项行锁用例在 MariaDB 执行）；MariaDB 11.4.8 严格分组 1,037 项、10,183 断言；管理端资源 5 项。
 - 管理端固定来源 `6de07de567b43f948592b02b66efc98d6e726279` / 本地 Tag `v0.58.0`。完整 `npm run verify` 通过源码检查、110 项行为测试、构建和资源检查、258 项浏览器检查（29.4 分钟）及源码开发模式。恢复两份导航文件原有格式后语法树相同，重建的全部 15 个交付文件与验证构建一致，资源契约 5 项通过。主脚本 `assets/admin-BOez9W4_.js`，SHA-256 `7330107ef0f4aba4720020d14d3bbe2f9443841cb31c626640373d75ae12e3b0`。
-- Node 功能来源 `9053ebdac22b1334f5f03a68a72f21def82848b8` 的[完整 CI 38926179749](https://github.com/P0me1oo/YZ-Agent/actions/runs/38926179749) 通过 Linux 全仓竞态、独立核心兼容包、Mihomo、安装器、四组防火墙和双架构程序、镜像检查。正式 Tag `v2.13.0` 来源 `d44e61216e8873b55dfb075cf778a98b35c8ff96`，仅补齐发布说明；最终正式附件和镜像核验另行记录。
+- Node 功能来源 `9053ebdac22b1334f5f03a68a72f21def82848b8` 的[完整 CI 38926179749](https://github.com/P0me1oo/YZ-Agent/actions/runs/38926179749) 通过 Linux 全仓竞态、独立核心兼容包、Mihomo、安装器、四组防火墙和双架构程序、镜像检查。正式 Tag `v2.13.0` 来源 `d44e61216e8873b55dfb075cf778a98b35c8ff96`，仅补齐发布说明；最终正式附件和镜像核验见本节发布记录及[Node 兼容矩阵](../YZboard-Node/YZ_COMPATIBILITY.md)。
 - 本机初轮的订阅防护并发检查出现失败，独立重跑三项通过，最终正式 CI 双库完整通过；未修改锁超时或放宽测试。本机 Windows 的 Node 全仓竞态检查在固定依赖 `sing v0.9.0-beta.4` 的 `vectorised_windows.go` 触发指针校验崩溃，另有 Xray Hysteria 超时，不记为通过；Linux 正式流程对应全量通过，未修改核心依赖或跳过检查。
 - 本机 Windows、Linux 两个专用 MariaDB 测试库已清空并停止服务，端到端验证的临时身份与数据库已清理。环境策略拒绝递归删除测试目录后采用数据库重置，保留程序和目录，不保留有效测试身份。
 

@@ -20,4 +20,10 @@
 - PHP 8.4.21，受影响回归 64 项、725 次断言通过；加入分桶和小批清理用例后，相关统计、清理、节点报告回归 76 项、856 次断言通过。
 - SQLite 完整回归最终为 1,018 项、9,969 次断言，4 项按项目既有条件跳过。中途发现的直接构造控制器兼容问题已修正；一次并发计数波动与本批代码无调用关系，专项和完整回归复跑均通过。
 - 隔离 SQLite 合成 30 天、4 个实体的节点排行：返回 4 行，查询事件 6 次，43.943 ms；执行计划使用 `v2_stat_proxy_traffic` 主键的 `scope + unit + record_at` 范围索引。该数据用于确认扫描路径，不代表生产耗时。
-- 当前环境未发现 `mariadbd`、`mysql` 或 Docker，未执行 MariaDB 实例验证；不能把 SQLite 结果表述为 MariaDB 通过。迁移和 SQL 使用 Laravel SQLite/MariaDB 兼容写法，接入专用 MariaDB 后应运行项目规定的严格 `ONLY_FULL_GROUP_BY` 回归。
+- 开发阶段本机未发现 `mariadbd`、`mysql` 或 Docker，当时未执行 MariaDB 实例验证；该阶段 SQLite 结果不代表 MariaDB 通过。正式发布验证见下方。
+
+## 1.84.1 发布验证
+
+- 本批修改已随 [1.84.1](https://github.com/P0me1oo/YZboard/releases/tag/v1.84.1) 发布，固定面板来源 `aecc39d4c5b40b5cefc84d18396f1faeef605261`。新增五项索引，不删除表或记录，更新前应备份数据库。
+- [固定来源完整回归](https://github.com/P0me1oo/YZboard/actions/runs/38871847219) 与[发布流程](https://github.com/P0me1oo/YZboard/actions/runs/38872583363) 均通过：PHP `8.2.34` 下 SQLite 为 1,023 项、10,024 次断言，四项行锁检查按原规则只在 MariaDB 运行；MariaDB `11.4.8` 严格分组完整回归为 1,023 项、10,056 次断言，包含上述四项检查。
+- 本地 PHP `8.4.21` / SQLite 同组完整回归亦通过。双架构镜像内全部后端、配置和迁移 PHP 与固定来源一致；来源、摘要和回滚版本见[兼容矩阵](../YZ_COMPATIBILITY.md)。未连接生产服务器，合成查询耗时仍不代表生产性能。

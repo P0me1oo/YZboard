@@ -85,8 +85,9 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     "entryTotal": "入口合计", "relayTotal": "落地合计", "date": "日期", "position": "流量类型", "entry": "入口", "relay": "中转"
   },
   "telegramBot": {
+    "userReminders": "用户提醒", "nodeNotifications": "节点掉线", "nodeNotificationSaved": "节点掉线提醒已保存",
     "groupLink": "Telegram 群组链接", "groupLinkInvalid": "请输入完整的 HTTP 或 HTTPS 群组链接。",
-    "groupNodeSettings": "群组与节点", "groupNodeSaved": "群组与节点设置已保存",
+    "groupNodeSettings": "群组设置", "groupNodeSaved": "群组设置已保存",
     "auto_approve_join": "自动审核入群", "notify_node_offline": "节点掉线通知",
     "joinGroups": "审核群组 ID", "joinGroupsPlaceholder": "每行一个群组 ID，例如 -1001234567890",
     "joinGroupsInvalid": "请填写有效的负数群组 ID，最多 20 个；开启审核时至少填写一个。",
@@ -134,7 +135,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     "searchPlaceholder": "搜索邮箱、Telegram ID 或用户名", "search": "查询",
     "total": "共 {{count}} 条绑定", "previous": "上一页", "next": "下一页", "page": "第 {{current}} / {{total}} 页",
     "status": { "unconfigured": "未配置", "unchecked": "未检查", "error": "连接异常", "connected": "接收地址已登记", "disconnected": "接收地址未登记" },
-    "success": { "save": "配置已保存", "saveStopped": "配置已保存，请重新启用机器人", "check": "Telegram 接口检查完成", "enable": "机器人已启用", "disable": "机器人已停用", "testMessage": "测试消息已发送，请到 Telegram 查看" }
+    "success": { "saveApplied": "配置已保存，机器人已重新启用", "save": "配置已保存", "saveStopped": "配置已保存，请重新启用机器人", "check": "Telegram 接口检查完成", "enable": "机器人已启用", "disable": "机器人已停用", "testMessage": "测试消息已发送，请到 Telegram 查看" }
   },
   "giftCard": {
     "title": "礼品卡管理",
@@ -1350,7 +1351,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
         "user_rate_hint": "同一账号跨 IP 累计请求，所有订阅入口共用额度。",
         "user_rate_limit_max_requests": "用户最大请求次数",
         "user_rate_limit_window_minutes": "用户统计窗口（分钟）",
-        "notify_telegram": "Telegram 封禁提醒",
+        "notify_telegram": "订阅防护提醒",
         "notify_hint": "复用 Telegram Bot 的管理员接收人和重复提醒间隔，仅在新触发限制时通知。",
         "restrictions": "当前限制",
         "refresh": "刷新",

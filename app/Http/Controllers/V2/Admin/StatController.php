@@ -429,6 +429,13 @@ class StatController extends Controller
      */
     public function getTrafficRank(Request $request)
     {
+        return app(\App\Services\StatisticsQueryLimiter::class)->run(
+            fn () => $this->getTrafficRankUnbounded($request)
+        );
+    }
+
+    private function getTrafficRankUnbounded(Request $request)
+    {
         $request->validate([
             'type' => 'required|in:node,user',
             'start_time' => 'nullable|integer|min:1000000000|max:9999999999',

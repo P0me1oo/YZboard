@@ -414,9 +414,6 @@ class UserController extends Controller
     // Export users to CSV.
     public function dumpCSV(Request $request)
     {
-        ini_set('memory_limit', '-1');
-        gc_enable(); // 启用垃圾回收
-
         $scopeInfo = $this->resolveScope($request);
         $scope = $scopeInfo['scope'];
         $userIds = $scopeInfo['user_ids'];
@@ -432,6 +429,7 @@ class UserController extends Controller
             ->with('plan:id,name')
             ->orderBy('id', 'asc')
             ->select([
+                'id',
                 'email',
                 'balance',
                 'commission_balance',
@@ -471,32 +469,21 @@ class UserController extends Controller
             ]);
 
             // 分批处理数据以减少内存使用
-            $query->chunk(500, function ($users) use ($output) {
+            $query->chunkById(500, function ($users) use ($output) {
                 foreach ($users as $user) {
-                    try {
-                        $row = [
-                            $user->email,
-                            number_format($user->balance / 100, 2),
-                            number_format($user->commission_balance / 100, 2),
-                            Helper::trafficConvert($user->transfer_enable),
-                            Helper::trafficConvert($user->transfer_enable - ($user->u + $user->d)),
-                            $user->expired_at ? date('Y-m-d H:i:s', $user->expired_at) : '长期有效',
-                            $user->plan ? $user->plan->name : '无订阅',
-                            Helper::getSubscribeUrl($user->token)
-                        ];
-                        fputcsv($output, $row);
-                    } catch (\Exception $e) {
-                        Log::error('CSV导出错误: ' . $e->getMessage(), [
-                            'user_id' => $user->id,
-                            'email' => $user->email
-                        ]);
-                        continue; // 继续处理下一条记录
-                    }
+                    $row = [
+                        $user->email,
+                        number_format($user->balance / 100, 2),
+                        number_format($user->commission_balance / 100, 2),
+                        Helper::trafficConvert($user->transfer_enable),
+                        Helper::trafficConvert($user->transfer_enable - ($user->u + $user->d)),
+                        $user->expired_at ? date('Y-m-d H:i:s', $user->expired_at) : '长期有效',
+                        $user->plan ? $user->plan->name : '无订阅',
+                        Helper::getSubscribeUrl($user->token)
+                    ];
+                    fputcsv($output, $row);
                 }
-
-                // 清理内存
-                gc_collect_cycles();
-            });
+            }, 'id');
 
             fclose($output);
         }, $filename, [

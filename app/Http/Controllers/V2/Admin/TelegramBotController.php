@@ -33,7 +33,9 @@ class TelegramBotController extends Controller
 
     public function save(TelegramBotConfigRequest $request): JsonResponse
     {
-        return response()->json(['data' => $this->config->save($request->validated())]);
+        $input = $request->validated();
+        return response()->json(['data' => $request->boolean('apply')
+            ? $this->config->apply($input) : $this->config->save($input)]);
     }
 
     public function check(): JsonResponse

@@ -428,15 +428,26 @@ class GiftCardController extends Controller
             'batch_id' => 'required|string|exists:v2_gift_card_code,batch_id',
         ]);
 
-        $codes = GiftCardCode::where('batch_id', $request->input('batch_id'))
-            ->orderBy('created_at', 'asc')
-            ->get(['code']);
-
-        $content = $codes->pluck('code')->implode("\n");
-
-        return response($content)
-            ->header('Content-Type', 'text/plain')
-            ->header('Content-Disposition', 'attachment; filename="gift_cards_' . $request->input('batch_id') . '.txt"');
+        $batchId = $request->input('batch_id');
+        return response()->streamDownload(function () use ($batchId): void {
+            $output = fopen('php://output', 'w');
+            $lastCreated = null; $lastId = 0;
+            do {
+                $query = GiftCardCode::where('batch_id', $batchId);
+                if ($lastCreated !== null) {
+                    $query->where(fn ($cursor) => $cursor->where('created_at', '>', $lastCreated)
+                        ->orWhere(fn ($same) => $same->where('created_at', $lastCreated)->where('id', '>', $lastId)));
+                }
+                $codes = $query->orderBy('created_at')->orderBy('id')->limit(500)->get(['id', 'code', 'created_at']);
+                foreach ($codes as $code) fwrite($output, $code->code . "\n");
+                if ($codes->isEmpty()) break;
+                $last = $codes->last(); $lastCreated = $last->created_at; $lastId = (int) $last->id;
+            } while ($codes->count() === 500);
+            fclose($output);
+        }, 'gift_cards_' . $batchId . '.txt', [
+            'Content-Type' => 'text/plain',
+            'Content-Disposition' => 'attachment; filename="gift_cards_' . $batchId . '.txt"',
+        ]);
     }
 
     /**

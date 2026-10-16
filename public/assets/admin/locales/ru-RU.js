@@ -85,8 +85,9 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
     "entryTotal": "Всего на входе", "relayTotal": "Всего на выходе", "date": "Дата", "position": "Тип передачи", "entry": "Вход", "relay": "Ретрансляция"
   },
   "telegramBot": {
+    "userReminders": "Напоминания пользователям", "nodeNotifications": "Недоступность узлов", "nodeNotificationSaved": "Уведомления об узлах сохранены",
     "groupLink": "Ссылка на группу Telegram", "groupLinkInvalid": "Укажите полную HTTP или HTTPS ссылку на группу.",
-    "groupNodeSettings": "Группы и узлы", "groupNodeSaved": "Настройки групп и узлов сохранены",
+    "groupNodeSettings": "Настройки групп", "groupNodeSaved": "Настройки групп сохранены",
     "auto_approve_join": "Автоматическая проверка заявок", "notify_node_offline": "Уведомления об отключении узлов",
     "joinGroups": "ID групп для проверки", "joinGroupsPlaceholder": "Один ID группы на строку, например -1001234567890",
     "joinGroupsInvalid": "Укажите до 20 отрицательных ID групп; при включении проверки нужна хотя бы одна группа.",
@@ -134,7 +135,7 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
     "searchPlaceholder": "Поиск по почте, Telegram ID или имени пользователя", "search": "Поиск",
     "total": "Привязок: {{count}}", "previous": "Назад", "next": "Далее", "page": "Страница {{current}} / {{total}}",
     "status": { "unconfigured": "Не настроено", "unchecked": "Не проверено", "error": "Ошибка соединения", "connected": "Адрес приёма зарегистрирован", "disconnected": "Адрес приёма не зарегистрирован" },
-    "success": { "save": "Настройки сохранены", "saveStopped": "Настройки сохранены. Включите бота снова.", "check": "Проверка API Telegram завершена", "enable": "Бот включён", "disable": "Бот выключен", "testMessage": "Тестовое сообщение отправлено. Проверьте Telegram." }
+    "success": { "saveApplied": "Настройки сохранены, бот снова включён", "save": "Настройки сохранены", "saveStopped": "Настройки сохранены. Включите бота снова.", "check": "Проверка API Telegram завершена", "enable": "Бот включён", "disable": "Бот выключен", "testMessage": "Тестовое сообщение отправлено. Проверьте Telegram." }
   },
   "giftCard": {
     "title": "Управление подарочными картами",
@@ -1392,7 +1393,7 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
         "user_rate_hint": "Запросы одного аккаунта суммируются для всех IP и адресов подписки.",
         "user_rate_limit_max_requests": "Максимум запросов пользователя",
         "user_rate_limit_window_minutes": "Окно пользователя (минуты)",
-        "notify_telegram": "Ограничения: уведомления Telegram",
+        "notify_telegram": "Уведомления о защите подписок",
         "notify_hint": "Используются получатели и интервал уведомлений администраторов Telegram Bot. Только новые ограничения.",
         "restrictions": "Активные ограничения",
         "refresh": "Обновить",

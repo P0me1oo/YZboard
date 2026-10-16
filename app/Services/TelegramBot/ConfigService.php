@@ -91,7 +91,7 @@ class ConfigService
         return $this->locked(fn () => DB::transaction(function () use ($input) {
             $config = TelegramBotConfig::whereKey(1)->lockForUpdate()->firstOrFail();
             // 已启用的旧配置需要增加入群事件订阅，保存成功后即可处理，无需重新停启。
-            if ($input['auto_approve_join'] && !$config->auto_approve_join && $config->enabled) {
+            if (($input['auto_approve_join'] ?? false) && !$config->auto_approve_join && $config->enabled) {
                 $this->inspect($config);
                 if (!$config->webhook_matches) throw new ApiException('机器人接收地址不匹配，请先检查连接。', 409);
                 $this->client->request($config->token, 'setWebhook', [
@@ -102,7 +102,7 @@ class ConfigService
             $config->fill(array_intersect_key($input, array_flip([
                 'group_link', 'auto_approve_join', 'join_group_ids', 'notify_node_offline', 'node_offline_minutes',
             ])))->save();
-            if (!$config->notify_node_offline) {
+            if (array_key_exists('notify_node_offline', $input) && !$config->notify_node_offline) {
                 \App\Models\TelegramBusinessNotification::where('kind', 'node_offline')->where('status', 'pending')
                     ->update(['status' => 'cancelled']);
             }
@@ -146,33 +146,73 @@ class ConfigService
         }));
     }
 
-    public function save(array $input): array
+    public function apply(array $input): array
     {
         return $this->locked(function () use ($input) {
             $config = $this->current();
-            if ($config->enabled || $config->webhook_registered) {
-                throw new ApiException('请先停用机器人，再修改配置。', 409);
-            }
+            // 先完成输入校验，非法地址不能导致正在运行的机器人停用。
             $url = array_key_exists('webhook_base_url', $input)
                 ? $this->resolveBaseUrl($input['webhook_base_url'])
                 : trim($input['webhook_url'] ?? $this->webhookUrl($config));
             $this->validateUrl($url);
             $token = trim($input['token'] ?? '');
-            if ($token !== '' && $token !== $config->token) {
-                $config->token = $token;
-                $config->webhook_secret = Str::random(48);
-                $config->bot_id = null;
-                $config->bot_username = null;
-                $config->last_received_at = null;
+            if ($url === $this->webhookUrl($config) && ($token === '' || $token === $config->token)) {
+                return $this->view($config);
             }
-            $config->webhook_url = $url;
-            $config->webhook_matches = null;
-            $config->last_checked_at = null;
-            $config->pending_update_count = null;
-            $config->last_error = null;
-            $config->save();
-            return $this->view($config);
+            $resume = $config->enabled;
+            if ($config->enabled || $config->webhook_registered) {
+                // 配置更换不等同于手动停用，不主动取消排队中的告警。
+                try {
+                    $this->disableConfiguration(false);
+                } catch (ApiException $error) {
+                    // 原配置尚未更换，保留原启用状态，让再次保存仍能自动恢复接入。
+                    if ($resume) $this->current()->update(['enabled' => true]);
+                    throw $error;
+                }
+            }
+            $saved = $this->saveConfiguration($input);
+            if (!$resume) return $saved;
+            try {
+                return $this->enableConfiguration();
+            } catch (ApiException $error) {
+                $message = '新配置已保存，但机器人重新启用失败。请检查配置后点击“启用”重试。' . $error->getMessage();
+                $current = $this->current();
+                $this->recordError($current, new ApiException($message, 502));
+                throw new ApiException($message, 502, ['configuration_saved' => true]);
+            }
         });
+    }
+
+    public function save(array $input): array
+    {
+        return $this->locked(fn () => $this->saveConfiguration($input));
+    }
+
+    private function saveConfiguration(array $input): array
+    {
+        $config = $this->current();
+        if ($config->enabled || $config->webhook_registered) {
+            throw new ApiException('请先停用机器人，再修改配置。', 409);
+        }
+        $url = array_key_exists('webhook_base_url', $input)
+            ? $this->resolveBaseUrl($input['webhook_base_url'])
+            : trim($input['webhook_url'] ?? $this->webhookUrl($config));
+        $this->validateUrl($url);
+        $token = trim($input['token'] ?? '');
+        if ($token !== '' && $token !== $config->token) {
+            $config->token = $token;
+            $config->webhook_secret = Str::random(48);
+            $config->bot_id = null;
+            $config->bot_username = null;
+            $config->last_received_at = null;
+        }
+        $config->webhook_url = $url;
+        $config->webhook_matches = null;
+        $config->last_checked_at = null;
+        $config->pending_update_count = null;
+        $config->last_error = null;
+        $config->save();
+        return $this->view($config);
     }
 
     public function check(): array
@@ -192,44 +232,47 @@ class ConfigService
 
     public function enable(): array
     {
-        return $this->locked(function () {
-            $config = $this->configured();
-            $this->validateUrl($this->webhookUrl($config));
-            try {
-                $remoteUrl = $this->inspect($config);
-                if ($remoteUrl !== '' && !$config->webhook_matches) {
-                    throw new ApiException('该机器人已由其他接收地址使用，请先停用原接入。', 409);
-                }
-                $config->webhook_secret ??= Str::random(48);
-                $config->webhook_url = $this->webhookUrl($config);
-                // 请求超时时无法确定远端是否生效，先保留待停用状态，禁止直接换密钥。
-                $config->webhook_registered = true;
-                $config->save();
-                $this->client->request($config->token, 'setWebhook', [
-                    'url' => $config->webhook_url,
-                    'secret_token' => $config->webhook_secret,
-                    'allowed_updates' => ['message', 'callback_query', ...($config->auto_approve_join ? ['chat_join_request'] : [])],
-                    'drop_pending_updates' => false,
-                ]);
-                $this->client->request($config->token, 'setMyCommands', [
-                    'commands' => [
-                        ['command' => 'start', 'description' => '打开账号菜单'],
-                        ['command' => 'ips', 'description' => '查询自己的入站 IP'],
-                        ['command' => 'traffic', 'description' => '查询自己的流量记录'],
-                        ['command' => 'unbind', 'description' => '解除账号绑定'],
-                    ],
-                    'scope' => ['type' => 'all_private_chats'],
-                ]);
-                $config->enabled = true;
-                $config->webhook_matches = true;
-                $config->last_error = null;
-                $config->save();
-            } catch (ApiException $e) {
-                $this->recordError($config, $e);
-                throw $e;
+        return $this->locked(fn () => $this->enableConfiguration());
+    }
+
+    private function enableConfiguration(): array
+    {
+        $config = $this->configured();
+        $this->validateUrl($this->webhookUrl($config));
+        try {
+            $remoteUrl = $this->inspect($config);
+            if ($remoteUrl !== '' && !$config->webhook_matches) {
+                throw new ApiException('该机器人已由其他接收地址使用，请先停用原接入。', 409);
             }
-            return $this->view($config);
-        });
+            $config->webhook_secret ??= Str::random(48);
+            $config->webhook_url = $this->webhookUrl($config);
+            // 请求超时时无法确定远端是否生效，先保留待停用状态，禁止直接换密钥。
+            $config->webhook_registered = true;
+            $config->save();
+            $this->client->request($config->token, 'setWebhook', [
+                'url' => $config->webhook_url,
+                'secret_token' => $config->webhook_secret,
+                'allowed_updates' => ['message', 'callback_query', ...($config->auto_approve_join ? ['chat_join_request'] : [])],
+                'drop_pending_updates' => false,
+            ]);
+            $this->client->request($config->token, 'setMyCommands', [
+                'commands' => [
+                    ['command' => 'start', 'description' => '打开账号菜单'],
+                    ['command' => 'ips', 'description' => '查询自己的入站 IP'],
+                    ['command' => 'traffic', 'description' => '查询自己的流量记录'],
+                    ['command' => 'unbind', 'description' => '解除账号绑定'],
+                ],
+                'scope' => ['type' => 'all_private_chats'],
+            ]);
+            $config->enabled = true;
+            $config->webhook_matches = true;
+            $config->last_error = null;
+            $config->save();
+        } catch (ApiException $e) {
+            $this->recordError($config, $e);
+            throw $e;
+        }
+        return $this->view($config);
     }
 
     public function sendTestMessage(string $recipient): void
@@ -256,42 +299,47 @@ class ConfigService
 
     public function disable(): array
     {
-        return $this->locked(function () {
-            $config = $this->current();
-            $config->enabled = false;
-            $config->save();
+        return $this->locked(fn () => $this->disableConfiguration());
+    }
+
+    private function disableConfiguration(bool $cancelNotifications = true): array
+    {
+        $config = $this->current();
+        $config->enabled = false;
+        $config->save();
+        if ($cancelNotifications) {
             TelegramAdminNotification::where('status', 'pending')
                 ->update(['status' => 'cancelled', 'details' => null]);
-            if (!$config->token) {
+        }
+        if (!$config->token) {
+            return $this->view($config);
+        }
+        try {
+            $remoteUrl = $this->inspect($config);
+            if ($remoteUrl !== '' && $config->webhook_matches) {
+                $this->client->request($config->token, 'deleteWebhook', ['drop_pending_updates' => false]);
+            }
+            $config->webhook_registered = false;
+            $config->webhook_matches = false;
+            $config->last_error = null;
+            $config->save();
+        } catch (ApiException $e) {
+            if ($e instanceof BotApiException && $e->telegramStatus === 401) {
+                // 原密钥已失效时无法移除远端地址，但必须允许管理员保存新密钥。
+                $config->webhook_registered = false;
+                $config->webhook_matches = null;
+                $config->webhook_secret = null;
+                $config->bot_id = null;
+                $config->bot_username = null;
+                $config->last_error = '原密钥已失效，已停止本地处理。远端接入未确认移除，请保存新密钥后重新接入。';
+                $config->last_checked_at = time();
+                $config->save();
                 return $this->view($config);
             }
-            try {
-                $remoteUrl = $this->inspect($config);
-                if ($remoteUrl !== '' && $config->webhook_matches) {
-                    $this->client->request($config->token, 'deleteWebhook', ['drop_pending_updates' => false]);
-                }
-                $config->webhook_registered = false;
-                $config->webhook_matches = false;
-                $config->last_error = null;
-                $config->save();
-            } catch (ApiException $e) {
-                if ($e instanceof BotApiException && $e->telegramStatus === 401) {
-                    // 原密钥已失效时无法移除远端地址，但必须允许管理员保存新密钥。
-                    $config->webhook_registered = false;
-                    $config->webhook_matches = null;
-                    $config->webhook_secret = null;
-                    $config->bot_id = null;
-                    $config->bot_username = null;
-                    $config->last_error = '原密钥已失效，已停止本地处理。远端接入未确认移除，请保存新密钥后重新接入。';
-                    $config->last_checked_at = time();
-                    $config->save();
-                    return $this->view($config);
-                }
-                $this->recordError($config, $e);
-                throw $e;
-            }
-            return $this->view($config);
-        });
+            $this->recordError($config, $e);
+            throw $e;
+        }
+        return $this->view($config);
     }
 
     private function configured(): TelegramBotConfig

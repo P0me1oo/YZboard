@@ -33,25 +33,38 @@ class ProxyTrafficStatistics
         $started = CarbonImmutable::createFromTimestamp($this->started(), config('app.timezone'));
         $boundary = match ($unit) { 'minute' => $started->startOfMinute(), 'hour' => $started->startOfHour(), default => $started->startOfDay() };
         if ($boundary < $started) { $boundary = $unit === 'day' ? $boundary->addDay() : $boundary->addSeconds($unit === 'minute' ? 60 : 3600); }
+        $shortFineRange = $range['end']->timestamp - $range['start']->timestamp <= 172800;
+        $fineWindows = [];
         for ($day = $range['start']->startOfDay(); $day < $range['end']; $day = $day->addDay()) {
             $start = $range['start']->max($day); $end = $range['end']->min($day->addDay());
             $whole = $start->equalTo($day) && $end->equalTo($day->addDay());
             if (!$whole && (!$fine || $start < $boundary)) {
                 throw ValidationException::withMessages(['start_time' => '该时段没有完整的新口径记录，请选择完整日期或启用后的时段。']);
             }
-            $selected = !$whole || ($fine && $trend && $range['end']->timestamp - $range['start']->timestamp <= 172800) ? $unit : 'day';
-            if ($whole && $selected !== 'day') {
-                $base = DB::table(ProxyTrafficRecorder::TABLE)->where('scope', $range['scope'])
-                    ->where('record_at', '>=', $start->timestamp)->where('record_at', '<', $end->timestamp);
-                $totals = fn (string $bucket) => (clone $base)->where('unit', $bucket)->select('entity_id')
-                    ->selectRaw('SUM(u) AS u, SUM(d) AS d')->groupBy('entity_id')->orderBy('entity_id')->get()->toJson();
-                if ($totals($selected) !== $totals('day')) $selected = 'day';
-            }
+            // 排行和长范围趋势使用已有日汇总，避免按天重复扫描细分表。
+            // 只有短范围趋势保留小时/分钟粒度；日内边界仍必须使用细分记录。
+            $selected = !$whole || ($fine && $trend && $shortFineRange) ? $unit : 'day';
+            if ($whole && $selected !== 'day') $fineWindows[] = [$start, $end];
             $last = count($windows[$selected] ?? []) - 1;
             if ($last >= 0 && $windows[$selected][$last][1] === $start->timestamp) {
                 $windows[$selected][$last][1] = $end->timestamp;
             } else {
                 $windows[$selected][] = [$start->timestamp, $end->timestamp];
+            }
+        }
+        if ($fineWindows !== [] && !$this->fineMatchesDaily($range['scope'], $unit, $fineWindows)) {
+            // 迟到数据使细分与日汇总不一致时，只回退完整日期；日内边界仍使用可用细分。
+            $fineKeys = array_fill_keys(array_map(fn (array $window): string => $window[0]->timestamp . ':' . $window[1]->timestamp, $fineWindows), true);
+            $windows = [];
+            for ($day = $range['start']->startOfDay(); $day < $range['end']; $day = $day->addDay()) {
+                $start = $range['start']->max($day); $end = $range['end']->min($day->addDay());
+                $whole = $start->equalTo($day) && $end->equalTo($day->addDay());
+                $key = $start->timestamp . ':' . $end->timestamp;
+                $selected = ($whole && isset($fineKeys[$key])) ? 'day'
+                    : (!$whole || ($fine && $trend && $shortFineRange) ? $unit : 'day');
+                $last = count($windows[$selected] ?? []) - 1;
+                if ($last >= 0 && $windows[$selected][$last][1] === $start->timestamp) $windows[$selected][$last][1] = $end->timestamp;
+                else $windows[$selected][] = [$start->timestamp, $end->timestamp];
             }
         }
         // 整日窗口合并为同一查询，全年范围不展开为数百个 UNION。
@@ -65,6 +78,30 @@ class ProxyTrafficStatistics
             $union === null ? $union = $query : $union->unionAll($query);
         }
         return DB::query()->fromSub($union, 'proxy_source');
+    }
+
+    /** 短范围趋势只做两次扫描，并按日期和实体比较细分与日汇总。 */
+    private function fineMatchesDaily(string $scope, string $unit, array $windows): bool
+    {
+        $aggregate = function (string $selected) use ($scope, $windows): array {
+            $query = DB::table(ProxyTrafficRecorder::TABLE)->where('scope', $scope)->where('unit', $selected)
+                ->where(function (Builder $query) use ($windows): void {
+                    foreach ($windows as [$start, $end]) {
+                        $query->orWhere(fn (Builder $part) => $part->where('record_at', '>=', $start->timestamp)->where('record_at', '<', $end->timestamp));
+                    }
+                });
+            $result = [];
+            foreach ($query->select('record_at', 'entity_id', 'u', 'd')->get() as $row) {
+                $day = CarbonImmutable::createFromTimestamp((int) $row->record_at, config('app.timezone'))->startOfDay()->timestamp;
+                $key = $day . ':' . (int) $row->entity_id;
+                $result[$key] ??= [0, 0];
+                $result[$key][0] += (int) $row->u;
+                $result[$key][1] += (int) $row->d;
+            }
+            ksort($result);
+            return $result;
+        };
+        return $aggregate($unit) === $aggregate('day');
     }
 
     /** 先按实体汇总有符号差值，再限制为非负数，采样迟到不会累计虚假直出。 */
@@ -161,6 +198,7 @@ class ProxyTrafficStatistics
             }
         }
         ksort($series);
+        $series = $this->limitSeries($series, (int) ($range['max_points'] ?? 1000));
         $summary = ['upload' => 0, 'download' => 0, 'total' => 0];
         foreach ($series as &$row) {
             if ($row['upload'] === null) { continue; }
@@ -171,5 +209,32 @@ class ProxyTrafficStatistics
         return ['list' => array_values($series), 'summary' => $summary, 'meta' => $this->meta($range) + [
             'unit' => $unit, 'visualization' => $range['start'] < TrafficStatisticsRetention::hourlyStart() ? 'heatmap' : 'trend',
         ]];
+    }
+
+    /** 按连续时间桶合并，上传/下载仍按桶求和，迟到扣减的结果不会被抽点丢失。 */
+    private function limitSeries(array $series, int $max): array
+    {
+        if ($max < 1 || count($series) <= $max) return $series;
+        $points = array_values($series);
+        $size = (int) ceil(count($points) / $max);
+        $limited = [];
+        foreach (array_chunk($points, $size) as $chunk) {
+            $first = $chunk[0];
+            $upload = $download = 0;
+            $hasValue = false;
+            foreach ($chunk as $point) {
+                if ($point['upload'] === null || $point['download'] === null) continue;
+                $hasValue = true;
+                $upload += (int) $point['upload'];
+                $download += (int) $point['download'];
+            }
+            $limited[] = [
+                'date' => $first['date'],
+                'upload' => $hasValue ? $upload : null,
+                'download' => $hasValue ? $download : null,
+                'total' => $hasValue ? $upload + $download : null,
+            ];
+        }
+        return $limited;
     }
 }

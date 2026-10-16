@@ -36,6 +36,7 @@ class TelegramBotTest extends TestCase
     private bool $failReply = false;
     private bool $failRegistration = false;
     private bool $failAuthentication = false;
+    private bool $failInspection = false;
     private array $webhookInfo = [];
     private int $replyStatus = 0;
     private bool $invalidReply = false;
@@ -62,6 +63,9 @@ class TelegramBotTest extends TestCase
             $method = basename(parse_url($request->url(), PHP_URL_PATH));
             $data = $request->data();
             $this->calls[] = ['method' => $method, 'data' => $data];
+            if ($method === 'getMe' && $this->failInspection) {
+                return Http::response(['ok' => false], 500);
+            }
             if ($method === 'getMe' && $this->failAuthentication) {
                 return Http::response(['ok' => false, 'error_code' => 401], 401);
             }
@@ -92,6 +96,75 @@ class TelegramBotTest extends TestCase
             };
             return Http::response(['ok' => true, 'result' => $result]);
         });
+    }
+
+    public function test_apply_changes_reconnects_running_bot_and_identical_retry_does_not_restart(): void
+    {
+        Sanctum::actingAs($this->user(['is_admin' => 1]));
+        $boundUser = $this->user();
+        $this->bind($boundUser);
+        $this->calls = [];
+        $this->remoteUrl = self::SITE . ConfigService::WEBHOOK_PATH;
+        $newToken = self::BOT_ID . ':' . Str::random(35);
+        $payload = ['apply' => true, 'token' => $newToken, 'webhook_base_url' => 'https://changed.example.test'];
+        $this->postJson($this->adminPath('save'), $payload)->assertOk()
+            ->assertJsonPath('data.enabled', true)->assertJsonPath('data.webhook_registered', true)
+            ->assertJsonMissingPath('data.token');
+        $this->assertSame('https://changed.example.test' . ConfigService::WEBHOOK_PATH, $this->remoteUrl);
+        $this->assertSame($newToken, TelegramBotConfig::first()->token);
+        $this->assertNotSame($this->secret, TelegramBotConfig::first()->webhook_secret);
+        $this->assertNotNull(TelegramBotBinding::where('user_id', $boundUser->id)->first());
+        $this->assertSame(['getMe', 'getWebhookInfo', 'deleteWebhook', 'getMe', 'getWebhookInfo', 'setWebhook', 'setMyCommands'], array_column($this->calls, 'method'));
+        $this->postJson($this->adminPath('save'), $payload)->assertOk();
+        $this->assertCount(7, $this->calls);
+        $this->getJson($this->adminPath('config'))->assertOk()->assertJsonPath('data.enabled', true);
+    }
+
+    public function test_apply_stopped_bot_stays_stopped_and_invalid_input_never_stops_running_bot(): void
+    {
+        Sanctum::actingAs($this->user(['is_admin' => 1]));
+        $this->postJson($this->adminPath('save'), ['apply' => true, 'webhook_base_url' => 'http://invalid.example.test'])
+            ->assertUnprocessable();
+        $this->assertTrue(TelegramBotConfig::first()->enabled);
+        TelegramBotConfig::first()->update(['enabled' => false, 'webhook_registered' => false]);
+        $this->postJson($this->adminPath('save'), ['apply' => true, 'webhook_base_url' => 'https://changed.example.test'])
+            ->assertOk()->assertJsonPath('data.enabled', false);
+        Http::assertNothingSent();
+        Sanctum::actingAs($this->user());
+        $this->postJson($this->adminPath('save'), ['apply' => true, 'webhook_base_url' => self::SITE])->assertForbidden();
+    }
+
+    public function test_apply_reconnect_failure_reports_saved_state_and_allows_enable_retry(): void
+    {
+        Sanctum::actingAs($this->user(['is_admin' => 1]));
+        $this->remoteUrl = self::SITE . ConfigService::WEBHOOK_PATH;
+        $this->failRegistration = true;
+        $this->postJson($this->adminPath('save'), ['apply' => true, 'webhook_base_url' => 'https://changed.example.test'])
+            ->assertStatus(502)->assertJsonPath('error.configuration_saved', true);
+        $config = TelegramBotConfig::first();
+        $this->assertFalse($config->enabled);
+        $this->assertTrue($config->webhook_registered);
+        $this->assertSame('https://changed.example.test' . ConfigService::WEBHOOK_PATH, $config->webhook_url);
+        $this->assertStringContainsString('新配置已保存', $config->last_error);
+        $this->failRegistration = false;
+        $this->postJson($this->adminPath('enable'))->assertOk()->assertJsonPath('data.enabled', true);
+    }
+
+    public function test_apply_stop_failure_keeps_old_credentials_and_does_not_register_new_url(): void
+    {
+        Sanctum::actingAs($this->user(['is_admin' => 1]));
+        $this->remoteUrl = self::SITE . ConfigService::WEBHOOK_PATH;
+        $this->failInspection = true;
+        $this->postJson($this->adminPath('save'), ['apply' => true, 'token' => self::BOT_ID . ':' . Str::random(35),
+            'webhook_base_url' => 'https://changed.example.test'])->assertStatus(502);
+        $this->assertSame($this->token, TelegramBotConfig::first()->token);
+        $this->assertSame(self::SITE . ConfigService::WEBHOOK_PATH, TelegramBotConfig::first()->webhook_url);
+        $this->assertTrue(TelegramBotConfig::first()->enabled);
+        Http::assertNotSent(fn ($request) => str_ends_with($request->url(), '/setWebhook'));
+        $this->failInspection = false;
+        $this->postJson($this->adminPath('save'), ['apply' => true,
+            'webhook_base_url' => 'https://changed.example.test'])->assertOk()->assertJsonPath('data.enabled', true);
+        $this->assertSame('https://changed.example.test' . ConfigService::WEBHOOK_PATH, $this->remoteUrl);
     }
 
     private function user(array $attributes = []): User

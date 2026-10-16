@@ -58,6 +58,24 @@ class TelegramGroupNodeTest extends TestCase
         });
     }
 
+    public function test_group_and_offline_forms_save_only_their_own_fields(): void
+    {
+        Sanctum::actingAs($this->user(['is_admin' => 1]));
+        $path = '/api/v2/' . hash('crc32b', config('app.key')) . '/telegram-bot/group-node-settings';
+        $this->postJson($path, ['notify_node_offline' => true, 'node_offline_minutes' => 45])->assertOk()
+            ->assertJsonPath('data.auto_approve_join', false)->assertJsonPath('data.notify_node_offline', true);
+        $this->postJson($path, ['group_link' => 'https://t.me/example', 'auto_approve_join' => true,
+            'join_group_ids' => ['-1001234567890']])->assertOk()->assertJsonPath('data.node_offline_minutes', 45);
+        $this->postJson($path, ['notify_node_offline' => false, 'node_offline_minutes' => 20])->assertOk()
+            ->assertJsonPath('data.auto_approve_join', true)->assertJsonPath('data.group_link', 'https://t.me/example')
+            ->assertJsonPath('data.join_group_ids', ['-1001234567890'])->assertJsonPath('data.enabled', true);
+        foreach ([[], ['auto_approve_join' => false], ['notify_node_offline' => true],
+            ['notify_node_offline' => true, 'node_offline_minutes' => 0],
+            ['auto_approve_join' => true, 'join_group_ids' => []]] as $invalid) {
+            $this->postJson($path, $invalid)->assertUnprocessable();
+        }
+    }
+
     private function user(array $changes = []): User
     {
         return User::create(array_merge(['email' => Str::random(12) . '@example.test', 'password' => Str::random(32),

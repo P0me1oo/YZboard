@@ -61,6 +61,8 @@ class TrafficStatisticsYearTest extends TestCase
         $date = now()->subDays(30)->toDateString();
         $this->getJson($this->path('traffic', ['period' => 'custom', 'start_date' => $date, 'end_date' => $date]))
             ->assertOk()->assertJsonPath('data.meta.visualization', 'heatmap')->assertJsonPath('data.summary.total', 30);
+        $this->getJson($this->path('traffic', ['max_points' => 10]))->assertOk()
+            ->assertJsonCount(10, 'data.list')->assertJsonPath('data.summary.total', 60);
         $this->getJson($this->path('traffic', ['period' => 'custom', 'start_date' => $date, 'end_date' => $date, 'start_time' => '01:00', 'end_time' => '02:00']))->assertUnprocessable();
         $this->getJson($this->path('traffic', ['scope' => 'legacy']))->assertUnprocessable();
         $this->getJson($this->path('traffic', ['period' => 'custom', 'start_date' => now()->subDays(365)->toDateString(), 'end_date' => $date]))->assertUnprocessable();
@@ -80,6 +82,22 @@ class TrafficStatisticsYearTest extends TestCase
         $this->assertDatabaseCount('v2_stat_route_hour', 2);
         $this->assertDatabaseCount('v2_stat_route_minute', 1);
         $this->getJson($this->path())->assertJsonPath('data.summary.total', 120);
+    }
+
+    public function test_reset_log_resumes_historical_deletes_in_small_batches(): void
+    {
+        foreach (range(1, 3) as $id) {
+            DB::table('v2_stat_user')->insert(['user_id' => $id, 'server_rate' => 1, 'record_type' => 'd',
+                'record_at' => now()->subDays(400)->timestamp, 'u' => 1, 'd' => 1, 'created_at' => now()->timestamp, 'updated_at' => now()->timestamp]);
+        }
+        $this->artisan('reset:log', ['--batch' => 1, '--batches' => 1])->assertSuccessful();
+        $this->assertSame(2, DB::table('v2_stat_user')->count());
+        $this->artisan('reset:log', ['--batch' => 1, '--batches' => 1])->assertSuccessful();
+        $this->assertSame(1, DB::table('v2_stat_user')->count());
+        $this->artisan('reset:log', ['--batch' => 10, '--batches' => 10])->assertSuccessful();
+        $this->assertSame(0, DB::table('v2_stat_user')->count());
+        $this->artisan('reset:log', ['--batch' => 10, '--batches' => 10])->assertSuccessful();
+        $this->assertSame(0, DB::table('v2_stat_user')->count());
     }
 
     public function test_late_batch_records_old_daily_total_without_recreating_expired_detail(): void

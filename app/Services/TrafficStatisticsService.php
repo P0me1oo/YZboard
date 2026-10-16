@@ -27,6 +27,7 @@ class TrafficStatisticsService
             'user_id' => 'sometimes|integer|min:1',
             'server_id' => 'sometimes|integer|min:1',
             'precision' => 'sometimes|in:auto',
+            'max_points' => 'sometimes|integer|min:1|max:1000',
             'start_time' => 'required_with:end_time|date_format:H:i',
             'end_time' => 'required_with:start_time|date_format:H:i',
             'sort' => 'sometimes|in:node,upload,download,total',
@@ -72,6 +73,7 @@ class TrafficStatisticsService
         return $input + [
             'start' => $start, 'end' => $end, 'unit' => 'day', 'metric' => 'actual', 'scope' => 'node',
             'page' => 1, 'page_size' => 20,
+            'max_points' => min(1000, max(1, (int) ($input['max_points'] ?? 1000))),
             'meta' => [
                 'start_date' => $start->toDateString(), 'end_date' => $end->subSecond()->toDateString(),
                 'start_at' => $start->format('Y-m-d\TH:i'), 'end_at' => $end->format('Y-m-d\TH:i'),
@@ -142,7 +144,11 @@ class TrafficStatisticsService
     {
         $userId = (int) $range['user_id'];
         $rows = collect(app(UserRouteTraffic::class)->details($userId, $range));
-        $names = ServerNameHistory::joinNames(DB::table(UserRouteTraffic::TABLE)->where('user_id', $userId), UserRouteTraffic::TABLE)
+        $serverIds = $rows->pluck('server_id')->unique()->values()->all();
+        $nameSource = DB::table(UserRouteTraffic::TABLE)->where('user_id', $userId);
+        if ($serverIds === []) $nameSource->whereRaw('1 = 0');
+        else $nameSource->whereIn('server_id', $serverIds);
+        $names = ServerNameHistory::joinNames($nameSource, UserRouteTraffic::TABLE)
             ->select('server_id', 'node_name', 'node_deleted', 'node_sort')->distinct()
             ->orderBy('node_deleted')->orderBy('node_sort')->orderBy('server_id')->get()->keyBy('server_id');
         $nodeOrder = $names->keys()->flip();

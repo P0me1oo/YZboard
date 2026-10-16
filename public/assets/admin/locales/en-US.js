@@ -85,8 +85,9 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     "entryTotal": "Entry total", "relayTotal": "Relay total", "date": "Date", "position": "Traffic type", "entry": "Entry", "relay": "Relay"
   },
   "telegramBot": {
+    "userReminders": "User reminders", "nodeNotifications": "Node offline", "nodeNotificationSaved": "Node offline settings saved",
     "groupLink": "Telegram group link", "groupLinkInvalid": "Enter a complete HTTP or HTTPS group link.",
-    "groupNodeSettings": "Groups & nodes", "groupNodeSaved": "Group and node settings saved",
+    "groupNodeSettings": "Group settings", "groupNodeSaved": "Group settings saved",
     "auto_approve_join": "Review join requests automatically", "notify_node_offline": "Node offline alerts",
     "joinGroups": "Group IDs to review", "joinGroupsPlaceholder": "One group ID per line, e.g. -1001234567890",
     "joinGroupsInvalid": "Enter up to 20 valid negative group IDs; at least one is required when review is enabled.",
@@ -134,7 +135,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     "searchPlaceholder": "Search email, Telegram ID or username", "search": "Search",
     "total": "{{count}} linked accounts", "previous": "Previous", "next": "Next", "page": "Page {{current}} / {{total}}",
     "status": { "unconfigured": "Not configured", "unchecked": "Not checked", "error": "Connection error", "connected": "Receiver URL registered", "disconnected": "Receiver URL not registered" },
-    "success": { "save": "Settings saved", "saveStopped": "Settings saved. Enable the bot again.", "check": "Telegram API check completed", "enable": "Bot enabled", "disable": "Bot disabled", "testMessage": "Test message sent. Check Telegram." }
+    "success": { "saveApplied": "Settings saved and bot re-enabled", "save": "Settings saved", "saveStopped": "Settings saved. Enable the bot again.", "check": "Telegram API check completed", "enable": "Bot enabled", "disable": "Bot disabled", "testMessage": "Test message sent. Check Telegram." }
   },
   "giftCard": {
     "title": "Gift Card Management",
@@ -1450,7 +1451,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
         "user_rate_hint": "Count requests for the same account across IP addresses and subscription endpoints.",
         "user_rate_limit_max_requests": "Maximum requests per user",
         "user_rate_limit_window_minutes": "User window (minutes)",
-        "notify_telegram": "Telegram restriction alerts",
+        "notify_telegram": "Subscription protection alerts",
         "notify_hint": "Use the Telegram Bot administrator recipients and cooldown. Notify only when a new restriction starts.",
         "restrictions": "Active restrictions",
         "refresh": "Refresh",

@@ -8,7 +8,10 @@ use Illuminate\Http\Request;
 
 class TrafficStatisticsController extends Controller
 {
-    public function __construct(private readonly TrafficStatisticsService $statistics) {}
+    public function __construct(
+        private readonly TrafficStatisticsService $statistics,
+        private readonly \App\Services\StatisticsQueryLimiter $queryLimiter,
+    ) {}
 
     public function metadata(Request $request)
     {
@@ -17,23 +20,23 @@ class TrafficStatisticsController extends Controller
 
     public function overview(Request $request)
     {
-        return $this->success($this->statistics->overview($this->statistics->range($request)));
+        return $this->queryLimiter->run(fn () => $this->success($this->statistics->overview($this->statistics->range($request))));
     }
 
     public function nodes(Request $request)
     {
-        return $this->success($this->statistics->nodes($this->statistics->range($request)));
+        return $this->queryLimiter->run(fn () => $this->success($this->statistics->nodes($this->statistics->range($request))));
     }
 
     public function users(Request $request)
     {
-        return $this->success($this->statistics->users($this->statistics->range($request)));
+        return $this->queryLimiter->run(fn () => $this->success($this->statistics->users($this->statistics->range($request))));
     }
 
     public function user(Request $request)
     {
         $request->validate(['user_id' => 'required|integer|min:1']);
-        return $this->success($this->statistics->user($this->statistics->range($request)));
+        return $this->queryLimiter->run(fn () => $this->success($this->statistics->user($this->statistics->range($request))));
     }
 
     public function searchUsers(Request $request)

@@ -14,6 +14,8 @@ use Illuminate\Http\Request;
 
 class MachineController extends Controller
 {
+    public function __construct(private readonly ?\App\Services\StatisticsQueryLimiter $queryLimiter = null) {}
+
     public function operate(Request $request)
     {
         $params = $request->validate([
@@ -197,35 +199,69 @@ class MachineController extends Controller
             'limit' => 'nullable|integer|min:10|max:1440',
             'range_hours' => 'nullable|integer|min:1|max:24',
         ]);
+        return ($this->queryLimiter ?? app(\App\Services\StatisticsQueryLimiter::class))->run(function () use ($params) {
+            $query = ServerMachineLoadHistory::query()
+                ->where('machine_id', $params['machine_id'])
+                // 即使定时清理暂未执行，也不展示 24 小时以前的历史。
+                ->where('recorded_at', '>=', now()->subHours(24)->timestamp);
 
-        $query = ServerMachineLoadHistory::query()
-            ->where('machine_id', $params['machine_id'])
-            // 即使定时清理暂未执行，也不展示 24 小时以前的历史。
-            ->where('recorded_at', '>=', now()->subHours(24)->timestamp);
+            if (!empty($params['range_hours'])) {
+                $query->where('recorded_at', '>=', now()->subHours((int) $params['range_hours'])->timestamp);
+            }
 
-        if (!empty($params['range_hours'])) {
-            $query->where('recorded_at', '>=', now()->subHours((int) $params['range_hours'])->timestamp);
+            $limit = min(500, (int) ($params['limit'] ?? 60));
+            $columns = ['cpu', 'mem_total', 'mem_used', 'disk_total', 'disk_used', 'net_in_speed', 'net_out_speed', 'recorded_at'];
+            if ((clone $query)->count() <= $limit) {
+                return $this->success($query->orderBy('recorded_at')->get($columns)->all());
+            }
+            $bounds = (clone $query)->selectRaw('MIN(recorded_at) AS first_at, MAX(recorded_at) AS last_at')->first();
+            $width = max(1, (int) ceil(((int) $bounds->last_at - (int) $bounds->first_at + 1) / $limit));
+            $groups = [];
+            foreach ($query->orderBy('recorded_at')->cursor($columns) as $row) {
+                $bucket = intdiv(max(0, (int) $row->recorded_at - (int) $bounds->first_at), $width);
+                $groups[$bucket] ??= $this->newHistoryBucket();
+                $this->addHistorySample($groups[$bucket], $row);
+            }
+            return $this->success(array_values(array_map([$this, 'finishHistoryBucket'], $groups)));
+        });
+    }
+
+    private function newHistoryBucket(): array
+    {
+        return ['count' => 0, 'recorded_at' => 0, 'mem_total' => 0, 'disk_total' => 0,
+            'cpu_sum' => 0.0, 'mem_used_sum' => 0.0, 'disk_used_sum' => 0.0,
+            'net_in_speed_sum' => 0.0, 'net_out_speed_sum' => 0.0,
+            'cpu_peak' => 0.0, 'mem_used_peak' => 0.0, 'disk_used_peak' => 0.0,
+            'net_in_speed_peak' => 0.0, 'net_out_speed_peak' => 0.0];
+    }
+
+    private function addHistorySample(array &$bucket, object $row): void
+    {
+        $bucket['count']++;
+        $bucket['recorded_at'] = (int) $row->recorded_at;
+        $bucket['mem_total'] = max($bucket['mem_total'], (int) $row->mem_total);
+        $bucket['disk_total'] = max($bucket['disk_total'], (int) $row->disk_total);
+        foreach (['cpu', 'mem_used', 'disk_used', 'net_in_speed', 'net_out_speed'] as $field) {
+            $value = (float) $row->$field;
+            $bucket[$field . '_sum'] += $value;
+            $bucket[$field . '_peak'] = max($bucket[$field . '_peak'], $value);
         }
+    }
 
-        $limit = (int) ($params['limit'] ?? 60);
-
-        $history = $query
-            ->orderByDesc('recorded_at')
-            ->limit($limit)
-            ->get([
-                'cpu',
-                'mem_total',
-                'mem_used',
-                'disk_total',
-                'disk_used',
-                'net_in_speed',
-                'net_out_speed',
-                'recorded_at',
-            ])
-            ->reverse()
-            ->values();
-
-        return $this->success($history);
+    private function finishHistoryBucket(array $bucket): array
+    {
+        $count = max(1, $bucket['count']);
+        $result = ['cpu' => $bucket['cpu_sum'] / $count, 'mem_total' => $bucket['mem_total'],
+            'mem_used' => $bucket['mem_used_sum'] / $count, 'disk_total' => $bucket['disk_total'],
+            'disk_used' => $bucket['disk_used_sum'] / $count,
+            'net_in_speed' => $bucket['net_in_speed_sum'] / $count,
+            'net_out_speed' => $bucket['net_out_speed_sum'] / $count,
+            'recorded_at' => $bucket['recorded_at']];
+        foreach (['cpu', 'mem_used', 'disk_used', 'net_in_speed', 'net_out_speed'] as $field) {
+            $result[$field . '_avg'] = $result[$field];
+            $result[$field . '_peak'] = $bucket[$field . '_peak'];
+        }
+        return $result;
     }
 
     private function operationState(ServerMachine $machine): ?array

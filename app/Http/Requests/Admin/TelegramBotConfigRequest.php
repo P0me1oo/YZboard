@@ -14,6 +14,7 @@ class TelegramBotConfigRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'apply' => ['sometimes', 'boolean'],
             'token' => ['nullable', 'string', 'min:20', 'max:256', 'regex:/\A\d+:[A-Za-z0-9_-]+\z/'],
             'webhook_base_url' => ['required_without:webhook_url', 'prohibits:webhook_url', 'string', 'max:2000', 'url:https'],
             'webhook_url' => ['required_without:webhook_base_url', 'prohibits:webhook_base_url', 'string', 'max:2048', 'url:https'],

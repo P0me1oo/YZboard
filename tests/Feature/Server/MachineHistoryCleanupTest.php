@@ -98,6 +98,26 @@ class MachineHistoryCleanupTest extends TestCase
         $this->assertSame(3, ServerMachineLoadHistory::count());
     }
 
+    public function test_history_api_bounds_points_and_keeps_average_and_peak_metrics(): void
+    {
+        Sanctum::actingAs(User::create(['email' => Str::random(12) . '@example.test',
+            'password' => Str::random(32), 'uuid' => (string) Str::uuid(), 'token' => Str::random(32), 'is_admin' => true]));
+        $machine = $this->machine();
+        for ($i = 0; $i < 600; $i++) {
+            ServerMachineLoadHistory::create(['machine_id' => $machine->id, 'cpu' => $i % 100,
+                'mem_total' => 1024, 'mem_used' => 100 + $i % 50, 'disk_total' => 2048,
+                'disk_used' => 500 + $i, 'net_in_speed' => $i, 'net_out_speed' => $i * 2,
+                'recorded_at' => now()->subSeconds(600 - $i)->timestamp]);
+        }
+        $path = '/api/v2/' . hash('crc32b', config('app.key')) . '/server/machine/history?machine_id=' . $machine->id . '&limit=1440';
+        $response = $this->getJson($path)->assertOk();
+        $this->assertLessThanOrEqual(500, count($response->json('data')));
+        $point = $response->json('data.0');
+        $this->assertArrayHasKey('cpu_avg', $point);
+        $this->assertArrayHasKey('cpu_peak', $point);
+        $this->assertArrayHasKey('mem_used_peak', $point);
+    }
+
     public function test_legacy_and_realtime_reports_share_scheduled_history_retention(): void
     {
         $machine = $this->machine();

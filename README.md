@@ -1,6 +1,6 @@
 # Xboard
 
-面板 `1.85.0` 本地开发，尚未发布：Reality 节点支持当前目标检测、域名/IP/指定网段批量查找和结果回填，预设去掉 Cloudflare。检测由节点服务器执行，配套管理端 `0.57.0`、Node `v2.12.0`；两个核心不变。使用方式及限制见 [Reality 目标检测](docs/reality-target-scan.md)。
+面板 [`1.85.0`](https://github.com/P0me1oo/YZboard/releases/tag/v1.85.0) 已发布：Reality 节点支持当前目标检测、域名/IP/指定网段批量查找和结果回填，预设去掉 Cloudflare。检测由节点服务器执行，配套管理端 `0.57.0`、Node `v2.12.0`；两个核心不变。双架构镜像及 `latest` 已核验，先更新面板，再更新 Node。使用方式及限制见 [Reality 目标检测](docs/reality-target-scan.md)，验证范围与既有前端检查问题见[兼容矩阵](YZ_COMPATIBILITY.md)。
 
 面板 [`1.82.0`](https://github.com/P0me1oo/YZboard/releases/tag/v1.82.0) 已发布，包含管理端 `0.54.0`，配套 Node [`v2.11.0`](https://github.com/P0me1oo/YZ-Agent/releases/tag/v2.11.0)。新增服务器外网网卡流量保护，移除节点旧额度与承载量展示，并一并交付订阅用户限频、限制管理及 Telegram 提醒。旧服务器默认不限，首次启用从 0 开始，无手动校准；用户套餐扣费和历史统计保留。双数据库完整回归、双核心实连、双架构产物及 `latest` 已核验。见[使用规则](docs/server-traffic-protection.md)和[发布记录](YZ_COMPATIBILITY.md)。
 

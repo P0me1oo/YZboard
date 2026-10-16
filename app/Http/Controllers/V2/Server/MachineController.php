@@ -59,9 +59,40 @@ class MachineController extends Controller
             'operation.status' => 'required_with:operation|in:running,succeeded,failed',
             'operation.error' => 'nullable|in:busy,launch_failed,execution_failed,unsupported,timeout,release_query_failed,current_version_failed,current_version_invalid,latest_version_invalid',
             'operation.result' => 'nullable|in:updated,up_to_date,current_newer',
+            'reality_scan_supported' => 'sometimes|boolean',
+            'reality_scan' => 'nullable|array:id,status,error,results',
+            'reality_scan.id' => 'required_with:reality_scan|uuid',
+            'reality_scan.status' => 'required_with:reality_scan|in:running,succeeded,failed',
+            'reality_scan.error' => 'nullable|in:invalid_target,invalid_cidr,too_many_targets,timeout',
+            'reality_scan.results' => 'sometimes|array|max:512',
+            'reality_scan.results.*' => 'array:target,host,ip,discovered_ip,port,feasible,tls13,tls_version,h2,alpn,x25519,curve,cert_valid,cert_chain_valid,cert_chain_bytes,cert_subject,cert_issuer,not_after,server_names,latency_ms,reason',
+            'reality_scan.results.*.target' => 'required|string|max:512',
+            'reality_scan.results.*.host' => 'present|nullable|string|max:253',
+            'reality_scan.results.*.ip' => 'present|nullable|ip',
+            'reality_scan.results.*.discovered_ip' => 'sometimes|ip',
+            'reality_scan.results.*.port' => 'required|integer|min:1|max:65535',
+            'reality_scan.results.*.feasible' => 'required|boolean',
+            'reality_scan.results.*.tls13' => 'required|boolean',
+            'reality_scan.results.*.tls_version' => 'present|nullable|string|max:8',
+            'reality_scan.results.*.h2' => 'required|boolean',
+            'reality_scan.results.*.alpn' => 'present|nullable|string|max:255',
+            'reality_scan.results.*.x25519' => 'required|boolean',
+            'reality_scan.results.*.curve' => 'present|nullable|string|max:64',
+            'reality_scan.results.*.cert_valid' => 'required|boolean',
+            'reality_scan.results.*.cert_chain_valid' => 'required|boolean',
+            'reality_scan.results.*.cert_chain_bytes' => 'required|integer|min:0|max:16777216',
+            'reality_scan.results.*.cert_subject' => 'present|nullable|string|max:1024',
+            'reality_scan.results.*.cert_issuer' => 'present|nullable|string|max:1024',
+            'reality_scan.results.*.not_after' => 'present|nullable|string|max:64',
+            'reality_scan.results.*.server_names' => 'present|array|max:32',
+            'reality_scan.results.*.server_names.*' => 'string|max:253',
+            'reality_scan.results.*.latency_ms' => 'required|integer|min:0|max:180000',
+            'reality_scan.results.*.reason' => 'present|nullable|in:dns_failed,private_target,connection_failed,tls_failed,no_certificate,no_domain,discovered,certificate_invalid,tls13_required,h2_required,x25519_required',
         ]);
         $machine = $this->authenticateMachine($request);
-        return response()->json(['command' => \App\Services\MachineAgentService::exchange($machine, $report, $request->ip())]);
+        $command = \App\Services\MachineAgentService::exchange($machine, $report, $request->ip());
+        $scan = ($report['reality_scan_supported'] ?? false) ? \App\Services\RealityScanService::exchange($machine, $report) : null;
+        return response()->json(['command' => $command, 'reality_scan' => $scan]);
     }
 
     /**

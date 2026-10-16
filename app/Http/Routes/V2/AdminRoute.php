@@ -123,6 +123,7 @@ class AdminRoute
                 $router->post('/resetTraffic', [ManageController::class, 'resetTraffic']);
                 $router->post('/batchResetTraffic', [ManageController::class, 'batchResetTraffic']);
                 $router->get('/generateEchKey', [ManageController::class, 'generateEchKey']);
+                $router->match(['GET', 'POST'], '/realityScan', [\App\Http\Controllers\V2\Admin\Server\RealityScanController::class, 'scan']);
             });
 
             // 机器管理接口

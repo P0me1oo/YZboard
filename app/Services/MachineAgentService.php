@@ -65,6 +65,7 @@ class MachineAgentService
             $runtime = [
                 'version' => $report['version'], 'boot_id' => $report['boot_id'],
                 'manageable' => $report['manageable'], 'reported_at' => time(),
+                'reality_scan_supported' => (bool) ($report['reality_scan_supported'] ?? false),
                 'public_ip' => $ip,
             ];
             // 控制请求只走系统默认的一种地址族，另一种由 agent 单独回报，这里要保留。

@@ -31,6 +31,15 @@ jobs:
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20
+      redis:
+        image: redis:7.4.2-alpine@sha256:02419de7eddf55aa5bcf49efb74e88fa8d931b4d77c07eff8a6b2144472b6952
+        ports:
+          - 127.0.0.1:6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
     steps:
       - name: 检出待验证源码
         uses: actions/checkout@v4
@@ -52,12 +61,14 @@ jobs:
         env:
           LOG_CHANNEL: stderr
           LOG_LEVEL: critical
+          YZ_TEST_SUBSCRIPTION_REDIS_PORT: '6379'
         run: php vendor/bin/phpunit --do-not-cache-result
 
       - name: MariaDB 严格分组完整回归
         env:
           LOG_CHANNEL: stderr
           LOG_LEVEL: critical
+          YZ_TEST_SUBSCRIPTION_REDIS_PORT: '6379'
         run: php vendor/bin/phpunit --bootstrap tests/bootstrap-mariadb.php --do-not-cache-result
 
       - name: 配置管理端测试环境

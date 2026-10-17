@@ -13,6 +13,7 @@ class AppController extends Controller
 {
     public function getConfig(Request $request)
     {
+        $request->attributes->set('subscription_statistics_format', 'Clash');
         $servers = [];
         $user = $request->user();
         $userService = new UserService();

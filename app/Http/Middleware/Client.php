@@ -19,6 +19,7 @@ class Client
     public function handle($request, Closure $next)
     {
         if ($request->routeIs('client.subscribe', 'client.subscribe.legacy', 'client.subscribe.app')) {
+            $request->attributes->set('subscription_statistics_at', now()->timestamp);
             $result = app(\App\Services\SubscriptionProtection::class)->authenticate($request);
             if ($result instanceof \Symfony\Component\HttpFoundation\Response) {
                 return $result;
@@ -38,5 +39,12 @@ class Client
         
         Auth::setUser($user);
         return $next($request);
+    }
+
+    public function terminate($request, $response): void
+    {
+        if ($request->routeIs('client.subscribe', 'client.subscribe.legacy', 'client.subscribe.app')) {
+            app(\App\Services\SubscriptionStatisticsCapture::class)->record($request, $response->getStatusCode());
+        }
     }
 }

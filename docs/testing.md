@@ -17,6 +17,8 @@
 
 ## 本地执行
 
+订阅统计的局部检查可运行 `php vendor/bin/phpunit tests/Feature/SubscriptionStatisticsTest.php --do-not-cache-result`。真实 Redis 恢复检查为 `SubscriptionStatisticsRedisTest`，仅通过 `YZ_TEST_SUBSCRIPTION_REDIS_PORT` 连接已确认的本机专用实例，使用随机测试键并在结束后删除；本地未提供实例时会标为跳过。CI 固定使用独立的 Redis `7.4.2`，在两套数据库回归中执行该检查。并发检查 `SubscriptionStatisticsConcurrencyTest` 使用下文 MariaDB 引导入口，只在专用测试库运行。不能把未提供依赖导致的跳过报告为通过。
+
 安装项目测试依赖后，在仓库根目录执行 SQLite 完整测试与资源检查：
 
 ```bash

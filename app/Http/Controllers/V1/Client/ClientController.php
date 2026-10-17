@@ -73,6 +73,7 @@ class ClientController extends Controller
 
         $protocolClassName = app('protocols.manager')->matchProtocolClassName($clientInfo['flag'])
             ?? General::class;
+        $request->attributes->set('subscription_statistics_format', substr(class_basename($protocolClassName), 0, 32));
 
         $serversFiltered = $this->filterServers(
             servers: $servers,

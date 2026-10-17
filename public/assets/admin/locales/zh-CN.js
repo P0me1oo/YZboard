@@ -1,6 +1,7 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['zh-CN'] = {
   "statistics": {
+    "subscription": { "title": "订阅统计", "users": "用户订阅汇总", "last90": "最近 90 天", "client": "客户端及版本", "clients": "客户端数", "requests": "拉取次数", "results": "成功 / 失败", "resultCounts": "{{success}} / {{failure}}", "first": "首次拉取", "last": "最近拉取", "time": "拉取时间", "status": "响应状态", "format": "订阅格式", "date": "日期", "daily": "每日统计", "recent": "逐次记录（7 天）", "history": "查看记录", "historyType": "记录类型", "back": "返回用户汇总", "close": "收起记录", "refresh": "刷新", "searchUser": "用户邮箱或编号", "searchClient": "搜索客户端" },
     "accessBack": "返回",
     "accessLogs": "访问记录", "destination": "目标域名 / IP", "targetPort": "目标端口", "connectedAt": "连接时间",
     "accessUsers": "用户访问汇总", "accessCount": "访问次数", "lastAccess": "最近访问", "accessSort": "排序方式", "accessSortCount": "按访问次数", "accessSortTime": "按访问时间",

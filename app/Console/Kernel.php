@@ -46,6 +46,8 @@ class Kernel extends ConsoleKernel
             ->name('subscription-protection:prune')->hourly()->onOneServer()->withoutOverlapping(10);
         $schedule->command('inbound-ip:refresh')->everyMinute()->onOneServer()->withoutOverlapping(5)->runInBackground();
         $schedule->command('access-log:prune')->everyFiveMinutes()->onOneServer()->withoutOverlapping(10)->runInBackground();
+        $schedule->job(new \App\Jobs\FlushSubscriptionStatistics())->everyMinute()->onOneServer();
+        $schedule->command('subscription-statistics:maintain')->everyFiveMinutes()->onOneServer()->withoutOverlapping(10)->runInBackground();
         $schedule->command('telegram-bot:prune-updates')->daily()->onOneServer()->withoutOverlapping(10);
         // send
         $schedule->command('telegram-bot:send-reminders')->everyMinute()->onOneServer()->withoutOverlapping(10);

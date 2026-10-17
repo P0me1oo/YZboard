@@ -1,6 +1,7 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['ru-RU'] = {
   "statistics": {
+    "subscription": { "title": "Статистика подписок", "users": "Подписки по пользователям", "last90": "Последние 90 дней", "client": "Клиент и версия", "clients": "Клиенты", "requests": "Запросы", "results": "Успешно / Ошибки", "resultCounts": "{{success}} / {{failure}}", "first": "Первый запрос", "last": "Последний запрос", "time": "Время запроса", "status": "Статус ответа", "format": "Формат подписки", "date": "Дата", "daily": "По дням", "recent": "Запросы (7 дней)", "history": "Записи", "historyType": "Тип записей", "back": "К пользователям", "close": "Свернуть записи", "refresh": "Обновить", "searchUser": "Почта или ID пользователя", "searchClient": "Поиск клиента" },
     "accessBack": "Назад",
     "accessLogs": "Журнал подключений", "destination": "Домен / IP", "targetPort": "Порт назначения", "connectedAt": "Время подключения",
     "accessUsers": "Подключения по пользователям", "accessCount": "Подключения", "lastAccess": "Последнее подключение", "accessSort": "Сортировка", "accessSortCount": "По числу подключений", "accessSortTime": "По времени подключения",

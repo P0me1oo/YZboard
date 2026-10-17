@@ -1,6 +1,7 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['en-US'] = {
   "statistics": {
+    "subscription": { "title": "Subscription statistics", "users": "Subscriptions by user", "last90": "Last 90 days", "client": "Client and version", "clients": "Clients", "requests": "Requests", "results": "Success / Failed", "resultCounts": "{{success}} / {{failure}}", "first": "First request", "last": "Last request", "time": "Request time", "status": "Response status", "format": "Subscription format", "date": "Date", "daily": "Daily totals", "recent": "Requests (7 days)", "history": "View records", "historyType": "Record type", "back": "Back to users", "close": "Close records", "refresh": "Refresh", "searchUser": "User email or ID", "searchClient": "Search clients" },
     "accessBack": "Back",
     "accessLogs": "Access records", "destination": "Domain / IP", "targetPort": "Target port", "connectedAt": "Connection time",
     "accessUsers": "Access by user", "accessCount": "Connections", "lastAccess": "Last access", "accessSort": "Sort by", "accessSortCount": "Most connections", "accessSortTime": "Most recent",

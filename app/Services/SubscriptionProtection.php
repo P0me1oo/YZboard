@@ -66,7 +66,11 @@ class SubscriptionProtection
         }
         $rawToken = $request->input('token', $request->route('token'));
         $token = is_string($rawToken) && strlen($rawToken) <= 255 && $rawToken !== '' ? $rawToken : null;
-        $lookup = fn () => $token === null ? null : User::where('token', $token)->first();
+        $lookup = function () use ($token, $request): ?User {
+            $user = $token === null ? null : User::where('token', $token)->first();
+            if ($user) $request->attributes->set('subscription_statistics_user_id', $user->id);
+            return $user;
+        };
         $ip = SubscriptionProtectionIp::normalize($request->ip() ?? '') ?? 'unknown';
 
         if (SubscriptionProtectionIp::matches($ip, $settings['whitelist_ips'])) {

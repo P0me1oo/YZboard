@@ -1,6 +1,16 @@
 # YZboard 兼容矩阵
 
-## 1.88.2 Reality 警告样式（未发布）
+## 1.88.2 Reality 检测详情与访问记录分组（已发布）
+
+- [Release v1.88.2](https://github.com/P0me1oo/YZboard/releases/tag/v1.88.2) 已正式发布，Tag 固定到 `c1c506b23c2de3f2c41f62d395490f9cf1c1cadd`。管理端 `0.60.2` / `6e7bae239ca46bbbfccd1eea2a42a108a27d48d3`，配套 [Node v2.14.0](https://github.com/P0me1oo/YZ-Agent/releases/tag/v2.14.0) / `b8b253dcf80b20023023ddc604a7a2ddcd9ffc7d`；包含下方 `1.87.0` 至 `1.88.1` 的开发修改，两个核心及固定依赖不变，无新增数据库迁移。
+- [正式发布流程 39003708328](https://github.com/P0me1oo/YZboard/actions/runs/39003708328) 全部通过。PHP `8.2.34` 下 SQLite 1,044 项、10,256 断言（4 项行锁检查按既有条件仅在 MariaDB 执行），MariaDB `11.4.8` 严格分组 1,044 项、10,288 断言，以及管理端资源 5 项均通过。
+- 最终前端构建的 18 项相关浏览器检查通过，覆盖 Reality 检测、旧 Node、失败重试、预设扫描和回填，以及访问记录分组、排序、翻页返回、桌面和手机布局；未扩展运行无关页面回归。3,082 项映射源码与固定前端源码一致，15 个集成文件与构建逐字节一致（仅移除源码映射注释）。
+- 不可变镜像 `ghcr.io/p0me1oo/yzboard:1.88.2-c1c506b`，版本别名 `1.88.2` 与 `latest` 均为 `sha256:946b99470e7cdf6f09338de892825923042464eba9b8b888773e663e994f18f2`。amd64 清单 `sha256:6b7d76c53014b1f486dc47846fde0a4f6f42163cfeda7ea7397d43ea30500ab7`，arm64 清单 `sha256:136551fcf3ff4f79e5b77864283ebd5d0c3cab93bad49da17ceeb56e595a857d`；两个架构各 25 个镜像层均经匿名获取和摘要校验，各 500 项应用、配置、数据库、管理端资源及 Git HEAD 与固定 Git 对象原始字节一致，OCI 来源和版本正确。
+- Node [正式 CI 39003450000](https://github.com/P0me1oo/YZ-Agent/actions/runs/39003450000) 全部通过，12 个附件、11 项校验和、双架构程序及镜像实际版本已核验。Node 版本标签、完整提交标签及 `latest` 均为 `sha256:c216438abfcdd7687fd9222b838edee2ec548569a1595dcda72c0343a19e7b49`，实际程序的来源和 `vcs.modified=false` 正确；详见 Node 兼容矩阵。
+- 先更新面板，再更新相关 Node。面板回滚参考 `1.86.0-bcfffd0` / `bcfffd014f587a9305df17403609fb45d06d0c7a` / `sha256:22bf8ae70750ade6025eb34a7903224bbe338a3c876a8399c67c387d9f35204f`；Node 回滚参考 `v2.13.1` / `sha256:ccdede7d5593bba72a0d8dcb5694338afd0a5da51b9e0de5bcbdccdec366c795`。以上版本和双架构镜像层可获取性已核对。
+- 核验数据位于 `D:/codex-tmp/yz-reality-release-20261017/`。首次下载的一层在 60 MiB 提前结束，分段补齐后完整摘要一致；Windows Git 导出时的换行转换曾造成参考摘要误报，改为直接读取 Git 对象后全部逐字节通过。未修改产物或放宽校验。没有连接、更新生产服务器；本机无 Docker，未运行本地面板容器，服务器更新与 HTTP 健康检查由用户执行。发布后文档提交不移动 Tag 或改变镜像来源。
+
+## 1.88.2 Reality 警告样式开发验证记录
 
 - 本次发布候选纳入下方 `1.87.0` 至 `1.88.1` 的访问记录分组、扫描入口和检测详情修改，无新增数据库迁移。管理端固定为 `0.60.2` / `6e7bae239ca46bbbfccd1eea2a42a108a27d48d3`，配套 Node `v2.14.0` / `b8b253dcf80b20023023ddc604a7a2ddcd9ffc7d`；两个核心及固定依赖不变。
 - 发布前本机复核通过 19 项后端专项、212 条断言，以及 3,080 项源码检查和 5 项面板资源契约；3,082 项映射源码与当前源码一致，15 个面板交付文件与最终构建逐字节一致（仅移除源码映射注释）。正式发布仍由固定 Tag 的完整回归和镜像构建完成，输出位于 `D:/codex-tmp/yz-reality-release-20261017/`。

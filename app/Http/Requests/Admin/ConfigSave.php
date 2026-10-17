@@ -72,7 +72,7 @@ class ConfigSave extends FormRequest
         'device_ip_exclude' => 'nullable|array',
         'device_ip_exclude.*' => 'nullable|string|max:64',
         // frontend
-        'admin_sidebar_hidden' => 'sometimes|array|list|max:24',
+        'admin_sidebar_hidden' => 'sometimes|array|list',
         'frontend_theme' => '',
         'frontend_theme_sidebar' => 'nullable|in:dark,light',
         'frontend_theme_header' => 'nullable|in:dark,light',
@@ -144,7 +144,9 @@ class ConfigSave extends FormRequest
         if (array_keys((array) $this->input(SubscriptionProtection::SETTING)) === ['notify_telegram']) {
             $requiredProtectionKeys = ['notify_telegram'];
         }
-        return self::RULES + [
+        $rules = self::RULES;
+        $rules[AdminAppearance::SETTING] .= '|max:' . count(AdminAppearance::ITEMS);
+        return $rules + [
             SubscriptionProtection::SETTING => 'sometimes|array:' . implode(',', array_keys(SubscriptionProtection::defaults())) . '|required_array_keys:' . implode(',', $requiredProtectionKeys),
             'subscribe_protection.block_browser' => 'boolean',
             'subscribe_protection.brute_force_enabled' => 'boolean',

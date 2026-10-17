@@ -25,7 +25,7 @@ class AdminAppearanceTest extends TestCase
         $this->getJson('/_tests/appearance/fetch?key=appearance')->assertOk()
             ->assertJsonPath('data', ['appearance' => ['admin_sidebar_hidden' => []]]);
         admin_setting(['subscribe_path' => 'test-subscription-path']);
-        $hidden = ['subscription-management', 'plan-management', 'subscription-client-control'];
+        $hidden = ['subscription-management', 'plan-management', 'subscription-client-control', 'subscription-statistics'];
         for ($i = 0; $i < 2; $i++) {
             $this->postJson('/_tests/appearance/save', ['admin_sidebar_hidden' => $hidden])->assertOk()->assertJsonPath('data', true);
         }
@@ -53,6 +53,15 @@ class AdminAppearanceTest extends TestCase
         admin_setting(['admin_sidebar_hidden' => ['system-config', 'unknown', 'dashboard', 'dashboard', null]]);
         $this->assertSame(['dashboard'], AdminAppearance::hidden());
         admin_setting(['admin_sidebar_hidden' => 'invalid']);
+        $this->assertSame([], AdminAppearance::hidden());
+    }
+
+    public function test_all_supported_entries_can_be_hidden_and_restored(): void
+    {
+        $this->postJson('/_tests/appearance/save', ['admin_sidebar_hidden' => AdminAppearance::ITEMS])->assertOk();
+        $this->app->forgetInstance(Setting::class);
+        $this->assertSame(AdminAppearance::ITEMS, AdminAppearance::hidden());
+        $this->postJson('/_tests/appearance/save', ['admin_sidebar_hidden' => []])->assertOk();
         $this->assertSame([], AdminAppearance::hidden());
     }
 }

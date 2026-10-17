@@ -65,7 +65,7 @@ class MachineController extends Controller
             'reality_scan.status' => 'required_with:reality_scan|in:running,succeeded,failed',
             'reality_scan.error' => 'nullable|in:invalid_target,invalid_cidr,too_many_targets,timeout',
             'reality_scan.results' => 'sometimes|array|max:512',
-            'reality_scan.results.*' => 'array:target,host,ip,discovered_ip,port,feasible,tls13,tls_version,h2,alpn,x25519,curve,cert_valid,cert_chain_valid,cert_chain_bytes,cert_subject,cert_issuer,not_after,server_names,latency_ms,reason',
+            'reality_scan.results.*' => 'array:target,host,ip,discovered_ip,port,feasible,tls13,tls_version,h2,alpn,x25519,curve,cert_valid,cert_chain_valid,cert_chain_bytes,cert_subject,cert_issuer,not_after,server_names,latency_ms,reason,cdn,http',
             'reality_scan.results.*.target' => 'required|string|max:512',
             'reality_scan.results.*.host' => 'present|nullable|string|max:253',
             'reality_scan.results.*.ip' => 'present|nullable|ip',
@@ -88,6 +88,15 @@ class MachineController extends Controller
             'reality_scan.results.*.server_names.*' => 'string|max:253',
             'reality_scan.results.*.latency_ms' => 'required|integer|min:0|max:180000',
             'reality_scan.results.*.reason' => 'present|nullable|in:dns_failed,private_target,connection_failed,tls_failed,no_certificate,no_domain,discovered,certificate_invalid,tls13_required,h2_required,x25519_required',
+            'reality_scan.results.*.cdn' => 'sometimes|array:status,providers,evidence|required_array_keys:status,providers,evidence',
+            'reality_scan.results.*.cdn.status' => 'required_with:reality_scan.results.*.cdn|in:detected,not_detected,unknown',
+            'reality_scan.results.*.cdn.providers' => 'sometimes|array|max:16',
+            'reality_scan.results.*.cdn.providers.*' => 'string|max:64',
+            'reality_scan.results.*.cdn.evidence' => 'sometimes|array|max:32',
+            'reality_scan.results.*.cdn.evidence.*' => 'string|max:300',
+            'reality_scan.results.*.http' => 'sometimes|array:status,status_code|required_array_keys:status',
+            'reality_scan.results.*.http.status' => 'required_with:reality_scan.results.*.http|in:received,timeout,failed,not_checked',
+            'reality_scan.results.*.http.status_code' => 'required_if:reality_scan.results.*.http.status,received|prohibited_unless:reality_scan.results.*.http.status,received|integer|min:100|max:599',
         ]);
         $machine = $this->authenticateMachine($request);
         $command = \App\Services\MachineAgentService::exchange($machine, $report, $request->ip());

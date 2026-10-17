@@ -1,7 +1,9 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['en-US'] = {
   "statistics": {
+    "accessBack": "Back",
     "accessLogs": "Access records", "destination": "Domain / IP", "targetPort": "Target port", "connectedAt": "Connection time",
+    "accessUsers": "Access by user", "accessCount": "Connections", "lastAccess": "Last access", "accessSort": "Sort by", "accessSortCount": "Most connections", "accessSortTime": "Most recent",
     "refreshRecords": "Refresh", "nodeSearchPlaceholder": "Node name or ID", "targetSearchPlaceholder": "Full or partial domain / IP",
     "lastYear": "Last year", "dailyHeatmap": "Daily usage", "trafficIntensity": "Usage intensity", "less": "Less", "more": "More",
     "noRecord": "No record", "wholeDays": "Only daily totals are available before the last 30 days. Select complete days.",
@@ -2154,11 +2156,24 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
   },
   "server": {
     "realityScan": {
+      "certChain": "Certificate chain",
+      "location": "IP location",
+      "pageStatus": "Page status",
+      "unknown": "Unknown",
+      "notProvided": "Not provided",
+      "cdnNotDetected": "No signatures found",
+      "detailsUpgrade": "CDN and page status require Node v2.14.0 or later.",
+      "page": {
+        "normal": "OK", "redirect": "Redirect", "unchanged": "Not modified",
+        "authentication": "Authentication required", "forbidden": "Forbidden", "notFound": "Not found",
+        "rateLimited": "Too many requests", "restricted": "Restricted", "serverError": "Server error",
+        "clientError": "Request error", "information": "Informational", "timeout": "Response timed out",
+        "failed": "Request failed", "not_checked": "Not checked"
+      },
       "close": "Close",
       "scanCurrent": "Test current target",
-      "findTargets": "Find targets",
+      "scanTargets": "Scan targets",
       "title": "Reality target scanner",
-      "source": "Tests run on the selected node server. Latency includes DNS, TCP connection and TLS handshake.",
       "targets": "Targets",
       "placeholder": "Domains, IPs or CIDRs, separated by commas or new lines. Leave empty for presets.",
       "scan": "Start scan",

@@ -146,4 +146,85 @@ class ProxyAccessLogTest extends TestCase
         $this->user->delete(); $this->node->delete();
         $this->fetch()->assertOk()->assertJsonPath('data.list.0.user_name', '#' . $batch['records'][0]['user_id']);
     }
+
+    public function test_user_summary_target_groups_and_exact_details_keep_all_connections(): void
+    {
+        $other = $this->makeUser();
+        $batch = $this->batch();
+        $batch['records'] = array_fill(0, 3, $batch['records'][0]);
+        $this->push($batch)->assertOk();
+        $this->push($batch)->assertOk();
+        $this->push($this->batch(['user_id' => $other->id, 'connected_at' => now()->timestamp]))->assertOk();
+        $this->push($this->batch(['port' => 80]))->assertOk();
+        $this->push($this->batch(['destination' => 'sub.example.com']))->assertOk();
+        $node = $this->node->replicate(); $node->name = '另一入口'; $node->save();
+        app(ProxyAccessLog::class)->accept($node, $this->batch());
+
+        $this->fetch(['view' => 'users'])->assertOk()->assertJsonPath('data.total', 2)
+            ->assertJsonPath('data.list.0.user_id', $this->user->id)->assertJsonPath('data.list.0.access_count', 6);
+        $this->fetch(['view' => 'users', 'sort' => 'time'])->assertOk()->assertJsonPath('data.list.0.user_id', $other->id);
+        $this->fetch(['view' => 'targets', 'user_id' => $this->user->id])->assertOk()->assertJsonPath('data.total', 3)
+            ->assertJsonPath('data.list.0.destination', 'example.com')->assertJsonPath('data.list.0.port', 443)
+            ->assertJsonPath('data.list.0.access_count', 4);
+        $details = $this->fetch(['view' => 'records', 'user_id' => $this->user->id, 'destination' => 'EXAMPLE.COM.', 'port' => 443])
+            ->assertOk()->assertJsonPath('data.total', 4)->json('data.list');
+        $this->assertEqualsCanonicalizing([$this->node->id, $node->id], array_values(array_unique(array_column($details, 'server_id'))));
+        $this->assertDatabaseCount('v2_proxy_access_log', 7);
+        $this->fetch(['view' => 'targets'])->assertUnprocessable();
+        $this->fetch(['view' => 'unknown'])->assertUnprocessable();
+        $this->fetch(['sort' => 'invalid'])->assertUnprocessable();
+        $this->fetch(['destination' => 'https://example.com'])->assertUnprocessable();
+    }
+
+    public function test_summary_filters_snapshot_and_deleted_user_fallback(): void
+    {
+        $this->push($this->batch())->assertOk();
+        $first = $this->fetch(['view' => 'users', 'period' => '7d', 'user' => $this->user->email, 'node' => $this->node->id,
+            'target' => 'EXAMPLE.COM', 'port' => 443, 'page_size' => 1])->assertOk()
+            ->assertJsonPath('data.total', 1)->assertJsonPath('data.list.0.access_count', 1)->json('data');
+        $this->push($this->batch())->assertOk();
+        $snapshot = ['snapshot_id' => $first['snapshot_id'], 'snapshot_at' => $first['snapshot_at']];
+        $this->fetch(['view' => 'targets', 'period' => '7d', 'user_id' => $this->user->id] + $snapshot)->assertOk()
+            ->assertJsonPath('data.list.0.access_count', 1);
+        $this->fetch(['view' => 'users', 'target' => '%'])->assertOk()->assertJsonPath('data.total', 0);
+        $this->fetch(['view' => 'users', 'user' => '%'])->assertOk()->assertJsonPath('data.total', 0);
+        $this->user->delete();
+        $this->fetch(['view' => 'users', 'user' => (string) $this->user->id])->assertOk()
+            ->assertJsonPath('data.list.0.user_name', '#' . $this->user->id)->assertJsonPath('data.list.0.access_count', 2);
+    }
+
+    public function test_summary_pagination_uses_stable_tie_breakers_and_time_boundary(): void
+    {
+        $this->travelTo(\Carbon\Carbon::parse('2026-10-16 23:59:50', 'Asia/Shanghai'));
+        $other = $this->makeUser();
+        $this->push($this->batch())->assertOk();
+        $this->push($this->batch(['user_id' => $other->id]))->assertOk();
+        $first = $this->fetch(['view' => 'users', 'page_size' => 1])->assertOk()->assertJsonPath('data.total', 2)
+            ->assertJsonPath('data.list.0.user_id', $this->user->id)->json('data');
+        $this->travel(20)->seconds();
+        $this->push($this->batch())->assertOk();
+        $this->fetch(['view' => 'users', 'page_size' => 1, 'page' => 2, 'snapshot_id' => $first['snapshot_id'], 'snapshot_at' => $first['snapshot_at']])
+            ->assertOk()->assertJsonPath('data.total', 2)->assertJsonPath('data.list.0.user_id', $other->id);
+        $this->fetch(['view' => 'users'])->assertOk()->assertJsonPath('data.total', 1)->assertJsonPath('data.list.0.access_count', 1);
+    }
+
+    public function test_target_sorting_pagination_and_expired_snapshot(): void
+    {
+        $batch = $this->batch(['destination' => 'b.example']);
+        $batch['records'][] = $batch['records'][0];
+        $batch['records'][] = $this->batch(['destination' => 'a.example', 'connected_at' => now()->timestamp])['records'][0];
+        $this->push($batch)->assertOk();
+        $params = ['view' => 'targets', 'user_id' => $this->user->id, 'page_size' => 1];
+        $first = $this->fetch($params)->assertOk()->assertJsonPath('data.total', 2)->assertJsonPath('data.last_page', 2)
+            ->assertJsonPath('data.list.0.destination', 'b.example')->assertJsonPath('data.list.0.access_count', 2)->json('data');
+        $this->fetch($params + ['page' => 2])->assertOk()->assertJsonPath('data.list.0.destination', 'a.example');
+        $this->fetch($params + ['sort' => 'time'])->assertOk()->assertJsonPath('data.list.0.destination', 'a.example');
+        $this->travel(8)->days();
+        $this->fetch($params + ['snapshot_id' => $first['snapshot_id'], 'snapshot_at' => $first['snapshot_at']])
+            ->assertOk()->assertJsonPath('data.total', 0);
+        $this->artisan('access-log:prune')->assertSuccessful();
+        $this->push($batch)->assertOk();
+        $this->fetch(['view' => 'users'])->assertOk()->assertJsonPath('data.total', 0);
+        $this->assertDatabaseCount('v2_proxy_access_log', 0);
+    }
 }

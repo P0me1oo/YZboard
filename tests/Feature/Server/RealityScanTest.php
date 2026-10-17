@@ -141,4 +141,57 @@ class RealityScanTest extends TestCase
         $this->expectException(ValidationException::class);
         RealityScanService::start($machine->fresh(), null);
     }
+
+    public function test_diagnostics_round_trip_and_local_location_do_not_change_feasibility(): void
+    {
+        \Illuminate\Support\Facades\Http::fake();
+        $this->admin();
+        $machine = $this->machine();
+        $task = RealityScanService::start($machine, 'example.com');
+        $auth = ['machine_id' => $machine->id, 'token' => $machine->token];
+        $this->postJson('/api/v2/server/machine/control', $this->report() + $auth)
+            ->assertOk()->assertJsonPath('reality_scan.diagnostics', true);
+        $base = [
+            'target' => 'example.com:443', 'host' => 'example.com', 'ip' => '8.8.8.8', 'port' => 443,
+            'feasible' => true, 'tls13' => true, 'tls_version' => '1.3', 'h2' => true, 'alpn' => 'h2',
+            'x25519' => true, 'curve' => 'X25519', 'cert_valid' => true, 'cert_chain_valid' => true,
+            'cert_chain_bytes' => 3600, 'cert_subject' => 'example.com', 'cert_issuer' => 'test CA',
+            'not_after' => '', 'server_names' => ['example.com'], 'latency_ms' => 35, 'reason' => '',
+        ];
+        $result = $base + [
+            'cdn' => ['status' => 'detected', 'providers' => ['Cloudflare'], 'evidence' => ['HTTP: Cf-Ray']],
+            'http' => ['status' => 'received', 'status_code' => 403],
+        ];
+        foreach ([
+            array_replace($result, ['http' => ['status' => 'received']]),
+            array_replace($result, ['http' => ['status' => 'received', 'status_code' => 700]]),
+            array_replace($result, ['http' => ['status' => 'timeout', 'status_code' => 200]]),
+            array_replace($result, ['cdn' => ['status' => 'detected', 'providers' => ['Cloudflare']]]),
+            array_replace($result, ['cdn' => ['status' => 'detected', 'providers' => ['Cloudflare'], 'evidence' => [], 'cookie' => 'rejected']]),
+        ] as $invalid) {
+            $this->postJson('/api/v2/server/machine/control', $this->report([
+                'id' => $task['id'], 'status' => 'succeeded', 'results' => [$invalid],
+            ]) + $auth)->assertStatus(422);
+            $this->assertSame('pending', RealityScanService::view($machine->id)['status']);
+        }
+        $results = [$result,
+            array_replace($base, ['target' => 'timeout.example:443', 'ip' => '2606:4700:4700::1111',
+                'cdn' => ['status' => 'unknown', 'providers' => [], 'evidence' => []], 'http' => ['status' => 'timeout']]),
+            array_replace($base, ['target' => 'plain.example:443',
+                'cdn' => ['status' => 'not_detected', 'providers' => [], 'evidence' => []], 'http' => ['status' => 'received', 'status_code' => 200]]),
+        ];
+        $report = $this->report(['id' => $task['id'], 'status' => 'succeeded', 'results' => $results]);
+        $this->postJson('/api/v2/server/machine/control', $report + $auth)->assertOk();
+        $saved = RealityScanService::view($machine->id);
+        $this->postJson('/api/v2/server/machine/control', $report + $auth)->assertOk();
+        $this->assertSame($saved, RealityScanService::view($machine->id));
+        $response = $this->getJson('/_tests/reality-scan?machine_id=' . $machine->id)->assertOk()
+            ->assertJsonPath('data.results.0.feasible', true)
+            ->assertJsonPath('data.results.0.cdn.providers.0', 'Cloudflare')
+            ->assertJsonPath('data.results.0.http.status_code', 403)
+            ->assertJsonPath('data.results.0.location.source', 'ip2region')
+            ->assertJsonPath('data.results.1.location.region', null);
+        $this->assertNotEmpty($response->json('data.results.0.location.region'));
+        \Illuminate\Support\Facades\Http::assertNothingSent();
+    }
 }

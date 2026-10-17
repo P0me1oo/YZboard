@@ -1,7 +1,9 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['ru-RU'] = {
   "statistics": {
+    "accessBack": "Назад",
     "accessLogs": "Журнал подключений", "destination": "Домен / IP", "targetPort": "Порт назначения", "connectedAt": "Время подключения",
+    "accessUsers": "Подключения по пользователям", "accessCount": "Подключения", "lastAccess": "Последнее подключение", "accessSort": "Сортировка", "accessSortCount": "По числу подключений", "accessSortTime": "По времени подключения",
     "refreshRecords": "Обновить", "nodeSearchPlaceholder": "Имя или ID узла", "targetSearchPlaceholder": "Домен или IP целиком или частично",
     "lastYear": "Последний год", "dailyHeatmap": "Расход по дням", "trafficIntensity": "Интенсивность расхода", "less": "Меньше", "more": "Больше",
     "noRecord": "Нет данных", "wholeDays": "Для дат старше 30 дней доступны только суточные итоги. Выберите полные дни.",
@@ -2096,11 +2098,24 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
   },
   "server": {
     "realityScan": {
+      "certChain": "Цепочка сертификатов",
+      "location": "География IP",
+      "pageStatus": "Статус страницы",
+      "unknown": "Неизвестно",
+      "notProvided": "Нет данных",
+      "cdnNotDetected": "Признаки не найдены",
+      "detailsUpgrade": "Для CDN и статуса страницы требуется Node v2.14.0 или новее.",
+      "page": {
+        "normal": "OK", "redirect": "Перенаправление", "unchanged": "Без изменений",
+        "authentication": "Нужна авторизация", "forbidden": "Доступ запрещён", "notFound": "Не найдена",
+        "rateLimited": "Слишком много запросов", "restricted": "Доступ ограничен", "serverError": "Ошибка сервера",
+        "clientError": "Ошибка запроса", "information": "Информация", "timeout": "Тайм-аут ответа",
+        "failed": "Ошибка запроса", "not_checked": "Не проверено"
+      },
       "close": "Закрыть",
       "scanCurrent": "Проверить текущую цель",
-      "findTargets": "Найти цели",
+      "scanTargets": "Сканировать цели",
       "title": "Проверка целей Reality",
-      "source": "Проверка выполняется на выбранном сервере узла. Задержка включает DNS, TCP и TLS.",
       "targets": "Цели",
       "placeholder": "Домены, IP или CIDR через запятую или с новой строки. Пустое поле — готовый список.",
       "scan": "Начать проверку",

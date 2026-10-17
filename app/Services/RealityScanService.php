@@ -101,6 +101,7 @@ class RealityScanService
             $task = [
                 'id' => (string) Str::uuid(), 'machine_id' => $machine->id,
                 'boot_id' => $runtime['boot_id'], 'targets' => $targets, 'sni' => $sni,
+                'diagnostics' => true,
                 'status' => 'pending', 'created_at' => time(), 'expires_at' => time() + 180,
                 'results' => [], 'error' => null,
             ];
@@ -134,7 +135,7 @@ class RealityScanService
                 self::cache()->forget(self::key($machine->id) . ':active');
                 return null;
             }
-            return array_intersect_key($task, array_flip(['id', 'targets', 'sni', 'expires_at']));
+            return array_intersect_key($task, array_flip(['id', 'targets', 'sni', 'expires_at', 'diagnostics']));
         });
     }
 }

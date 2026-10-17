@@ -75,19 +75,34 @@ class ProxyAccessLog
             'page' => 'sometimes|integer|min:1|max:1000000',
             'page_size' => 'sometimes|integer|min:1|max:100',
             'snapshot_id' => 'sometimes|integer|min:0',
+            'snapshot_at' => 'sometimes|integer|min:1|max:' . now()->timestamp,
+            'view' => 'sometimes|in:users,targets,records',
+            'sort' => 'sometimes|in:count,time',
+            'user_id' => 'required_if:view,targets|integer|min:1|max:4294967295',
+            'destination' => 'sometimes|required|string|max:253',
         ]);
         $now = CarbonImmutable::now(config('app.timezone'));
+        // 翻页、切换排序和展开详情使用同一个时间边界，跨午夜也不会换成另一天。
+        $anchor = isset($input['snapshot_at']) ? CarbonImmutable::createFromTimestamp((int) $input['snapshot_at'], $now->timezone) : $now;
         $oldest = $now->subSeconds(self::RETENTION_DAYS * 86400);
         $period = $input['period'] ?? 'today';
-        $start = $period === 'custom' ? CarbonImmutable::createFromFormat('!Y-m-d\TH:i', $input['start_at'], $now->timezone) : ($period === '7d' ? $oldest : $now->startOfDay());
-        $end = $period === 'custom' ? CarbonImmutable::createFromFormat('!Y-m-d\TH:i', $input['end_at'], $now->timezone) : $now->addMinutes(5);
-        if ($start < $oldest->startOfMinute() || $end > $now->addMinutes(5)->endOfMinute() || $start >= $end
+        $start = $period === 'custom' ? CarbonImmutable::createFromFormat('!Y-m-d\TH:i', $input['start_at'], $now->timezone) : ($period === '7d' ? $anchor->subSeconds(self::RETENTION_DAYS * 86400) : $anchor->startOfDay());
+        $end = $period === 'custom' ? CarbonImmutable::createFromFormat('!Y-m-d\TH:i', $input['end_at'], $now->timezone) : $anchor->addMinutes(5);
+        if (($period === 'custom' && $start < $anchor->subSeconds(self::RETENTION_DAYS * 86400)->startOfMinute()) || $end > $now->addMinutes(5)->endOfMinute() || $start >= $end
             || ($period === 'custom' && ($start->format('Y-m-d\TH:i') !== $input['start_at'] || $end->format('Y-m-d\TH:i') !== $input['end_at']))) {
             throw ValidationException::withMessages(['start_at' => '请选择最近 7 天内的有效时间。']);
         }
-        $query = DB::table('v2_proxy_access_log as a')->leftJoin('v2_user as u', 'u.id', '=', 'a.user_id')
+        $query = DB::table('v2_proxy_access_log as a')
             ->where('a.connected_at', '>=', max($start->timestamp, $oldest->timestamp))->where('a.connected_at', '<', $end->timestamp);
-        foreach (['user' => ['u.email', 'a.user_id'], 'node' => ['a.server_name', 'a.server_id'], 'target' => ['a.destination', null]] as $key => [$column, $id]) {
+        $user = trim($input['user'] ?? '');
+        if ($user !== '') {
+            $escaped = str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $user);
+            $query->where(function ($part) use ($user, $escaped): void {
+                $part->whereIn('a.user_id', DB::table('v2_user')->select('id')->whereRaw("email LIKE ? ESCAPE '!'", ['%' . $escaped . '%']));
+                if (ctype_digit($user)) $part->orWhere('a.user_id', $user);
+            });
+        }
+        foreach (['node' => ['a.server_name', 'a.server_id'], 'target' => ['a.destination', null]] as $key => [$column, $id]) {
             $value = trim($input[$key] ?? '');
             if ($value === '') continue;
             $escaped = str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $value);
@@ -97,20 +112,48 @@ class ProxyAccessLog
             });
         }
         if (isset($input['port'])) $query->where('a.port', $input['port']);
+        if (isset($input['user_id'])) $query->where('a.user_id', $input['user_id']);
+        if (isset($input['destination'])) {
+            $destination = self::host($input['destination']);
+            if ($destination === null) throw ValidationException::withMessages(['destination' => '目标地址无效。']);
+            $query->where('a.destination', $destination);
+        }
         $snapshot = isset($input['snapshot_id']) ? (int) $input['snapshot_id'] : (int) DB::table('v2_proxy_access_log')->max('id');
         $query->where('a.id', '<=', $snapshot);
         $page = (int) ($input['page'] ?? 1);
         $size = (int) ($input['page_size'] ?? 20);
-        $total = (clone $query)->count();
-        $list = $query->select('a.id', 'a.user_id', 'u.email', 'a.server_id', 'a.server_name', 'a.connected_at', 'a.destination', 'a.port')
-            ->orderByDesc('a.connected_at')->orderByDesc('a.id')->forPage($page, $size)->get()->map(fn ($row) => [
+        $view = $input['view'] ?? 'records';
+        $sort = $input['sort'] ?? 'count';
+        if ($view === 'records') {
+            $total = (clone $query)->count();
+            $query->select('a.id', 'a.user_id', 'a.server_id', 'a.server_name', 'a.connected_at', 'a.destination', 'a.port')
+                ->orderByDesc('a.connected_at')->orderByDesc('a.id');
+        } else {
+            // 在数据库内汇总后分页，不读取全量明细，也不维护第二份统计表。
+            $columns = $view === 'users' ? ['a.user_id'] : ['a.user_id', 'a.destination', 'a.port'];
+            $total = $view === 'users' ? (clone $query)->distinct()->count('a.user_id')
+                : DB::query()->fromSub((clone $query)->select($columns)->groupBy($columns), 'groups')->count();
+            $query->select($columns)->selectRaw('COUNT(*) as access_count, MAX(a.connected_at) as last_at')->groupBy($columns);
+            if ($sort === 'count') $query->orderByDesc('access_count');
+            $query->orderByDesc('last_at');
+            foreach ($columns as $column) $query->orderBy($column);
+        }
+        $rows = $query->forPage($page, $size)->get();
+        // 仅查询本页涉及的用户，避免计数、排序和每条明细都关联用户表。
+        $names = DB::table('v2_user')->whereIn('id', $rows->pluck('user_id')->unique())->pluck('email', 'id');
+        $list = $rows->map(fn ($row) => $view === 'records' ? [
                 'id' => (string) $row->id, 'user_id' => (int) $row->user_id,
-                'user_name' => $row->email ?? '#' . $row->user_id,
+                'user_name' => $names[$row->user_id] ?? '#' . $row->user_id,
                 'server_id' => (int) $row->server_id, 'server_name' => $row->server_name,
                 'connected_at' => CarbonImmutable::createFromTimestamp((int) $row->connected_at, $now->timezone)->toIso8601String(),
                 'destination' => $row->destination, 'port' => (int) $row->port,
-            ])->all();
+            ] : [
+                'user_id' => (int) $row->user_id, 'user_name' => $names[$row->user_id] ?? '#' . $row->user_id,
+                'access_count' => (int) $row->access_count,
+                'last_at' => CarbonImmutable::createFromTimestamp((int) $row->last_at, $now->timezone)->toIso8601String(),
+            ] + ($view === 'targets' ? ['destination' => $row->destination, 'port' => (int) $row->port] : []))->all();
         return compact('list', 'page', 'total') + ['page_size' => $size, 'last_page' => max(1, (int) ceil($total / $size)), 'snapshot_id' => (string) $snapshot,
+            'snapshot_at' => $anchor->timestamp,
             'meta' => ['timezone' => config('app.timezone'), 'retention_days' => self::RETENTION_DAYS,
                 'min_at' => $oldest->format('Y-m-d\TH:i'), 'max_at' => $now->addMinutes(5)->format('Y-m-d\TH:i'),
                 'start_at' => $start->format('Y-m-d\TH:i'), 'end_at' => $now->format('Y-m-d\TH:i')]];

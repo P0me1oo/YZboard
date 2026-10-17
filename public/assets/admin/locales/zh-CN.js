@@ -1,7 +1,9 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['zh-CN'] = {
   "statistics": {
+    "accessBack": "返回",
     "accessLogs": "访问记录", "destination": "目标域名 / IP", "targetPort": "目标端口", "connectedAt": "连接时间",
+    "accessUsers": "用户访问汇总", "accessCount": "访问次数", "lastAccess": "最近访问", "accessSort": "排序方式", "accessSortCount": "按访问次数", "accessSortTime": "按访问时间",
     "refreshRecords": "刷新", "nodeSearchPlaceholder": "节点名称或 ID", "targetSearchPlaceholder": "完整或部分域名 / IP",
     "lastYear": "最近一年", "dailyHeatmap": "每日用量", "trafficIntensity": "用量深浅", "less": "少", "more": "多",
     "noRecord": "暂无记录", "wholeDays": "30 天前仅保留日汇总，请选择完整日期。",
@@ -2159,11 +2161,24 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
   },
   "server": {
     "realityScan": {
+      "certChain": "证书链",
+      "location": "IP 位置",
+      "pageStatus": "页面状态",
+      "unknown": "未知",
+      "notProvided": "未提供",
+      "cdnNotDetected": "未发现特征",
+      "detailsUpgrade": "CDN 和页面状态需要 Node v2.14.0 或更高版本。",
+      "page": {
+        "normal": "正常", "redirect": "跳转", "unchanged": "未修改",
+        "authentication": "需要认证", "forbidden": "拒绝访问", "notFound": "页面不存在",
+        "rateLimited": "请求过多", "restricted": "访问受限", "serverError": "服务错误",
+        "clientError": "请求错误", "information": "信息响应", "timeout": "响应超时",
+        "failed": "请求失败", "not_checked": "未检测"
+      },
       "close": "关闭",
       "scanCurrent": "检测当前目标",
-      "findTargets": "查找目标",
+      "scanTargets": "扫描目标",
       "title": "Reality 目标检测",
-      "source": "由所选节点服务器检测，延迟包含域名解析、TCP 连接和 TLS 握手。",
       "targets": "检测目标",
       "placeholder": "域名、IP 或 CIDR，以逗号或换行分隔；留空检测预设域名",
       "scan": "开始检测",

@@ -1,6 +1,6 @@
 {
   "index.html": {
-    "file": "assets/index-VexvcjPl.js",
+    "file": "assets/index-CHB6LyIW.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
@@ -8,7 +8,7 @@
       "src/runtime/vendor-runtime.js"
     ],
     "css": [
-      "assets/index-CV1tVNlW.css"
+      "assets/index-gXevADUc.css"
     ],
     "assets": [
       "assets/codicon-ngg6Pgfi-ngg6Pgfi.ttf"
@@ -35,12 +35,12 @@
     "src": "src/runtime/ts.worker-sc26f_2L.js"
   },
   "src/runtime/vendor-runtime.js": {
-    "file": "assets/admin-BOez9W4_.js",
+    "file": "assets/admin-Be0ldxqj.js",
     "name": "admin",
     "src": "src/runtime/vendor-runtime.js",
     "isDynamicEntry": true,
     "css": [
-      "assets/admin-Bps0qWpW.css"
+      "assets/admin-1rJJEJWc.css"
     ],
     "assets": [
       "assets/css.worker-Bx7Y3X-c-BT-8rbQO.js",

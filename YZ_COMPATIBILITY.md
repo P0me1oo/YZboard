@@ -1,11 +1,20 @@
 # YZboard 兼容矩阵
 
-## 1.95.1 发布准备
+## 1.95.1 正式发布核验
+
+- [Release v1.95.1](https://github.com/P0me1oo/YZboard/releases/tag/v1.95.1) 已发布并核对为最新正式版，标签固定到 `707f9d8137aee397bd4d1cef43c50cf9b62af2b7`。管理端 `v0.66.1` / `14af56ac4e915e54652ba0670140c16628b5513c` 随镜像交付，配套 Agent 沿用已发布的 `v2.17.0`。
+- [正式发布流程](https://github.com/P0me1oo/YZboard/actions/runs/39134031159) 全部通过：PHP `8.2.34` 下 SQLite 1,129 项、10,768 条断言，MariaDB `11.4.8` 严格分组 1,129 项、10,816 条断言。SQLite 的 6 项行锁并发检查在 MariaDB 执行；两套数据库均执行 Redis 恢复检查，面板资源 5 项通过。管理端 111 项行为及 11 项相关页面检查分项通过，未声称完整前端 verify 一次通过。
+- 不可变镜像 `ghcr.io/p0me1oo/yzboard:1.95.1-707f9d8`、`1.95.1` 与 `latest` 均指向 `sha256:7aa7d307dd5f084815e3612aab96ba09a1cedc190438c5c2fefe0c1fa3167ecd`。amd64 清单为 `sha256:5c41d534b996382a2950cc073c127d26c943457b9ba03c0f70b31a5f0d561d02`，arm64 为 `sha256:aeea2df50ac8b9d12574311f82069e3472109e6c45705e797560699433064e5d`；两个平台均为 Linux，OCI 来源和版本正确。
+- 镜像内每个架构的 516 个应用、配置、迁移、前端和 IP 数据文件均与固定 Git 对象逐字节核对。Git HEAD、两份数据库的 SHA-256、实际安装的 ip2region `v3.0.16` 及 Composer 类映射一致；相关镜像层均经过摘要核验。15 个前端资源和既有 VLESS 默认配置保留。
+- [校验附件](https://github.com/P0me1oo/YZboard/releases/download/v1.95.1/verification.json) 已下载并核对，SHA-256 为 `2e91f44204e92e9d0177aa54d355906fb78ccdfb789f0e1fda5c746dc71c37c6`。核验目录为 `D:/codex-tmp/yz-release-1.95.1-20261018/`。
+- 回滚参考 `ghcr.io/p0me1oo/yzboard:1.93.0-a83b971` / `sha256:3cea99fb6a2ec9b1d22d3837f18fda21a9cbb5989acbafc0ce7e728c60933131`，匿名获取和两个架构可用性已复核。本次迁移仅刷新派生位置缓存，出现历史和业务数据保留；更新前仍应备份 Compose 及必要持久化数据。未操作生产服务器，服务器更新和健康检查由用户执行。
+
+### 发布准备记录
 
 - 纳入下方全部 `1.95.0` 修改，管理端仍为 `v0.66.1` / `14af56ac4e915e54652ba0670140c16628b5513c`，资源及 Node、核心依赖不变。
 - `v1.95.0` 固定到 `0b213fb8dcd5fbbb7b5fdab37f05b949fbd1786d`。该提交的首次完整回归通过，标签发布流程在 MariaDB 的实时状态兼容测试中失败，镜像构建被门槛阻止，未创建 Release；标签保留，不覆盖或移动。
 - 失败项为 `RealtimeReadOptimizationTest`：旧访问器和批量读取分别使用真实时间，两次计算跨秒时，300 秒边界上的在线状态不同。仅调整测试为同一秒内比较，保留全部场景和原有相等断言，最多三次采样；业务代码不变。
-- 正式发布将使用新提交和 `v1.95.1`，执行既有完整回归与双架构构建。核验目录为 `D:/codex-tmp/yz-release-1.95.1-20261018/`。
+- 新提交及 `v1.95.1` 的完整回归、双架构构建与发布核验已完成，见上方正式记录；发布后的文档提交不移动标签，也不改变固定镜像来源。
 
 ## 1.95.0 本地 IP 位置与 IPv6 数据库（发布准备）
 

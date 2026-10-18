@@ -1,8 +1,8 @@
 # Xboard
 
-面板 `1.95.1` 升级 ip2region 至 `v3.0.16` 并纳入官方 IPv4、IPv6 库。位置查询统一为：中国大陆 IPv4 用纯真，其他 IPv4 和全部 IPv6 用 ip2region；网络编号及风险属性继续由现有外部服务补充。配套管理端 `0.66.1`，包含下方 VLESS 默认配置与订阅拦截修改，正在准备发布，见 [IP 位置查询](docs/ip-location.md)。
+面板 [`v1.95.1`](https://github.com/P0me1oo/YZboard/releases/tag/v1.95.1) 已发布，包含管理端 `0.66.1`。ip2region 升级至 `v3.0.16` 并纳入官方 IPv4、IPv6 库；中国大陆 IPv4 地区用纯真，其他 IPv4 和全部 IPv6 用 ip2region，外部服务继续补充网络编号及风险属性。同时交付下方 VLESS 默认配置与订阅拦截修改，完整回归、双架构镜像及 `latest` 核验通过，见 [IP 位置查询](docs/ip-location.md)与[发布记录](YZ_COMPATIBILITY.md)。
 
-面板 `1.94.0` 配套管理端 `0.66.0`：新建 VLESS 节点默认 Reality、Vision，并自动生成私钥、公钥及 Short ID；切换协议保留草稿，已有节点保持原配置。包含此前未发布修改，尚未发布。
+开发版本 `1.94.0` / 管理端 `0.66.0` 的修改已纳入 `v1.95.1`：新建 VLESS 节点默认 Reality、Vision，并自动生成私钥、公钥及 Short ID；切换协议保留草稿，已有节点保持原配置。
 
 面板 `1.93.0` 新增服务器流量保护“仅计费代理流量”，配套管理端 `0.65.0`、Agent `v2.17.0`。按同机全部受管节点的原始上传加下载计算，不乘倍率、排除系统流量，同机中转只计一次；保留原单向、双向及额度恢复机制，见[使用说明](docs/server-traffic-protection.md)。
 

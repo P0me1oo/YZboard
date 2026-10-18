@@ -1,8 +1,8 @@
 # Xboard
 
-面板 `1.92.0` 本地开发，配套管理端 `0.64.0`，尚未发布。节点配置可自定义预设扫描目标，默认移除 Amazon 主页和 Google 下载地址；开始检测按钮靠右，使用结果后自动回到节点表单并填入 SNI 与端口。保留下方未发布功能，见 [Reality 目标检测](docs/reality-target-scan.md)。
+面板 [`1.92.0`](https://github.com/P0me1oo/YZboard/releases/tag/v1.92.0) 已发布，配套管理端 `0.64.0`、Agent [`v2.16.1`](https://github.com/P0me1oo/YZ-Agent/releases/tag/v2.16.1)。节点配置可自定义预设扫描目标，默认移除 Amazon 主页和 Google 下载地址；开始检测按钮靠右，使用结果后自动回到节点表单并填入 SNI 与端口。同时交付下方开发阶段记录的功能，见 [Reality 目标检测](docs/reality-target-scan.md)。
 
-面板 `1.91.0` 本地开发，尚未发布，配套管理端 `0.63.0`：订阅设置和模板移到“订阅管理”，设置分为基础、输出两页。新增按节点名称添加国旗、按实际倍率添加名称后缀的开关，默认关闭，1 倍不显示；见[订阅设置](docs/subscription-settings.md)。保留已有未发布功能，其配套要求见[兼容矩阵](YZ_COMPATIBILITY.md)。
+原开发版本 `1.91.0`（管理端 `0.63.0`）的以下修改已纳入 `1.92.0`：订阅设置和模板移到“订阅管理”，设置分为基础、输出两页。新增按节点名称添加国旗、按实际倍率添加名称后缀的开关，默认关闭，1 倍不显示；见[订阅设置](docs/subscription-settings.md)。保留已有未发布功能，其配套要求见[兼容矩阵](YZ_COMPATIBILITY.md)。
 
 面板 [`1.88.2`](https://github.com/P0me1oo/YZboard/releases/tag/v1.88.2) 已发布，包含管理端 `0.60.2`，配套 Node [`v2.14.0`](https://github.com/P0me1oo/YZ-Agent/releases/tag/v2.14.0)。Reality 检测增加 CDN 厂商、本地 IP 位置、页面状态和证书链大小，未通过原因使用提醒图标与无句号警告文案；一并交付扫描入口修正和访问记录分组。位置只使用 ip2region，IPv6 暂显示未知，证书链仅展示大小。双数据库完整回归和双架构镜像核验通过，先更新面板，再更新 Node；使用说明见 [Reality 目标检测](docs/reality-target-scan.md)与[访问记录](docs/access-logs.md)，固定来源及回滚参考见[兼容矩阵](YZ_COMPATIBILITY.md)。
 

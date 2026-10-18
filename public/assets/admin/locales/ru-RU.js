@@ -3209,6 +3209,7 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
       "mode": "Способ учёта",
       "outbound": "Только исходящий",
       "both": "Входящий + исходящий",
+      "proxy": "Только трафик прокси",
       "interfaces": "Сетевые интерфейсы",
       "interfacesPlaceholder": "Автоматически, если пусто; имена через запятую",
       "unlimitedPlaceholder": "0 — без лимита",

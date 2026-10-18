@@ -1,5 +1,7 @@
 # Xboard
 
+面板 `1.93.0` 新增服务器流量保护“仅计费代理流量”，配套管理端 `0.65.0`、Agent `v2.17.0`。按同机全部受管节点的原始上传加下载计算，不乘倍率、排除系统流量，同机中转只计一次；保留原单向、双向及额度恢复机制，见[使用说明](docs/server-traffic-protection.md)。
+
 面板 [`1.92.0`](https://github.com/P0me1oo/YZboard/releases/tag/v1.92.0) 已发布，配套管理端 `0.64.0`、Agent [`v2.16.1`](https://github.com/P0me1oo/YZ-Agent/releases/tag/v2.16.1)。节点配置可自定义预设扫描目标，默认移除 Amazon 主页和 Google 下载地址；开始检测按钮靠右，使用结果后自动回到节点表单并填入 SNI 与端口。同时交付下方开发阶段记录的功能，见 [Reality 目标检测](docs/reality-target-scan.md)。
 
 原开发版本 `1.91.0`（管理端 `0.63.0`）的以下修改已纳入 `1.92.0`：订阅设置和模板移到“订阅管理”，设置分为基础、输出两页。新增按节点名称添加国旗、按实际倍率添加名称后缀的开关，默认关闭，1 倍不显示；见[订阅设置](docs/subscription-settings.md)。保留已有未发布功能，其配套要求见[兼容矩阵](YZ_COMPATIBILITY.md)。

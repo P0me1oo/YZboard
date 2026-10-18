@@ -3,15 +3,18 @@
 namespace Tests\Feature\Server;
 
 use App\Http\Controllers\V2\Admin\Server\MachineController;
+use App\Jobs\ProcessNodeReportBatch;
 use App\Models\Server;
 use App\Models\ServerMachine;
 use App\Models\User;
 use App\Services\MachineTrafficService as Traffic;
+use App\Services\NodeReportService;
 use App\Services\ServerRelayService;
 use App\Services\ServerService;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -188,5 +191,125 @@ class MachineTrafficTest extends TestCase
         }
         $this->assertSame(50, Traffic::exchange($m->id, $report)['used']);
         $this->assertSame(50, Traffic::exchange($m->id, $report)['used']);
+    }
+
+    private function proxyHeartbeat(ServerMachine $machine, array $extra = []): array
+    {
+        $p = Traffic::view($machine->fresh());
+        return $this->send($machine, $this->sample($machine, 999999, 999999, $extra + [
+            'mode' => 'proxy', 'revision' => $p['revision'],
+        ]));
+    }
+
+    public function test_proxy_counts_all_managed_nodes_raw_and_deduplicates_same_machine_relay_before_billing(): void
+    {
+        Bus::fake([ProcessNodeReportBatch::class]);
+        $a = $this->machine(); $b = $this->machine();
+        $entry = $this->node($a, ['rate' => 3]);
+        $same = $this->node($a, ['relay_entry_id' => $entry->id]);
+        $remote = $this->node($b, ['relay_entry_id' => $entry->id]);
+        $other = $this->node($a, ['rate' => 0]);
+        foreach ([$a, $b] as $machine) {
+            $this->configure($machine, ['traffic_limit_gb' => 1, 'traffic_mode' => 'proxy', 'traffic_interfaces' => ['missing0']]);
+            $this->assertFalse($this->proxyHeartbeat($machine)['blocked']);
+        }
+        $a->update(['load_status' => ['network' => ['sent' => Traffic::GB, 'received' => Traffic::GB]]]);
+        $reports = app(NodeReportService::class);
+        $relay = [$same->id => [20, 30], $remote->id => [10, 40]];
+        $batch = $reports->accept($entry, 'proxy-dedup', [1 => [100, 400]], $relay, [1 => $relay]);
+        $this->assertSame($batch->id, $reports->accept($entry, 'proxy-dedup', [1 => [100, 400]], $relay, [1 => $relay])->id);
+        $reports->accept($other, 'proxy-other', [1 => [20, 30]], []);
+        $this->assertSame(550, Traffic::view($a->fresh())['used']);
+        $this->assertSame(50, Traffic::view($b->fresh())['used']);
+        $this->assertSame(0, $a->fresh()->proxy_u, '保护不能依赖扣费队列处理');
+        $p = $this->proxyHeartbeat($a);
+        $this->assertSame(550, $p['used']);
+        $this->assertSame([], $p['measured_interfaces']);
+        $this->assertSame(0, $p['rx']);
+        $this->assertSame(0, $p['tx']);
+    }
+
+    public function test_proxy_mode_switch_preserves_both_sources_and_rejects_old_source_reports(): void
+    {
+        Bus::fake([ProcessNodeReportBatch::class]);
+        $m = $this->machine(); $node = $this->node($m);
+        $this->configure($m, ['traffic_limit_gb' => 1]);
+        $this->send($m, $this->sample($m, 40, 60));
+        app(NodeReportService::class)->accept($node, 'count-in-background', [1 => [20, 30]], []);
+        $old = $this->sample($m, 1000, 2000);
+        $this->configure($m, ['traffic_mode' => 'proxy']);
+        $this->assertSame(50, Traffic::view($m)['used']);
+        $this->assertTrue($this->send($m, $old)['blocked']);
+        $heartbeat = $this->proxyHeartbeat($m);
+        $this->assertFalse($heartbeat['blocked']);
+        $this->assertSame(50, $heartbeat['used']);
+        $oldProxy = $this->sample($m, 9000, 9000, ['mode' => 'proxy', 'revision' => $heartbeat['revision']]);
+        $this->configure($m, ['traffic_mode' => 'both']);
+        $this->assertSame(100, Traffic::view($m)['used']);
+        $this->assertTrue($this->send($m, $oldProxy)['blocked']);
+        $this->assertFalse($this->send($m, $this->sample($m, 40, 60))['blocked']);
+        $this->configure($m, ['traffic_limit_gb' => 0]);
+        $this->configure($m, ['traffic_limit_gb' => 1, 'traffic_mode' => 'proxy']);
+        $this->assertSame(50, $this->proxyHeartbeat($m)['used']);
+    }
+
+    public function test_proxy_limit_recovery_and_monthly_reset_do_not_replay_old_reports(): void
+    {
+        Bus::fake([ProcessNodeReportBatch::class]);
+        $m = $this->machine(); $on = $this->node($m);
+        $off = $this->node($m, ['enabled' => false]);
+        $this->configure($m, ['traffic_limit_gb' => 1, 'traffic_mode' => 'proxy', 'traffic_reset_day' => 31]);
+        $this->proxyHeartbeat($m);
+        $reports = app(NodeReportService::class);
+        $reports->accept($on, 'proxy-over-limit', [1 => [Traffic::GB, 0]], []);
+        $this->assertTrue(Traffic::view($m->fresh())['blocked']);
+        $this->assertCount(0, ServerService::getMachineNodes($m->fresh()));
+        $this->assertTrue($on->fresh()->enabled); $this->assertFalse($off->fresh()->enabled);
+        $this->configure($m, ['traffic_limit_gb' => 2, 'traffic_reset_day' => 30]);
+        $this->assertSame(Traffic::GB, Traffic::view($m)['used']);
+        $this->assertFalse(Traffic::blocked($m));
+        $this->assertSame([$on->id], ServerService::getMachineNodes($m)->pluck('id')->all());
+        $this->travelTo(CarbonImmutable::parse('2026-10-30 00:00:00', 'Asia/Shanghai'));
+        $reports->accept($on, 'proxy-over-limit', [1 => [Traffic::GB, 0]], []);
+        $this->assertSame(0, Traffic::view($m->fresh())['used']);
+        $reports->accept($on, 'proxy-new-period', [1 => [10, 20]], []);
+        $this->assertSame(30, $this->proxyHeartbeat($m)['used']);
+    }
+
+    public function test_proxy_receipt_failure_rolls_back_batch_and_counters_then_retries_once(): void
+    {
+        Bus::fake([ProcessNodeReportBatch::class]);
+        $m = $this->machine(); $node = $this->node($m);
+        $reports = app(NodeReportService::class);
+        $reports->accept($node, 'before-protection', [1 => [100, 200]], []);
+        $this->configure($m, ['traffic_limit_gb' => 1, 'traffic_mode' => 'proxy']);
+        $this->assertSame(0, Traffic::view($m)['used']);
+        $this->failNextQueryMatching('/update.*v2_server_machine/i');
+        try {
+            $reports->accept($node, 'proxy-retry', [1 => [10, 20]], []);
+            $this->fail('保护写入失败时不得确认报告');
+        } catch (\Illuminate\Database\QueryException) {
+            $this->assertSame(0, Traffic::view($m->fresh())['used']);
+            $this->assertDatabaseMissing('v2_node_report_batch', ['report_id' => 'proxy-retry']);
+        }
+        for ($i = 0; $i < 2; $i++) {
+            $reports->accept($node, 'proxy-retry', [1 => [10, 20]], []);
+            $this->assertSame(30, Traffic::view($m->fresh())['used']);
+        }
+    }
+
+    public function test_proxy_protection_uses_raw_counters_before_billing_plugin_changes(): void
+    {
+        Bus::fake([ProcessNodeReportBatch::class]);
+        $m = $this->machine(); $node = $this->node($m);
+        $this->configure($m, ['traffic_limit_gb' => 1, 'traffic_mode' => 'proxy']);
+        \App\Services\Plugin\HookManager::registerFilter('traffic.process.before', function ($payload) {
+            [$server, $protocol, $traffic] = $payload;
+            foreach ($traffic as &$value) $value = [$value[0] * 10, $value[1] * 10];
+            return [$server, $protocol, $traffic];
+        });
+        $batch = app(NodeReportService::class)->accept($node, 'plugin-adjusted', [1 => [10, 20]], []);
+        $this->assertSame([100, 200], $batch->traffic[1]);
+        $this->assertSame(30, Traffic::view($m->fresh())['used']);
     }
 }

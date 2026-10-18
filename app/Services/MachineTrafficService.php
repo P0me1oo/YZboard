@@ -7,7 +7,7 @@ use App\Models\ServerMachine;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
-/** 服务器网卡计量独立于代理统计、用户扣费和管理员运行开关。 */
+/** 服务器额度独立于用户扣费和管理员运行开关，两种计量来源分别累计。 */
 class MachineTrafficService
 {
     public const GB = 1073741824;
@@ -32,17 +32,20 @@ class MachineTrafficService
         [$start, $end] = self::period($machine->traffic_reset_day ?: 1);
         $state = $machine->traffic_state ?? [];
         $state += ['revision' => 1, 'epoch' => 1, 'start' => $start, 'end' => $end,
-            'rx' => 0, 'tx' => 0, 'baseline' => 0, 'sequence' => 0,
+            'rx' => 0, 'tx' => 0, 'proxy_rx' => 0, 'proxy_tx' => 0, 'baseline' => 0, 'sequence' => 0,
             'initialized' => false, 'error' => null, 'reported_at' => 0, 'interfaces' => []];
         if (now()->timestamp >= $state['end']) {
             $state = array_replace($state, ['start' => $start, 'end' => $end,
-                'rx' => 0, 'tx' => 0, 'baseline' => 0, 'sequence' => 0]);
+                'rx' => 0, 'tx' => 0, 'proxy_rx' => 0, 'proxy_tx' => 0, 'baseline' => 0, 'sequence' => 0]);
         }
         return $state;
     }
 
     public static function used(ServerMachine $machine, array $state): int
     {
+        if ($machine->traffic_mode === 'proxy') {
+            return min(self::MAX_BYTES, $state['proxy_rx'] + $state['proxy_tx']);
+        }
         return min(self::MAX_BYTES, $state['baseline'] + $state['tx']
             + ($machine->traffic_mode === 'both' ? $state['rx'] : 0));
     }
@@ -75,6 +78,7 @@ class MachineTrafficService
             'interfaces' => $machine->traffic_interfaces ?? [], 'revision' => $state['revision'],
             'epoch' => $state['epoch'], 'period_start' => $state['start'], 'period_end' => $state['end'],
             'rx' => $state['rx'], 'tx' => $state['tx'], 'baseline' => $state['baseline'],
+            'proxy_rx' => $state['proxy_rx'], 'proxy_tx' => $state['proxy_tx'],
             'used' => self::used($machine, $state), 'sequence' => $state['sequence'],
             'initialized' => $state['initialized'], 'error' => $state['error'],
             'reported_at' => $state['reported_at'], 'measured_interfaces' => $state['interfaces'],
@@ -102,12 +106,19 @@ class MachineTrafficService
         if ($previous['limit'] === 0 && $machine->traffic_limit > 0 && !($state['protection_started'] ?? false)) {
             $state = array_replace($state, ['epoch' => $state['epoch'] + 1,
                 'baseline' => 0, 'protection_started' => true,
-                'rx' => 0, 'tx' => 0, 'sequence' => 0, 'initialized' => false,
+                'rx' => 0, 'tx' => 0, 'proxy_rx' => 0, 'proxy_tx' => 0, 'sequence' => 0, 'initialized' => false,
                 'error' => null, 'reported_at' => 0]);
         }
         // 调整重置日只改变下一次归零日期，不在保存时清空当前用量。
         if ($previous['reset_day'] !== $machine->traffic_reset_day) {
             [, $state['end']] = self::period($machine->traffic_reset_day);
+        }
+        if (($previous['mode'] === 'proxy') !== ($machine->traffic_mode === 'proxy')) {
+            // 新来源需要 Node 确认；保留两套累计，旧来源的在途报告不能解除等待。
+            $state['initialized'] = false;
+            $state['error'] = null;
+            $state['reported_at'] = 0;
+            $state['interfaces'] = [];
         }
         $state['revision']++;
         $machine->traffic_state = $state;
@@ -130,13 +141,20 @@ class MachineTrafficService
             $before = $machine->traffic_state['notified_blocked'] ?? self::blocked($machine);
             $state = self::state($machine);
             if ($report !== null && $report['epoch'] === $state['epoch']
-                && $report['period_start'] === $state['start'] && $report['sequence'] > $state['sequence']) {
-                $state['rx'] = max($state['rx'], $report['rx']);
-                $state['tx'] = max($state['tx'], $report['tx']);
+                && $report['period_start'] === $state['start'] && $report['sequence'] > $state['sequence']
+                && (!isset($report['revision']) || (int) $report['revision'] === $state['revision'])
+                && (($machine->traffic_mode === 'proxy')
+                    ? (($report['mode'] ?? null) === 'proxy' && isset($report['revision']))
+                    : (($report['mode'] ?? 'outbound') !== 'proxy'))) {
+                // 代理累计仅由已去重的节点报告写入，心跳不能覆盖或增加它。
+                if ($machine->traffic_mode !== 'proxy') {
+                    $state['rx'] = max($state['rx'], $report['rx']);
+                    $state['tx'] = max($state['tx'], $report['tx']);
+                }
                 $state['sequence'] = $report['sequence'];
                 $state['initialized'] = $report['initialized'];
                 $state['error'] = $report['error'] ?? null;
-                $state['interfaces'] = $report['interfaces'] ?? [];
+                $state['interfaces'] = $machine->traffic_mode === 'proxy' ? [] : ($report['interfaces'] ?? []);
                 $state['reported_at'] = now()->timestamp;
             }
             $machine->traffic_state = $state;
@@ -149,6 +167,27 @@ class MachineTrafficService
             }
             return self::view($machine);
         }, 3);
+    }
+
+    /** 必须与新报告的插入共用事务；机器行锁避免多节点报告互相覆盖。 */
+    public static function recordProxyUsage(int $id, int $upload, int $download): void
+    {
+        $machine = ServerMachine::whereKey($id)->lockForUpdate()->first();
+        if (!$machine) {
+            return;
+        }
+        $before = $machine->traffic_state['notified_blocked'] ?? self::blocked($machine);
+        $state = self::state($machine);
+        $state['proxy_rx'] = min(self::MAX_BYTES, $state['proxy_rx'] + max(0, $upload));
+        $state['proxy_tx'] = min(self::MAX_BYTES, $state['proxy_tx'] + max(0, $download));
+        $machine->traffic_state = $state;
+        $after = self::blocked($machine);
+        $state['notified_blocked'] = $after;
+        $machine->traffic_state = $state;
+        $machine->saveQuietly();
+        if ($before !== $after) {
+            DB::afterCommit(fn () => self::notify($id));
+        }
     }
 
     public static function notify(int $machineId): void

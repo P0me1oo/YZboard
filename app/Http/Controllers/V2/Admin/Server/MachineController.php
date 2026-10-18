@@ -72,7 +72,7 @@ class MachineController extends Controller
             'notes' => 'nullable|string',
             'is_active' => 'nullable|boolean',
             'traffic_limit_gb' => 'sometimes|required|numeric|min:0|max:8388607',
-            'traffic_mode' => 'sometimes|required|in:outbound,both',
+            'traffic_mode' => 'sometimes|required|in:outbound,both,proxy',
             'traffic_reset_day' => 'sometimes|required|integer|min:1|max:31',
             'traffic_interfaces' => 'sometimes|array|max:32',
             'traffic_interfaces.*' => ['string', 'distinct', 'regex:/\A[a-zA-Z0-9_.:-]{1,15}\z/'],

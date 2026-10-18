@@ -12,6 +12,29 @@ class ProxyTrafficRecorder
 {
     public const TABLE = 'v2_stat_proxy_traffic';
 
+    /** 入口总量已包含中转，同机只记一次；跨机为实际承载的落地另记。 */
+    public function machineUsage(array $snapshot, array $traffic, array $relayTraffic): array
+    {
+        $entryMachine = $snapshot['nodes'][$snapshot['entry_id']]['machine_id'] ?? null;
+        $usage = $entryMachine ? [$entryMachine => [0, 0]] : [];
+        foreach ($traffic as [$u, $d]) {
+            if ($entryMachine) {
+                $usage[$entryMachine][0] += (int) $u;
+                $usage[$entryMachine][1] += (int) $d;
+            }
+        }
+        foreach ($relayTraffic as $row) {
+            $machine = $snapshot['nodes'][$row['server_id']]['machine_id'] ?? null;
+            if ($machine && $machine !== $entryMachine) {
+                $usage[$machine] ??= [0, 0];
+                $usage[$machine][0] += (int) $row['u'];
+                $usage[$machine][1] += (int) $row['d'];
+            }
+        }
+        ksort($usage, SORT_NUMERIC);
+        return $usage;
+    }
+
     /** 收到上报时固定归属；队列重试、删除和改绑不能搬走这批流量。 */
     public function snapshot(Server $entry, array $relayTraffic, array $relayUserTraffic): array
     {
@@ -42,7 +65,6 @@ class ProxyTrafficRecorder
             return; // 升级前已接收的队列保留旧口径，不猜测历史机器归属。
         }
         $entryId = (int) $snapshot['entry_id'];
-        $entryMachine = $snapshot['nodes'][$entryId]['machine_id'] ?? null;
         $total = [0, 0];
         foreach ((array) $batch->traffic as $value) {
             $total[0] += (int) $value[0];
@@ -56,19 +78,12 @@ class ProxyTrafficRecorder
             $relays[$row['server_id']][1] += (int) $row['d'];
         }
         $direct = $total;
-        $machineTraffic = $entryMachine ? [$entryMachine => $total] : [];
+        $machineTraffic = $this->machineUsage($snapshot, (array) $batch->traffic, (array) $batch->relay_traffic);
         $nodeTraffic = [];
         foreach ($relays as $id => $value) {
             $direct[0] -= $value[0];
             $direct[1] -= $value[1];
             $nodeTraffic[(int) $id] = $value;
-            $machine = $snapshot['nodes'][$id]['machine_id'] ?? null;
-            // 同机落地已经包含在入口总量中，跨机器才为落地服务器另记一次。
-            if ($machine && $machine !== $entryMachine) {
-                $machineTraffic[$machine] ??= [0, 0];
-                $machineTraffic[$machine][0] += $value[0];
-                $machineTraffic[$machine][1] += $value[1];
-            }
         }
         $nodeTraffic[$entryId] = $direct;
         $rows = [];

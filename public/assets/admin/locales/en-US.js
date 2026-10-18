@@ -3294,6 +3294,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "mode": "Billing mode",
       "outbound": "One-way (outbound only)",
       "both": "Two-way (inbound + outbound)",
+      "proxy": "Proxy traffic only",
       "interfaces": "Billing interfaces",
       "interfacesPlaceholder": "Automatic if empty; separate names with commas",
       "unlimitedPlaceholder": "0 for unlimited",

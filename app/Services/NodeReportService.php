@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Jobs\ProcessNodeReportBatch;
 use App\Models\NodeReportBatch;
 use App\Models\Server;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class NodeReportService
@@ -39,6 +40,7 @@ class NodeReportService
         array $relayUserTraffic = []
     ): ?NodeReportBatch {
         $traffic = $this->normalizeTraffic($traffic);
+        $rawTraffic = $traffic;
         $serverSnapshot = ['id' => (int) $node->id, 'rate' => $node->getEffectiveRate(), 'type' => $node->type];
         $protocol = $node->type;
 
@@ -62,7 +64,7 @@ class NodeReportService
         if ($relayRates !== []) {
             $serverSnapshot['relay_rates'] = $relayRates;
         }
-        if ($traffic === [] && $relayTraffic === [] && $relayUserTraffic === []) {
+        if ($traffic === [] && $rawTraffic === [] && $relayTraffic === [] && $relayUserTraffic === []) {
             return null;
         }
 
@@ -74,29 +76,41 @@ class NodeReportService
             $reportId = 'legacy-' . Str::uuid()->toString();
         }
 
-        $batch = NodeReportBatch::query()->firstOrCreate(
-            [
-                'server_id' => (int) $node->id,
-                'report_key' => hash('sha256', $reportId),
-            ],
-            [
-                'report_id' => mb_substr($reportId, 0, 128),
-                'server_type' => (string) $protocol,
-                'server_snapshot' => $serverSnapshot,
-                'traffic' => $traffic,
-                'relay_traffic' => $relayTraffic,
-                'relay_user_traffic' => $relayUserTraffic,
-                'record_at' => strtotime(date('Y-m-d')),
-                'status' => NodeReportBatch::STATUS_PENDING,
-                'attempts' => 0,
-            ]
-        );
+        return DB::transaction(function () use ($node, $reportId, $protocol, $serverSnapshot, $traffic, $rawTraffic, $relayTraffic, $relayUserTraffic) {
+            // 先尝试插入，避免 MariaDB 可重复读下先查后建形成旧快照，
+            // 导致并发重复报告插入冲突后仍无法读到已经提交的那一批。
+            $batch = NodeReportBatch::query()->lockForUpdate()->createOrFirst(
+                [
+                    'server_id' => (int) $node->id,
+                    'report_key' => hash('sha256', $reportId),
+                ],
+                [
+                    'report_id' => mb_substr($reportId, 0, 128),
+                    'server_type' => (string) $protocol,
+                    'server_snapshot' => $serverSnapshot,
+                    'traffic' => $traffic,
+                    'relay_traffic' => $relayTraffic,
+                    'relay_user_traffic' => $relayUserTraffic,
+                    'record_at' => strtotime(date('Y-m-d')),
+                    'status' => NodeReportBatch::STATUS_PENDING,
+                    'attempts' => 0,
+                ]
+            );
 
-        if ($batch->wasRecentlyCreated || $batch->status === NodeReportBatch::STATUS_FAILED) {
-            ProcessNodeReportBatch::dispatch((int) $batch->id);
-        }
+            if ($batch->wasRecentlyCreated) {
+                $usage = app(ProxyTrafficRecorder::class)->machineUsage($serverSnapshot['proxy_traffic'], $rawTraffic, $relayTraffic);
+                foreach ($usage as $id => [$u, $d]) {
+                    if ($u > 0 || $d > 0) {
+                        MachineTrafficService::recordProxyUsage((int) $id, $u, $d);
+                    }
+                }
+            }
+            if ($batch->wasRecentlyCreated || $batch->status === NodeReportBatch::STATUS_FAILED) {
+                DB::afterCommit(fn () => ProcessNodeReportBatch::dispatch((int) $batch->id));
+            }
 
-        return $batch;
+            return $batch;
+        }, 5);
     }
 
     /**

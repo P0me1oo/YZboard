@@ -23,6 +23,8 @@ class MachineController extends Controller
             'sample.epoch' => 'required_with:sample|integer|min:1',
             'sample.period_start' => 'required_with:sample|integer|min:1',
             'sample.sequence' => 'required_with:sample|integer|min:1|max:9007199254740991',
+            'sample.revision' => 'sometimes|integer|min:1|max:9007199254740991',
+            'sample.mode' => 'sometimes|in:outbound,both,proxy',
             'sample.rx' => 'required_with:sample|integer|min:0|max:9007199254740991',
             'sample.tx' => 'required_with:sample|integer|min:0|max:9007199254740991',
             'sample.initialized' => 'required_with:sample|boolean',

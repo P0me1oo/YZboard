@@ -3323,6 +3323,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
       "mode": "计费方式",
       "outbound": "单向（仅出站）",
       "both": "双向（入站 + 出站）",
+      "proxy": "仅计费代理流量",
       "interfaces": "计费网卡",
       "interfacesPlaceholder": "留空自动识别，多个网卡用逗号分隔",
       "unlimitedPlaceholder": "0 为不限",

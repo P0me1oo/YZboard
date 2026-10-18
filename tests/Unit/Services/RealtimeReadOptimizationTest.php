@@ -42,6 +42,20 @@ class RealtimeReadOptimizationTest extends TestCase
         return $data;
     }
 
+    private function assertRuntimeMatchesLegacy(?array $state): void
+    {
+        // 两条读取路径都使用真实时间，跨秒时在线边界会变化；比较必须处于同一秒。
+        for ($attempt = 0; $attempt < 3; $attempt++) {
+            $startedAt = time();
+            $expected = $this->oldView($this->node(), $state);
+            $actual = $this->node()->runtimeView($state);
+            if (time() !== $startedAt) continue;
+            $this->assertEquals($expected, $actual);
+            return;
+        }
+        $this->fail('无法在同一秒内完成实时状态兼容比较');
+    }
+
     public function test_runtime_projection_preserves_legacy_fresh_stale_empty_and_parent_semantics(): void
     {
         $now = time();
@@ -57,12 +71,12 @@ class RealtimeReadOptimizationTest extends TestCase
                 $this->legacy(['LAST_CHECK_AT' => $check, 'LAST_PUSH_AT' => $push,
                     'ONLINE_USER' => 19, 'METRICS' => ['active_connections' => 30], 'LOAD_STATUS' => ['cpu' => 50]]);
                 foreach ($states as $state) {
-                    $this->assertEquals($this->oldView($this->node(), $state), $this->node()->runtimeView($state));
+                    $this->assertRuntimeMatchesLegacy($state);
                 }
             }
         }
         Cache::flush();
-        $this->assertEquals($this->oldView($this->node(), null), $this->node()->runtimeView(null));
+        $this->assertRuntimeMatchesLegacy(null);
     }
 
     public function test_online_node_reads_twelve_old_fields_but_only_two_fallback_values_with_runtime(): void

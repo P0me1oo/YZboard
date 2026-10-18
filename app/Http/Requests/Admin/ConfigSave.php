@@ -3,12 +3,14 @@
 namespace App\Http\Requests\Admin;
 
 use App\Services\DeviceIpExclusion;
+use App\Services\RealityScanService;
 use App\Services\SubscriptionClientControl;
 use App\Services\SubscriptionProtection;
 use App\Support\SubscriptionProtectionIp;
 use App\Support\AdminAppearance;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\ValidationException;
 
 class ConfigSave extends FormRequest
 {
@@ -51,6 +53,8 @@ class ConfigSave extends FormRequest
         'change_order_event_id' => '',
         'show_info_to_server_enable' => '',
         'show_protocol_to_server_enable' => '',
+        'show_flag_to_server_enable' => 'sometimes|boolean',
+        'show_rate_to_server_enable' => 'sometimes|boolean',
         'subscribe_path' => '',
         'subscribe_client_control' => 'sometimes|array:mode,clients,exempt_group_ids|required_array_keys:mode,clients,exempt_group_ids',
         'subscribe_client_control.mode' => 'in:off,whitelist,blacklist',
@@ -71,6 +75,7 @@ class ConfigSave extends FormRequest
         'server_ws_url' => 'nullable|url',
         'device_ip_exclude' => 'nullable|array',
         'device_ip_exclude.*' => 'nullable|string|max:64',
+        'reality_scan_targets' => 'sometimes|nullable|string|max:8192',
         // frontend
         'admin_sidebar_hidden' => 'sometimes|array|list',
         'frontend_theme' => '',
@@ -176,6 +181,16 @@ class ConfigSave extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator) {
+            $targets = $this->input(RealityScanService::SETTING);
+            if (is_string($targets) && trim($targets) !== '' && !$validator->errors()->has(RealityScanService::SETTING)) {
+                try {
+                    RealityScanService::targets($targets);
+                } catch (ValidationException $e) {
+                    foreach ($e->errors()['targets'] as $error) {
+                        $validator->errors()->add(RealityScanService::SETTING, $error);
+                    }
+                }
+            }
             $entries = $this->input(DeviceIpExclusion::SETTING);
             if (!is_array($entries)) {
                 return;

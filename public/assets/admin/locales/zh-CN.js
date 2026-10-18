@@ -1465,6 +1465,14 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
         "current_format": "当前订阅路径格式：{path}/xxxxxxxxxx",
         "restart_tip": "修改订阅路径后，可能需要重启服务才能生效。"
       },
+      "basic_settings": "基础设置",
+      "output_settings": "输出设置",
+      "loading": "加载中…",
+      "load_failed": "读取失败，请重试。",
+      "save_failed": "保存失败，请重试。",
+      "retry": "重试",
+      "show_flag_to_server": {"title":"自动添加国旗","description":"按节点名称识别国家或地区，在名称前添加国旗；已有国旗或无法识别时不添加。"},
+      "show_rate_to_server": {"title":"在名称后添加倍率","description":"在名称末尾显示实际倍率，例如「｜0.8×」；1 倍不显示。"},
       "show_info_to_server": {
         "title": "在订阅中展示订阅信息",
         "description": "开启后将会在用户订阅节点时输出订阅信息。"
@@ -1829,6 +1837,11 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
         "title": "WebSocket 地址",
         "description": "节点连接面板的 WebSocket 地址，留空则自动使用站点网址。",
         "placeholder": "留空则使用站点网址"
+      },
+      "reality_scan_targets": {
+        "title": "预设扫描目标",
+        "description": "每行一个域名、IP 或网段，可填写端口，最多 64 项、合计 512 个地址。离开输入框自动保存，留空恢复默认列表。",
+        "placeholder": "www.microsoft.com:443\naws.amazon.com:443"
       },
       "device_ip_exclude": {
         "title": "前置服务器 IP",
@@ -2500,6 +2513,11 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
         "label": "父级节点",
         "placeholder": "选择父节点",
         "none": "无"
+      },
+      "proxy_protocol": {
+        "label": "接收 PROXY 协议",
+        "hint": "TCP v1/v2，兼容普通连接。信任所有来源，请配合防火墙使用。",
+        "legacy": "当前沿用旧配置，切换后生效。"
       },
       "source_policy": {
         "label": "屏蔽大陆来源 IP",

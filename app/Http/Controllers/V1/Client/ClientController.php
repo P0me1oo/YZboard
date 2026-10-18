@@ -8,6 +8,7 @@ use App\Protocols\General;
 use App\Services\Plugin\HookManager;
 use App\Services\ServerService;
 use App\Services\SubscriptionClientControl;
+use App\Services\SubscriptionServerName;
 use App\Services\UserService;
 use App\Utils\Helper;
 use Illuminate\Http\Request;
@@ -81,8 +82,8 @@ class ClientController extends Controller
             filterKeywords: $filterKeywords
         );
 
-        $this->setSubscribeInfoToServers($serversFiltered, $user, count($servers) - count($serversFiltered));
         $serversFiltered = $this->addPrefixToServerName($serversFiltered);
+        $this->setSubscribeInfoToServers($serversFiltered, $user, count($servers) - count($serversFiltered));
 
         // Instantiate the protocol class with filtered servers and client info
         $protocolInstance = app()->make($protocolClassName, [
@@ -231,18 +232,22 @@ class ClientController extends Controller
 
     private function addPrefixToServerName(array $servers): array
     {
-        if (!admin_setting('show_protocol_to_server_enable', false)) {
+        $protocol = (bool) admin_setting('show_protocol_to_server_enable', false);
+        $flag = (bool) admin_setting('show_flag_to_server_enable', false);
+        $rate = (bool) admin_setting('show_rate_to_server_enable', false);
+        if (!$protocol && !$flag && !$rate) {
             return $servers;
         }
         return collect($servers)
-            ->map(function (array $server): array {
-                $server['name'] = $this->getPrefixedServerName($server);
+            ->map(function (array $server) use ($protocol, $flag, $rate): array {
+                $name = $protocol ? $this->getPrefixedServerName($server, $flag) : ($server['name'] ?? '');
+                $server['name'] = SubscriptionServerName::format($name, $server['rate'] ?? null, $flag, $rate);
                 return $server;
             })
             ->all();
     }
 
-    private function getPrefixedServerName(array $server): string
+    private function getPrefixedServerName(array $server, bool $keepFlagFirst = false): string
     {
         $type = $server['type'] ?? '';
         if (!isset(self::PROTOCOL_PREFIXES[$type])) {
@@ -251,6 +256,10 @@ class ClientController extends Controller
         $prefix = is_array(self::PROTOCOL_PREFIXES[$type])
             ? self::PROTOCOL_PREFIXES[$type][$server['protocol_settings']['version'] ?? 1] ?? ''
             : self::PROTOCOL_PREFIXES[$type];
-        return $prefix . ($server['name'] ?? '');
+        $name = $server['name'] ?? '';
+        if ($keepFlagFirst && preg_match('/^([\x{1F1E6}-\x{1F1FF}]{2})\s*/u', $name, $match)) {
+            return $match[1] . ' ' . $prefix . substr($name, strlen($match[0]));
+        }
+        return $prefix . $name;
     }
 }

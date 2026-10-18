@@ -14,6 +14,9 @@ class ServerSave extends FormRequest
 {
     protected function prepareForValidation(): void
     {
+        if (!$this->input('id') && !$this->has('accept_proxy_protocol')) {
+            $this->merge(['accept_proxy_protocol' => false]);
+        }
         $sourcePolicy = $this->input('source_policy');
         if (is_array($sourcePolicy)) {
             if (array_key_exists('block_cn', $sourcePolicy)
@@ -179,6 +182,7 @@ class ServerSave extends FormRequest
             'custom_outbounds' => 'nullable|array',
             'custom_routes' => 'nullable|array',
             'source_policy' => 'nullable|array:block_cn,allow_ips',
+            'accept_proxy_protocol' => 'nullable|boolean',
             'source_policy.block_cn' => 'required_with:source_policy|boolean',
             'source_policy.allow_ips' => 'sometimes|array|max:128',
             'source_policy.allow_ips.*' => ['bail', 'string', 'distinct', new SourcePolicyIp()],
@@ -311,6 +315,11 @@ class ServerSave extends FormRequest
         $validator->after(function (Validator $validator) {
             $selfId = $this->input('id') !== null ? (int) $this->input('id') : null;
             $existing = $selfId !== null ? Server::find($selfId) : null;
+            if ($validator->errors()->isEmpty()
+                && $this->input('accept_proxy_protocol', $existing?->accept_proxy_protocol)
+                && !Server::supportsProxyProtocol($this->input('type'), (array) $this->input('protocol_settings', []))) {
+                $validator->errors()->add('accept_proxy_protocol', '当前协议或传输不支持接收 TCP PROXY 协议');
+            }
             $policy = $this->input('source_policy', $existing?->source_policy);
             if ($this->input('type') === Server::TYPE_WIREGUARD && $this->input('relay_entry_id') && data_get($policy, 'block_cn')) {
                 $validator->errors()->add('source_policy', 'WireGuard 中转落地请在前置入口设置大陆来源拦截');

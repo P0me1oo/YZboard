@@ -9,15 +9,23 @@ use Illuminate\Validation\ValidationException;
 
 class RealityScanService
 {
+    public const SETTING = 'reality_scan_targets';
+
     public const DEFAULTS = [
-        'www.microsoft.com:443', 'www.amazon.com:443', 'aws.amazon.com:443',
+        'www.microsoft.com:443', 'aws.amazon.com:443',
         'www.samsung.com:443', 'www.nvidia.com:443', 'www.amd.com:443',
-        'www.intel.com:443', 'www.sony.com:443', 'dl.google.com:443',
+        'www.intel.com:443', 'www.sony.com:443',
     ];
+
+    public static function presets(): string
+    {
+        return trim((string) admin_setting(self::SETTING, '')) ?: implode("\n", self::DEFAULTS);
+    }
 
     public static function targets(?string $input, string $sni = ''): array
     {
-        $targets = preg_split('/[\s,]+/', trim($input ?? ''), -1, PREG_SPLIT_NO_EMPTY) ?: self::DEFAULTS;
+        $targets = preg_split('/[\s,]+/', trim($input ?? ''), -1, PREG_SPLIT_NO_EMPTY)
+            ?: preg_split('/[\s,]+/', self::presets(), -1, PREG_SPLIT_NO_EMPTY);
         if (count($targets) > 64 || ($sni !== '' && (count($targets) !== 1 || !self::domain($sni)))) {
             throw ValidationException::withMessages(['targets' => '目标格式无效，最多输入 64 项；单目标检测的 SNI 必须是域名。']);
         }

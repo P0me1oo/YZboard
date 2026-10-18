@@ -8,6 +8,7 @@ use App\Models\SubscribeTemplate;
 use App\Services\DeviceIpExclusion;
 use App\Services\MailService;
 use App\Services\NodeSyncService;
+use App\Services\RealityScanService;
 use App\Services\SubscriptionClientControl;
 use App\Services\SubscriptionProtection;
 use App\Services\TelegramService;
@@ -132,6 +133,8 @@ class ConfigController extends Controller
                 'change_order_event_id' => (int) admin_setting('change_order_event_id', 0),
                 'show_info_to_server_enable' => (bool) admin_setting('show_info_to_server_enable', 0),
                 'show_protocol_to_server_enable' => (bool) admin_setting('show_protocol_to_server_enable', 0),
+                'show_flag_to_server_enable' => (bool) admin_setting('show_flag_to_server_enable', 0),
+                'show_rate_to_server_enable' => (bool) admin_setting('show_rate_to_server_enable', 0),
                 'default_remind_expire' => (bool) admin_setting('default_remind_expire', 1),
                 'default_remind_traffic' => (bool) admin_setting('default_remind_traffic', 1),
                 'subscribe_path' => admin_setting('subscribe_path', 's'),
@@ -156,6 +159,7 @@ class ConfigController extends Controller
                 'server_ws_enable' => (bool) admin_setting('server_ws_enable', 1),
                 'server_ws_url' => admin_setting('server_ws_url', ''),
                 'device_ip_exclude' => DeviceIpExclusion::entries(),
+                RealityScanService::SETTING => RealityScanService::presets(),
             ],
             'email' => [
                 'email_host' => admin_setting('email_host'),
@@ -229,6 +233,11 @@ class ConfigController extends Controller
 
         if (array_key_exists(SubscriptionClientControl::SETTING, $data)) {
             $data[SubscriptionClientControl::SETTING] = SubscriptionClientControl::normalize($data[SubscriptionClientControl::SETTING]);
+        }
+
+        if (array_key_exists(RealityScanService::SETTING, $data)) {
+            $input = trim($data[RealityScanService::SETTING] ?? '');
+            $data[RealityScanService::SETTING] = $input === '' ? null : implode("\n", RealityScanService::targets($input));
         }
 
         // 设置页整组自动保存，只有名单内容实际变化时才向节点推送新配置，只调换顺序不算变化。

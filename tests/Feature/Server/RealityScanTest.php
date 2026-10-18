@@ -47,7 +47,9 @@ class RealityScanTest extends TestCase
 
     public function test_defaults_validation_and_maximum_addresses(): void
     {
-        $this->assertCount(9, RealityScanService::targets(null));
+        $this->assertCount(7, RealityScanService::targets(null));
+        $this->assertNotContains('www.amazon.com:443', RealityScanService::targets(null));
+        $this->assertNotContains('dl.google.com:443', RealityScanService::targets(null));
         $this->assertNotContains('www.cloudflare.com:443', RealityScanService::targets(null));
         $this->assertSame(['www.cloudflare.com:443'], RealityScanService::targets('www.cloudflare.com:443'));
         $this->assertSame(['example.com:8443', '[2606:4700::1111]:443'], RealityScanService::targets("example.com:8443\n[2606:4700::1111]:443"));

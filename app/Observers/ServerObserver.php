@@ -45,6 +45,7 @@ class ServerObserver
             'custom_outbounds',
             'custom_routes',
             'source_policy',
+            'accept_proxy_protocol',
             'cert_config',
         ]) || ($server->wasChanged('kernel_type') && !$server->machine_id)) {
             NodeSyncService::notifyConfigUpdated($server->id);

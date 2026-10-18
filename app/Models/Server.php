@@ -152,6 +152,7 @@ class Server extends Model
         'last_push_at' => 'integer',
         'show' => 'boolean',
         'enabled' => 'boolean',
+        'accept_proxy_protocol' => 'boolean',
         'created_at' => 'timestamp',
         'updated_at' => 'timestamp',
         'rate_time_ranges' => 'array',
@@ -457,6 +458,15 @@ class Server extends Model
         return self::normalizeType($type) === self::TYPE_VLESS
             ? self::KERNEL_XRAY
             : self::KERNEL_SINGBOX;
+    }
+
+    /** 只有经过核心通用 TCP 监听的协议支持接收 PROXY 头。 */
+    public static function supportsProxyProtocol(?string $type, array $settings): bool
+    {
+        $network = $settings['network'] ?? 'tcp';
+        return in_array($type, ['shadowsocks', 'vmess', 'vless', 'trojan', 'anytls', 'socks', 'http', 'naive'], true)
+            && is_string($network)
+            && !in_array(strtolower($network), ['kcp', 'mkcp', 'quic', 'hysteria', 'hysteria2'], true);
     }
 
     /** 返回节点实际使用的内核。历史节点没有 kernel_type 时默认使用 Xray。 */

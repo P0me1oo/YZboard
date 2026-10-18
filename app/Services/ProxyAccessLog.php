@@ -19,7 +19,8 @@ class ProxyAccessLog
         $data = Validator::make($payload, [
             'batch_id' => ['required', 'string', 'regex:/\A[a-f0-9]{32}\z/'],
             'records' => 'required|array|min:1|max:' . self::MAX_BATCH,
-            'records.*' => 'required|array:user_id,connected_at,destination,port',
+            'records.*' => 'required|array:node_id,user_id,connected_at,destination,port',
+            'records.*.node_id' => 'sometimes|required|integer|min:1|max:4294967295',
             'records.*.user_id' => 'required|integer|min:1|max:4294967295',
             'records.*.connected_at' => 'required|integer|min:1',
             'records.*.destination' => 'required|string|max:253',
@@ -30,6 +31,10 @@ class ProxyAccessLog
         }
         $now = now()->timestamp;
         $cutoff = $now - self::RETENTION_DAYS * 86400;
+        // 认证仍属于上报入口，只允许归属本节点或它自己的中转落地。
+        $children = Server::query()->where('relay_entry_id', $node->id)->pluck('name', 'id');
+        $nodes = $children->all();
+        if (!$node->isRelayChild()) $nodes[$node->id] = $node->name;
         $rows = [];
         foreach ($data['records'] as $position => $record) {
             $host = self::host($record['destination']);
@@ -38,8 +43,12 @@ class ProxyAccessLog
             }
             // 到期的重试也确认接收，避免旧批次堵塞新记录或重新写入已清理的数据。
             if ($record['connected_at'] < $cutoff) continue;
+            // 旧缓存缺少选路信息，不能把中转请求猜成入口直出。
+            $serverId = $record['node_id'] ?? 0;
+            // 拓扑移除或调整后的迟到记录不再入库，但确认批次以免堵塞后续上报。
+            if (!array_key_exists($serverId, $nodes)) continue;
             $rows[] = [
-                'server_id' => $node->id, 'server_name' => $node->name,
+                'server_id' => (int) $serverId, 'server_name' => $nodes[$serverId],
                 'batch_id' => $data['batch_id'], 'position' => $position,
                 'user_id' => (int) $record['user_id'], 'connected_at' => (int) $record['connected_at'],
                 'destination' => $host, 'port' => (int) $record['port'],

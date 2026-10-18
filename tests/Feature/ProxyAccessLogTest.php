@@ -43,6 +43,7 @@ class ProxyAccessLogTest extends TestCase
     private function batch(array $changes = []): array
     {
         return ['batch_id' => bin2hex(random_bytes(16)), 'records' => [array_replace([
+            'node_id' => $this->node->id,
             'user_id' => $this->user->id, 'connected_at' => now()->timestamp - 10, 'destination' => 'Example.COM.', 'port' => 443,
         ], $changes)]];
     }
@@ -55,6 +56,71 @@ class ProxyAccessLogTest extends TestCase
     private function fetch(array $params = [])
     {
         return $this->getJson('/api/v2/' . hash('crc32b', config('app.key')) . '/statistics/accessLogs?' . http_build_query($params));
+    }
+
+    public function test_relay_records_use_only_the_selected_landing_and_direct_exit(): void
+    {
+        $first = $this->node->replicate(); $first->name = '落地甲'; $first->relay_entry_id = $this->node->id; $first->save();
+        $second = $first->replicate(); $second->name = '落地乙'; $second->save();
+        $batch = $this->batch(['node_id' => $first->id]);
+        $batch['records'][] = $this->batch(['node_id' => $second->id])['records'][0];
+        $batch['records'][] = $this->batch()['records'][0];
+        $this->push($batch)->assertOk();
+        $this->push($batch)->assertOk();
+        $this->assertDatabaseCount('v2_proxy_access_log', 3);
+        foreach ([$first, $second, $this->node] as $exit) {
+            $this->fetch(['node' => (string) $exit->id])->assertOk()->assertJsonPath('data.total', 1)
+                ->assertJsonPath('data.list.0.server_id', $exit->id)->assertJsonPath('data.list.0.server_name', $exit->name);
+        }
+        $this->fetch(['view' => 'targets', 'user_id' => $this->user->id])->assertOk()
+            ->assertJsonPath('data.total', 1)->assertJsonPath('data.list.0.access_count', 3);
+        $first->update(['name' => '落地甲改名']);
+        $this->push($batch)->assertOk();
+        $this->assertDatabaseHas('v2_proxy_access_log', ['server_id' => $first->id, 'server_name' => '落地甲']);
+        $this->assertSame(0, (int) $this->user->fresh()->u);
+        $this->assertSame(0, (int) $this->user->fresh()->d);
+    }
+
+    public function test_unknown_legacy_and_removed_routes_are_confirmed_without_wrong_attribution(): void
+    {
+        $child = $this->node->replicate(); $child->name = '已移除落地'; $child->relay_entry_id = $this->node->id; $child->save();
+        $foreign = $this->node->replicate(); $foreign->name = '其他节点'; $foreign->save();
+        $batch = $this->batch(['node_id' => $child->id]);
+        $batch['records'][] = $this->batch(['node_id' => $foreign->id])['records'][0];
+        $batch['records'][] = $this->batch(['node_id' => 4294967295])['records'][0];
+        $legacy = $this->batch()['records'][0]; unset($legacy['node_id']);
+        $batch['records'][] = $legacy;
+        $batch['records'][] = $this->batch()['records'][0];
+        $this->push($batch)->assertOk()->assertJsonPath('data.batch_id', $batch['batch_id']);
+        $this->assertDatabaseCount('v2_proxy_access_log', 2);
+        $child->delete();
+        $this->push($batch)->assertOk();
+        $this->assertDatabaseCount('v2_proxy_access_log', 2);
+        $this->assertDatabaseHas('v2_proxy_access_log', ['server_id' => $child->id, 'server_name' => '已移除落地']);
+        $batch['batch_id'] = bin2hex(random_bytes(16));
+        $this->push($batch)->assertOk();
+        $this->assertDatabaseCount('v2_proxy_access_log', 3);
+        $this->push($this->batch(['node_id' => 0]))->assertUnprocessable();
+        $this->push($this->batch(['node_id' => -1]))->assertUnprocessable();
+    }
+
+    public function test_machine_entry_can_report_its_landing_on_another_machine_only_once(): void
+    {
+        $machine = ServerMachine::create(['name' => '入口测试机', 'token' => Str::random(32), 'is_active' => true]);
+        $other = ServerMachine::create(['name' => '落地测试机', 'token' => Str::random(32), 'is_active' => true]);
+        $this->node->update(['machine_id' => $machine->id]);
+        $child = $this->node->replicate(); $child->name = '跨机器落地'; $child->machine_id = $other->id;
+        $child->relay_entry_id = $this->node->id; $child->save();
+        $batch = $this->batch(['node_id' => $child->id]);
+        $payload = $batch + ['machine_id' => $machine->id, 'node_id' => $this->node->id, 'token' => $machine->token];
+        $this->postJson('/api/v2/server/access-log', $payload)->assertOk();
+        $this->postJson('/api/v2/server/access-log', $payload)->assertOk();
+        $this->assertDatabaseCount('v2_proxy_access_log', 1);
+        $this->fetch()->assertOk()->assertJsonPath('data.list.0.server_id', $child->id);
+        $landingPayload = $batch + ['machine_id' => $other->id, 'node_id' => $child->id, 'token' => $other->token];
+        $landingPayload['batch_id'] = bin2hex(random_bytes(16));
+        $this->postJson('/api/v2/server/access-log', $landingPayload)->assertOk();
+        $this->assertDatabaseCount('v2_proxy_access_log', 1);
     }
 
     public function test_retry_is_idempotent_and_does_not_change_traffic_or_history(): void
@@ -94,7 +160,7 @@ class ProxyAccessLogTest extends TestCase
     public function test_permissions_machine_scope_and_handshake(): void
     {
         $this->postJson('/api/v2/server/access-log', $this->batch() + ['node_id' => $this->node->id])->assertUnprocessable();
-        $this->postJson('/api/v2/server/handshake', ['token' => $this->credential])->assertOk()->assertJsonPath('access_log.version', 1);
+        $this->postJson('/api/v2/server/handshake', ['token' => $this->credential])->assertOk()->assertJsonPath('access_log.version', 2);
         $machine = ServerMachine::create(['name' => '测试机', 'token' => Str::random(32), 'is_active' => true]);
         $payload = $this->batch() + ['machine_id' => $machine->id, 'node_id' => $this->node->id, 'token' => $machine->token];
         $this->postJson('/api/v2/server/access-log', $payload)->assertStatus(400);
@@ -141,6 +207,7 @@ class ProxyAccessLogTest extends TestCase
         $this->assertDatabaseCount('v2_proxy_access_log', 0);
         $this->push($batch)->assertOk();
         $other = $this->node->replicate(); $other->name = '另一个节点'; $other->save();
+        $batch['records'][0]['node_id'] = $other->id;
         app(ProxyAccessLog::class)->accept($other, $batch);
         $this->assertDatabaseCount('v2_proxy_access_log', 2);
         $this->user->delete(); $this->node->delete();
@@ -158,7 +225,7 @@ class ProxyAccessLogTest extends TestCase
         $this->push($this->batch(['port' => 80]))->assertOk();
         $this->push($this->batch(['destination' => 'sub.example.com']))->assertOk();
         $node = $this->node->replicate(); $node->name = '另一入口'; $node->save();
-        app(ProxyAccessLog::class)->accept($node, $this->batch());
+        app(ProxyAccessLog::class)->accept($node, $this->batch(['node_id' => $node->id]));
 
         $this->fetch(['view' => 'users'])->assertOk()->assertJsonPath('data.total', 2)
             ->assertJsonPath('data.list.0.user_id', $this->user->id)->assertJsonPath('data.list.0.access_count', 6);

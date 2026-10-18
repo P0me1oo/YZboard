@@ -1137,6 +1137,11 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
         "description": "The WebSocket address nodes use to connect to the panel. Leave empty to use the site URL.",
         "placeholder": "Leave empty to use site URL"
       },
+      "reality_scan_targets": {
+        "title": "Preset scan targets",
+        "description": "One domain, IP or network per line, with an optional port. Up to 64 entries and 512 addresses. Saved when you leave the field; leave empty to restore defaults.",
+        "placeholder": "www.microsoft.com:443\naws.amazon.com:443"
+      },
       "device_ip_exclude": {
         "title": "Front server IPs",
         "description": "Only enter the exit addresses of your own forwarders or proxy chain front servers. These addresses do not count as devices; Xray TCP connections carrying a real client IP count that IP instead.",
@@ -1565,6 +1570,14 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
         "current_format": "Current subscription path format: {path}/xxxxxxxxxx",
         "restart_tip": "You may need to restart the service for the new subscribe path to take effect."
       },
+      "basic_settings": "Basic settings",
+      "output_settings": "Output settings",
+      "loading": "Loading…",
+      "load_failed": "Failed to load. Please retry.",
+      "save_failed": "Failed to save. Please retry.",
+      "retry": "Retry",
+      "show_flag_to_server": {"title":"Add country flags","description":"Detect the country or region from each node name and prepend its flag. Keep existing flags; leave unknown names unchanged."},
+      "show_rate_to_server": {"title":"Append traffic multiplier","description":"Append the effective multiplier, such as “｜0.8×”. Hide it for 1×."},
       "show_info_to_server": {
         "title": "Show Subscription Info in Nodes",
         "description": "When enabled, subscription information will be output when users subscribe to nodes."
@@ -2505,6 +2518,11 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
         "label": "Parent Node",
         "placeholder": "Select parent node",
         "none": "None"
+      },
+      "proxy_protocol": {
+        "label": "Receive PROXY protocol",
+        "hint": "TCP v1/v2 with plain connections supported. Trusts all sources; restrict access with a firewall.",
+        "legacy": "Legacy settings apply until this switch is changed."
       },
       "source_policy": {
         "label": "Block mainland China source IPs",

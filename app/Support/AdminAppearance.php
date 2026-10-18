@@ -12,7 +12,7 @@ class AdminAppearance
         'telegram-bot', 'plugin-management', 'theme-config', 'notice-management',
         'payment-config', 'knowledge-management', 'node-management',
         'machine-management', 'node-manage', 'permission-group-management', 'route-management',
-        'subscription-management', 'plan-management', 'subscription-client-control', 'subscription-protection',
+        'subscription-management', 'plan-management', 'subscription-settings', 'subscription-template', 'subscription-client-control', 'subscription-protection',
         'order-management', 'coupon-management', 'gift-card-management',
         'user-management', 'user-manage', 'ticket-management',
     ];

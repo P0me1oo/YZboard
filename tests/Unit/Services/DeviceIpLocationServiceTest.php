@@ -9,6 +9,51 @@ use Tests\TestCase;
 
 class DeviceIpLocationServiceTest extends TestCase
 {
+    public function test_external_location_and_old_cached_location_never_override_local_databases(): void
+    {
+        Cache::flush();
+        Http::fake(['api.ip2location.io/*' => fn ($request) => Http::response([
+            'ip' => $request->data()['ip'], 'asn' => 64500, 'as' => '测试网络',
+            'country_name' => '错误国家', 'region_name' => '错误省份', 'city_name' => '错误城市',
+        ])]);
+        foreach (['223.5.5.5', '8.8.8.8', '2400:3200::1'] as $ip) {
+            Cache::put('device_location:v4:' . hash('sha256', $ip), [
+                'region' => '旧外部位置', 'location_source' => 'ip2location',
+            ], 86400);
+            $expected = (new \App\Services\IpLocation())->lookup($ip);
+            $first = (new DeviceIpLocationService())->lookup($ip);
+            $this->assertSame($expected['region'], $first['region']);
+            $this->assertSame($expected['source'], $first['source']);
+            $this->assertSame('local', $first['location_source']);
+            $this->assertSame('AS64500', $first['asn']);
+            $this->assertSame($first, (new DeviceIpLocationService())->lookup($ip));
+        }
+        Http::assertSentCount(3);
+    }
+
+    public function test_ipv6_api_failure_and_quota_exhaustion_keep_the_local_region_and_isp(): void
+    {
+        Cache::flush();
+        Http::preventStrayRequests();
+        Http::fake(['api.ip2location.io/*' => Http::response([], 429)]);
+        $ip = '2400:3200::1';
+        $local = (new \App\Services\LocalIpLocation())->lookup($ip);
+        $this->assertNotEmpty($local['region']);
+        $this->assertNotEmpty($local['isp']);
+        $first = (new DeviceIpLocationService())->lookup($ip);
+        $this->assertSame('local', $first['location_source']);
+        $this->assertSame($local['region'], $first['region']);
+        $this->assertSame($local['isp'], $first['isp']);
+        $this->assertNull($first['asn']);
+        $this->assertSame($first, (new DeviceIpLocationService())->lookup($ip));
+        Http::assertSentCount(1);
+
+        Cache::flush();
+        Cache::put('device_asn:quota:' . now('UTC')->toDateString(), 1000, 86400);
+        $this->assertSame($first, (new DeviceIpLocationService())->lookup($ip));
+        Http::assertSentCount(1);
+    }
+
     public function test_ip_properties_keep_true_false_and_unknown_and_share_the_location_cache(): void
     {
         Cache::flush();
@@ -63,8 +108,8 @@ class DeviceIpLocationServiceTest extends TestCase
 
         $this->assertSame('AS15169', $first['asn']);
         $this->assertSame('Google LLC', $first['as_name']);
-        $this->assertSame('United States California Mountain View', $first['region']);
-        $this->assertSame('ip2location', $first['location_source']);
+        $this->assertSame((new \App\Services\IpLocation())->lookup('8.8.8.8')['region'], $first['region']);
+        $this->assertSame('local', $first['location_source']);
         $this->assertSame('local', $private['location_source']);
         $this->assertSame($first, $second);
         $this->assertNull($private['asn']);
@@ -107,24 +152,24 @@ class DeviceIpLocationServiceTest extends TestCase
             'ip' => '8.8.8.8', 'country_name' => '美国', 'region_name' => '美国', 'city_name' => '测试城市',
         ])]);
         $service = app(DeviceIpLocationService::class);
-        $this->assertSame('美国 测试城市', $service->lookup('8.8.8.8')['region']);
+        $this->assertSame((new \App\Services\IpLocation())->lookup('8.8.8.8')['region'], $service->lookup('8.8.8.8')['region']);
         Cache::put('device_asn:quota:' . now('UTC')->toDateString(), 1000, 86400);
         $this->assertSame('local', $service->lookup('1.1.1.1')['location_source']);
         Http::assertSentCount(1);
     }
 
-    public function test_missing_location_is_retried_after_short_cache_expires(): void
+    public function test_missing_network_data_is_retried_after_short_cache_expires(): void
     {
         Cache::flush();
         Http::fake(['api.ip2location.io/*' => Http::sequence()
-            ->push(['ip' => '8.8.8.8', 'asn' => '15169'])
+            ->push(['ip' => '8.8.8.8'])
             ->push(['ip' => '8.8.8.8', 'asn' => '15169', 'country_name' => '美国'])]);
         $service = app(DeviceIpLocationService::class);
         $this->assertSame('local', $service->lookup('8.8.8.8')['location_source']);
         $this->assertSame('local', $service->lookup('8.8.8.8')['location_source']);
         Http::assertSentCount(1);
         $this->travel(301)->seconds();
-        $this->assertSame('ip2location', $service->lookup('8.8.8.8')['location_source']);
+        $this->assertSame('AS15169', $service->lookup('8.8.8.8')['asn']);
         Http::assertSentCount(2);
     }
 

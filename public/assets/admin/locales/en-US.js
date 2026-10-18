@@ -2520,9 +2520,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
         "none": "None"
       },
       "proxy_protocol": {
-        "label": "Receive PROXY protocol",
-        "hint": "TCP v1/v2 with plain connections supported. Trusts all sources; restrict access with a firewall.",
-        "legacy": "Legacy settings apply until this switch is changed."
+        "label": "Receive PROXY protocol"
       },
       "source_policy": {
         "label": "Block mainland China source IPs",

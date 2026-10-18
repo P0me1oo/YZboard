@@ -9,7 +9,7 @@ use App\Models\TelegramBotUpdate;
 use App\Models\User;
 use App\Services\DeviceIpLocationService;
 use App\Services\InboundIpRecorder;
-use App\Services\QqwryLocation;
+use App\Services\IpLocation;
 use App\Services\ServerNameHistory;
 use App\Services\TelegramBot\ConfigService;
 use App\Services\UserRouteTraffic;
@@ -47,8 +47,9 @@ class TelegramBotStatisticsTest extends TestCase
         ]);
         DB::table('v2_settings')->where('name', 'user_route_statistics_started_at')
             ->update(['value' => (string) now()->subDays(30)->timestamp]);
-        $this->mock(QqwryLocation::class)->shouldReceive('lookup')->andReturnUsing(
-            fn () => ['region' => $this->region, 'province' => '测试省']
+        $this->mock(IpLocation::class)->shouldReceive('lookup')->andReturnUsing(
+            fn () => ['region' => $this->unknownLocation ? '未知' : $this->region,
+                'province' => $this->unknownLocation ? '未知' : '测试省']
         );
         $this->mock(DeviceIpLocationService::class)->shouldReceive('lookupMany')->andReturnUsing(
             fn ($ips) => array_fill_keys($ips, [

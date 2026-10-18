@@ -9,7 +9,7 @@ use App\Services\InboundIpLocation;
 use App\Services\DeviceStateService;
 use App\Services\NodeStateService;
 use App\Services\RealtimeStateStore;
-use App\Services\QqwryLocation;
+use App\Services\IpLocation;
 use App\Services\ServerService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -25,16 +25,44 @@ class InboundIpStatisticsTest extends TestCase
     private bool $networkFails = false;
     private array $externalProperties = [];
 
+    public function test_location_strategy_migration_only_expires_derived_cache_and_preserves_history(): void
+    {
+        $user = $this->user();
+        $this->record($user->id, ['8.8.8.8', '2400:cb00:1:2::1']);
+        $expires = now()->addDays(30)->timestamp;
+        DB::table('v2_inbound_ip')->update(['region' => '旧地区', 'province' => '旧省份',
+            'local_expires_at' => $expires, 'external_expires_at' => $expires, 'lookup_after' => $expires,
+            'asn' => 'AS64500', 'as_name' => '已保存网络', 'ip_properties' => '{"is_proxy":false}']);
+        $before = DB::table('v2_inbound_ip')->orderBy('ip')->get()->keyBy('ip')->toArray();
+        $history = DB::table('v2_stat_user_inbound_ip')->orderBy('ip')->get()->toArray();
+        $migration = require database_path('migrations/2026_10_18_000002_refresh_inbound_ip_local_locations.php');
+        $migration->up();
+        $migration->up();
+        $expected = unserialize(serialize($before));
+        foreach ($expected as $row) $row->local_expires_at = 0;
+        $this->assertEquals($expected, DB::table('v2_inbound_ip')->orderBy('ip')->get()->keyBy('ip')->toArray());
+        $this->getJson($this->path('inboundUser', ['user_id' => $user->id]))->assertOk()
+            ->assertJsonPath('data.total', 2);
+        $this->assertDatabaseHas('v2_inbound_ip', ['ip' => '2400:cb00:1:2::1',
+            'region' => '广东省广州市', 'province' => '广东省', 'asn' => 'AS64500']);
+        $this->assertEquals($history, DB::table('v2_stat_user_inbound_ip')->orderBy('ip')->get()->toArray());
+        $migration->down();
+        $this->assertDatabaseHas('v2_inbound_ip', ['ip' => '2400:cb00:1:2::1',
+            'local_expires_at' => 0, 'external_expires_at' => 0, 'lookup_after' => 0, 'asn' => 'AS64500']);
+        Http::assertNothingSent();
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
         config(['app.timezone' => 'Asia/Shanghai']);
         $this->travelTo(\Carbon\Carbon::parse('2026-10-07 15:00:00', 'Asia/Shanghai'));
         Sanctum::actingAs($this->user(true));
-        $this->mock(QqwryLocation::class, function ($mock): void {
+        $this->mock(IpLocation::class, function ($mock): void {
             $mock->shouldReceive('lookup')->andReturnUsing(fn ($ip) => [
-                'region' => $ip === '8.8.8.8' ? '广东省广州市' : '浙江省杭州市',
-                'province' => $ip === '8.8.8.8' ? '广东省' : '浙江省',
+                'region' => $ip === '8.8.8.8' || str_contains($ip, ':') ? '广东省广州市' : '浙江省杭州市',
+                'province' => $ip === '8.8.8.8' || str_contains($ip, ':') ? '广东省' : '浙江省',
+                'isp' => '测试运营商', 'source' => 'ip2region', 'location_source' => 'local',
             ]);
         });
         Http::fake(['api.ip2location.io/*' => fn ($request) => $this->networkFails ? Http::response([], 429) : Http::response($this->externalProperties + ['ip' => $request->data()['ip'], 'asn' => 4134, 'as' => '测试网络',
@@ -164,7 +192,7 @@ class InboundIpStatisticsTest extends TestCase
             ->assertJsonPath('data.list.0.provinces', ['广东省']);
         $response = $this->getJson($this->path('inboundUsers', ['period' => '7d', 'page_size' => 1]))->assertOk()
             ->assertJsonPath('data.list.0.id', $a->id)->assertJsonPath('data.list.0.ip_count', 3);
-        $this->assertEqualsCanonicalizing(['广东省', '浙江省', '未知'], $response->json('data.list.0.provinces'));
+        $this->assertEqualsCanonicalizing(['广东省', '浙江省'], $response->json('data.list.0.provinces'));
         admin_setting(['device_ip_exclude' => ['1.1.1.1', '2400:cb00:1:2::1']]);
         $this->getJson($this->path('inboundUsers', ['period' => '7d', 'search' => $a->email]))->assertOk()
             ->assertJsonPath('data.total', 1)->assertJsonPath('data.list.0.provinces', ['广东省']);
@@ -182,7 +210,7 @@ class InboundIpStatisticsTest extends TestCase
         $this->getJson($this->path('inboundUser', ['user_id' => $user->id, 'province' => '广东省']))->assertOk()
             ->assertJsonPath('data.total', 2)->assertJsonPath('data.ip_count', 3);
         $this->assertDatabaseHas('v2_inbound_ip', ['ip' => '8.8.8.8', 'region' => '广东省广州市', 'asn' => 'AS4134']);
-        $this->assertDatabaseHas('v2_inbound_ip', ['ip' => '2400:cb00:1:2::1', 'region' => 'China Guangdong Guangzhou', 'province' => '广东省']);
+        $this->assertDatabaseHas('v2_inbound_ip', ['ip' => '2400:cb00:1:2::1', 'region' => '广东省广州市', 'province' => '广东省']);
         Http::assertSentCount(3);
         $this->travel(29)->days();
         app(InboundIpLocation::class)->refresh(['8.8.8.8', '1.1.1.1', '2400:cb00:1:2::1']);
@@ -203,7 +231,7 @@ class InboundIpStatisticsTest extends TestCase
             $response = $this->getJson($this->path('inboundUsers', ['search' => $search, 'page_size' => 1]))->assertOk()
                 ->assertJsonPath('data.total', 2)->assertJsonPath('data.last_page', 2)
                 ->assertJsonPath('data.list.0.id', $a->id)->assertJsonPath('data.list.0.ip_count', 3);
-            $this->assertEqualsCanonicalizing(['广东省', '浙江省', '未知'], $response->json('data.list.0.provinces'));
+            $this->assertEqualsCanonicalizing(['广东省', '浙江省'], $response->json('data.list.0.provinces'));
             $this->getJson($this->path('inboundUsers', ['search' => $search, 'page_size' => 1, 'page' => 2]))->assertOk()
                 ->assertJsonPath('data.list.0.id', $b->id)->assertJsonPath('data.list.0.ip_count', 1);
         }
@@ -275,7 +303,7 @@ class InboundIpStatisticsTest extends TestCase
         $expected['8.8.8.8']->local_expires_at = 0;
         $this->assertEquals($expected, DB::table('v2_inbound_ip')->orderBy('ip')->get()->keyBy('ip')->toArray());
 
-        $this->mock(QqwryLocation::class, function ($mock): void {
+        $this->mock(IpLocation::class, function ($mock): void {
             $mock->shouldReceive('lookup')->once()->with('8.8.8.8')->andReturn([
                 'region' => '中国–上海–上海–宝山区 测试网络',
                 'province' => \App\Services\IpProvince::fromChinese('中国–上海–上海–宝山区'),
@@ -298,14 +326,14 @@ class InboundIpStatisticsTest extends TestCase
         Http::assertNothingSent();
     }
 
-    public function test_lookup_failure_keeps_ipv4_local_and_expired_ipv6_becomes_unknown(): void
+    public function test_external_lookup_failure_keeps_both_ipv4_and_ipv6_local_regions(): void
     {
         $user = $this->user();
         $this->record($user->id, ['8.8.8.8', '2400:cb00:1:2::1']);
         $this->networkFails = true;
         $this->getJson($this->path('inboundUser', ['user_id' => $user->id]))->assertOk()->assertJsonPath('data.total', 2);
         $this->assertDatabaseHas('v2_inbound_ip', ['ip' => '8.8.8.8', 'region' => '广东省广州市', 'asn' => null]);
-        $this->assertDatabaseHas('v2_inbound_ip', ['ip' => '2400:cb00:1:2::1', 'region' => '未知', 'asn' => null]);
+        $this->assertDatabaseHas('v2_inbound_ip', ['ip' => '2400:cb00:1:2::1', 'region' => '广东省广州市', 'asn' => null]);
         $sent = count(Http::recorded());
         $this->getJson($this->path('inboundUser', ['user_id' => $user->id]))->assertOk();
         Http::assertSentCount($sent);
@@ -402,17 +430,17 @@ class InboundIpStatisticsTest extends TestCase
         $this->assertSame(now()->addDays(30)->timestamp, (int) DB::table('v2_inbound_ip')->where('ip', '8.8.8.8')->value('external_expires_at'));
     }
 
-    public function test_expired_ipv6_is_not_grouped_under_an_old_province_during_backoff(): void
+    public function test_expired_external_cache_does_not_hide_the_refreshed_ipv6_local_province(): void
     {
         $user = $this->user();
         $this->record($user->id, ['2400:cb00:1:2::1']);
         DB::table('v2_inbound_ip')->update(['region' => '旧地址', 'province' => '广东省', 'asn' => 'AS4134',
             'external_expires_at' => now()->subSecond()->timestamp, 'lookup_after' => now()->addMinutes(5)->timestamp]);
         $this->getJson($this->path('inboundUser', ['user_id' => $user->id]))->assertOk()
-            ->assertJsonPath('data.list.0.region', '未知')->assertJsonPath('data.list.0.asn', null)
-            ->assertJsonPath('data.provinces.0.name', '未知');
+            ->assertJsonPath('data.list.0.region', '广东省广州市')->assertJsonPath('data.list.0.asn', null)
+            ->assertJsonPath('data.provinces.0.name', '广东省');
         $this->getJson($this->path('inboundUser', ['user_id' => $user->id, 'province' => '广东省']))->assertOk()
-            ->assertJsonPath('data.total', 0);
+            ->assertJsonPath('data.total', 1);
         Http::assertNothingSent();
     }
 
@@ -435,10 +463,10 @@ class InboundIpStatisticsTest extends TestCase
         $response = $this->getJson($this->path('inboundUser', $params))->assertOk()
             ->assertJsonPath('data.total', 7)->assertJsonPath('data.ip_count', 7)->assertJsonCount(2, 'data.list');
         $groups = array_column($response->json('data.provinces'), 'count', 'name');
-        $this->assertEquals(['广东省' => 3, '未知' => 4], $groups);
+        $this->assertEquals(['广东省' => 4, '未知' => 2, '浙江省' => 1], $groups);
         $filtered = $this->getJson($this->path('inboundUser', $params + ['province' => '未知', 'page' => 2]))
-            ->assertOk()->assertJsonPath('data.total', 4)->assertJsonPath('data.ip_count', 7)
-            ->assertJsonPath('data.last_page', 2)->assertJsonCount(2, 'data.list');
+            ->assertOk()->assertJsonPath('data.total', 2)->assertJsonPath('data.ip_count', 7)
+            ->assertJsonPath('data.last_page', 1)->assertJsonCount(2, 'data.list');
         $this->assertEquals($groups, array_column($filtered->json('data.provinces'), 'count', 'name'));
         foreach ($filtered->json('data.list') as $row) {
             $this->assertSame('未知', $row['province']);

@@ -22,7 +22,10 @@ class RealityTargetLocationTest extends TestCase
         $this->assertSame('ip2region', $results[0]['location']['source']);
         $this->assertSame($results[0]['location'], $results[1]['location']);
         $this->assertFalse($results[1]['feasible']);
-        foreach (array_slice($results, 2) as $result) {
+        $this->assertNotEmpty($results[2]['location']['region']);
+        $this->assertNotEmpty($results[2]['location']['isp']);
+        $this->assertSame('ip2region', $results[2]['location']['source']);
+        foreach (array_slice($results, 3) as $result) {
             $this->assertNull($result['location']['region']);
             $this->assertNull($result['location']['isp']);
         }
@@ -32,7 +35,7 @@ class RealityTargetLocationTest extends TestCase
     public function test_placeholders_and_repeated_region_names_are_not_displayed(): void
     {
         $this->assertSame(['region' => '中国 北京', 'isp' => '测试运营商', 'source' => 'ip2region'],
-            RealityTargetLocation::parse('中国|0|北京|北京|测试运营商'));
+            RealityTargetLocation::parse('中国|北京|北京|测试运营商|CN'));
         $this->assertSame(['region' => null, 'isp' => null, 'source' => 'ip2region'],
             RealityTargetLocation::parse('0|0|0|0|0'));
     }

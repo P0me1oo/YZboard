@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "480a8ca30b1b8cb93723cc9de334d130",
+    "content-hash": "ff36aff4d4a1ca2a010710fb42853ec2",
     "packages": [
         {
             "name": "bacon/bacon-qr-code",
@@ -9198,26 +9198,42 @@
         },
         {
             "name": "zoujingli/ip2region",
-            "version": "v2.0.6",
+            "version": "v3.0.16",
             "source": {
                 "type": "git",
                 "url": "https://github.com/zoujingli/ip2region.git",
-                "reference": "66895178be204521e9f5ae9df0ea502893ee53b2"
+                "reference": "19ef70eefcd0c84ea3a9f4302aded22b5156cb7b"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/zoujingli/ip2region/zipball/66895178be204521e9f5ae9df0ea502893ee53b2",
-                "reference": "66895178be204521e9f5ae9df0ea502893ee53b2",
+                "url": "https://api.github.com/repos/zoujingli/ip2region/zipball/19ef70eefcd0c84ea3a9f4302aded22b5156cb7b",
+                "reference": "19ef70eefcd0c84ea3a9f4302aded22b5156cb7b",
                 "shasum": ""
             },
             "require": {
-                "php": ">=5.4"
+                "php": ">=7.1.0"
             },
+            "suggest": {
+                "ext-opcache": "启用 OPcache 以获得更好的性能"
+            },
+            "bin": [
+                "bin/ip2down"
+            ],
             "type": "library",
+            "extra": {
+                "branch-alias": {
+                    "dev-master": "3.0.x-dev"
+                }
+            },
             "autoload": {
+                "files": [
+                    "src/common.php"
+                ],
+                "psr-4": {
+                    "ip2region\\": "src/ip2region/"
+                },
                 "classmap": [
-                    "Ip2Region.php",
-                    "XdbSearcher.php"
+                    "src/Ip2Region.php"
                 ]
             },
             "notification-url": "https://packagist.org/downloads/",
@@ -9231,16 +9247,30 @@
                     "homepage": "https://thinkadmin.top"
                 }
             ],
-            "description": "Ip2Region for PHP",
+            "description": "PHP IP 地理位置查询库，基于 ip2region XDB，支持 IPv4/IPv6、内置 IPv4 数据库、IPv6 按需下载和多种缓存策略",
             "homepage": "https://github.com/zoujingli/Ip2Region",
             "keywords": [
-                "Ip2Region"
+                "IP",
+                "Ip2Region",
+                "cache",
+                "composer",
+                "geoip",
+                "geolocation",
+                "ipv4",
+                "ipv6",
+                "location",
+                "php",
+                "xdb",
+                "智能加载",
+                "缓存策略",
+                "零依赖",
+                "高性能"
             ],
             "support": {
                 "issues": "https://github.com/zoujingli/ip2region/issues",
-                "source": "https://github.com/zoujingli/ip2region/tree/v2.0.6"
+                "source": "https://github.com/zoujingli/ip2region/tree/v3.0.16"
             },
-            "time": "2024-08-02T01:01:01+00:00"
+            "time": "2026-09-24T16:07:09+00:00"
         }
     ],
     "packages-dev": [

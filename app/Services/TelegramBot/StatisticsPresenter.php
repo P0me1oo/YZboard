@@ -74,7 +74,7 @@ class StatisticsPresenter
                 : ($data['actual_summary']['total'] > 0 ? '所选时段有流量，暂无可展示的节点明细。' : '所选时段暂无流量记录。');
         } elseif ($query['type'] === 'inbound') {
             $lines[] = '';
-            $lines[] = 'IPv4 归属地：纯真；ASN / IPv6：https://www.ip2location.io';
+            $lines[] = 'IP 归属地：纯真 / ip2region；ASN：https://www.ip2location.io';
         }
         return ['text' => implode("\n", $lines), 'keyboard' => $this->keyboard($query, $data)];
     }

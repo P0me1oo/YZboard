@@ -10,6 +10,13 @@ use Illuminate\Support\Facades\Http;
 
 class DeviceIpLocationService
 {
+    private readonly IpLocation $local;
+
+    public function __construct(?IpLocation $local = null)
+    {
+        $this->local = $local ?? new IpLocation();
+    }
+
     public function lookup(string $ip): array
     {
         return $this->lookupMany([$ip])[$ip];
@@ -26,7 +33,7 @@ class DeviceIpLocationService
             if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
                 continue;
             }
-            $key = 'device_location:v4:' . hash('sha256', $ip);
+            $key = 'device_location:v5:' . hash('sha256', $ip);
             try {
                 $cached = Cache::get($key);
                 if (is_array($cached)) {
@@ -72,21 +79,7 @@ class DeviceIpLocationService
 
     private function localLocation(string $ip): array
     {
-        $unknown = ['region' => '未知', 'isp' => '未知'];
-        if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) return $unknown;
-        try {
-            $parts = explode('|', (new \Ip2Region())->memorySearch($ip)['region'] ?? '');
-            $places = array_values(array_unique(array_filter(
-                array_slice($parts, 0, 4),
-                static fn (string $part) => $part !== '' && $part !== '0'
-            )));
-            return [
-                'region' => $places ? implode(' ', $places) : '未知',
-                'isp' => isset($parts[4]) && $parts[4] !== '' && $parts[4] !== '0' ? $parts[4] : '未知',
-            ];
-        } catch (\Throwable) {
-            return $unknown;
-        }
+        return $this->local->lookup($ip);
     }
 
     private function parseLocation(string $ip, mixed $response, string $key): array
@@ -123,23 +116,11 @@ class DeviceIpLocationService
                 'as_name' => is_string($name) ? mb_substr(trim($name), 0, 200) : null,
                 'ip_properties' => IpProperties::fromResponse($body),
             ];
-            foreach (['country_code', 'country_name', 'region_name'] as $field) {
-                $value = $body[$field] ?? null;
-                $result[$field] = is_string($value) && trim($value) !== '-' ? mb_substr(trim($value), 0, 200) : '';
-            }
-            $places = [];
-            foreach (['country_name', 'region_name', 'city_name'] as $field) {
-                $place = $body[$field] ?? null;
-                if (is_string($place) && trim($place) !== '' && trim($place) !== '-') {
-                    $places[] = mb_substr(trim($place), 0, 200);
-                }
-            }
-            if ($places !== []) {
-                $result['region'] = implode(' ', array_unique($places));
-                $result['location_source'] = 'ip2location';
-            }
-            $result['expires_at'] = now()->timestamp + ($places !== [] ? 30 * 86400 : 300);
-            Cache::put($key, $result, $places !== [] ? 30 * 86400 : 300);
+            $complete = $number !== false || ($result['as_name'] !== null && $result['as_name'] !== '')
+                || $result['ip_properties'] !== IpProperties::fromResponse();
+            $ttl = $complete ? 30 * 86400 : 300;
+            $result['expires_at'] = now()->timestamp + $ttl;
+            Cache::put($key, $result, $ttl);
             return $result;
         } catch (\Throwable) {
             try { Cache::put('device_asn:backoff', true, 300); } catch (\Throwable) {}

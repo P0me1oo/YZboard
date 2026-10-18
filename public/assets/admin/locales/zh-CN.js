@@ -2515,9 +2515,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
         "none": "无"
       },
       "proxy_protocol": {
-        "label": "接收 PROXY 协议",
-        "hint": "TCP v1/v2，兼容普通连接。信任所有来源，请配合防火墙使用。",
-        "legacy": "当前沿用旧配置，切换后生效。"
+        "label": "接收 PROXY 协议"
       },
       "source_policy": {
         "label": "屏蔽大陆来源 IP",

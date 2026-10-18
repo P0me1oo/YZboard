@@ -1,0 +1,28 @@
+{
+    "repository": "https://github.com/lionsoul2014/ip2region",
+    "commit": "f8b0792b0cd729f5b2593f690aeed225e49c1967",
+    "databases": [
+        {
+            "file": "ip2region_v4.xdb",
+            "source_path": "data/ip2region_v4.xdb",
+            "url": "https://raw.githubusercontent.com/lionsoul2014/ip2region/f8b0792b0cd729f5b2593f690aeed225e49c1967/data/ip2region_v4.xdb",
+            "git_blob_sha1": "bda1438a83e9ab152f5451d93e2138e35a166a26",
+            "sha256": "27ecba8c9a6d5e3b280aedbe7ee15c65372b179fbd0dad3845d8c608f2fcace1",
+            "bytes": 11122642,
+            "structure_version": 3,
+            "ip_version": 4,
+            "generated_at_utc": "2026-10-14T02:11:07+00:00"
+        },
+        {
+            "file": "ip2region_v6.xdb",
+            "source_path": "data/ip2region_v6.xdb",
+            "url": "https://raw.githubusercontent.com/lionsoul2014/ip2region/f8b0792b0cd729f5b2593f690aeed225e49c1967/data/ip2region_v6.xdb",
+            "git_blob_sha1": "15002d535f31336cc556b672a617186c827ea14c",
+            "sha256": "939f6b46bd2b8bec3cf7c5ceb8ba782266ae9b1f35b5ba7916700dec0b7506ed",
+            "bytes": 37277813,
+            "structure_version": 3,
+            "ip_version": 6,
+            "generated_at_utc": "2026-08-14T05:38:41+00:00"
+        }
+    ]
+}

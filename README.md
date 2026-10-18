@@ -1,5 +1,9 @@
 # Xboard
 
+面板 `1.95.0` 升级 ip2region 至 `v3.0.16` 并纳入官方 IPv4、IPv6 库。位置查询统一为：中国大陆 IPv4 用纯真，其他 IPv4 和全部 IPv6 用 ip2region；网络编号及风险属性继续由现有外部服务补充。配套管理端 `0.66.1`，包含下方 VLESS 默认配置与订阅拦截修改，正在准备发布，见 [IP 位置查询](docs/ip-location.md)。
+
+面板 `1.94.0` 配套管理端 `0.66.0`：新建 VLESS 节点默认 Reality、Vision，并自动生成私钥、公钥及 Short ID；切换协议保留草稿，已有节点保持原配置。包含此前未发布修改，尚未发布。
+
 面板 `1.93.0` 新增服务器流量保护“仅计费代理流量”，配套管理端 `0.65.0`、Agent `v2.17.0`。按同机全部受管节点的原始上传加下载计算，不乘倍率、排除系统流量，同机中转只计一次；保留原单向、双向及额度恢复机制，见[使用说明](docs/server-traffic-protection.md)。
 
 面板 [`1.92.0`](https://github.com/P0me1oo/YZboard/releases/tag/v1.92.0) 已发布，配套管理端 `0.64.0`、Agent [`v2.16.1`](https://github.com/P0me1oo/YZ-Agent/releases/tag/v2.16.1)。节点配置可自定义预设扫描目标，默认移除 Amazon 主页和 Google 下载地址；开始检测按钮靠右，使用结果后自动回到节点表单并填入 SNI 与端口。同时交付下方开发阶段记录的功能，见 [Reality 目标检测](docs/reality-target-scan.md)。

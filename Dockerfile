@@ -38,7 +38,10 @@ RUN test -n "${SOURCE_COMMIT}" && \
 
 # 缺少管理端产物会让后台白屏，这里在构建期显式失败而不是产出坏镜像。
 RUN test -f /www/public/assets/admin/manifest.json && \
-    test -n "$(ls /www/public/assets/admin/locales/*.js 2>/dev/null)"
+    test -n "$(ls /www/public/assets/admin/locales/*.js 2>/dev/null)" && \
+    test -f /www/resources/ip/qqwry.dat && \
+    test -f /www/resources/ip/ip2region_v4.xdb && \
+    test -f /www/resources/ip/ip2region_v6.xdb
 
 COPY .docker/supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY .docker/caddy/Caddyfile /etc/caddy/Caddyfile

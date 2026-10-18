@@ -144,7 +144,12 @@ class SubscriptionProtectionTest extends TestCase
         $user = $this->user();
         foreach ([false, true] as $legacy) {
             $response = $this->download($user, legacy: $legacy, headers: ['User-Agent' => $agent]);
-            $blocked ? $this->assertSafe($response, 403, $user) : $response->assertOk();
+            if ($blocked) {
+                $this->assertSafe($response, 404, $user);
+                $response->assertContent('Not Found');
+            } else {
+                $response->assertOk();
+            }
         }
     }
 
@@ -153,9 +158,12 @@ class SubscriptionProtectionTest extends TestCase
         $this->configure(['block_browser' => true]);
         $user = $this->user();
         foreach ([['Sec-Fetch-Mode' => 'navigate'], ['Sec-Fetch-Dest' => 'document'], ['Sec-Fetch-Dest' => 'iframe']] as $headers) {
-            $this->assertSafe($this->download($user, headers: $headers), 403, $user);
+            $response = $this->download($user, headers: $headers);
+            $this->assertSafe($response, 404, $user);
+            $response->assertContent('Not Found');
         }
-        $this->get('/_tests/custom-sub/' . $user->token . '?flag=clash', ['User-Agent' => 'Mozilla/5.0'])->assertForbidden();
+        $this->get('/_tests/custom-sub/' . $user->token . '?flag=clash', ['User-Agent' => 'Mozilla/5.0'])
+            ->assertNotFound()->assertContent('Not Found');
     }
 
     public function test_rate_limit_shares_both_routes_counts_failures_and_recovers_at_window_end(): void
@@ -207,7 +215,7 @@ class SubscriptionProtectionTest extends TestCase
             $this->download($this->user($values))->assertForbidden();
         }
         $user = $this->user();
-        $this->download($user, headers: ['User-Agent' => 'Mozilla/5.0'])->assertForbidden();
+        $this->download($user, headers: ['User-Agent' => 'Mozilla/5.0'])->assertNotFound();
         $this->download($user)->assertOk();
         // 原订阅接口允许已用完流量的有效账号下载，保留此行为。
         $this->download($this->user(['u' => 1024]))->assertOk();
@@ -341,7 +349,7 @@ class SubscriptionProtectionTest extends TestCase
         $user = $this->user();
         $url = '/api/v1/client/app/getConfig?' . http_build_query(['token' => $user->token]);
         $this->configure(['block_browser' => true]);
-        $this->get($url, ['User-Agent' => 'Mozilla/5.0'])->assertForbidden();
+        $this->get($url, ['User-Agent' => 'Mozilla/5.0'])->assertNotFound()->assertContent('Not Found');
         $this->get($url, ['User-Agent' => 'Clash/1.0'])->assertOk();
         $this->configure(['brute_force_enabled' => true, 'brute_force_max_failures' => 1]);
         $this->get('/api/v1/client/app/getConfig?token=')->assertStatus(429);
@@ -509,7 +517,7 @@ class SubscriptionProtectionTest extends TestCase
     {
         $this->configure(['block_browser' => true, 'user_rate_limit_enabled' => true, 'user_rate_limit_max_requests' => 1]);
         $user = $this->user();
-        $this->download($user, headers: ['User-Agent' => 'Mozilla/5.0'])->assertForbidden();
+        $this->download($user, headers: ['User-Agent' => 'Mozilla/5.0'])->assertNotFound();
         $this->download($user)->assertStatus(429);
         Cache::shouldReceive('store')->with('redis')->andThrow(new \RuntimeException('测试缓存不可用'));
         $this->download($user)->assertStatus(503);

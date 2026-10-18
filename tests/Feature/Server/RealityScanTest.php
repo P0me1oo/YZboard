@@ -192,8 +192,9 @@ class RealityScanTest extends TestCase
             ->assertJsonPath('data.results.0.cdn.providers.0', 'Cloudflare')
             ->assertJsonPath('data.results.0.http.status_code', 403)
             ->assertJsonPath('data.results.0.location.source', 'ip2region')
-            ->assertJsonPath('data.results.1.location.region', null);
+            ->assertJsonPath('data.results.1.location.source', 'ip2region');
         $this->assertNotEmpty($response->json('data.results.0.location.region'));
+        $this->assertNotEmpty($response->json('data.results.1.location.region'));
         \Illuminate\Support\Facades\Http::assertNothingSent();
     }
 }

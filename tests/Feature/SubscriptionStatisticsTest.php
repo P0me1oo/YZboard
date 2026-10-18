@@ -89,7 +89,7 @@ class SubscriptionStatisticsTest extends TestCase
     {
         $user = $this->user();
         admin_setting([SubscriptionProtection::SETTING => ['block_browser' => true]]);
-        $this->get('/s/' . $user->token, ['User-Agent' => 'Mozilla/5.0'])->assertForbidden();
+        $this->get('/s/' . $user->token, ['User-Agent' => 'Mozilla/5.0'])->assertNotFound();
         admin_setting([SubscriptionProtection::SETTING => []]);
         $this->getJson('/s/' . $user->token . '?flag[]=bad')->assertStatus(422);
         $user->update(['banned' => true]);
@@ -97,7 +97,7 @@ class SubscriptionStatisticsTest extends TestCase
         Route::get('/_tests/subscription-error/{token}', fn () => throw new \RuntimeException('测试生成错误'))
             ->middleware('client')->name('client.subscribe.legacy');
         $this->get('/_tests/subscription-error/' . $user->token)->assertStatus(500);
-        $this->assertSame([403, 422, 403, 500], array_column($this->buffer->events, 'status'));
+        $this->assertSame([404, 422, 403, 500], array_column($this->buffer->events, 'status'));
     }
 
     public function test_invalid_credentials_are_not_attributed_to_previous_authenticated_user(): void

@@ -73,7 +73,7 @@ class InboundIpStatistics
 
         $now = now()->timestamp;
         $province = $this->provinceExpression($now);
-        $region = "CASE WHEN i.ip_version = 6 AND i.external_expires_at <= $now THEN '未知' ELSE i.region END";
+        $region = "CASE WHEN i.local_expires_at <= $now THEN '未知' ELSE i.region END";
         $query = clone $base;
         if (!empty($range['province'])) $query->whereRaw("($province) = ?", [$range['province']]);
         $this->searchIps($query, trim($range['search'] ?? ''));
@@ -81,7 +81,7 @@ class InboundIpStatistics
             CASE WHEN i.external_expires_at > $now THEN i.asn ELSE NULL END AS asn,
             CASE WHEN i.external_expires_at > $now THEN i.as_name ELSE NULL END AS as_name,
             MIN(h.first_seen_at) AS first_seen_at, MAX(h.last_seen_at) AS last_seen_at")
-            ->groupBy('i.ip', 'i.ip_version', 'i.region', 'i.province', 'i.asn', 'i.as_name', 'i.external_expires_at');
+            ->groupBy('i.ip', 'i.ip_version', 'i.region', 'i.province', 'i.asn', 'i.as_name', 'i.external_expires_at', 'i.local_expires_at');
         $result = $this->paginate($query, $range, 'province', 'asc');
         // 属性在本页汇总后批量读取；网页数据只由后台补齐，列表和卡片不请求网页。
         $properties = DB::table('v2_inbound_ip')->whereIn('ip', array_column($result['list'], 'ip'))
@@ -111,7 +111,7 @@ class InboundIpStatistics
 
     private function provinceExpression(int $now): string
     {
-        return "CASE WHEN i.ip_version = 6 AND i.external_expires_at <= $now THEN '未知' ELSE i.province END";
+        return "CASE WHEN i.local_expires_at <= $now THEN '未知' ELSE i.province END";
     }
 
     private function searchIps(Builder $query, string $search): Builder
@@ -128,7 +128,7 @@ class InboundIpStatistics
 
     private function refreshLocalLocations(Builder $base): void
     {
-        $local = (clone $base)->where('i.ip_version', 4)->where('i.local_expires_at', '<=', now()->timestamp)
+        $local = (clone $base)->where('i.local_expires_at', '<=', now()->timestamp)
             ->select('i.ip')->distinct()->orderBy('i.ip');
         // 分批补齐所有本地分类，不受 IP 明细分页限制，也不占用外部接口额度。
         $local->chunkById(256, function ($rows): void {

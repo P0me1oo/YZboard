@@ -34,7 +34,7 @@
         "webmozart/assert": "*",
         "workerman/redis": "^2.0",
         "workerman/workerman": "^5.1",
-        "zoujingli/ip2region": "^2.0"
+        "zoujingli/ip2region": "^3.0"
     },
     "require-dev": {
         "barryvdh/laravel-debugbar": "^3.9",

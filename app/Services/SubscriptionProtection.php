@@ -214,7 +214,7 @@ class SubscriptionProtection
 
     private function browserDenied(): Response
     {
-        return $this->deny('请使用代理客户端获取订阅', 403);
+        return $this->deny('Not Found', 404);
     }
 
     private function limited(int $seconds, bool $brute = false): Response

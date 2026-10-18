@@ -4,6 +4,7 @@
 namespace App\Http\Requests\Admin;
 
 use App\Models\Server;
+use App\Rules\RealityDestination;
 use App\Rules\SourcePolicyIp;
 use App\Services\ServerRelayService;
 use App\Services\ServerRouteService;
@@ -288,6 +289,10 @@ class ServerSave extends FormRequest
             $rules['protocol_settings.' . $field] = $rule;
         }
 
+        if ($type === Server::TYPE_VLESS) {
+            $rules['protocol_settings.reality_settings.dest'] = ['nullable', 'string', 'max:512', new RealityDestination()];
+        }
+
         if ($type === Server::TYPE_HYSTERIA && (int) $this->input('protocol_settings.version', 2) === 2) {
             $rules['port'] = ['required', function ($attribute, $value, $fail) {
                 if (!is_string($value) && !is_int($value)) {
@@ -313,8 +318,26 @@ class ServerSave extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator) {
+            if ($validator->errors()->isEmpty()
+                && $this->input('type') === Server::TYPE_VLESS
+                && (int) $this->input('protocol_settings.tls') === 2
+                && $this->boolean('protocol_settings.reality_settings.anti_abuse')) {
+                $dest = $this->input('protocol_settings.reality_settings.dest');
+                $sni = trim((string) $this->input('protocol_settings.reality_settings.server_name'));
+                if ($dest && strcasecmp((string) parse_url('tcp://' . $dest, PHP_URL_HOST), $sni) !== 0) {
+                    $validator->errors()->add('protocol_settings.reality_settings.dest', '回源地址与握手域名不同时，请关闭防盗用模式');
+                }
+            }
             $selfId = $this->input('id') !== null ? (int) $this->input('id') : null;
             $existing = $selfId !== null ? Server::find($selfId) : null;
+            if ($validator->errors()->isEmpty()
+                && $this->input('type') === Server::TYPE_VLESS
+                && (int) $this->input('protocol_settings.tls') === 2
+                && str_starts_with((string) $this->input('protocol_settings.reality_settings.dest'), '[')
+                && Server::effectiveKernelType($this->input('kernel_type', $existing?->kernel_type)) === 'singbox') {
+                // 现有 Node 的 sing-box 适配按首个冒号拆分回源，不能正确解析 IPv6。
+                $validator->errors()->add('protocol_settings.reality_settings.dest', '当前 sing-box 回源仅支持域名或 IPv4 地址，IPv6 回源请使用 Xray');
+            }
             if ($validator->errors()->isEmpty()
                 && $this->input('accept_proxy_protocol', $existing?->accept_proxy_protocol)
                 && !Server::supportsProxyProtocol($this->input('type'), (array) $this->input('protocol_settings', []))) {
@@ -372,6 +395,7 @@ class ServerSave extends FormRequest
             'protocol_settings.utls.enabled' => 'uTLS',
             'protocol_settings.utls.fingerprint' => 'uTLS指纹',
             'protocol_settings.reality_settings.anti_abuse' => '防盗用模式',
+            'protocol_settings.reality_settings.dest' => '回源地址',
             'protocol_settings.tls_settings.ech.enabled' => 'ECH',
             'protocol_settings.tls_settings.ech.config' => 'ECH配置',
             'protocol_settings.tls_settings.ech.query_server_name' => 'ECH查询域名',

@@ -933,6 +933,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     "routeManagement": "路由管理",
     "subscriptionManagement": "订阅管理",
     "planManagement": "套餐管理",
+    "planSettings": "套餐设置",
     "orderManagement": "订单管理",
     "couponManagement": "优惠券管理",
     "giftCardManagement": "礼品卡管理",
@@ -1099,7 +1100,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     }
   },
   "settings": {
-    "appearance": {"title":"外观设置","sidebar":"侧边栏","restore":"全部显示","saving":"保存中","retry":"重试","load_error":"外观设置读取失败","save_error":"保存失败，请重试","loading":"加载中"},
+    "appearance": {"title":"外观设置","sidebar":"侧边栏","restore":"全部显示","restore_order":"恢复默认顺序","sort_help":"拖动调整同级菜单顺序，开关控制显示。","move":"调整{{name}}顺序","saving":"保存中","retry":"重试","load_error":"外观设置读取失败","save_error":"保存失败，请重试","loading":"加载中"},
     "title": "系统设置",
     "description": "管理系统核心配置，包括站点、安全、订阅、邀请佣金、节点、邮件和通知等设置",
     "site": {
@@ -2202,6 +2203,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
       "requestFailed": "无法读取检测结果，请重试。",
       "bindMachine": "请先为节点绑定服务器。",
       "currentRequired": "请先填写伪装域名和有效端口。",
+      "currentDestinationRequired": "请先填写回源地址和握手域名。",
       "expired": "检测记录已过期，请重新检测。",
       "retry": "重新读取",
       "applied": "已填入 {{target}}，保存节点后生效。",
@@ -2815,8 +2817,12 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
             "label": "防盗用模式",
             "description": "伪装回源改走节点本机的专用入口，只放行伪装站点的 TLS 域名，其余流量直接阻断"
           },
+          "dest": {
+            "label": "回源地址(dest)",
+            "placeholder": "例如：127.0.0.1:8443"
+          },
           "server_name": {
-            "label": "伪装站点(dest)",
+            "label": "握手域名(SNI)",
             "placeholder": "例如：example.com"
           },
           "server_port": {

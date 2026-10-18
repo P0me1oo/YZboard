@@ -1,5 +1,7 @@
 # Xboard
 
+本地开发版 `1.98.0` / 管理端 `0.69.0` 将侧栏拆为套餐管理和订阅管理两个独立栏目，各四个入口，支持独立折叠、排序和显隐；保留刷新首屏修复、原页面地址及已有 VLESS Reality 独立回源修改。见 [外观设置](docs/admin-appearance.md)与 [Reality 配置](docs/vless-reality.md)。尚未发布。
+
 面板 [`v1.95.1`](https://github.com/P0me1oo/YZboard/releases/tag/v1.95.1) 已发布，包含管理端 `0.66.1`。ip2region 升级至 `v3.0.16` 并纳入官方 IPv4、IPv6 库；中国大陆 IPv4 地区用纯真，其他 IPv4 和全部 IPv6 用 ip2region，外部服务继续补充网络编号及风险属性。同时交付下方 VLESS 默认配置与订阅拦截修改，完整回归、双架构镜像及 `latest` 核验通过，见 [IP 位置查询](docs/ip-location.md)与[发布记录](YZ_COMPATIBILITY.md)。
 
 开发版本 `1.94.0` / 管理端 `0.66.0` 的修改已纳入 `v1.95.1`：新建 VLESS 节点默认 Reality、Vision，并自动生成私钥、公钥及 Short ID；切换协议保留草稿，已有节点保持原配置。

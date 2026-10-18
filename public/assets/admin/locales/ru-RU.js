@@ -874,6 +874,7 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
     "routeManagement": "Управление маршрутами",
     "subscriptionManagement": "Подписки",
     "planManagement": "Тарифные планы",
+    "planSettings": "Настройки тарифов",
     "orderManagement": "Управление заказами",
     "couponManagement": "Купоны",
     "giftCardManagement": "Подарочные карты",
@@ -1040,7 +1041,7 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
     }
   },
   "settings": {
-    "appearance": {"title":"Внешний вид","sidebar":"Боковое меню","restore":"Показать всё","saving":"Сохранение","retry":"Повторить","load_error":"Не удалось загрузить настройки","save_error":"Не удалось сохранить. Повторите попытку.","loading":"Загрузка"},
+    "appearance": {"title":"Внешний вид","sidebar":"Боковое меню","restore":"Показать всё","restore_order":"Сбросить порядок","sort_help":"Перетаскивайте пункты одного уровня. Переключатели управляют видимостью.","move":"Переместить {{name}}","saving":"Сохранение","retry":"Повторить","load_error":"Не удалось загрузить настройки","save_error":"Не удалось сохранить. Повторите попытку.","loading":"Загрузка"},
     "title": "Системные настройки",
     "description": "Управление основными конфигурациями системы, включая сайт, безопасность, подписки, реферальную программу, узлы и уведомления.",
     "server": {
@@ -2139,6 +2140,7 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
       "requestFailed": "Не удалось получить результаты. Повторите попытку.",
       "bindMachine": "Сначала привяжите узел к серверу.",
       "currentRequired": "Укажите домен и допустимый порт.",
+      "currentDestinationRequired": "Укажите адрес назначения и домен рукопожатия.",
       "expired": "Результат устарел. Запустите проверку снова.",
       "retry": "Получить снова",
       "applied": "{{target}} подставлен. Сохраните узел.",
@@ -2745,8 +2747,12 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
             "label": "Защита от злоупотреблений",
             "description": "Маскировочный трафик идёт во внутренний вход на самом узле: пропускаются только TLS-домены маскировочного сайта, остальной трафик блокируется"
           },
+          "dest": {
+            "label": "Адрес назначения (dest)",
+            "placeholder": "Например: 127.0.0.1:8443"
+          },
           "server_name": {
-            "label": "Destination Site (dest)",
+            "label": "Домен рукопожатия (SNI)",
             "placeholder": "e.g., example.com"
           },
           "server_port": {

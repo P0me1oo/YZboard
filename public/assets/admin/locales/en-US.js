@@ -932,6 +932,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     "routeManagement": "Route Management",
     "subscriptionManagement": "Subscription",
     "planManagement": "Plan Management",
+    "planSettings": "Plan Settings",
     "orderManagement": "Order Management",
     "couponManagement": "Coupon Management",
     "giftCardManagement": "Gift Card Management",
@@ -1098,7 +1099,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     }
   },
   "settings": {
-    "appearance": {"title":"Appearance","sidebar":"Sidebar","restore":"Show all","saving":"Saving","retry":"Retry","load_error":"Failed to load appearance settings","save_error":"Could not save. Please retry.","loading":"Loading"},
+    "appearance": {"title":"Appearance","sidebar":"Sidebar","restore":"Show all","restore_order":"Reset order","sort_help":"Drag to reorder menus within their group. Use switches to show or hide them.","move":"Reorder {{name}}","saving":"Saving","retry":"Retry","load_error":"Failed to load appearance settings","save_error":"Could not save. Please retry.","loading":"Loading"},
     "title": "System Settings",
     "description": "Manage core system configurations, including site, security, subscription, invite commission, nodes, email, and notifications",
     "server": {
@@ -2197,6 +2198,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "requestFailed": "Unable to read scan results. Please retry.",
       "bindMachine": "Bind this node to a server first.",
       "currentRequired": "Enter a target domain and valid port first.",
+      "currentDestinationRequired": "Enter a destination address and handshake domain first.",
       "expired": "Scan record expired. Start a new scan.",
       "retry": "Read again",
       "applied": "{{target}} applied. Save the node to keep this change.",
@@ -2820,8 +2822,12 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
             "label": "Anti-Abuse Mode",
             "description": "Camouflage fallback goes through a loopback-only inbound on the node; only TLS domains of the camouflage site are allowed, all other traffic is blocked"
           },
+          "dest": {
+            "label": "Destination (dest)",
+            "placeholder": "e.g., 127.0.0.1:8443"
+          },
           "server_name": {
-            "label": "Destination Site (dest)",
+            "label": "Handshake Domain (SNI)",
             "placeholder": "e.g., example.com"
           },
           "server_port": {

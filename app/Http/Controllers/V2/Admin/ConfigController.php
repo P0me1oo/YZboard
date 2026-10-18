@@ -143,6 +143,7 @@ class ConfigController extends Controller
             ],
             'appearance' => [
                 AdminAppearance::SETTING => AdminAppearance::hidden(),
+                AdminAppearance::ORDER_SETTING => AdminAppearance::order(),
             ],
             'frontend' => [
                 'frontend_theme' => admin_setting('frontend_theme', 'Xboard'),

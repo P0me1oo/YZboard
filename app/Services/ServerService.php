@@ -614,6 +614,19 @@ class ServerService
         $serverPort = $node->server_port;
         $host = $node->host;
 
+        if (in_array($nodeType, [Server::TYPE_VLESS, Server::TYPE_TROJAN], true)
+            && (int) data_get($protocolSettings, 'tls') === 2) {
+            // 空回源字段不能下发给 Xray；历史 VLESS 沿用原域名与端口。
+            $reality = $protocolSettings['reality_settings'] ?? [];
+            if (trim((string) ($reality['dest'] ?? '')) === '') {
+                unset($reality['dest']);
+                if ($nodeType === Server::TYPE_VLESS && !empty($reality['server_name'])) {
+                    $reality['dest'] = Helper::wrapIPv6($reality['server_name']) . ':' . ($reality['server_port'] ?: 443);
+                }
+            }
+            $protocolSettings['reality_settings'] = $reality;
+        }
+
         $baseConfig = [
             'protocol' => $nodeType,
             // 节点内核独立于协议；历史节点的空值按默认 Xray 下发。

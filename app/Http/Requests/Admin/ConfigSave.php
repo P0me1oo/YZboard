@@ -78,6 +78,7 @@ class ConfigSave extends FormRequest
         'reality_scan_targets' => 'sometimes|nullable|string|max:8192',
         // frontend
         'admin_sidebar_hidden' => 'sometimes|array|list',
+        'admin_sidebar_order' => 'sometimes|array|list',
         'frontend_theme' => '',
         'frontend_theme_sidebar' => 'nullable|in:dark,light',
         'frontend_theme_header' => 'nullable|in:dark,light',
@@ -151,6 +152,7 @@ class ConfigSave extends FormRequest
         }
         $rules = self::RULES;
         $rules[AdminAppearance::SETTING] .= '|max:' . count(AdminAppearance::ITEMS);
+        $rules[AdminAppearance::ORDER_SETTING] .= '|max:' . count(AdminAppearance::sortableItems());
         return $rules + [
             SubscriptionProtection::SETTING => 'sometimes|array:' . implode(',', array_keys(SubscriptionProtection::defaults())) . '|required_array_keys:' . implode(',', $requiredProtectionKeys),
             'subscribe_protection.block_browser' => 'boolean',
@@ -174,6 +176,7 @@ class ConfigSave extends FormRequest
             'subscribe_protection.whitelist_user_ids' => 'array|list|max:1000',
             'subscribe_protection.whitelist_user_ids.*' => 'integer|min:1|distinct|exists:v2_user,id',
             'admin_sidebar_hidden.*' => 'required|string|distinct|in:' . implode(',', AdminAppearance::ITEMS),
+            'admin_sidebar_order.*' => 'required|string|distinct|in:' . implode(',', AdminAppearance::sortableItems()),
         ];
     }
 

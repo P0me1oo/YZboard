@@ -197,6 +197,7 @@ class Server extends Model
             'fields' => [
                 'server_name' => ['type' => 'string', 'default' => null],
                 'server_port' => ['type' => 'string', 'default' => null],
+                'dest' => ['type' => 'string', 'default' => null],
                 'public_key' => ['type' => 'string', 'default' => null],
                 'private_key' => ['type' => 'string', 'default' => null],
                 'short_id' => ['type' => 'string', 'default' => null],

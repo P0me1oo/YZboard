@@ -5,6 +5,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{{ $title }}</title>
+  @php
+    $appearance = [
+      \App\Support\AdminAppearance::SETTING => \App\Support\AdminAppearance::hidden(),
+      \App\Support\AdminAppearance::ORDER_SETTING => \App\Support\AdminAppearance::order(),
+    ];
+  @endphp
   <script @if(!empty($cspNonce)) nonce="{{ $cspNonce }}" @endif>
     window.settings = {
       base_url: "/",
@@ -12,6 +18,7 @@
       version: "{{ $version }}",
       logo: "{{ $logo }}",
       secure_path: "{{ $secure_path }}",
+      appearance: @json($appearance),
     };
   </script>
   @php

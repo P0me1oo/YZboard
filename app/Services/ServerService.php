@@ -771,11 +771,15 @@ class ServerService
             $response['custom_routes'] = $node['custom_routes'];
         }
 
-        if (($nodeType !== Server::TYPE_WIREGUARD || !$node->isRelayChild()) && data_get($node->source_policy, 'block_cn')) {
+        if (($nodeType !== Server::TYPE_WIREGUARD || !$node->isRelayChild()) && \App\Utils\SourcePolicy::enabled($node->source_policy)) {
             $response['source_policy'] = [
-                'block_cn' => true,
+                'block_cn' => (bool) data_get($node->source_policy, 'block_cn', false),
                 'allow_ips' => array_values(data_get($node->source_policy, 'allow_ips', [])),
             ];
+            if (isset($node->source_policy['mode'])) {
+                $response['source_policy']['mode'] = $node->source_policy['mode'];
+                $response['source_policy']['block_ips'] = array_values(data_get($node->source_policy, 'block_ips', []));
+            }
         }
 
         if (!empty($node['cert_config'])) {

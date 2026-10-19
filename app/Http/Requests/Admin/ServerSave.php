@@ -6,6 +6,7 @@ namespace App\Http\Requests\Admin;
 use App\Models\Server;
 use App\Rules\RealityDestination;
 use App\Rules\SourcePolicyIp;
+use App\Utils\SourcePolicy;
 use App\Services\ServerRelayService;
 use App\Services\ServerRouteService;
 use Illuminate\Contracts\Validation\Validator;
@@ -24,8 +25,10 @@ class ServerSave extends FormRequest
                 && in_array($sourcePolicy['block_cn'], [true, false, 0, 1, '0', '1'], true)) {
                 $sourcePolicy['block_cn'] = (bool) $sourcePolicy['block_cn'];
             }
-            if (is_array($sourcePolicy['allow_ips'] ?? null)) {
-                $sourcePolicy['allow_ips'] = array_values(array_map([SourcePolicyIp::class, 'normalize'], $sourcePolicy['allow_ips']));
+            foreach (['allow_ips', 'block_ips'] as $list) {
+                if (is_array($sourcePolicy[$list] ?? null)) {
+                    $sourcePolicy[$list] = array_values(array_map([SourcePolicyIp::class, 'normalize'], $sourcePolicy[$list]));
+                }
             }
             $this->merge(['source_policy' => $sourcePolicy]);
         }
@@ -182,11 +185,14 @@ class ServerSave extends FormRequest
             'rate_time_ranges' => 'nullable|array',
             'custom_outbounds' => 'nullable|array',
             'custom_routes' => 'nullable|array',
-            'source_policy' => 'nullable|array:block_cn,allow_ips',
+            'source_policy' => 'nullable|array:mode,block_cn,allow_ips,block_ips',
             'accept_proxy_protocol' => 'nullable|boolean',
-            'source_policy.block_cn' => 'required_with:source_policy|boolean',
-            'source_policy.allow_ips' => 'sometimes|array|max:128',
+            'source_policy.mode' => 'sometimes|string|in:disabled,blacklist,whitelist',
+            'source_policy.block_cn' => [\Illuminate\Validation\Rule::requiredIf(fn () => is_array($this->input('source_policy')) && !$this->has('source_policy.mode')), 'boolean'],
+            'source_policy.allow_ips' => 'required_if:source_policy.mode,whitelist|array|max:128',
             'source_policy.allow_ips.*' => ['bail', 'string', 'distinct', new SourcePolicyIp()],
+            'source_policy.block_ips' => 'sometimes|array|max:128',
+            'source_policy.block_ips.*' => ['bail', 'string', 'distinct', new SourcePolicyIp()],
             'cert_config' => 'nullable|array',
             'rate_time_ranges.*.start' => 'required_with:rate_time_ranges|string|date_format:H:i',
             'rate_time_ranges.*.end' => 'required_with:rate_time_ranges|string|date_format:H:i',
@@ -344,8 +350,10 @@ class ServerSave extends FormRequest
                 $validator->errors()->add('accept_proxy_protocol', '当前协议或传输不支持接收 TCP PROXY 协议');
             }
             $policy = $this->input('source_policy', $existing?->source_policy);
-            if ($this->input('type') === Server::TYPE_WIREGUARD && $this->input('relay_entry_id') && data_get($policy, 'block_cn')) {
-                $validator->errors()->add('source_policy', 'WireGuard 中转落地请在前置入口设置大陆来源拦截');
+            if ($this->input('type') === Server::TYPE_WIREGUARD
+                && (int) $this->input('relay_entry_id', $existing?->relay_entry_id) > 0
+                && is_array($policy) && SourcePolicy::enabled($policy)) {
+                $validator->errors()->add('source_policy', 'WireGuard 中转落地请在前置入口设置来源限制');
             }
             // 0、空串和 null 都表示“不使用中转”，管理端会把“无”提交为 0。
             // 编辑时省略可选字段表示保留已保存值，校验必须与实际更新一致。
@@ -370,9 +378,12 @@ class ServerSave extends FormRequest
     {
         return [
             'source_policy' => '来源限制',
+            'source_policy.mode' => '来源限制模式',
             'source_policy.block_cn' => '屏蔽大陆来源 IP',
-            'source_policy.allow_ips' => '例外放行 IP',
-            'source_policy.allow_ips.*' => '例外放行 IP',
+            'source_policy.allow_ips' => '允许来源 IP',
+            'source_policy.allow_ips.*' => '允许来源 IP',
+            'source_policy.block_ips' => '屏蔽来源 IP',
+            'source_policy.block_ips.*' => '屏蔽来源 IP',
             'protocol_settings.cipher' => '加密方式',
             'protocol_settings.obfs' => '混淆类型',
             'protocol_settings.network' => '传输协议',

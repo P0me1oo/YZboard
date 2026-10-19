@@ -2520,11 +2520,20 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
         "label": "接收 PROXY 协议"
       },
       "source_policy": {
-        "label": "屏蔽大陆来源 IP",
-        "allow_ips": "例外放行 IP",
-        "placeholder": "输入中转 IP，按回车添加",
+        "label": "来源 IP 限制",
+        "disabled": "关闭",
+        "blacklist": "黑名单",
+        "whitelist": "白名单",
+        "block_ips": "屏蔽来源 IP",
+        "allow_ips": "允许来源 IP",
+        "exceptions": "大陆 IP 例外放行",
+        "block_cn": "屏蔽大陆来源 IP",
+        "placeholder": "输入 IP，按回车添加",
         "invalid_ip": "请填写具体的 IPv4 或 IPv6 地址",
-        "max_ips": "最多添加 128 个例外 IP"
+        "max_ips": "每份名单最多添加 128 个 IP",
+        "empty_whitelist": "白名单至少填写一个 IP",
+        "connections": "连接设置",
+        "save": "保存"
       },
       "route": {
         "label": "路由组",

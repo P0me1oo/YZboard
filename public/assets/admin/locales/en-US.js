@@ -2525,11 +2525,20 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
         "label": "Receive PROXY protocol"
       },
       "source_policy": {
-        "label": "Block mainland China source IPs",
-        "allow_ips": "Allowed source IP exceptions",
-        "placeholder": "Enter a relay IP and press Enter",
+        "label": "Source IP restrictions",
+        "disabled": "Disabled",
+        "blacklist": "Blacklist",
+        "whitelist": "Whitelist",
+        "block_ips": "Blocked source IPs",
+        "allow_ips": "Allowed source IPs",
+        "exceptions": "Mainland China IP exceptions",
+        "block_cn": "Block mainland China source IPs",
+        "placeholder": "Enter an IP and press Enter",
         "invalid_ip": "Enter an individual IPv4 or IPv6 address",
-        "max_ips": "Up to 128 IP exceptions are allowed"
+        "max_ips": "Up to 128 IPs per list",
+        "empty_whitelist": "Add at least one IP to the whitelist",
+        "connections": "Connections",
+        "save": "Save"
       },
       "route": {
         "label": "Route Groups",

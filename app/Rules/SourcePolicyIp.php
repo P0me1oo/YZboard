@@ -12,7 +12,7 @@ class SourcePolicyIp implements ValidationRule
     {
         if (!is_string($value) || !filter_var($value, FILTER_VALIDATE_IP)
             || IpUtils::checkIp($value, ['0.0.0.0/32', '::/128', '224.0.0.0/4', 'ff00::/8'])) {
-            $fail('来源例外必须填写具体的 IPv4 或 IPv6 地址');
+            $fail('来源名单必须填写具体的 IPv4 或 IPv6 地址');
         }
     }
 

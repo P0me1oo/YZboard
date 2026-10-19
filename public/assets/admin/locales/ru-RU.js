@@ -2450,11 +2450,20 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
         "label": "Принимать PROXY protocol"
       },
       "source_policy": {
-        "label": "Блокировать подключения с IP материкового Китая",
-        "allow_ips": "Разрешённые IP-исключения",
-        "placeholder": "Введите IP ретранслятора и нажмите Enter",
+        "label": "Ограничения IP источников",
+        "disabled": "Отключено",
+        "blacklist": "Чёрный список",
+        "whitelist": "Белый список",
+        "block_ips": "Заблокированные IP",
+        "allow_ips": "Разрешённые IP",
+        "exceptions": "Исключения для IP Китая",
+        "block_cn": "Блокировать IP материкового Китая",
+        "placeholder": "Введите IP и нажмите Enter",
         "invalid_ip": "Введите отдельный адрес IPv4 или IPv6",
-        "max_ips": "Допускается не более 128 IP-исключений"
+        "max_ips": "Не более 128 IP в каждом списке",
+        "empty_whitelist": "Добавьте хотя бы один IP в белый список",
+        "connections": "Подключения",
+        "save": "Сохранить"
       },
       "route": {
         "label": "Группы маршрутов",

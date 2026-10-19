@@ -86,6 +86,48 @@ class SourcePolicyTest extends TestCase
         $this->assertTrue(ServerService::buildNodeConfig($wg)['source_policy']['block_cn']);
     }
 
+    public function test_modes_round_trip_push_and_disable_preserves_lists(): void
+    {
+        $this->postJson('/_tests/source-policy/save', $this->payload())->assertOk();
+        $node = Server::latest('id')->firstOrFail();
+        Cache::put("node_ws_alive:{$node->id}", true);
+        foreach (['blacklist', 'whitelist', 'disabled'] as $mode) {
+            $policy = ['mode' => $mode, 'block_cn' => true,
+                'allow_ips' => ['198.51.100.7', '2001:db8::7'], 'block_ips' => ['203.0.113.7']];
+            $payload = $this->payload(['id' => $node->id, 'source_policy' => $policy]);
+            $this->postJson('/_tests/source-policy/save', $payload)->assertOk();
+            $this->assertSame($policy, $node->fresh()->source_policy);
+            $config = ServerService::buildNodeConfig($node->fresh());
+            $push = collect($this->pushes)->where('event', 'sync.config')->last();
+            if ($mode === 'disabled') {
+                $this->assertArrayNotHasKey('source_policy', $config);
+                $this->assertArrayNotHasKey('source_policy', $push['data']['config']);
+            } else {
+                $this->assertEquals($policy, $config['source_policy']);
+                $this->assertEquals($policy, $push['data']['config']['source_policy']);
+            }
+            $this->pushes = [];
+            $this->postJson('/_tests/source-policy/save', $payload)->assertOk();
+            $this->assertEmpty($this->pushes);
+        }
+    }
+
+    public function test_manual_lists_normalize_and_invalid_lists_are_rejected(): void
+    {
+        $this->postJson('/_tests/source-policy/save', $this->payload(['source_policy' => [
+            'mode' => 'blacklist', 'block_ips' => [' ::ffff:198.51.100.7 ', '2001:DB8::7'],
+        ]]))->assertOk();
+        $this->assertSame(['198.51.100.7', '2001:db8::7'], Server::latest('id')->firstOrFail()->source_policy['block_ips']);
+        foreach ([['mode' => 'invalid'], ['mode' => 'whitelist', 'allow_ips' => []],
+            ['mode' => 'blacklist', 'block_ips' => ['198.51.100.7', '::ffff:198.51.100.7']],
+            ['mode' => 'blacklist', 'block_ips' => ['198.51.100.0/24']],
+            ['mode' => 'blacklist', 'block_ips' => ['0.0.0.0']],
+            ['mode' => 'blacklist', 'block_ips' => array_fill(0, 129, '198.51.100.7')]] as $policy) {
+            $this->postJson('/_tests/source-policy/save', $this->payload(['source_policy' => $policy]))->assertUnprocessable();
+        }
+        $this->assertSame(1, Server::count());
+    }
+
     private function payload(array $override = []): array
     {
         static $port = 32100;

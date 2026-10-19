@@ -1,6 +1,15 @@
 # YZboard 兼容矩阵
 
-## 1.98.0 发布准备
+## 1.98.0 正式发布核验
+
+- [Release v1.98.0](https://github.com/P0me1oo/YZboard/releases/tag/v1.98.0) 已发布，标签固定到 `33b7e06beb1ee5e2a5f5bb20e4c715841c60f8c5`。管理端 `v0.69.0` / `b7f3bf826ceb24dee7db96e4ea7a2149de4c7fbd` 随镜像交付，配套 Agent 沿用 `v2.17.0`。
+- [发布工作流](https://github.com/P0me1oo/YZboard/actions/runs/39208957344) 完成 PHP `8.2.34` 两套完整回归：SQLite 1,148 项、10,926 条断言，6 项行锁并发检查由 MariaDB 执行；MariaDB `11.4.8` 严格分组模式下 1,148 项、10,974 条断言全部通过，无跳过。5 项资源检查通过。
+- 本地 3,085 项源码检查、120 项行为测试、44 项浏览器检查、正式构建及资源检查通过；15 个集成文件与构建产物逐字节一致。23 项后端专项测试、195 条断言通过。浏览器检查使用本机模拟接口，测试服务随检查结束退出，不代替真实节点实连。
+- 不可变镜像 `ghcr.io/p0me1oo/yzboard:1.98.0-33b7e06`、`1.98.0` 和 `latest` 均指向 `sha256:712b5b4c46c13aa76e8dca53be1e35cdf218e7ba5c8a911a33cc9cfb7483151a`。`linux/amd64`、`linux/arm64` 的来源 commit、OCI 版本和架构均已核对，匿名获取通过。主脚本 SHA-256 为 `fb88a2e3b34bb1bee404466eed7645d9fe64d7db3c21ddb8afa4e11547f05041`。
+- 核验附件 [verification.json](https://github.com/P0me1oo/YZboard/releases/download/v1.98.0/verification.json) 记录两个架构的清单、配置摘要及检查范围。回滚镜像 `ghcr.io/p0me1oo/yzboard:1.95.1-707f9d8` / `sha256:7aa7d307dd5f084815e3612aab96ba09a1cedc190438c5c2fefe0c1fa3167ecd` 已复核可匿名获取。
+- 不修改 Node、核心或数据库结构。未操作生产服务器，更新前保留旧镜像并备份 Compose 和必要持久化数据，服务器更新及 HTTP、版本、日志和运行镜像核对由用户执行。
+
+## 1.98.0 发布准备记录
 
 - 合并发布以下 `1.95.2` 至 `1.98.0` 全部本地修改，保留中间版本的开发验证记录。管理端固定为本地标签 `v0.69.0` / `b7f3bf826ceb24dee7db96e4ea7a2149de4c7fbd`，源码仓库未配置远程；构建产物随面板镜像发布。
 - 包含节点弹窗与按钮样式、VLESS uTLS 默认值、独立 Reality 回源、侧栏排序、刷新首屏配置和套餐/订阅分组。不修改 Node、核心或数据库结构，配套 Agent 沿用已发布的 `v2.17.0`。

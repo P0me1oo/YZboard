@@ -139,6 +139,7 @@ class Server extends Model
     protected $table = 'v2_server';
 
     protected $guarded = ['id'];
+    protected $attributes = ['accept_proxy_protocol' => false];
     protected $casts = [
         'group_ids' => 'array',
         'route_ids' => 'array',
@@ -406,6 +407,15 @@ class Server extends Model
             $result[$key] = $this->castValueWithConfig($value, $config);
         }
         return $result;
+    }
+
+    protected function acceptProxyProtocol(): Attribute
+    {
+        return Attribute::make(
+            get: fn ($value) => $value !== null
+                ? (bool) $value
+                : data_get($this->protocol_settings, 'network_settings.acceptProxyProtocol') === true,
+        );
     }
 
     public function getProtocolSettingsAttribute($value)

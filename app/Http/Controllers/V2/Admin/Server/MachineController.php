@@ -92,6 +92,7 @@ class MachineController extends Controller
             'name' => $params['name'],
             'notes' => $params['notes'] ?? null,
             'is_active' => $params['is_active'] ?? true,
+            'traffic_mode' => $params['traffic_mode'] ?? 'both',
             'token' => ServerMachine::generateToken(),
         ]);
         MachineTrafficService::configure($machine, $params);

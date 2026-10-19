@@ -145,6 +145,13 @@ class Helper
         }
     }
 
+    /** 每行一个订阅地址，兼容旧逗号配置并保留顺序。 */
+    public static function getSubscribeUrls(): array
+    {
+        $urls = preg_split('/[\r\n,]+/', (string) admin_setting('subscribe_url', ''));
+        return array_values(array_filter(array_map('trim', $urls), fn ($url) => $url !== ''));
+    }
+
     public static function getSubscribeUrl(string $token, $subscribeUrl = null)
     {
         $path = route('client.subscribe', ['token' => $token], false);
@@ -154,14 +161,13 @@ class Helper
             return HookManager::filter('subscribe.url', $finalUrl);
         }
         
-        $urlString = (string)admin_setting('subscribe_url', '');
-        $subscribeUrlList = $urlString ? explode(',', $urlString) : [];
+        $subscribeUrlList = self::getSubscribeUrls();
         
         if (empty($subscribeUrlList)) {
             return HookManager::filter('subscribe.url', url($path));
         }
         
-        $selectedUrl = self::replaceByPattern(Arr::random($subscribeUrlList));
+        $selectedUrl = self::replaceByPattern($subscribeUrlList[0]);
         $finalUrl = rtrim($selectedUrl, '/') . $path;
         
         return HookManager::filter('subscribe.url', $finalUrl);

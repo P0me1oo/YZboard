@@ -7,6 +7,7 @@ use App\Models\Server;
 use App\Services\ServerService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
@@ -50,30 +51,73 @@ class ServerProxyProtocolTest extends TestCase
         $this->assertFalse($node->fresh()->accept_proxy_protocol, '旧调用省略开关不得覆盖已保存状态');
     }
 
-    public function test_old_nodes_keep_legacy_settings_and_statistics_exclusion(): void
+    public function test_old_nodes_use_boolean_switches_and_statistics_exclusion_is_independent(): void
     {
         admin_setting(['device_ip_exclude' => ['203.0.114.7']]);
-        $node = Server::create($this->payload([
+        $node = Server::make($this->payload([
             'type' => 'vless', 'protocol_settings' => [
                 'tls' => 0, 'network' => 'tcp', 'network_settings' => ['acceptProxyProtocol' => true],
             ],
         ]));
+        // 模拟迁移前读取的旧节点，不能写入已经禁止空值的新列。
+        $node->setRawAttributes(array_replace($node->getAttributes(), ['accept_proxy_protocol' => null]));
         $legacy = ServerService::buildNodeConfig($node);
-        $this->assertArrayNotHasKey('accept_proxy_protocol', $legacy);
+        $this->assertTrue($node->toArray()['accept_proxy_protocol']);
+        $this->assertTrue($legacy['accept_proxy_protocol']);
         $this->assertTrue($legacy['networkSettings']['acceptProxyProtocol']);
         $this->assertSame(['203.0.114.7'], $legacy['device_ip_exclude']);
         foreach ([true, false] as $enabled) {
-            $node->update(['accept_proxy_protocol' => $enabled]);
-            $config = ServerService::buildNodeConfig($node->fresh());
+            $node->accept_proxy_protocol = $enabled;
+            $config = ServerService::buildNodeConfig($node);
             $this->assertSame($enabled, $config['accept_proxy_protocol']);
+            $this->assertSame($enabled, $node->toArray()['accept_proxy_protocol']);
             $this->assertSame(['203.0.114.7'], $config['device_ip_exclude']);
         }
+        $node->setRawAttributes(array_replace($node->getAttributes(), [
+            'accept_proxy_protocol' => null,
+            'protocol_settings' => json_encode(['tls' => 0, 'network' => 'tcp']),
+        ]));
+        $this->assertFalse($node->toArray()['accept_proxy_protocol']);
+        $this->assertFalse(ServerService::buildNodeConfig($node)['accept_proxy_protocol']);
+    }
+
+    public function test_migration_converts_only_old_empty_values_and_can_repeat_and_roll_back(): void
+    {
+        $migration = require database_path('migrations/2026_10_19_000002_normalize_server_proxy_protocol_switch.php');
+        $migration->down();
+        $nodes = [];
+        foreach ([[null, false, false], [null, true, true], [false, true, false], [true, false, true]] as [$value, $old, $expected]) {
+            $node = Server::create($this->payload([
+                'type' => 'vless', 'accept_proxy_protocol' => $value,
+                'protocol_settings' => ['tls' => 0, 'network' => 'tcp', 'network_settings' => ['acceptProxyProtocol' => $old]],
+            ]));
+            $nodes[] = [$node, $expected, DB::table('v2_server')->where('id', $node->id)->first()];
+        }
+        for ($run = 0; $run < 2; $run++) {
+            $migration->up();
+            foreach ($nodes as [$node, $expected, $before]) {
+                $row = DB::table('v2_server')->where('id', $node->id)->first();
+                $this->assertNotNull($row->accept_proxy_protocol);
+                $this->assertSame($expected, (bool) $row->accept_proxy_protocol);
+                $this->assertSame($before->protocol_settings, $row->protocol_settings);
+                $this->assertSame($before->updated_at, $row->updated_at);
+                $this->assertSame($expected, ServerService::buildNodeConfig($node->fresh())['accept_proxy_protocol']);
+            }
+        }
+        $migration->down();
+        foreach ($nodes as [$node, $expected]) {
+            $this->assertSame($expected, $node->fresh()->accept_proxy_protocol);
+        }
+        $migration->up();
+        $this->assertFalse(Server::create($this->payload())->fresh()->accept_proxy_protocol);
     }
 
     public function test_invalid_switch_and_non_tcp_transports_are_rejected(): void
     {
-        $this->postJson('/_tests/proxy/save', $this->payload(['accept_proxy_protocol' => 'invalid']))
-            ->assertUnprocessable()->assertJsonValidationErrors('accept_proxy_protocol');
+        foreach (['invalid', null] as $value) {
+            $this->postJson('/_tests/proxy/save', $this->payload(['accept_proxy_protocol' => $value]))
+                ->assertUnprocessable()->assertJsonValidationErrors('accept_proxy_protocol');
+        }
         foreach ([
             ['type' => 'hysteria', 'protocol_settings' => ['version' => 2]],
             ['type' => 'vless', 'protocol_settings' => ['tls' => 0, 'network' => 'kcp']],

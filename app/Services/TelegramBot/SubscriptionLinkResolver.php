@@ -2,6 +2,8 @@
 
 namespace App\Services\TelegramBot;
 
+use App\Utils\Helper;
+
 class SubscriptionLinkResolver
 {
     public function token(string $url): string
@@ -14,7 +16,7 @@ class SubscriptionLinkResolver
             throw new BindingException('invalid_link');
         }
 
-        $bases = explode(',', (string) admin_setting('subscribe_url', ''));
+        $bases = Helper::getSubscribeUrls();
         $bases[] = (string) admin_setting('app_url', config('app.url'));
         $subscribePath = '/' . trim((string) admin_setting('subscribe_path', 's'), '/');
         foreach (array_filter(array_map('trim', $bases)) as $baseUrl) {

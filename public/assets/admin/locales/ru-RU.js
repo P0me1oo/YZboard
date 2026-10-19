@@ -1180,8 +1180,8 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
         },
         "subscribeUrl": {
           "label": "URL подписки (кастомный)",
-          "placeholder": "Разделяйте ',', оставьте пустым для URL сайта",
-          "description": "URL для генерации ссылок подписки."
+          "placeholder": "Один URL подписки на строку, например https://sub.example.com",
+          "description": "По умолчанию используется первый URL. Оставьте пустым для URL сайта."
         },
         "tosUrl": {
           "label": "URL условий (TOS)",

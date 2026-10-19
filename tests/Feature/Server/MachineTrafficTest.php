@@ -72,6 +72,32 @@ class MachineTrafficTest extends TestCase
             'enabled' => true, 'show' => true, 'group_ids' => ['1'], 'rate' => 1], $extra));
     }
 
+    public function test_new_machine_defaults_to_both_and_existing_modes_are_preserved(): void
+    {
+        foreach ([null, 'outbound', 'both', 'proxy'] as $mode) {
+            $params = ['name' => '新建计费测试'];
+            if ($mode !== null) {
+                $params['traffic_mode'] = $mode;
+            }
+            $id = $this->postJson('/_tests/machine-traffic/save', $params)->assertOk()->json('data.id');
+            $machine = ServerMachine::findOrFail($id);
+            $this->assertSame($mode ?? 'both', Traffic::view($machine)['mode']);
+            $this->assertSame(0, Traffic::view($machine)['limit']);
+            $this->postJson('/_tests/machine-traffic/save', ['id' => $id, 'name' => '修改名称'])
+                ->assertOk()->assertJsonPath('data', true);
+            $machine->refresh();
+            $this->assertSame('修改名称', $machine->name);
+            $this->assertSame($mode ?? 'both', Traffic::view($machine)['mode']);
+        }
+
+        $legacy = $this->machine();
+        $this->postJson('/_tests/machine-traffic/save', ['id' => $legacy->id, 'name' => '旧服务器改名'])
+            ->assertOk()->assertJsonPath('data', true);
+        $legacy->refresh();
+        $this->assertSame('旧服务器改名', $legacy->name);
+        $this->assertSame('outbound', Traffic::view($legacy)['mode']);
+    }
+
     public function test_old_machine_is_unlimited_and_first_enable_starts_at_zero_without_calibration(): void
     {
         $m = $this->machine();

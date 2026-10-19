@@ -1133,8 +1133,8 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
         },
         "subscribeUrl": {
           "label": "订阅URL",
-          "placeholder": "用于订阅所使用，多个订阅地址用','隔开.留空则为站点URL。",
-          "description": "用于订阅所使用，留空则为站点URL。"
+          "placeholder": "每行一个订阅地址，如 https://sub.example.com",
+          "description": "默认使用第一个地址，留空使用站点 URL。"
         },
         "tosUrl": {
           "label": "用户条款(TOS)URL",

@@ -794,10 +794,8 @@ class ServerService
             }
         }
 
-        // 明确关闭必须下发 false，不能被旧传输设置或前置服务器名单重新开启。
-        if ($node->accept_proxy_protocol !== null) {
-            $response['accept_proxy_protocol'] = (bool) $node->accept_proxy_protocol;
-        }
+        // 始终下发界面对应的布尔状态，前置服务器名单不能改变接收开关。
+        $response['accept_proxy_protocol'] = $node->accept_proxy_protocol;
         // 名单为空时不下发该字段，未使用此功能的节点配置保持不变。
         if ($deviceIpExclude = DeviceIpExclusion::entries()) {
             $response['device_ip_exclude'] = $deviceIpExclude;

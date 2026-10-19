@@ -75,6 +75,27 @@ class SubscriptionOutputTest extends TestCase
         $this->postJson('/_tests/subscription-output/config', ['admin_sidebar_hidden' => ['subscription-settings', 'subscription-template']])->assertOk();
     }
 
+    public function test_greenland_flag_reaches_all_subscription_formats_and_keeps_existing_flag(): void
+    {
+        $user = $this->user();
+        $node = $this->node(['name' => '格陵兰 01']);
+        admin_setting(['show_flag_to_server_enable' => true]);
+        $flag = mb_chr(0x1F1EC) . mb_chr(0x1F1F1);
+        $expected = $flag . ' 格陵兰 01';
+        for ($i = 0; $i < 2; $i++) {
+            $this->assertStringContainsString('#' . rawurlencode($expected), base64_decode($this->subscription($user, 'general')));
+            $yaml = Yaml::parse($this->subscription($user, 'clashmeta'));
+            $this->assertSame($expected, $yaml['proxies'][0]['name']);
+            $this->assertContains($expected, $yaml['proxy-groups'][0]['proxies']);
+            $json = json_decode($this->subscription($user, 'sing-box'), true);
+            $this->assertContains($expected, array_column($json['outbounds'], 'tag'));
+            $this->assertContains($expected, $json['outbounds'][0]['outbounds']);
+        }
+        $this->assertSame('格陵兰 01', $node->fresh()->name);
+        $node->update(['name' => $expected]);
+        $this->assertSame($expected, Yaml::parse($this->subscription($user, 'clashmeta'))['proxies'][0]['name']);
+    }
+
     public function test_names_reach_uri_yaml_json_and_selector_references_without_changing_stored_names(): void
     {
         $user = $this->user();

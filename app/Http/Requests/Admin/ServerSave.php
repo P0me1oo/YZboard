@@ -186,7 +186,7 @@ class ServerSave extends FormRequest
             'custom_outbounds' => 'nullable|array',
             'custom_routes' => 'nullable|array',
             'source_policy' => 'nullable|array:mode,block_cn,allow_ips,block_ips',
-            'accept_proxy_protocol' => 'nullable|boolean',
+            'accept_proxy_protocol' => 'sometimes|boolean',
             'source_policy.mode' => 'sometimes|string|in:disabled,blacklist,whitelist',
             'source_policy.block_cn' => [\Illuminate\Validation\Rule::requiredIf(fn () => is_array($this->input('source_policy')) && !$this->has('source_policy.mode')), 'boolean'],
             'source_policy.allow_ips' => 'required_if:source_policy.mode,whitelist|array|max:128',

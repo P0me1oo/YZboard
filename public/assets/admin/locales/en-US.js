@@ -1238,8 +1238,8 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
         },
         "subscribeUrl": {
           "label": "Subscribe URL",
-          "placeholder": "Used for subscription, multiple URLs separated by ','. Leave empty to use site URL.",
-          "description": "Used for subscription, leave empty to use site URL."
+          "placeholder": "One subscription URL per line, e.g. https://sub.example.com",
+          "description": "The first URL is used by default. Leave empty to use the site URL."
         },
         "tosUrl": {
           "label": "Terms of Service (TOS) URL",

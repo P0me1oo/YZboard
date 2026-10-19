@@ -87,6 +87,22 @@ class TelegramBotLinkTest extends TestCase
         $resolver->token('https://4.sub.example.test/s/' . $token);
     }
 
+    public function test_multiline_subscription_domains_remain_valid_for_binding(): void
+    {
+        app(Setting::class)->save([
+            'app_url' => 'https://panel.example.test',
+            'subscribe_url' => "\r\n https://first.example.test/ \r\n\r\n https://second.example.test/base \nhttps://legacy.example.test,https://last.example.test",
+        ]);
+        $token = Str::random(32);
+        $resolver = app(SubscriptionLinkResolver::class);
+        foreach (['https://first.example.test', 'https://second.example.test/base',
+            'https://legacy.example.test', 'https://last.example.test', 'https://panel.example.test'] as $base) {
+            $this->assertSame($token, $resolver->token($base . '/s/' . $token));
+        }
+        $this->expectException(BindingException::class);
+        $resolver->token('https://unconfigured.example.test/s/' . $token);
+    }
+
     public function test_database_enforces_uniqueness_independently_of_the_binding_service(): void
     {
         $users = [];

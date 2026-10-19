@@ -1,5 +1,14 @@
 # YZboard 兼容矩阵
 
+## 1.99.0 正式发布核验
+
+- [Release v1.99.0](https://github.com/P0me1oo/YZboard/releases/tag/v1.99.0) 已发布，固定标签来源 ce48a023d0447a6d9857e7e168f4b123f74f15cd；配套管理端 v0.70.0 / 1cc38401b2de4bc5ec3a08280b0a53dcd7d73a22，Agent v2.20.0 / 92776219d6a40f5e42c3256368e7a318a781f767。两个项目的最新正式版已指向本次版本。
+- [发布流程](https://github.com/P0me1oo/YZboard/actions/runs/39217665673) 的完整回归和双架构镜像发布通过。PHP 8.2.34 下 SQLite 1,150 项、10,954 条断言通过，6 项行锁检查由 MariaDB 执行；MariaDB 11.4.8 严格分组下 1,150 项、11,002 条断言全部通过，无跳过。面板 5 项资源检查通过；管理端 3,086 项源码检查、120 项行为测试、13 项相关浏览器检查、正式构建和资源检查通过。
+- 不可变镜像 ghcr.io/p0me1oo/yzboard:1.99.0-ce48a02、1.99.0 和 latest 均为 sha256:c38dca7d78fce195b9a9e93617de09f667b50e17ee1785983e96427027d24086。linux/amd64、linux/arm64 的清单、配置、OCI 来源和版本已匿名核对；每种架构镜像内的 15 个前端文件及应用配置与固定来源一致。主脚本 SHA-256 为 1596b8d010b360def0b374b60afb663d7719efa6afab7fbd225e1164d545aae0。
+- Agent 发布流程 9 个任务通过，12 个附件和 11 项校验清单已实际下载核对；双架构程序、Go 1.27.1、固定来源及 vcs.modified=false 均正确，本地 Linux 版本实跑通过。Agent v2.20.0、固定提交标签和 latest 镜像均为 sha256:ad04152f83139093af76403c6d2f8b3c8e04344a815890a30ae8e645faba23c1，两个架构已匿名核对。
+- 发布附件 [verification.json](https://github.com/P0me1oo/YZboard/releases/download/v1.99.0/verification.json) 已匿名实际下载核对，记录两个项目的来源、清单、架构、校验和与回滚版本。回滚面板镜像 ghcr.io/p0me1oo/yzboard:1.98.0-33b7e06 / sha256:712b5b4c46c13aa76e8dca53be1e35cdf218e7ba5c8a911a33cc9cfb7483151a、Agent v2.19.3 / sha256:10befcdbca3ff19f9a9dd1acca4e70d381721051867be41f314bb93c32872050 均已复核可匿名获取；回退旧面板或节点前先关闭来源限制并确认配置下发。
+- 无数据库迁移或核心依赖变更。未操作服务器；用户先更新 Agent，再在现有生产部署目录按 Compose 更新面板，检查版本、HTTP、日志、OCI revision 和运行镜像。完整本地记录位于 D:/codex-tmp/yz-source-policy-20261019/。发布后文档提交不移动正式标签。
+
 ## 1.99.0 来源 IP 黑白名单（发布准备）
 
 - 本地开发基线 master / 174ee01f4987d0e28faa30cd6a59fadba3adb0bc；配套管理端 0.70.0、Agent v2.20.0。管理端开发基线 c7063670aa9014369289aaa98e3e9adf3f66dfb2，Agent 开发基线 dev / dc32a5ea66d3a42d2e325a9cec48d9fcea74c961，三个工作区起初均无未提交修改。

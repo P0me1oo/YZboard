@@ -1,6 +1,6 @@
 # Xboard
 
-面板 `1.102.0` / 管理端 `0.73.0`：系统管理新增数据库分析，查看各表与索引占用，预览并分批清理到期历史记录；页面移除空间复用、清理范围和 MySQL 估算三处说明。沿用既有保留期，见[使用说明](docs/database-maintenance.md)，发布状态见[兼容记录](YZ_COMPATIBILITY.md)。
+面板 [v1.102.0](https://github.com/P0me1oo/YZboard/releases/tag/v1.102.0) / 管理端 `0.73.0` 已发布：系统管理新增数据库分析与历史清理，并移除空间复用、清理范围、MySQL 估算三处页面说明。完整回归和双架构镜像核验通过，`latest` 已更新。使用见[说明文档](docs/database-maintenance.md)，来源与回滚见[兼容记录](YZ_COMPATIBILITY.md)。
 
 正式版 `1.101.0` / 管理端 `0.72.0` / Agent `v2.22.0`：节点高级设置新增默认开启的“自动管理防火墙”。开启后以面板来源名单管理节点端口；关闭后撤回托管规则，恢复原手工规则的作用。发布与双架构核验见[兼容记录](YZ_COMPATIBILITY.md)，使用见[防火墙说明](docs/firewall-port-hopping.md)。
 

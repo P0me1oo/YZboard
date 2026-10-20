@@ -796,6 +796,7 @@ class ServerService
 
         // 始终下发界面对应的布尔状态，前置服务器名单不能改变接收开关。
         $response['accept_proxy_protocol'] = $node->accept_proxy_protocol;
+        $response['auto_firewall'] = $node->auto_firewall;
         // 名单为空时不下发该字段，未使用此功能的节点配置保持不变。
         if ($deviceIpExclude = DeviceIpExclusion::entries()) {
             $response['device_ip_exclude'] = $deviceIpExclude;

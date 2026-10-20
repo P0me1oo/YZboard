@@ -2519,6 +2519,10 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
       "proxy_protocol": {
         "label": "接收 PROXY 协议"
       },
+      "auto_firewall": {
+        "label": "自动管理防火墙",
+        "disabled_hint": "关闭后恢复原有规则，来源名单不再由系统防火墙执行。"
+      },
       "source_policy": {
         "label": "来源 IP 限制",
         "disabled": "关闭",

@@ -2449,6 +2449,10 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
       "proxy_protocol": {
         "label": "Принимать PROXY protocol"
       },
+      "auto_firewall": {
+        "label": "Автоматическое управление межсетевым экраном",
+        "disabled_hint": "При отключении восстанавливаются прежние правила. Списки IP больше не применяются системным межсетевым экраном."
+      },
       "source_policy": {
         "label": "Ограничения IP источников",
         "disabled": "Отключено",

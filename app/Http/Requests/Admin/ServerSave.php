@@ -16,6 +16,9 @@ class ServerSave extends FormRequest
 {
     protected function prepareForValidation(): void
     {
+        if (!$this->input('id') && !$this->has('auto_firewall')) {
+            $this->merge(['auto_firewall' => true]);
+        }
         if (!$this->input('id') && !$this->has('accept_proxy_protocol')) {
             $this->merge(['accept_proxy_protocol' => false]);
         }
@@ -187,6 +190,7 @@ class ServerSave extends FormRequest
             'custom_routes' => 'nullable|array',
             'source_policy' => 'nullable|array:mode,block_cn,allow_ips,block_ips',
             'accept_proxy_protocol' => 'sometimes|boolean',
+            'auto_firewall' => 'sometimes|boolean',
             'source_policy.mode' => 'sometimes|string|in:disabled,blacklist,whitelist',
             'source_policy.block_cn' => [\Illuminate\Validation\Rule::requiredIf(fn () => is_array($this->input('source_policy')) && !$this->has('source_policy.mode')), 'boolean'],
             'source_policy.allow_ips' => 'required_if:source_policy.mode,whitelist|array|max:128',
@@ -378,6 +382,7 @@ class ServerSave extends FormRequest
     {
         return [
             'source_policy' => '来源限制',
+            'auto_firewall' => '自动管理防火墙',
             'source_policy.mode' => '来源限制模式',
             'source_policy.block_cn' => '屏蔽大陆来源 IP',
             'source_policy.allow_ips' => '允许来源 IP',

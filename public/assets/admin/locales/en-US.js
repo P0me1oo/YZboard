@@ -2524,6 +2524,10 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "proxy_protocol": {
         "label": "Receive PROXY protocol"
       },
+      "auto_firewall": {
+        "label": "Manage firewall automatically",
+        "disabled_hint": "Turning this off restores existing rules. Source lists will no longer be enforced by the system firewall."
+      },
       "source_policy": {
         "label": "Source IP restrictions",
         "disabled": "Disabled",

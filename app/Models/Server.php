@@ -139,7 +139,7 @@ class Server extends Model
     protected $table = 'v2_server';
 
     protected $guarded = ['id'];
-    protected $attributes = ['accept_proxy_protocol' => false];
+    protected $attributes = ['accept_proxy_protocol' => false, 'auto_firewall' => true];
     protected $casts = [
         'group_ids' => 'array',
         'route_ids' => 'array',
@@ -154,6 +154,7 @@ class Server extends Model
         'show' => 'boolean',
         'enabled' => 'boolean',
         'accept_proxy_protocol' => 'boolean',
+        'auto_firewall' => 'boolean',
         'created_at' => 'timestamp',
         'updated_at' => 'timestamp',
         'rate_time_ranges' => 'array',

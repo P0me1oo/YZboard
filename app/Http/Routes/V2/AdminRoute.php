@@ -37,6 +37,11 @@ class AdminRoute
         ], function ($router) {
             $router->post('/realtime/ticket', [\App\Http\Controllers\V2\Admin\RealtimeController::class, 'ticket']);
             $router->post('/realtime/snapshot', [\App\Http\Controllers\V2\Admin\RealtimeController::class, 'snapshot']);
+            $router->group(['prefix' => 'database'], function ($router) {
+                $router->get('/overview', [\App\Http\Controllers\V2\Admin\DatabaseController::class, 'overview']);
+                $router->post('/preview', [\App\Http\Controllers\V2\Admin\DatabaseController::class, 'preview']);
+                $router->post('/cleanup', [\App\Http\Controllers\V2\Admin\DatabaseController::class, 'cleanup']);
+            });
             // Config
             $router->group([
                 'prefix' => 'config'

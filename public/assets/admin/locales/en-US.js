@@ -1,5 +1,66 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['en-US'] = {
+  "database": {
+    "title": "Database analysis",
+    "refresh": "Refresh analysis",
+    "checkedAt": "Analyzed: {{time}}",
+    "loading": "Analyzing database…",
+    "loadFailed": "Could not load database analysis. Please retry.",
+    "retry": "Retry",
+    "databaseSize": "Main database file",
+    "allocatedSize": "Tables and indexes",
+    "tableCount": "Tables",
+    "databaseType": "Database type",
+    "reusableSize": "Reusable free space",
+    "tables": "Table storage",
+    "search": "Search tables",
+    "sort": "Sort by",
+    "sortSize": "Storage size",
+    "sortName": "Table name",
+    "sortRows": "Estimated rows",
+    "tableName": "Table",
+    "usage": "Total",
+    "dataSize": "Data",
+    "indexSize": "Indexes",
+    "estimatedRows": "Estimated rows",
+    "empty": "No matching tables",
+    "sqliteSizeNote": "Main file pages only; write-ahead logs are excluded. Row estimates are unavailable in SQLite.",
+    "sqliteUnavailable": "Per-table sizes are unavailable in this SQLite build. Total storage and history cleanup remain available.",
+    "cleanup": "History cleanup",
+    "preview": "Preview cleanup",
+    "preparing": "Preparing preview…",
+    "unavailable": "Table unavailable",
+    "completed": "Deleted {{count}} records in this run",
+    "deletedRows": "Deleted {{count}}",
+    "moreRemaining": "Expired records remain. Preview again to continue cleanup.",
+    "confirmTitle": "Confirm history cleanup",
+    "confirmNote": "Preview contains {{count}} expired records. This run deletes up to {{limit}} per category.",
+    "eligible": "{{count}} expired",
+    "before": "Delete records before {{time}}",
+    "irreversible": "Deletion cannot be undone. Confirm you have any required backup. Preview expires in 10 minutes.",
+    "cancel": "Cancel",
+    "confirm": "Confirm cleanup",
+    "cleaning": "Cleaning…",
+    "requestFailed": "Request failed. Please retry.",
+    "targets": {
+      "access": {
+        "name": "Access records",
+        "retention": "Keep the last 7 days"
+      },
+      "machine": {
+        "name": "Machine monitoring history",
+        "retention": "Keep the last 24 hours"
+      },
+      "audit": {
+        "name": "Administrator audit logs",
+        "retention": "Keep the last 3 months"
+      },
+      "telegram": {
+        "name": "Telegram message deduplication",
+        "retention": "Keep the last 7 days; account bindings are preserved"
+      }
+    }
+  },
   "statistics": {
     "subscription": { "title": "Subscription statistics", "users": "Subscriptions by user", "last90": "Last 90 days", "client": "Client and version", "clients": "Clients", "requests": "Requests", "results": "Success / Failed", "resultCounts": "{{success}} / {{failure}}", "first": "First request", "last": "Last request", "time": "Request time", "status": "Response status", "format": "Subscription format", "date": "Date", "daily": "Daily totals", "recent": "Requests (7 days)", "history": "View records", "historyType": "Record type", "back": "Back to users", "close": "Close records", "refresh": "Refresh", "searchUser": "User email or ID", "searchClient": "Search clients" },
     "accessBack": "Back",

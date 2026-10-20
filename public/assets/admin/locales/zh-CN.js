@@ -1,5 +1,66 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['zh-CN'] = {
+  "database": {
+    "title": "数据库分析",
+    "refresh": "刷新分析",
+    "checkedAt": "分析时间：{{time}}",
+    "loading": "正在分析数据库…",
+    "loadFailed": "数据库分析读取失败，请重试。",
+    "retry": "重试",
+    "databaseSize": "数据库主文件",
+    "allocatedSize": "表与索引占用",
+    "tableCount": "数据表",
+    "databaseType": "数据库类型",
+    "reusableSize": "库内空闲空间",
+    "tables": "数据表占用",
+    "search": "搜索数据表",
+    "sort": "排序方式",
+    "sortSize": "按占用排序",
+    "sortName": "按表名排序",
+    "sortRows": "按估算行数排序",
+    "tableName": "数据表",
+    "usage": "总占用",
+    "dataSize": "数据占用",
+    "indexSize": "索引占用",
+    "estimatedRows": "估算行数",
+    "empty": "没有匹配的数据表",
+    "sqliteSizeNote": "显示主文件的分页占用，不含写入日志；SQLite 不估算行数。",
+    "sqliteUnavailable": "当前 SQLite 未提供各表占用统计，仍可查看数据库总占用和清理历史记录。",
+    "cleanup": "历史数据清理",
+    "preview": "预览清理",
+    "preparing": "正在预览…",
+    "unavailable": "数据表不可用",
+    "completed": "本轮已清理 {{count}} 条记录",
+    "deletedRows": "已删除 {{count}} 条",
+    "moreRemaining": "仍有到期记录，可再次预览并继续清理。",
+    "confirmTitle": "确认清理历史数据",
+    "confirmNote": "本次预览共 {{count}} 条到期记录，每个项目本轮最多删除 {{limit}} 条。",
+    "eligible": "到期 {{count}} 条",
+    "before": "清理早于 {{time}} 的记录",
+    "irreversible": "清理后无法恢复，请先确认已有所需备份。预览 10 分钟内有效。",
+    "cancel": "取消",
+    "confirm": "确认清理",
+    "cleaning": "正在清理…",
+    "requestFailed": "操作失败，请重试。",
+    "targets": {
+      "access": {
+        "name": "访问记录",
+        "retention": "保留最近 7 天"
+      },
+      "machine": {
+        "name": "机器监控历史",
+        "retention": "保留最近 24 小时"
+      },
+      "audit": {
+        "name": "管理员操作日志",
+        "retention": "保留最近 3 个月"
+      },
+      "telegram": {
+        "name": "Telegram 消息防重记录",
+        "retention": "保留最近 7 天，账号绑定保持"
+      }
+    }
+  },
   "statistics": {
     "subscription": { "title": "订阅统计", "users": "用户订阅汇总", "last90": "最近 90 天", "client": "客户端及版本", "clients": "客户端数", "requests": "拉取次数", "results": "成功 / 失败", "resultCounts": "{{success}} / {{failure}}", "first": "首次拉取", "last": "最近拉取", "time": "拉取时间", "status": "响应状态", "format": "订阅格式", "date": "日期", "daily": "每日统计", "recent": "逐次记录（7 天）", "history": "查看记录", "historyType": "记录类型", "back": "返回用户汇总", "close": "收起记录", "refresh": "刷新", "searchUser": "用户邮箱或编号", "searchClient": "搜索客户端" },
     "accessBack": "返回",

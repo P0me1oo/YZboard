@@ -41,6 +41,7 @@ class ServerController extends Controller
 
         return response()->json([
             'access_log' => ['version' => 2, 'retention_days' => \App\Services\ProxyAccessLog::RETENTION_DAYS],
+            'agent_log' => ['version' => 1, 'retention_days' => \App\Services\AgentLog::RETENTION_DAYS, 'events' => ['xray.crash']],
             'websocket' => $websocket,
             'settings' => [
                 'push_interval' => (int) admin_setting('server_push_interval', 60),
@@ -120,7 +121,7 @@ class ServerController extends Controller
 
         $limitEvents = $request->input('limit_events');
         if (is_array($limitEvents) && !empty($limitEvents)) {
-            ServerService::processLimitEvents($node, $limitEvents);
+            ServerService::processLimitEvents($node, $limitEvents, $request->input('report_id'));
         }
 
         return response()->json(['data' => true]);

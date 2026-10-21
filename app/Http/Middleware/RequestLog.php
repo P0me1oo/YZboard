@@ -3,12 +3,11 @@
 namespace App\Http\Middleware;
 
 use App\Models\AdminAuditLog;
+use App\Services\LogSanitizer;
 use Closure;
 
 class RequestLog
 {
-    private const SENSITIVE_KEYS = ['password', 'token', 'secret', 'key', 'api_key'];
-
     public function handle($request, Closure $next)
     {
         if ($request->method() !== 'POST') {
@@ -29,20 +28,20 @@ class RequestLog
             // 独立机器人只审计操作与配置变更标志，不能记录密钥或任意嵌套输入。
             $data = $isTelegramBot
                 ? ['token_updated' => $request->filled('token')]
-                : collect($request->all())->except(self::SENSITIVE_KEYS)->toArray();
+                : LogSanitizer::audit($request->all());
 
             AdminAuditLog::insert([
                 'admin_id' => $admin->id,
                 'action' => $action,
                 'method' => $request->method(),
-                'uri' => $isTelegramBot ? $request->getPathInfo() : $request->getRequestUri(),
+                'uri' => $request->getPathInfo(),
                 'request_data' => json_encode($data, JSON_UNESCAPED_UNICODE),
                 'ip' => $request->getClientIp(),
                 'created_at' => time(),
                 'updated_at' => time(),
             ]);
         } catch (\Throwable $e) {
-            \Log::warning('Audit log write failed: ' . $e->getMessage());
+            \Log::warning('管理员操作审计保存失败');
         }
 
         return $response;

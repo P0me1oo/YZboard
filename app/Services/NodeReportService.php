@@ -20,14 +20,15 @@ class NodeReportService
             'relay_user_traffic' => 'sometimes|array',
             'limit_events' => 'sometimes|array',
         ])->validate();
-        $batch = $this->accept(
+        $this->accept(
             $node, $data['report_id'], $data['traffic'] ?? [],
             $data['relay_traffic'] ?? [], $data['relay_user_traffic'] ?? []
         );
         ServerService::touchNode($node);
         ServerService::touchPush($node);
-        if (!empty($data['limit_events']) && (!$batch || $batch->wasRecentlyCreated)) {
-            ServerService::processLimitEvents($node, $data['limit_events']);
+        if (!empty($data['limit_events'])) {
+            // 限制事件自己登记接收状态；流量已接收不代表通知写入也成功。
+            ServerService::processLimitEvents($node, $data['limit_events'], $data['report_id']);
         }
         return ['report_id' => $data['report_id'], 'accepted' => true];
     }

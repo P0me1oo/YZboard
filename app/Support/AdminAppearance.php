@@ -10,6 +10,7 @@ class AdminAppearance
     // 系统管理和系统设置始终保留，避免隐藏恢复入口。
     public const ITEMS = [
         'dashboard', 'statistics', 'traffic-overview', 'inbound-ip', 'access-logs', 'subscription-statistics',
+        'log-management', 'system-logs', 'agent-logs', 'user-logs',
         'telegram-bot', 'database-analysis', 'plugin-management', 'theme-config', 'notice-management',
         'payment-config', 'knowledge-management', 'node-management',
         'machine-management', 'node-manage', 'permission-group-management', 'route-management',

@@ -66,6 +66,7 @@ class DatabaseMaintenance
         }
         $prefix = $connection->getTablePrefix();
         foreach ($tables as &$table) {
+            $table['schema_name'] = str_starts_with($table['name'], $prefix) ? substr($table['name'], strlen($prefix)) : $table['name'];
             $table['cleanup_target'] = null;
             foreach (self::TARGETS as $key => [$name]) {
                 if ($table['name'] === $prefix . $name) $table['cleanup_target'] = $key;

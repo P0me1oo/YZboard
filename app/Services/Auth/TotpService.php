@@ -10,6 +10,7 @@ use BaconQrCode\Renderer\ImageRenderer;
 use BaconQrCode\Renderer\RendererStyle\RendererStyle;
 use BaconQrCode\Writer;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -180,9 +181,14 @@ class TotpService
     public function resolveChallenge(string $challengeId, string $code): array
     {
         $key = $this->challengeKey($challengeId);
+        return Cache::lock($key . ':lock', 15)->block(2, fn () => $this->resolveLockedChallenge($key, $code));
+    }
+
+    private function resolveLockedChallenge(string $key, string $code): array
+    {
         $payload = Cache::get($key);
 
-        if (!is_array($payload) || empty($payload['user_id'])) {
+        if (!is_array($payload) || empty($payload['user_id']) || (int) ($payload['expires_at'] ?? 0) <= now()->timestamp) {
             return [false, [400, __('The verification session has expired, please sign in again')]];
         }
 
@@ -200,6 +206,7 @@ class TotpService
 
         if (!$this->verifyCode($user, $code)) {
             // 失败计数写回时只保留剩余有效期。
+            app(\App\Services\UserEventLog::class)->account($user, 'login', 'wrong_code');
             // 按固定 TTL 重写会让每次输错都把挑战续命，等于挑战永不过期，
             // 攻击者可以在同一个挑战里慢慢穷举 6 位动态码。
             $remaining = (int) ($payload['expires_at'] ?? 0) - now()->getTimestamp();
@@ -259,22 +266,22 @@ class TotpService
      */
     private function consumeRecoveryCode(User $user, string $code): bool
     {
-        $stored = $user->totp_recovery_codes ?? [];
-        if (empty($stored)) {
-            return false;
-        }
-
-        $normalized = strtoupper(trim($code));
-        foreach ($stored as $index => $hash) {
-            if (password_verify($normalized, $hash)) {
-                unset($stored[$index]);
-                $user->totp_recovery_codes = array_values($stored);
-                $user->save();
-                return true;
+        return DB::transaction(function () use ($user, $code) {
+            $current = User::whereKey($user->id)->lockForUpdate()->first();
+            if (!$current || $current->banned || !$this->isEnabled($current)) return false;
+            $stored = $current->totp_recovery_codes ?? [];
+            $normalized = strtoupper(trim($code));
+            foreach ($stored as $index => $hash) {
+                if (password_verify($normalized, $hash)) {
+                    unset($stored[$index]);
+                    $current->totp_recovery_codes = array_values($stored);
+                    if (!$current->saveOrFail()) throw new \RuntimeException('恢复码保存失败');
+                    $user->totp_recovery_codes = $current->totp_recovery_codes;
+                    return true;
+                }
             }
-        }
-
-        return false;
+            return false;
+        }, 3);
     }
 
     /**

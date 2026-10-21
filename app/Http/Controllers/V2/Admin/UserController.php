@@ -10,7 +10,6 @@ use App\Http\Requests\Admin\UserUpdate;
 use App\Jobs\SendEmailJob;
 use App\Models\Plan;
 use App\Models\User;
-use App\Services\AuthService;
 use App\Services\Plugin\HookManager;
 use App\Services\UserService;
 use App\Services\DeviceStateService;
@@ -275,7 +274,8 @@ class UserController extends Controller
         ], [
             'id.required' => '用户ID不能为空'
         ]);
-        $user = User::find($request->input('id'))->load('invite_user');
+        $user = User::with('invite_user')->find($request->input('id'));
+        if (!$user) return $this->fail([400202, '用户不存在']);
         $user = HookManager::filter('admin.user.detail', $user, $request);
         return $this->success($user);
     }
@@ -311,6 +311,7 @@ class UserController extends Controller
         if (isset($params['password'])) {
             $params['password'] = password_hash($params['password'], PASSWORD_DEFAULT);
             $params['password_algo'] = NULL;
+            $params['password_salt'] = NULL;
         } else {
             unset($params['password']);
         }
@@ -340,10 +341,6 @@ class UserController extends Controller
             $params['invite_user_id'] = null;
         }
 
-        if (isset($params['banned']) && (int) $params['banned'] === 1) {
-            $authService = new AuthService($user);
-            $authService->removeAllSessions();
-        }
         if (isset($params['balance'])) {
             $params['balance'] = $params['balance'] * 100;
         }
@@ -360,7 +357,13 @@ class UserController extends Controller
         ]);
 
         try {
-            $user->update($params);
+            DB::transaction(function () use ($user, $params) {
+                $current = User::whereKey($user->id)->lockForUpdate()->firstOrFail();
+                if (!$current->fill($params)->saveOrFail()) throw new \RuntimeException('用户信息保存失败');
+                if (isset($params['password']) || !empty($params['banned'])) {
+                    $current->tokens()->delete();
+                }
+            }, 3);
         } catch (\Exception $e) {
             Log::error($e);
             return $this->fail([500, '保存失败']);
@@ -667,12 +670,17 @@ class UserController extends Controller
         } // all: ignore filter/sort
 
         try {
-            $groupIds = (clone $builder)->reorder()->get(['group_id', 'group_ids'])
-                ->flatMap(fn (User $user) => $user->effectiveGroupIds())
-                ->unique()->all();
-            $builder->update([
-                'banned' => 1
-            ]);
+            $groupIds = DB::transaction(function () use ($builder) {
+                $users = (clone $builder)->reorder()->orderBy('id')->lockForUpdate()->get(['id', 'group_id', 'group_ids']);
+                $groups = $users->flatMap(fn (User $user) => $user->effectiveGroupIds())->unique()->all();
+                foreach ($users->chunk(500) as $chunk) {
+                    $ids = $chunk->pluck('id');
+                    User::whereIn('id', $ids)->update(['banned' => 1]);
+                    \Laravel\Sanctum\PersonalAccessToken::where('tokenable_type', (new User())->getMorphClass())
+                        ->whereIn('tokenable_id', $ids)->delete();
+                }
+                return $groups;
+            }, 3);
         } catch (\Exception $e) {
             Log::error($e);
             return $this->fail([500, '处理失败']);

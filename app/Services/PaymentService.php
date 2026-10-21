@@ -13,7 +13,6 @@ class PaymentService
     protected $config;
     protected $payment;
     protected $pluginManager;
-    protected $class;
 
     public function __construct($method, $id = NULL, $uuid = NULL)
     {
@@ -41,6 +40,7 @@ class PaymentService
 
         $this->config = [];
         if (isset($payment)) {
+            if ($payment['payment'] !== $method) throw new ApiException('Payment method does not match gateway', 422);
             $this->config = is_string($payment['config']) ? json_decode($payment['config'], true) : $payment['config'];
             $this->config['enable'] = $payment['enable'];
             $this->config['id'] = $payment['id'];
@@ -48,6 +48,7 @@ class PaymentService
             $this->config['notify_domain'] = $payment['notify_domain'] ?? '';
         }
 
+        $this->pluginManager->initializeEnabledPlugins();
         $paymentMethods = $this->getAvailablePaymentMethods();
         if (isset($paymentMethods[$this->method])) {
             $pluginCode = $paymentMethods[$this->method]['plugin_code'];
@@ -61,14 +62,15 @@ class PaymentService
             }
         }
 
-        $this->payment = new $this->class($this->config);
+        throw new ApiException('Payment plugin is unavailable', 422);
     }
 
     public function notify($params)
     {
         if (!$this->config['enable'])
             throw new ApiException('gate is not enable');
-        return $this->payment->notify($params);
+        $receipt = $this->payment->notify($params);
+        return is_array($receipt) ? array_merge($receipt, ['payment_id' => (int) $this->config['id']]) : $receipt;
     }
 
     public function pay($order)
@@ -86,7 +88,7 @@ class PaymentService
             'trade_no' => $order['trade_no'],
             'total_amount' => $order['total_amount'],
             'user_id' => $order['user_id'],
-            'stripe_token' => $order['stripe_token']
+            'stripe_token' => $order['stripe_token'] ?? $order['token'] ?? null
         ]);
     }
 

@@ -59,7 +59,7 @@ class BusinessNotificationService
             if (!$config?->enabled || !$config->bot_id || !$config->{'notify_' . $kind}) return;
             TelegramBotBinding::whereHas('user', fn ($query) => $query->where('banned', 0)
                 ->where(fn ($roles) => $roles->where('is_admin', 1)
-                    ->when($kind !== 'node_offline', fn ($roles) => $roles->orWhere('is_staff', 1))))
+                    ->when(!in_array($kind, ['node_offline', 'xray_crash'], true), fn ($roles) => $roles->orWhere('is_staff', 1))))
                 ->chunkById(100, function ($bindings) use ($config, $kind, $eventId): void {
                     foreach ($bindings as $binding) {
                         TelegramBusinessNotification::firstOrCreate([
@@ -90,6 +90,11 @@ class BusinessNotificationService
         $this->record('node_offline', $incidentId);
     }
 
+    public function recordXrayCrash(int $logId): void
+    {
+        if (app(XrayCrashService::class)->message($logId) !== null) $this->record('xray_crash', $logId);
+    }
+
     public function send(int $id): void
     {
         DB::transaction(function () use ($id): void {
@@ -104,7 +109,7 @@ class BusinessNotificationService
             if (!$config->getRawOriginal('token') || $config->bot_id !== $notification->bot_id
                 || !$config->{'notify_' . $notification->kind} || !$binding
                 || $binding->telegram_id !== $notification->telegram_id || !self::authorized($recipient)
-                || ($notification->kind === 'node_offline' && !$recipient->is_admin)
+                || (in_array($notification->kind, ['node_offline', 'xray_crash'], true) && !$recipient->is_admin)
                 || ($text = $this->message($notification)) === null) {
                 $notification->update(['status' => 'cancelled']);
                 return;
@@ -167,6 +172,9 @@ class BusinessNotificationService
     {
         if ($notification->kind === 'node_offline') {
             return app(NodeOfflineService::class)->message($notification->event_id);
+        }
+        if ($notification->kind === 'xray_crash') {
+            return app(XrayCrashService::class)->message($notification->event_id);
         }
         $site = '面板：' . $this->text(admin_setting('app_name', 'YZboard'), 80);
         if ($notification->kind === 'ticket') {

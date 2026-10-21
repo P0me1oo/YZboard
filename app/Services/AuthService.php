@@ -28,6 +28,8 @@ class AuthService
         $tokenParts = explode('|', $token->plainTextToken);
         $formattedToken = 'Bearer ' . ($tokenParts[1] ?? $tokenParts[0]);
 
+        app(UserEventLog::class)->account($this->user, 'login', 'success');
+
         return [
             'token' => $this->user->token,
             'auth_data' => $formattedToken,
@@ -64,7 +66,7 @@ class AuthService
 
         $tokenable = $accessToken->tokenable;
 
-        return $tokenable instanceof User ? $tokenable : null;
+        return $tokenable instanceof User && !$tokenable->banned ? $tokenable : null;
     }
 
     /**

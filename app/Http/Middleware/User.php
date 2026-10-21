@@ -19,7 +19,8 @@ class User
      */
     public function handle($request, Closure $next)
     {
-        if (!Auth::guard('sanctum')->check()) {
+        $user = Auth::guard('sanctum')->user();
+        if (!$user || $user->banned) {
             throw new ApiException('未登录或登陆已过期', 403);
         }
         return $next($request);

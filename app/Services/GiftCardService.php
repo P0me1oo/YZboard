@@ -180,7 +180,10 @@ class GiftCardService
 
         if (isset($rewards['reset_package']) && $rewards['reset_package']) {
             if ($this->user->plan_id) {
-                app(TrafficResetService::class)->performReset($this->user, TrafficResetLog::SOURCE_GIFT_CARD);
+                if (!app(TrafficResetService::class)->performReset($this->user, TrafficResetLog::SOURCE_GIFT_CARD)) {
+                    throw new ApiException('流量重置失败');
+                }
+                $this->user->refresh();
             }
         }
 

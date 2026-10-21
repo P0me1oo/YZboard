@@ -15,11 +15,12 @@ class TelegramGroupNodeRequest extends FormRequest
     {
         return [
             'group_link' => ['sometimes', 'nullable', 'string', 'max:2048', 'url:http,https'],
-            'auto_approve_join' => ['required_without:notify_node_offline', 'required_with:join_group_ids', 'boolean'],
+            'auto_approve_join' => ['required_without_all:notify_node_offline,notify_xray_crash', 'required_with:join_group_ids', 'boolean'],
             'join_group_ids' => ['present_with:auto_approve_join', 'array', 'max:20', $this->boolean('auto_approve_join') ? 'min:1' : 'min:0'],
             'join_group_ids.*' => ['required', 'string', 'distinct', 'regex:/\A-[1-9][0-9]{0,15}\z/', 'numeric', 'min:-4503599627370495', 'max:-1'],
-            'notify_node_offline' => ['required_without:auto_approve_join', 'required_with:node_offline_minutes', 'boolean'],
+            'notify_node_offline' => ['required_without_all:auto_approve_join,notify_xray_crash', 'required_with:node_offline_minutes', 'boolean'],
             'node_offline_minutes' => ['required_with:notify_node_offline', 'integer', 'min:1', 'max:1440'],
+            'notify_xray_crash' => ['sometimes', 'boolean'],
         ];
     }
 
@@ -27,6 +28,6 @@ class TelegramGroupNodeRequest extends FormRequest
     {
         return ['group_link' => 'Telegram 群组链接', 'auto_approve_join' => '自动审核入群', 'join_group_ids' => '审核群组',
             'join_group_ids.*' => '群组 ID', 'notify_node_offline' => '节点掉线通知',
-            'node_offline_minutes' => '掉线等待分钟数'];
+            'node_offline_minutes' => '掉线等待分钟数', 'notify_xray_crash' => 'Xray 核心崩溃通知'];
     }
 }

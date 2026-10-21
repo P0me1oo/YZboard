@@ -54,6 +54,7 @@ class ConfigService
             'auto_approve_join' => $config->auto_approve_join,
             'join_group_ids' => $config->join_group_ids ?? [],
             'notify_node_offline' => $config->notify_node_offline,
+            'notify_xray_crash' => $config->notify_xray_crash,
             'node_offline_minutes' => $config->node_offline_minutes,
             'notify_ticket' => $config->notify_ticket,
             'allow_ticket_reply' => $config->allow_ticket_reply,
@@ -100,10 +101,14 @@ class ConfigService
                 ]);
             }
             $config->fill(array_intersect_key($input, array_flip([
-                'group_link', 'auto_approve_join', 'join_group_ids', 'notify_node_offline', 'node_offline_minutes',
+                'group_link', 'auto_approve_join', 'join_group_ids', 'notify_node_offline', 'node_offline_minutes', 'notify_xray_crash',
             ])))->save();
             if (array_key_exists('notify_node_offline', $input) && !$config->notify_node_offline) {
                 \App\Models\TelegramBusinessNotification::where('kind', 'node_offline')->where('status', 'pending')
+                    ->update(['status' => 'cancelled']);
+            }
+            if (array_key_exists('notify_xray_crash', $input) && !$config->notify_xray_crash) {
+                \App\Models\TelegramBusinessNotification::where('kind', 'xray_crash')->where('status', 'pending')
                     ->update(['status' => 'cancelled']);
             }
             return $this->view($config);

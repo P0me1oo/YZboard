@@ -212,6 +212,13 @@ class MachineController extends Controller
         return response()->json(['data' => true]);
     }
 
+    public function agentLog(Request $request, \App\Services\AgentLog $logs)
+    {
+        abort_unless($request->isJson() && strlen($request->getContent()) <= 262144, 422);
+        $machine = $this->authenticateMachine($request);
+        return response()->json(['data' => $logs->accept(null, $machine, $request->json()->all())]);
+    }
+
     private function authenticateMachine(Request $request, bool $allowDisabled = false): ServerMachine
     {
         $request->validate([

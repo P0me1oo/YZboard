@@ -36,6 +36,8 @@ class AdminRoute
             'middleware' => ['admin', 'log', 'throttle:admin-api'],
         ], function ($router) {
             $router->post('/realtime/ticket', [\App\Http\Controllers\V2\Admin\RealtimeController::class, 'ticket']);
+            $router->get('/logs/agent/nodes', [\App\Http\Controllers\V2\Admin\LogController::class, 'nodes']);
+            $router->get('/logs/{category}', [\App\Http\Controllers\V2\Admin\LogController::class, 'fetch'])->where('category', 'system|agent|user');
             $router->post('/realtime/snapshot', [\App\Http\Controllers\V2\Admin\RealtimeController::class, 'snapshot']);
             $router->group(['prefix' => 'database'], function ($router) {
                 $router->get('/overview', [\App\Http\Controllers\V2\Admin\DatabaseController::class, 'overview']);

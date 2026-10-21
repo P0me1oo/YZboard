@@ -4,6 +4,7 @@ namespace Plugin\Epay;
 
 use App\Services\Plugin\AbstractPlugin;
 use App\Contracts\PaymentInterface;
+use App\Services\PaymentReceipt;
 
 class Plugin extends AbstractPlugin implements PaymentInterface
 {
@@ -79,18 +80,26 @@ class Plugin extends AbstractPlugin implements PaymentInterface
 
     public function notify($params): array|bool
     {
-        $sign = $params['sign'];
+        $sign = $params['sign'] ?? null;
+        $key = (string) $this->getConfig('key', '');
+        if (!is_string($sign) || $key === '') return false;
         unset($params['sign'], $params['sign_type']);
         ksort($params);
         $str = stripslashes(urldecode(http_build_query($params))) . $this->getConfig('key');
 
-        if ($sign !== md5($str)) {
+        if (!hash_equals(md5($str), $sign) || (string) ($params['pid'] ?? '') !== (string) $this->getConfig('pid')) {
             return false;
         }
 
+        if (($params['trade_status'] ?? null) !== 'TRADE_SUCCESS') {
+            return ['paid' => false, 'custom_result' => 'success'];
+        }
+
         return [
-            'trade_no' => $params['out_trade_no'],
-            'callback_no' => $params['trade_no']
+            'trade_no' => $params['out_trade_no'] ?? null,
+            'callback_no' => $params['trade_no'] ?? null,
+            'amount_cents' => PaymentReceipt::cents($params['money'] ?? null),
+            'currency' => 'CNY', 'exact_amount' => true,
         ];
     }
 }

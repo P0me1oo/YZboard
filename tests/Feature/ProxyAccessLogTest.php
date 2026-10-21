@@ -275,6 +275,52 @@ class ProxyAccessLogTest extends TestCase
         $this->fetch(['view' => 'users'])->assertOk()->assertJsonPath('data.total', 1)->assertJsonPath('data.list.0.access_count', 1);
     }
 
+    public function test_today_summary_and_details_exclude_adjacent_days(): void
+    {
+        $this->travelTo(\Carbon\Carbon::parse('2026-10-16 23:59:50', 'Asia/Shanghai'));
+        $midnight = now()->startOfDay()->timestamp;
+        foreach ([$midnight - 1, $midnight, now()->timestamp - 1, $midnight + 86400] as $at) {
+            $this->push($this->batch(['connected_at' => $at]))->assertOk();
+        }
+        $today = $this->fetch(['view' => 'users'])->assertOk()->assertJsonPath('data.total', 1)
+            ->assertJsonPath('data.list.0.access_count', 2)->json('data');
+        $this->fetch(['view' => 'records'])->assertOk()->assertJsonPath('data.total', 2);
+        $this->fetch(['view' => 'targets', 'user_id' => $this->user->id])->assertOk()->assertJsonPath('data.list.0.access_count', 2);
+        $this->fetch(['view' => 'users', 'period' => '7d'])->assertOk()->assertJsonPath('data.list.0.access_count', 4);
+        $this->fetch(['view' => 'users', 'period' => 'custom', 'start_at' => '2026-10-15T00:00', 'end_at' => '2026-10-16T00:00'])
+            ->assertOk()->assertJsonPath('data.list.0.access_count', 1);
+        $this->travel(20)->seconds();
+        $this->fetch(['view' => 'users', 'snapshot_id' => $today['snapshot_id'], 'snapshot_at' => $today['snapshot_at']])
+            ->assertOk()->assertJsonPath('data.list.0.access_count', 2);
+        $this->fetch(['view' => 'users'])->assertOk()->assertJsonPath('data.list.0.access_count', 1);
+    }
+
+    public function test_mariadb_user_summary_reads_a_covering_time_range(): void
+    {
+        if (DB::connection()->getDriverName() !== 'mysql') {
+            $this->markTestSkipped('MariaDB 查询计划专项。');
+        }
+        $batch = $this->batch(['connected_at' => now()->subDays(3)->timestamp]);
+        $batch['records'] = array_fill(0, 256, $batch['records'][0]);
+        $this->push($batch)->assertOk();
+        $this->push($this->batch())->assertOk();
+        DB::enableQueryLog();
+        try {
+            $this->fetch(['view' => 'users'])->assertOk()->assertJsonPath('data.total', 1)->assertJsonPath('data.list.0.access_count', 1);
+            $queries = array_values(array_filter(DB::getQueryLog(), fn ($query) => str_contains($query['query'], '`v2_proxy_access_log` as `a`')));
+        } finally {
+            DB::disableQueryLog();
+            DB::flushQueryLog();
+        }
+        $this->assertCount(2, $queries);
+        foreach ($queries as $query) {
+            $plan = DB::select('EXPLAIN ' . $query['query'], $query['bindings'])[0];
+            $this->assertSame('range', $plan->type);
+            $this->assertSame('proxy_access_time_user', $plan->key);
+            $this->assertStringContainsString('Using index', $plan->Extra);
+        }
+    }
+
     public function test_target_sorting_pagination_and_expired_snapshot(): void
     {
         $batch = $this->batch(['destination' => 'b.example']);

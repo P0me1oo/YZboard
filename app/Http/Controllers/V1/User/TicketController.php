@@ -22,8 +22,7 @@ class TicketController extends Controller
         if ($request->input('id')) {
             $ticket = Ticket::where('id', $request->input('id'))
                 ->where('user_id', $request->user()->id)
-                ->first()
-                ->load('message');
+                ->first();
             if (!$ticket) {
                 return $this->fail([400, __('Ticket does not exist')]);
             }

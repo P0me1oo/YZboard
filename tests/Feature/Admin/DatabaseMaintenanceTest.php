@@ -81,6 +81,8 @@ class DatabaseMaintenanceTest extends TestCase
         $this->assertGreaterThan(0, $data['total_bytes']);
         $this->assertSame(count($data['tables']), $data['table_count']);
         $tables = collect($data['tables'])->keyBy('name');
+        $this->assertSame('v2_user', $tables['v2_user']['schema_name']);
+        $this->assertSame('v2_admin_audit_log', $tables['v2_admin_audit_log']['schema_name']);
         $this->assertSame('audit', $tables['v2_admin_audit_log']['cleanup_target']);
         $this->assertNull($tables['v2_user']['cleanup_target']);
         $this->assertArrayNotHasKey('database', $data);
@@ -92,6 +94,22 @@ class DatabaseMaintenanceTest extends TestCase
         } else {
             $this->assertIsInt($data['free_bytes']);
             $this->assertNull($tables['v2_user']['rows']);
+        }
+    }
+
+    public function test_overview_normalizes_prefixed_table_names_without_changing_cleanup_permissions(): void
+    {
+        $connection = DB::connection();
+        $prefix = $connection->getTablePrefix();
+        $connection->setTablePrefix('v2_');
+        try {
+            $tables = collect(app(DatabaseMaintenance::class)->overview()['tables'])->keyBy('name');
+            $this->assertSame('user', $tables['v2_user']['schema_name']);
+            $this->assertSame('admin_audit_log', $tables['v2_admin_audit_log']['schema_name']);
+            $this->assertNull($tables['v2_admin_audit_log']['cleanup_target']);
+            $this->assertSame('migrations', $tables['migrations']['schema_name']);
+        } finally {
+            $connection->setTablePrefix($prefix);
         }
     }
 

@@ -25,6 +25,9 @@ class LoginService
         if ((int) admin_setting('password_limit_enable', true)) {
             $passwordErrorCount = (int) Cache::get($passwordErrorKey, 0);
             if ($passwordErrorCount >= (int) admin_setting('password_limit_count', 5)) {
+                if ($limitedUser = User::byEmail($email)->first()) {
+                    app(\App\Services\UserEventLog::class)->account($limitedUser, 'login', 'rate_limited');
+                }
                 return [
                     false,
                     [
@@ -53,6 +56,7 @@ class LoginService
             )
         ) {
             // 增加密码错误计数
+            app(\App\Services\UserEventLog::class)->account($user, 'login', 'wrong_password');
             if ((int) admin_setting('password_limit_enable', true)) {
                 $passwordErrorCount = (int) Cache::get($passwordErrorKey, 0);
                 Cache::put(
@@ -66,6 +70,7 @@ class LoginService
 
         // 检查账户状态
         if ($user->banned) {
+            app(\App\Services\UserEventLog::class)->account($user, 'login', 'banned');
             return [false, [400, __('Your account has been suspended')]];
         }
 
@@ -137,6 +142,8 @@ class LoginService
         // 订阅 token 不在这里轮换：轮换会让用户所有客户端都要重新导入订阅，
         // 属于独立的产品决策，需要时应由用户在“重置订阅信息”里主动触发。
         $user->tokens()->delete();
+
+        app(\App\Services\UserEventLog::class)->account($user, 'password_reset', 'success');
 
         HookManager::call('user.password.reset.after', $user);
 

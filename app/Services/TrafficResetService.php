@@ -25,29 +25,38 @@ class TrafficResetService
       return false;
     }
 
-    return $this->performReset($user, $triggerSource);
+    return $this->performReset($user, $triggerSource, true);
   }
 
   /**
    * Perform the traffic reset for a user.
    */
-  public function performReset(User $user, string $triggerSource = TrafficResetLog::SOURCE_MANUAL): bool
+  public function performReset(User $user, string $triggerSource = TrafficResetLog::SOURCE_MANUAL, bool $onlyWhenDue = false): bool
   {
     try {
-      return DB::transaction(function () use ($user, $triggerSource) {
+      return DB::transaction(function () use ($user, $triggerSource, $onlyWhenDue) {
+        $current = User::whereKey($user->id)->lockForUpdate()->firstOrFail();
+        if ($onlyWhenDue && !$current->shouldResetTraffic()) return false;
+        // 订单可能尚有待保存的套餐额度；只从锁内最新数据取得用量和重置计数。
+        $pending = $onlyWhenDue ? [] : $user->getDirty();
+        unset($pending['u'], $pending['d'], $pending['last_reset_at'], $pending['next_reset_at'], $pending['reset_count']);
+        $current->fill($pending);
+        $current->unsetRelation('plan');
+        $user = $current;
         $oldUpload = $user->u ?? 0;
         $oldDownload = $user->d ?? 0;
         $oldTotal = $oldUpload + $oldDownload;
 
         $nextResetTime = $this->calculateNextResetTime($user);
 
-        $user->update([
+        $user->fill([
           'u' => 0,
           'd' => 0,
           'last_reset_at' => time(),
           'reset_count' => $user->reset_count + 1,
           'next_reset_at' => $nextResetTime ? $nextResetTime->timestamp : null,
         ]);
+        if (!$user->saveOrFail()) throw new \RuntimeException('用户流量重置保存失败');
 
         $this->recordResetLog($user, [
           'reset_type' => $this->getResetTypeFromPlan($user->plan),
@@ -63,7 +72,7 @@ class TrafficResetService
         $this->clearUserCache($user);
         HookManager::call('traffic.reset.after', $user);
         return true;
-      });
+      }, 3);
     } catch (\Exception $e) {
       Log::error(__('traffic_reset.reset_failed'), [
         'user_id' => $user->id,

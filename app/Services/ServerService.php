@@ -11,6 +11,7 @@ use App\Services\Plugin\HookManager;
 use App\Utils\CacheKey;
 use App\Utils\Helper;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Collection;
 
@@ -482,7 +483,20 @@ class ServerService
      *
      * @param array $events 节点上报的原始事件列表
      */
-    public static function processLimitEvents(Server $node, array $events): void
+    public static function processLimitEvents(Server $node, array $events, ?string $reportId = null, bool $notify = true): void
+    {
+        DB::transaction(function () use ($node, $events, $reportId, $notify) {
+            if ($reportId !== null && trim($reportId) !== '') {
+                $receipt = \App\Models\NodeLimitReceipt::query()->lockForUpdate()->createOrFirst([
+                    'node_id' => $node->id, 'report_key' => hash('sha256', $reportId),
+                ], ['accepted_at' => now()->timestamp]);
+                if (!$receipt->wasRecentlyCreated) return;
+            }
+            self::persistLimitEvents($node, $events, $reportId, $notify);
+        }, 3);
+    }
+
+    private static function persistLimitEvents(Server $node, array $events, ?string $reportId, bool $notify): void
     {
         $normalized = [];
 
@@ -492,7 +506,7 @@ class ServerService
             }
             $userId = (int) ($event['user_id'] ?? 0);
             $kind = (string) ($event['kind'] ?? '');
-            if ($userId <= 0 || !in_array($kind, ['conn', 'rate', 'device'], true)) {
+            if ($userId <= 0 || !in_array($kind, ['conn', 'rate', 'device', 'speed'], true)) {
                 continue;
             }
             $item = [
@@ -501,6 +515,8 @@ class ServerService
                 'limit' => max(0, (int) ($event['limit'] ?? 0)),
                 'observed' => max(0, (int) ($event['observed'] ?? 0)),
                 'count' => max(0, (int) ($event['count'] ?? 0)),
+                'last_at' => max(0, (int) ($event['last_at'] ?? 0)),
+                'occurred_at' => min(now()->timestamp, max(1, (int) ($event['occurred_at'] ?? now()->timestamp))),
             ];
             // 被拒来源只属于设备数超限，并发和速率事件保持原有字段。
             if ($kind === 'device') {
@@ -516,6 +532,12 @@ class ServerService
             return;
         }
 
+        app(UserEventLog::class)->limits($node, $normalized, $reportId);
+        if (!$notify) return;
+        // 带宽限速只进入日志，不冒充连接建立频率通知。
+        $normalized = array_values(array_filter($normalized, fn ($event) => $event['kind'] !== 'speed'));
+        $normalized = array_map(function ($event) { unset($event['last_at'], $event['occurred_at']); return $event; }, $normalized);
+        if (!$normalized) return;
         app(\App\Services\TelegramBot\ReminderService::class)->recordLimits($normalized);
         app(\App\Services\TelegramBot\AdminNotificationService::class)->recordLimits($node, $normalized);
 

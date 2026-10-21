@@ -67,6 +67,7 @@ class UserController extends Controller
                 $user->password
             )
         ) {
+            app(\App\Services\UserEventLog::class)->account($user, 'password_change', 'wrong_password');
             return $this->fail([400, __('The old password is wrong')]);
         }
         $user->password = password_hash($request->input('new_password'), PASSWORD_DEFAULT);
@@ -82,6 +83,7 @@ class UserController extends Controller
         } else {
             $user->tokens()->delete();
         }
+        app(\App\Services\UserEventLog::class)->account($user, 'password_change', 'success');
         
         return $this->success(true);
     }

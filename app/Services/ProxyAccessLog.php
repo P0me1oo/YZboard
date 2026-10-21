@@ -97,6 +97,7 @@ class ProxyAccessLog
         $period = $input['period'] ?? 'today';
         $start = $period === 'custom' ? CarbonImmutable::createFromFormat('!Y-m-d\TH:i', $input['start_at'], $now->timezone) : ($period === '7d' ? $anchor->subSeconds(self::RETENTION_DAYS * 86400) : $anchor->startOfDay());
         $end = $period === 'custom' ? CarbonImmutable::createFromFormat('!Y-m-d\TH:i', $input['end_at'], $now->timezone) : $anchor->addMinutes(5);
+        if ($period === 'today') $end = $end->min($anchor->startOfDay()->addDay());
         if (($period === 'custom' && $start < $anchor->subSeconds(self::RETENTION_DAYS * 86400)->startOfMinute()) || $end > $now->addMinutes(5)->endOfMinute() || $start >= $end
             || ($period === 'custom' && ($start->format('Y-m-d\TH:i') !== $input['start_at'] || $end->format('Y-m-d\TH:i') !== $input['end_at']))) {
             throw ValidationException::withMessages(['start_at' => '请选择最近 7 天内的有效时间。']);
@@ -133,6 +134,10 @@ class ProxyAccessLog
         $size = (int) ($input['page_size'] ?? 20);
         $view = $input['view'] ?? 'records';
         $sort = $input['sort'] ?? 'count';
+        if ($view === 'users' && $user === '' && !isset($input['user_id']) && DB::connection()->getDriverName() === 'mysql') {
+            // 汇总先按所选时间范围读取；避免为用户去重而扫描全部历史用户索引。
+            $query->forceIndex('proxy_access_time_user');
+        }
         if ($view === 'records') {
             $total = (clone $query)->count();
             $query->select('a.id', 'a.user_id', 'a.server_id', 'a.server_name', 'a.connected_at', 'a.destination', 'a.port')

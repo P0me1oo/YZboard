@@ -23,26 +23,33 @@ class PaymentController extends Controller
                 return $this->fail([422, 'verify error']);
             }
             HookManager::call('payment.notify.verified', $verify);
-            if (!$this->handle($verify['trade_no'], $verify['callback_no'])) {
+            // 兼容网关的待付款确认文本；合法非付款通知不进入开通流程。
+            if (is_string($verify)) return $verify;
+            if (!is_array($verify)) return $this->fail([422, 'verify error']);
+            if (($verify['paid'] ?? true) === false) return $verify['custom_result'] ?? 'success';
+            if (!is_string($verify['trade_no'] ?? null) || $verify['trade_no'] === ''
+                || !is_string($verify['callback_no'] ?? null) || $verify['callback_no'] === '') {
+                return $this->fail([422, 'invalid payment receipt']);
+            }
+            if (!$this->handle($verify)) {
                 return $this->fail([400, 'handle error']);
             }
             return (isset($verify['custom_result']) ? $verify['custom_result'] : 'success');
         } catch (\Exception $e) {
-            Log::error($e);
+            Log::warning('支付回调处理失败', ['reason' => \App\Services\LogSanitizer::text($e->getMessage())]);
+            if ($e instanceof \App\Exceptions\ApiException) return $this->fail([$e->getCode(), 'invalid payment receipt']);
             return $this->fail([500, 'fail']);
         }
     }
 
-    private function handle($tradeNo, $callbackNo)
+    private function handle(array $receipt): bool
     {
-        $order = Order::where('trade_no', $tradeNo)->first();
+        $order = Order::where('trade_no', $receipt['trade_no'])->first();
         if (!$order) {
-            return $this->fail([400202, 'order is not found']);
+            return false;
         }
-        if ($order->status !== Order::STATUS_PENDING)
-            return true;
         $orderService = new OrderService($order);
-        if (!$orderService->paid($callbackNo, true)) {
+        if (!$orderService->paid($receipt['callback_no'], true, $receipt)) {
             return false;
         }
 

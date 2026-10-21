@@ -8,8 +8,6 @@ use App\Services\NodeSyncService;
 
 class ServerObserver
 {
-    public bool $afterCommit = true;
-
     /**
      * 影响入口节点出站与路由规则的字段。逻辑节点的这些字段变化时，入口必须重新下发配置。
      */
@@ -28,11 +26,20 @@ class ServerObserver
 
     public function created(Server $server): void
     {
-        $this->notifyMachineNodesChanged($server->machine_id);
-        $this->notifyRelayEntry($server->relay_entry_id);
+        $snapshot = clone $server;
+        $server->getConnection()->afterCommit(function () use ($snapshot) {
+            $this->notifyMachineNodesChanged($snapshot->machine_id);
+            $this->notifyRelayEntry($snapshot->relay_entry_id);
+        });
     }
 
     public function updated(Server $server): void
+    {
+        $snapshot = clone $server;
+        $server->getConnection()->afterCommit(fn () => $this->updatedAfterCommit($snapshot));
+    }
+
+    private function updatedAfterCommit(Server $server): void
     {
         if ($server->wasChanged('group_ids')) {
             NodeSyncService::notifyFullSync($server->id);
@@ -66,6 +73,12 @@ class ServerObserver
     }
 
     public function deleted(Server $server): void
+    {
+        $snapshot = clone $server;
+        $server->getConnection()->afterCommit(fn () => $this->deletedAfterCommit($snapshot));
+    }
+
+    private function deletedAfterCommit(Server $server): void
     {
         $this->notifyMachineChange(null, $server->getOriginal('machine_id') ?: $server->machine_id);
         $this->notifyRelayEntry($server->getOriginal('relay_entry_id') ?: $server->relay_entry_id);

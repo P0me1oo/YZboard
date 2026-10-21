@@ -145,7 +145,7 @@ class OrderService
 
             match ((string) $order->period) {
                 Plan::PERIOD_ONETIME => $this->buyByOneTime($plan),
-                Plan::PERIOD_RESET_TRAFFIC => app(TrafficResetService::class)->performReset($this->user, TrafficResetLog::SOURCE_ORDER),
+                Plan::PERIOD_RESET_TRAFFIC => $this->resetUserTraffic(),
                 default => $this->buyByPeriod($order, $plan),
             };
 
@@ -324,14 +324,15 @@ class OrderService
         }
     }
 
-    public function paid(string $callbackNo, bool $notifyPayment = false)
+    public function paid(string $callbackNo, bool $notifyPayment = false, ?array $receipt = null)
     {
         try {
-            [$order, $shouldDispatch] = DB::transaction(function () use ($callbackNo, $notifyPayment) {
+            [$order, $shouldDispatch] = DB::transaction(function () use ($callbackNo, $notifyPayment, $receipt) {
                 $order = $this->lockCurrentOrder();
                 if (!$order) {
                     throw new \RuntimeException('Order not found.');
                 }
+                if ($receipt !== null) PaymentReceipt::validate($order, $receipt);
                 if ((int) $order->status !== Order::STATUS_PENDING) {
                     return [$order, false];
                 }
@@ -356,7 +357,8 @@ class OrderService
                 OrderHandleJob::dispatchSync($order->trade_no);
             }
         } catch (\Exception $e) {
-            Log::error($e);
+            Log::warning('订单付款处理失败', ['order_id' => $this->order->id,
+                'reason' => LogSanitizer::text($e->getMessage())]);
             return false;
         }
         return true;
@@ -430,7 +432,7 @@ class OrderService
         $this->user->transfer_enable = $plan->transfer_enable * 1073741824;
         // 从一次性转换到循环或者新购的时候，重置流量
         if ($this->user->expired_at === NULL || $order->type === Order::TYPE_NEW_PURCHASE)
-            app(TrafficResetService::class)->performReset($this->user, TrafficResetLog::SOURCE_ORDER);
+            $this->resetUserTraffic();
         $this->user->plan_id = $plan->id;
         $this->user->group_id = $plan->group_id;
         $this->user->group_ids = $plan->effectiveGroupIds();
@@ -439,7 +441,7 @@ class OrderService
 
     private function buyByOneTime(Plan $plan)
     {
-        app(TrafficResetService::class)->performReset($this->user, TrafficResetLog::SOURCE_ORDER);
+        $this->resetUserTraffic();
         $this->user->transfer_enable = $plan->transfer_enable * 1073741824;
         $this->user->plan_id = $plan->id;
         $this->user->group_id = $plan->group_id;
@@ -473,9 +475,17 @@ class OrderService
             case 0:
                 break;
             case 1:
-                app(TrafficResetService::class)->performReset($this->user, TrafficResetLog::SOURCE_ORDER);
+                $this->resetUserTraffic();
                 break;
         }
+    }
+
+    private function resetUserTraffic(): void
+    {
+        if (!app(TrafficResetService::class)->performReset($this->user, TrafficResetLog::SOURCE_ORDER)) {
+            throw new \RuntimeException('用户流量重置失败');
+        }
+        $this->user->refresh();
     }
 
     protected function applyCoupon(string $couponCode): void

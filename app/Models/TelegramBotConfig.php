@@ -14,6 +14,7 @@ class TelegramBotConfig extends Model
         'auto_approve_join' => 'boolean',
         'join_group_ids' => 'array',
         'notify_node_offline' => 'boolean',
+        'notify_xray_crash' => 'boolean',
         'node_offline_minutes' => 'integer',
         'notify_ticket' => 'boolean',
         'allow_ticket_reply' => 'boolean',

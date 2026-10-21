@@ -5,6 +5,7 @@ namespace Plugin\Coinbase;
 use App\Services\Plugin\AbstractPlugin;
 use App\Contracts\PaymentInterface;
 use App\Exceptions\ApiException;
+use App\Services\PaymentReceipt;
 
 class Plugin extends AbstractPlugin implements PaymentInterface
 {
@@ -78,24 +79,38 @@ class Plugin extends AbstractPlugin implements PaymentInterface
 
     public function notify($params): array
     {
-        $payload = trim(request()->getContent());
-        $json_param = json_decode($payload, true);
-
-        $headerName = 'X-Cc-Webhook-Signature';
-        $headers = getallheaders();
-        $signatureHeader = isset($headers[$headerName]) ? $headers[$headerName] : '';
-        $computedSignature = \hash_hmac('sha256', $payload, $this->getConfig('coinbase_webhook_key'));
-
-        if (!$this->hashEqual($signatureHeader, $computedSignature)) {
+        $payload = request()->getContent();
+        $key = (string) $this->getConfig('coinbase_webhook_key', '');
+        $signatureHeader = request()->header('X-Cc-Webhook-Signature', '');
+        $computedSignature = hash_hmac('sha256', $payload, $key);
+        if ($key === '' || !hash_equals($computedSignature, $signatureHeader)) {
             throw new ApiException('HMAC signature does not match', 400);
         }
 
-        $out_trade_no = $json_param['event']['data']['metadata']['outTradeNo'];
-        $pay_trade_no = $json_param['event']['id'];
-        
+        $json = json_decode($payload, true, 64, JSON_THROW_ON_ERROR);
+        $event = $json['event'] ?? [];
+        // 创建、待确认、失败及人工处理事件只确认接收，不签发权益。
+        if (($event['type'] ?? null) !== 'charge:confirmed') {
+            return ['paid' => false, 'custom_result' => 'success'];
+        }
+        $charge = $event['data'] ?? [];
+        $timeline = $charge['timeline'] ?? [];
+        if (!is_array($timeline) || ($timeline[count($timeline) - 1]['status'] ?? null) !== 'COMPLETED') {
+            throw new ApiException('Charge is not completed', 422);
+        }
+        $currency = $charge['pricing']['local']['currency'] ?? null;
+        $amount = 0;
+        foreach ($charge['payments'] ?? [] as $payment) {
+            if (($payment['status'] ?? null) !== 'CONFIRMED') continue;
+            if (($payment['value']['local']['currency'] ?? null) !== $currency) {
+                throw new ApiException('Payment currency does not match charge', 422);
+            }
+            $amount += PaymentReceipt::cents($payment['value']['local']['amount'] ?? null);
+        }
         return [
-            'trade_no' => $out_trade_no,
-            'callback_no' => $pay_trade_no
+            'trade_no' => $charge['metadata']['outTradeNo'] ?? null,
+            'callback_no' => $event['id'] ?? null,
+            'amount_cents' => $amount, 'currency' => $currency,
         ];
     }
 
@@ -117,22 +132,4 @@ class Plugin extends AbstractPlugin implements PaymentInterface
         return $result;
     }
 
-    private function hashEqual($str1, $str2)
-    {
-        if (function_exists('hash_equals')) {
-            return \hash_equals($str1, $str2);
-        }
-
-        if (strlen($str1) != strlen($str2)) {
-            return false;
-        } else {
-            $res = $str1 ^ $str2;
-            $ret = 0;
-
-            for ($i = strlen($res) - 1; $i >= 0; $i--) {
-                $ret |= ord($res[$i]);
-            }
-            return !$ret;
-        }
-    }
-} 
+}

@@ -55,6 +55,7 @@ class ServerController extends Controller
                 'device_handover' => 1,
                 'device_handover_ws' => 1,
                 'device_handover_renewal' => 1,
+                'device_handover_admit_sync' => 1,
             ],
         ]);
     }

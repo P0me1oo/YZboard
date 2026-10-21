@@ -1,5 +1,9 @@
 # Xboard
 
+本地开发版 `1.104.5` 同步上游 PHP 安全更新，容器固定使用 PHP `8.2.35`，修复 `CVE-2026-109618`、`CVE-2026-109619`；保留下方设备授权改动和 YZ 定制功能。尚未发布，来源及验证状态见[兼容矩阵](YZ_COMPATIBILITY.md)。
+
+本地开发版 `1.104.4` 配套 Node `v2.24.0`：首次设备状态同步与授权合为一次请求，减少批量测延迟时的等待；旧版兼容，保留设备限制和真实关闭确认。尚未发布，线上偶发超时尚未完成实际链路归因，详见[设备换网](docs/device-handover.md)。
+
 面板 [v1.104.3](https://github.com/P0me1oo/YZboard/releases/tag/v1.104.3) 已正式发布，管理端为 `0.75.1`。修复支付误开通、会话撤销、敏感日志、恢复码、旧绑定同步、流量重置、套餐新购、工单和上报去重等 13 项问题，并一并交付 `1.102.1` 至 `1.104.2` 开发阶段的面板修改。PHP 8.2 双数据库回归、双架构镜像及核验附件通过检查，`latest` 已更新。说明见[面板修复](docs/panel-bugfixes.md)，来源、摘要与回滚见[兼容矩阵](YZ_COMPATIBILITY.md)。
 
 新增[日志管理与节点筛选](docs/log-management.md)、默认关闭的 [Xray 崩溃通知开关](docs/telegram-bot.md)、[数据库表用途说明](docs/database-maintenance.md)及[访问记录查询优化](docs/access-logs.md)。本次只发布面板，Agent 沿用已发布的 `v2.22.1`，核心不升级；Agent 运行日志和 Xray 崩溃事件仍需未来配套 Agent，`v2.24.0` 尚未发布。生产历史敏感审计与备份不会自动清除。
@@ -125,7 +129,7 @@
 <div align="center">
 
 [![Telegram](https://img.shields.io/badge/Telegram-Channel-blue)](https://t.me/XboardOfficial)
-![PHP](https://img.shields.io/badge/PHP-8.2+-green.svg)
+![PHP](https://img.shields.io/badge/PHP-8.2.35+-green.svg)
 ![MySQL](https://img.shields.io/badge/MySQL-5.7+-blue.svg)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -178,6 +182,9 @@ docker compose up -d
 - [YZboard/Xray Compatibility](./YZ_COMPATIBILITY.md) - Fixed Xray fork, Node build, and report compatibility matrix
 
 ### Deployment Guides
+
+PHP **8.2.35 or later** is required. Use the latest security patch for your PHP release series. Docker deployments must meet this requirement inside the container.
+
 - [Deploy with 1Panel](./docs/en/installation/1panel.md)
 - [Deploy with Docker Compose](./docs/en/installation/docker-compose.md)
 - [Deploy with aaPanel](./docs/en/installation/aapanel.md)

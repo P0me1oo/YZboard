@@ -20,7 +20,7 @@ class DeviceHandoverService
     public function deletedNode(int $nodeId): void
     {
         if (Server::query()->whereKey($nodeId)->exists()) return;
-        $users = Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->block(2, function () use ($nodeId): array {
+        $users = Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($nodeId): array {
             $node = Cache::get($this->nodeKey($nodeId), []);
             return array_unique(array_merge(array_column($node['sources'] ?? [], 'user_id'), Cache::get($this->queueKey($nodeId), [])));
         });
@@ -34,7 +34,7 @@ class DeviceHandoverService
 
     public function begin(int $nodeId, string $run): array
     {
-        return Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->block(2, function () use ($nodeId, $run): array {
+        return Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($nodeId, $run): array {
             $current = Cache::get($this->nodeKey($nodeId));
             if (($current['run'] ?? null) !== $run) {
                 foreach (array_unique(array_column($current['sources'] ?? [], 'user_id')) as $userId) {
@@ -52,7 +52,7 @@ class DeviceHandoverService
     /** 旧 Node 握手时明确退出新协议，避免回滚后把旧节点来源误当作已托管来源。 */
     public function legacyNode(int $nodeId): void
     {
-        $users = Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->block(2, function () use ($nodeId): array {
+        $users = Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($nodeId): array {
             $current = Cache::get($this->nodeKey($nodeId), []);
             Cache::forever($this->nodeKey($nodeId), [
                 'run' => '', 'sequence' => 0, 'pending' => [], 'sources' => [], 'version' => 0, 'seen_at' => $this->now(),
@@ -65,28 +65,12 @@ class DeviceHandoverService
 
     public function sync(int $nodeId, array $data): array
     {
-        Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->block(2, function () use ($nodeId, $data): void {
+        Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($nodeId, $data): void {
             if (!empty($data['unchanged'])) {
                 $this->renew($nodeId, $data);
                 return;
             }
-            $current = $this->node($nodeId, $data['run']);
-            if ($data['sequence'] <= $current['sequence']) return;
-            $sources = [];
-            $now = $this->now();
-            foreach ($data['sources'] as $source) {
-                $previous = $current['sources'][$source['lease']] ?? null;
-                $source['last_new_at'] = $previous !== null && $previous['connect_sequence'] === $source['connect_sequence']
-                    ? $previous['last_new_at'] : $now - $source['age_ms'];
-                $sources[$source['lease']] = $source;
-            }
-            if (!Cache::forever($this->nodeKey($nodeId), [
-                'run' => $data['run'], 'sequence' => $data['sequence'],
-                'pending' => array_fill_keys($data['pending'], true), 'sources' => $sources, 'version' => 1, 'seen_at' => $now,
-            ])) {
-                throw new \RuntimeException('设备来源完整快照写入失败');
-            }
-            $this->saveProgress($nodeId, $data['run'], $data['sequence'], $data['sequence'], $now);
+            $this->storeSnapshot($nodeId, $data);
         });
 
         $revoked = [];
@@ -101,6 +85,30 @@ class DeviceHandoverService
             array_push($revoked, ...$items);
         }
         return ['run' => $data['run'], 'sequence' => $data['sequence'], 'revoked' => $revoked];
+    }
+
+    /** 调用方持有节点锁；先写入完整状态，后续名额判断才能看到真实关闭与连接排序。 */
+    private function storeSnapshot(int $nodeId, array $data): array
+    {
+        $current = $this->node($nodeId, $data['run']);
+        if ($data['sequence'] <= $current['sequence']) return $current;
+        $sources = [];
+        $now = $this->now();
+        foreach ($data['sources'] as $source) {
+            $previous = $current['sources'][$source['lease']] ?? null;
+            $source['last_new_at'] = $previous !== null && $previous['connect_sequence'] === $source['connect_sequence']
+                ? $previous['last_new_at'] : $now - $source['age_ms'];
+            $sources[$source['lease']] = $source;
+        }
+        $state = [
+            'run' => $data['run'], 'sequence' => $data['sequence'],
+            'pending' => array_fill_keys($data['pending'], true), 'sources' => $sources, 'version' => 1, 'seen_at' => $now,
+        ];
+        if (!Cache::forever($this->nodeKey($nodeId), $state)) {
+            throw new \RuntimeException('设备来源完整快照写入失败');
+        }
+        $this->saveProgress($nodeId, $data['run'], $data['sequence'], $data['sequence'], $now);
+        return $state;
     }
 
     /** 未变化的快照只更新小记录，不反复读取、序列化和写入全部来源。 */
@@ -152,67 +160,87 @@ class DeviceHandoverService
 
     public function admit(int $nodeId, int $userId, int $limit, array $data): array
     {
-        return Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->block(2, function () use ($nodeId, $userId, $limit, $data): array {
-            $this->node($nodeId, $data['run']);
+        return Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($nodeId, $userId, $limit, $data): array {
+            $node = isset($data['snapshot']) ? $this->storeSnapshot($nodeId, $data['snapshot']) : $this->node($nodeId, $data['run']);
+            // 较新状态已确认申请结束，迟到的旧快照不能复活该申请。
+            if (isset($data['snapshot']) && !isset($node['pending'][$data['sequence']])) {
+                throw new PreconditionFailedHttpException('设备来源申请已结束');
+            }
             return $this->locked($userId, function (array &$state) use ($nodeId, $userId, $limit, $data): array {
-                $this->reconcile($state);
-                $raw = PublicDeviceIp::normalize($data['ip']);
-                if ($raw === null) return $this->answer('denied', $limit, 0, 'invalid_source');
-                $key = DeviceIpExclusion::countKey($raw);
-                $groups = $this->groups($state);
-                $legacy = $this->legacyGroups($userId);
-                $count = count($groups + $legacy);
-                $now = $this->now();
-                $deny = fn (string $reason) => $this->denied($limit, $count, $reason, $raw, $groups, $legacy);
-
-                $existing = $state['sources'][$raw] ?? null;
-                if ($existing !== null && !$existing['revoked']) {
-                    return $this->grant($state, $nodeId, $userId, $raw, $data, $limit, $count);
-                }
-                if ($key === null || $limit <= 0) {
-                    if ($existing !== null) return $this->waiting($state, $nodeId, $limit, $count);
-                    return $this->grant($state, $nodeId, $userId, $raw, $data, $limit, $count);
-                }
-
-                $pending = $state['pending'];
-                if ($pending !== null) {
-                    if ($pending['target'] !== '' && $pending['target'] !== $key) {
-                        return $deny('replacement_pending');
-                    }
-                    $state['pending']['target'] = $key;
-                    $state['pending']['until'] = $now + self::CLAIM_MS;
-                    if (!$pending['closed'] || $count >= $limit) {
-                        return $this->waiting($state, $nodeId, $limit, $count);
-                    }
-                    $state['pending'] = null;
-                    return $this->grant($state, $nodeId, $userId, $raw, $data, $limit, $count);
-                }
-
-                if (isset($groups[$key]) || isset($legacy[$key]) || $count < $limit) {
-                    unset($state['cooldown'][$key]);
-                    return $this->grant($state, $nodeId, $userId, $raw, $data, $limit, $count);
-                }
-                if (($state['cooldown'][$key] ?? 0) > $now) {
-                    return $deny('cooldown');
-                }
-                // 旧节点无法确认关闭，也没有可比较的连接时间，混用时保留原来的拒绝规则。
-                if ($legacy !== []) return $deny('legacy_node');
-
-                uasort($groups, fn (array $a, array $b) => ($a['last_new_at'] <=> $b['last_new_at']) ?: strcmp($a['key'], $b['key']));
-                $victim = reset($groups);
-                if ($victim === false) return $deny('unknown_state');
-                $leases = [];
-                foreach ($victim['ips'] as $ip) {
-                    $state['sources'][$ip]['revoked'] = true;
-                    $leases[] = $state['sources'][$ip]['lease'];
-                }
-                $state['pending'] = [
-                    'victim' => $victim['key'], 'leases' => $leases, 'target' => $key,
-                    'until' => $now + self::CLAIM_MS, 'closed' => false,
-                ];
-                return $this->waiting($state, $nodeId, $limit, $count);
+                // 合并请求只协调本次账号，其他账号仍由周期同步处理。
+                return $this->decide($state, $nodeId, $userId, $limit, $data);
             });
         });
+    }
+
+    private function decide(array &$state, int $nodeId, int $userId, int $limit, array $data): array
+    {
+        $reply = $this->decideAdmission($state, $nodeId, $userId, $limit, $data);
+        if (isset($data['snapshot'])) {
+            $reply['sync'] = ['run' => $data['snapshot']['run'], 'sequence' => $data['snapshot']['sequence'],
+                'revoked' => $this->revocations($state, $nodeId)];
+        }
+        return $reply;
+    }
+
+    private function decideAdmission(array &$state, int $nodeId, int $userId, int $limit, array $data): array
+    {
+        $this->reconcile($state);
+        $raw = PublicDeviceIp::normalize($data['ip']);
+        if ($raw === null) return $this->answer('denied', $limit, 0, 'invalid_source');
+        $key = DeviceIpExclusion::countKey($raw);
+        $groups = $this->groups($state);
+        $legacy = $this->legacyGroups($userId);
+        $count = count($groups + $legacy);
+        $now = $this->now();
+        $deny = fn (string $reason) => $this->denied($limit, $count, $reason, $raw, $groups, $legacy);
+
+        $existing = $state['sources'][$raw] ?? null;
+        if ($existing !== null && !$existing['revoked']) {
+            return $this->grant($state, $nodeId, $userId, $raw, $data, $limit, $count);
+        }
+        if ($key === null || $limit <= 0) {
+            if ($existing !== null) return $this->waiting($state, $nodeId, $limit, $count);
+            return $this->grant($state, $nodeId, $userId, $raw, $data, $limit, $count);
+        }
+
+        $pending = $state['pending'];
+        if ($pending !== null) {
+            if ($pending['target'] !== '' && $pending['target'] !== $key) {
+                return $deny('replacement_pending');
+            }
+            $state['pending']['target'] = $key;
+            $state['pending']['until'] = $now + self::CLAIM_MS;
+            if (!$pending['closed'] || $count >= $limit) {
+                return $this->waiting($state, $nodeId, $limit, $count);
+            }
+            $state['pending'] = null;
+            return $this->grant($state, $nodeId, $userId, $raw, $data, $limit, $count);
+        }
+
+        if (isset($groups[$key]) || isset($legacy[$key]) || $count < $limit) {
+            unset($state['cooldown'][$key]);
+            return $this->grant($state, $nodeId, $userId, $raw, $data, $limit, $count);
+        }
+        if (($state['cooldown'][$key] ?? 0) > $now) {
+            return $deny('cooldown');
+        }
+        // 旧节点无法确认关闭，也没有可比较的连接时间，混用时保留原来的拒绝规则。
+        if ($legacy !== []) return $deny('legacy_node');
+
+        uasort($groups, fn (array $a, array $b) => ($a['last_new_at'] <=> $b['last_new_at']) ?: strcmp($a['key'], $b['key']));
+        $victim = reset($groups);
+        if ($victim === false) return $deny('unknown_state');
+        $leases = [];
+        foreach ($victim['ips'] as $ip) {
+            $state['sources'][$ip]['revoked'] = true;
+            $leases[] = $state['sources'][$ip]['lease'];
+        }
+        $state['pending'] = [
+            'victim' => $victim['key'], 'leases' => $leases, 'target' => $key,
+            'until' => $now + self::CLAIM_MS, 'closed' => false,
+        ];
+        return $this->waiting($state, $nodeId, $limit, $count);
     }
 
     private function grant(array &$state, int $nodeId, int $userId, string $raw, array $data, int $limit, int $count): array
@@ -343,14 +371,15 @@ class DeviceHandoverService
     private function locked(int $userId, callable $action): mixed
     {
         $key = 'device_handover:user:' . $userId;
-        return Cache::lock($key . ':lock', 15)->block(2, function () use ($key, $userId, $action): mixed {
+        return Cache::lock($key . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($key, $userId, $action): mixed {
             $state = Cache::get($key, ['sources' => [], 'cooldown' => [], 'pending' => null]);
             $result = $action($state);
             if ($state['sources'] === [] && $state['pending'] === null) {
-                Cache::put($key, $state, 120);
+                $saved = Cache::put($key, $state, 120);
             } else {
-                Cache::forever($key, $state);
+                $saved = Cache::forever($key, $state);
             }
+            if (!$saved) throw new \RuntimeException('设备来源名额写入失败');
             foreach ($state['sources'] as $source) {
                 foreach ($source['owners'] as $nodeId => $owner) {
                     if ($source['revoked'] || $owner['connect_sequence'] === 0) $this->queue((int) $nodeId, $userId, true);
@@ -363,7 +392,7 @@ class DeviceHandoverService
     private function queue(int $nodeId, int $userId, bool $add): void
     {
         $key = $this->queueKey($nodeId);
-        Cache::lock($key . ':lock', 15)->block(2, function () use ($key, $userId, $add): void {
+        Cache::lock($key . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($key, $userId, $add): void {
             $users = array_fill_keys(Cache::get($key, []), true);
             if ($add) $users[$userId] = true;
             else unset($users[$userId]);

@@ -64,6 +64,119 @@ class DeviceHandoverTest extends TestCase
         return ['user_id' => $this->user->id, 'ip' => $ip, 'lease' => $lease, 'connect_sequence' => $sequence, 'age_ms' => 0];
     }
 
+    private function combined(string $ip, int $sequence, int $snapshotSequence, array $sources = [], array $pending = [], array $retired = [])
+    {
+        return $this->deviceRequest('admit', [
+            'sequence' => $sequence, 'user_id' => $this->user->id, 'ip' => $ip,
+            'snapshot' => ['run' => $this->run, 'sequence' => $snapshotSequence,
+                'pending' => array_merge([$sequence], $pending), 'sources' => $sources, 'retired' => $retired],
+        ]);
+    }
+
+    public function test_combined_admission_stores_state_before_deciding_and_confirms_real_close(): void
+    {
+        $this->postJson('/api/v2/server/handshake', $this->auth() + ['device_handover' => 1])->assertOk()
+            ->assertJsonPath('realtime.device_handover_admit_sync', 1);
+        $this->deviceRequest('begin')->assertOk();
+        $lease = $this->combined('8.8.8.8', 1, 2)->assertOk()->assertJsonPath('data.status', 'allowed')
+            ->assertJsonPath('data.sync.run', $this->run)->assertJsonPath('data.sync.sequence', 2)->json('data.lease');
+        $live = [$this->source('8.8.8.8', $lease, 3)];
+        $this->combined('1.1.1.1', 4, 5, $live)->assertOk()->assertJsonPath('data.status', 'waiting')
+            ->assertJsonPath('data.sync.revoked.0.lease', $lease);
+        $this->combined('1.1.1.1', 4, 6, $live)->assertOk()->assertJsonPath('data.status', 'waiting');
+        $this->combined('1.1.1.1', 4, 7, [], [], [
+            ['user_id' => $this->user->id, 'ip' => '8.8.8.8', 'lease' => $lease],
+        ])->assertOk()->assertJsonPath('data.status', 'allowed');
+        $this->assertSame([], Cache::get('device_handover:node:' . $this->node->id)['sources']);
+        $this->combined('8.8.8.8', 8, 9, [], [4])->assertOk()->assertJsonPath('data.reason', 'cooldown');
+    }
+
+    public function test_combined_validation_rejects_missing_or_cross_run_state_without_freeing_occupancy(): void
+    {
+        $this->deviceRequest('begin')->assertOk();
+        $lease = $this->combined('8.8.8.8', 1, 2)->assertOk()->json('data.lease');
+        $before = Cache::get('device_handover:node:' . $this->node->id);
+        $snapshot = ['run' => $this->run, 'sequence' => 4, 'pending' => [3], 'sources' => []];
+        foreach ([
+            array_diff_key($snapshot, ['sources' => true]),
+            array_replace($snapshot, ['run' => str_repeat('b', 32)]),
+            array_replace($snapshot, ['sequence' => 2]),
+            array_replace($snapshot, ['pending' => []]),
+            array_replace($snapshot, ['sources' => [$this->source('8.8.8.8', $lease, 99)]]),
+            $snapshot + ['unchanged' => true],
+        ] as $invalid) {
+            $this->deviceRequest('admit', ['sequence' => 3, 'user_id' => $this->user->id, 'ip' => '1.1.1.1', 'snapshot' => $invalid])->assertStatus(422);
+            $this->assertSame($before, Cache::get('device_handover:node:' . $this->node->id));
+        }
+        $this->user->forceFill(['banned' => 1])->saveQuietly();
+        $this->combined('1.1.1.1', 3, 4)->assertStatus(403);
+        $this->assertSame($before, Cache::get('device_handover:node:' . $this->node->id));
+    }
+
+    public function test_out_of_order_combined_snapshots_keep_newer_state_and_reject_completed_requests(): void
+    {
+        $this->user->forceFill(['device_limit' => 2])->saveQuietly();
+        $this->deviceRequest('begin')->assertOk();
+        // 模拟同一批请求乱序到达，但最新快照仍保存所有未结束申请。
+        $leaseB = $this->combined('1.1.1.1', 3, 4, [], [1])->assertOk()->json('data.lease');
+        $leaseA = $this->combined('8.8.8.8', 1, 2)->assertOk()->json('data.lease');
+        $this->assertSame(4, Cache::get('device_handover:node:' . $this->node->id)['sequence']);
+        $this->combined('8.8.8.8', 1, 2)->assertOk()->assertJsonPath('data.lease', $leaseA);
+        $sources = [$this->source('8.8.8.8', $leaseA, 5), $this->source('1.1.1.1', $leaseB, 6)];
+        $this->deviceRequest('sync', ['sequence' => 7, 'pending' => [], 'sources' => $sources])->assertOk();
+        $this->combined('8.8.8.8', 1, 2)->assertStatus(412);
+        $this->assertSame(7, Cache::get('device_handover:node:' . $this->node->id)['sequence']);
+        $this->assertCount(2, Cache::get('device_handover:user:' . $this->user->id)['sources']);
+    }
+
+    public function test_combined_sorting_uses_latest_connection_and_restart_rejects_previous_run(): void
+    {
+        $this->user->forceFill(['device_limit' => 2])->saveQuietly();
+        $this->deviceRequest('begin')->assertOk();
+        $a = $this->combined('8.8.8.8', 1, 2)->assertOk()->json('data.lease');
+        $b = $this->combined('1.1.1.1', 4, 5, [$this->source('8.8.8.8', $a, 3)])->assertOk()->json('data.lease');
+        $recent = $this->source('8.8.8.8', $a, 7);
+        $older = $this->source('1.1.1.1', $b, 6);
+        $older['age_ms'] = 30000;
+        $this->combined('9.9.9.9', 8, 9, [$recent, $older])->assertOk()->assertJsonPath('data.status', 'waiting')
+            ->assertJsonPath('data.revoked.0.lease', $b);
+        $this->postJson('/api/v2/server/device-handover/begin', $this->auth() + ['run' => str_repeat('b', 32)])->assertOk();
+        $this->combined('9.9.9.9', 8, 10)->assertStatus(409);
+        $this->run = str_repeat('b', 32);
+        $this->combined('9.9.9.9', 1, 2)->assertOk()->assertJsonPath('data.status', 'allowed');
+    }
+
+    public function test_combined_websocket_and_http_retry_share_state_confirmation_and_grant(): void
+    {
+        $frames = [];
+        $connection = \Mockery::mock(TcpConnection::class);
+        $connection->realtime = true;
+        $connection->nodeId = (int) $this->node->id;
+        $connection->shouldReceive('send')->andReturnUsing(function ($data) use (&$frames) {
+            $frames[] = json_decode($data, true);
+            return true;
+        });
+        $worker = (new \ReflectionClass(NodeWorker::class))->newInstanceWithoutConstructor();
+        NodeRegistry::add((int) $this->node->id, $connection);
+        try {
+            $this->deviceRequest('begin')->assertOk();
+            $data = ['run' => $this->run, 'sequence' => 1, 'user_id' => $this->user->id, 'ip' => '8.8.8.8',
+                'snapshot' => ['run' => $this->run, 'sequence' => 2, 'pending' => [1], 'sources' => [], 'retired' => []]];
+            $worker->onMessage($connection, json_encode(['event' => 'device.admit',
+                'data' => $data + ['request_id' => 'combined-ws-test', 'node_id' => $this->node->id]]));
+            $this->assertSame('device.admit.ack', $frames[0]['event']);
+            $this->assertSame(2, $frames[0]['data']['result']['sync']['sequence']);
+            $this->deviceRequest('admit', $data)->assertOk()->assertJsonPath('data.lease', $frames[0]['data']['result']['lease']);
+            unset($data['snapshot']['sources']);
+            $worker->onMessage($connection, json_encode(['event' => 'device.admit',
+                'data' => $data + ['request_id' => 'combined-ws-invalid', 'node_id' => $this->node->id]]));
+            $this->assertSame('device.admit.error', $frames[1]['event']);
+            $this->assertSame(422, $frames[1]['data']['code']);
+        } finally {
+            NodeRegistry::remove((int) $this->node->id, $connection);
+        }
+    }
+
     public function test_http_renewal_requires_a_matching_full_baseline_and_excludes_source_payloads(): void
     {
         $this->postJson('/api/v2/server/handshake', $this->auth() + ['device_handover' => 1])->assertOk()

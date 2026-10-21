@@ -47,6 +47,45 @@ class DeviceHandoverServiceTest extends TestCase
 
     private function runID(int $node): string { return str_repeat(dechex($node), 32); }
 
+    public function test_busy_device_lock_retries_promptly_and_timeout_preserves_existing_slot(): void
+    {
+        $a = $this->admit('8.8.8.8', 1, 1);
+        $this->sync([$this->source($a, '8.8.8.8', 1)]);
+        $lock = Cache::lock('device_handover:node:1:lock', 15);
+        $this->assertTrue($lock->get());
+        \Illuminate\Support\Sleep::fake(true, true);
+        try {
+            $this->admit('1.1.1.1', 1, 1);
+            $this->fail('锁一直占用时不能放行');
+        } catch (\Illuminate\Contracts\Cache\LockTimeoutException) {
+            $state = Cache::get('device_handover:user:10');
+            $this->assertCount(1, $state['sources']);
+            $this->assertFalse($state['sources']['8.8.8.8']['revoked']);
+            $this->assertNull($state['pending']);
+            \Illuminate\Support\Sleep::assertSlept(fn ($duration) => $duration->totalMilliseconds === 25.0, 79);
+        } finally {
+            $lock->release();
+            \Illuminate\Support\Sleep::fake(false);
+        }
+        $this->assertSame('waiting', $this->admit('1.1.1.1', 1, 1)['status']);
+    }
+
+    public function test_nominally_failed_slot_write_cannot_return_authorization(): void
+    {
+        $store = \Mockery::mock(\Illuminate\Cache\ArrayStore::class . '[forever]');
+        $store->shouldReceive('forever')->andReturnUsing(function ($key, $value) use ($store) {
+            if ($key === 'device_handover:user:10') return false;
+            return $store->put($key, $value, 0);
+        });
+        $repository = new \Illuminate\Cache\Repository($store);
+        app(\App\Support\Setting::class);
+        Cache::swap($repository);
+        $this->service->begin(1, $this->runID(1));
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('设备来源名额写入失败');
+        $this->admit('8.8.8.8', 1, 1);
+    }
+
     public function test_denial_snapshot_keeps_live_sources_and_excludes_deleted_node_occupancy(): void
     {
         $a = $this->admit('8.8.8.8', 1, 1);

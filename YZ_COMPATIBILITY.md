@@ -1,5 +1,15 @@
 # YZboard 兼容矩阵
 
+## 1.104.5 正式发布核验（2026-10-22）
+
+- [Release v1.104.5](https://github.com/P0me1oo/YZboard/releases/tag/v1.104.5) 已发布，固定来源 `8f02c013cfb8f582f030e069893b5ab185d7f2f2`。同步 Xboard 上游 `81dd561c1ed7a591443c4c20e990b795211d3661` 的 PHP 安全更新，一并交付设备状态与授权合并。管理端保持 `0.75.1` / `360101a0e7cfcb2e2231ba463e1c0238b59de2bb`；本轮配套 Agent `v2.24.2`，其最终发布结果见 Node 兼容矩阵。
+- [发布流程](https://github.com/P0me1oo/YZboard/actions/runs/39668091673) 成功。PHP `8.2.35` 下 SQLite 完整回归 1,285 项、13,545 条断言，跳过的 10 项由 MariaDB 覆盖；MariaDB `11.4.8` 严格分组回归 1,285 项、13,561 条断言，无跳过。Redis `7.4.2` 和管理端资源 5 项检查通过，复用已核对一致的 3,094 份映射源码和 16 份集成资源。
+- 不可变镜像 `ghcr.io/p0me1oo/yzboard:1.104.5-8f02c01`、版本别名 `1.104.5` 和 `latest` 均为 `sha256:a407df3b079a3ebe7fe8b981b773a16881732e91b479fac219403552427a03fe`。两个架构 `linux/amd64`、`linux/arm64` 的清单、配置、OCI revision、版本和 PHP `8.2.35` 已匿名核对；各架构的 16 份管理资源与 4 份本轮业务源码、配置文件均与固定来源匹配。
+- [verification.json](https://github.com/P0me1oo/YZboard/releases/download/v1.104.5/verification.json) 和校验附件已匿名下载并核对；记录 SHA-256 为 `8ff6ad887fc3c243368c12e74660e3cba4c8d0fdec1fdb7b37a46bb5aad681b3`。核验文件保存在 `D:/codex-tmp/yz-release-panel-node-20261022-c05033a48076487a857e91002c76ec7b/panel/`。
+- 更新顺序为先面板、后 Agent；现有部署仍使用 `latest`，由用户备份 Compose 和必要持久化数据后拉取并重建，无本轮新增数据库迁移。回滚参考 `ghcr.io/p0me1oo/yzboard:1.104.3-080f934` / `080f93474a532f64631c188f65292cc7f07f010b`，digest `sha256:cffbd4e4eb63dc0deb2872c30ad72d676142b6bcbf32803436b35bb36a831bc4`，两个架构已核对可匿名获取。未连接或更新生产服务器。
+
+以下保留开发和发布准备时的状态，最终结果以上方正式记录为准。
+
 ## 1.104.5 正式发布准备（2026-10-22）
 
 - 本次发布包含下方 PHP `8.2.35` 安全更新及 `1.104.4` 的设备授权修改，配套 Node `v2.24.0`，管理端保持 `0.75.1`；不修改两个核心。复用本地已通过的 PHP `8.2.35` / SQLite 回归和来源核验，标签发布流程补齐 Linux、Redis、MariaDB 和双架构最终镜像验证。

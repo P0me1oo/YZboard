@@ -113,14 +113,16 @@ class DdnsService
         return ['node', (int) (($server['relay_entry_id'] ?? null) ?: ($server['id'] ?? 0))];
     }
 
-    public function project(array $servers, User $user): array
+    public function project(array $servers, User|array $user): array
     {
         if (!self::installed() || !DdnsBinding::where('enabled', true)->where('retired', false)->exists()) return $servers;
         foreach ($servers as &$server) {
             [$type, $id] = self::endpoint($server);
             $binding = self::current($type, $id);
             if (!$binding?->enabled) continue;
-            if ($user->banned || $user->u + $user->d >= $user->transfer_enable
+            // 兼容订阅渲染器的数组输入；涉及个人域名时，只信任数据库中的最新资格。
+            if (is_array($user)) $user = User::find((int) ($user['id'] ?? 0));
+            if (!$user || $user->banned || $user->u + $user->d >= $user->transfer_enable
                 || ($user->expired_at !== null && $user->expired_at <= time())
                 || !array_intersect($user->effectiveGroupIds(), $this->groupIds($binding))) {
                 throw new HttpResponseException(response('当前用户没有该节点的使用权限', 403, ['Cache-Control' => 'private, no-store']));

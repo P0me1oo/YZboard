@@ -555,4 +555,19 @@ class DdnsTest extends TestCase
         $this->assertArrayHasKey($id, $this->remote);
         $this->assertNotNull($binding->fresh());
     }
+
+    public function test_array_user_uses_current_database_permissions_for_personal_domains(): void
+    {
+        $node = $this->node(); $user = $this->user(); $this->configure($node);
+        $this->assertTrue($this->sync());
+        $snapshot = $user->toArray();
+        $service = app(DdnsService::class);
+        $servers = [$node->fresh()->toArray()];
+        $this->assertSame($this->projected($node, $user)['host'], $service->project($servers, $snapshot)[0]['host']);
+        $user->update(['banned' => true]);
+        foreach ([$snapshot, []] as $input) {
+            try { $service->project($servers, $input); $this->fail('过期快照或无身份数组不能绕过权限'); }
+            catch (HttpResponseException $error) { $this->assertSame(403, $error->getResponse()->getStatusCode()); }
+        }
+    }
 }

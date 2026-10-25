@@ -1,6 +1,6 @@
 # 前置负载均衡
 
-面板 `1.106.2`、管理端 `0.77.0`、Node `v2.25.0` 正在准备正式发布。本版只开放 **VLESS Reality + TCP/RAW** 前置池；已有独立节点、HY2 和单前置中转保持原有配置。两个核心和固定依赖不变。
+已随面板 [v1.106.2](https://github.com/P0me1oo/YZboard/releases/tag/v1.106.2)、管理端 `0.77.0` 和 Node `v2.25.0` 发布。本版只开放 **VLESS Reality + TCP/RAW** 前置池；已有独立节点、HY2 和单前置中转保持原有配置。两个核心和固定依赖不变，产物核验见[兼容矩阵](../YZ_COMPATIBILITY.md)。
 
 ## 工作方式
 

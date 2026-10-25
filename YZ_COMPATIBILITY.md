@@ -1,5 +1,15 @@
 # YZboard 兼容矩阵
 
+## 1.106.2 正式发布核验（2026-10-25）
+
+- [Release v1.106.2](https://github.com/P0me1oo/YZboard/releases/tag/v1.106.2) 已发布，固定来源 `e2343eae1f0ca0e0d491708650a41f33ec0d870c`，[发布工作流](https://github.com/P0me1oo/YZboard/actions/runs/40203582644) 全部成功。一并交付 `1.104.6` 至 `1.106.2` 的前置池、个人 DDNS、管理端及修复；保留失败的 `v1.106.1` 标签，其未发布正式 Release 或镜像。
+- PHP `8.2.35` / Linux 完整回归通过：SQLite 1,340 项、13,985 条断言，10 条数据库环境型跳过由 MariaDB 覆盖；MariaDB `11.4.8` 严格分组回归 1,340 项、13,994 条断言，无跳过。Redis `7.4.2` 随发布环境验证，管理端资源 5 项检查通过。
+- 管理端 `0.77.0` 固定本地源码 `1b5279c4db25812ade6aaf809e8cf4bdbe9c022c`，3,101 份映射源码和 16 份集成资源已核对一致并复用原页面检查；主脚本为 `assets/admin-_snmUi2o.js`。Agent `v2.25.0` 同时完成发布，程序来源 `2fa409888f8b71247b44aefd47d2bd5435936292`；两个核心固定依赖保持不变，详情见 Node 兼容矩阵。
+- 不可变镜像 `ghcr.io/p0me1oo/yzboard:1.106.2-e2343ea`、`1.106.2` 和 `latest` 均为 `sha256:b7d9f2149da7f0a57790f7e2a1d95b96fbda520b0a887847c0d6e3636ba7dc49`。清单包含 `linux/amd64`（`sha256:ccedb629bd221c0baf6a8d337630f7171a741ba3bf78bd13ee6fd353895573c3`）和 `linux/arm64`（`sha256:c123036ca8ab2014e514c02396d90e1f1763c01d548f958f776362d712e3dc46`）；两个平台的 OCI revision、版本和 PHP `8.2.35` 已匿名核对。
+- [verification.json](https://github.com/P0me1oo/YZboard/releases/download/v1.106.2/verification.json) 及校验文件已发布，JSON 已匿名下载核对，SHA-256 为 `cf7cde5742b3bb5ee943c3843b6da738519763458930c327533960b5706563c2`；Release 的 `latest` 指向 `v1.106.2`。完整记录位于 `D:/codex-tmp/yz-release-20261025-11061/panel/`。
+- 用户在实际生产部署目录备份 Compose、数据库及必要持久化数据后，先拉取并重建面板，再执行 Agent 常规升级。面板新增前置池、个人 DDNS 及归属恢复迁移，保留已有数据。回滚参考面板 `v1.104.5` / `8f02c013cfb8f582f030e069893b5ab185d7f2f2`、不可变标签 `1.104.5-8f02c01`、digest `sha256:a407df3b079a3ebe7fe8b981b773a16881732e91b479fac219403552427a03fe`，以及 Agent `v2.24.2`；前一版本双架构镜像均已确认可获取。回滚须同时评估新增池和 DNS 数据，不直接丢弃待确认记录的归属。
+- 发布后仅更新核验文档，复用已通过的固定来源检查；未连接、拉取、重启或更新生产服务器，真实 Cloudflare 凭据和域名写入不在本次验证范围。
+
 ## 1.106.2 发布准备（2026-10-25）
 
 - `v1.106.1` / `306f411042600ff59e0260c8267065c3591bdc06` 的发布工作流在 SQLite 完整回归中发现旧订阅渲染入口的数组用户参数不兼容：1,339 项中 9 项报同一类型错误。未构建镜像、未发布正式 Release；保留原标签和失败记录，使用新的修订版本继续发布。

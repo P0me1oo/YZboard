@@ -31,6 +31,8 @@ class Kernel extends ConsoleKernel
         // v2board
         $schedule->command('xboard:statistics')->dailyAt('0:10')->onOneServer();
         // check
+        $schedule->command('ddns:sync')->everyMinute()->onOneServer()->withoutOverlapping(10)->runInBackground();
+        $schedule->command('balancer:sync')->everyThirtySeconds()->onOneServer()->withoutOverlapping(2);
         $schedule->command('check:order')->everyMinute()->onOneServer()->withoutOverlapping(5);
         $schedule->command('check:commission')->everyMinute()->onOneServer()->withoutOverlapping(5);
         $schedule->command('check:ticket')->everyMinute()->onOneServer()->withoutOverlapping(5);

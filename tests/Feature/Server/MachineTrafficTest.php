@@ -36,6 +36,7 @@ class MachineTrafficTest extends TestCase
         });
         Route::post('/_tests/machine-traffic/save', [MachineController::class, 'save']);
         Route::get('/_tests/machine-traffic/fetch', [MachineController::class, 'fetch']);
+        Route::post('/_tests/machine-traffic/node-save', [\App\Http\Controllers\V2\Admin\Server\ManageController::class, 'save']);
     }
 
     private function machine(): ServerMachine
@@ -96,6 +97,69 @@ class MachineTrafficTest extends TestCase
         $legacy->refresh();
         $this->assertSame('旧服务器改名', $legacy->name);
         $this->assertSame('outbound', Traffic::view($legacy)['mode']);
+    }
+
+    public function test_changing_node_machine_preserves_each_machine_usage_and_protection_state(): void
+    {
+        foreach ([false, true] as $lost) {
+            $source = $this->machine();
+            $target = $this->machine();
+            foreach ([$source, $target] as $machine) {
+                $this->configure($machine, ['traffic_limit_gb' => 1, 'traffic_mode' => 'both']);
+            }
+            $this->send($source, $this->sample($source, 100, 200));
+            $this->send($target, $this->sample($target, 400, 500));
+            if ($lost) {
+                $this->send($target, $this->sample($target, 400, 500, ['initialized' => false, 'error' => 'state_lost']));
+            }
+            $snapshots = [$source->id => $source->fresh()->traffic_state, $target->id => $target->fresh()->traffic_state];
+            $node = $this->node($source);
+            foreach ([$target, $target, $source, $target] as $binding) {
+                $this->postJson('/_tests/machine-traffic/node-save', [
+                    'id' => $node->id, 'name' => $node->name, 'type' => $node->type,
+                    'host' => $node->host, 'port' => (string) $node->port, 'server_port' => $node->server_port,
+                    'rate' => 1, 'kernel_type' => 'xray', 'protocol_settings' => $node->protocol_settings,
+                    'machine_id' => $binding->id, 'enabled' => true,
+                ])->assertOk()->assertJsonPath('data', true);
+                $this->assertSame($binding->id, $node->fresh()->machine_id);
+                foreach ([$source, $target] as $machine) {
+                    $this->assertSame($snapshots[$machine->id], $machine->fresh()->traffic_state);
+                }
+                $this->assertSame(300, Traffic::view($source->fresh())['used']);
+                $this->assertSame(900, Traffic::view($target->fresh())['used']);
+                $this->assertSame($binding->id === $target->id && $lost, Traffic::nodeBlocked($node->fresh()));
+                $this->assertTrue($node->fresh()->enabled);
+            }
+        }
+    }
+
+    public function test_binding_to_new_machine_keeps_fresh_baseline_and_first_report_enables_nodes(): void
+    {
+        $source = $this->machine();
+        $this->configure($source, ['traffic_limit_gb' => 1, 'traffic_mode' => 'both']);
+        $this->send($source, $this->sample($source, 100, 200));
+        $targetId = $this->postJson('/_tests/machine-traffic/save', [
+            'name' => '新服务器计量测试', 'traffic_limit_gb' => 1, 'traffic_mode' => 'both',
+        ])->assertOk()->json('data.id');
+        $target = ServerMachine::findOrFail($targetId);
+        $state = $target->traffic_state;
+        $node = $this->node($source);
+        $this->postJson('/_tests/machine-traffic/node-save', [
+            'id' => $node->id, 'name' => $node->name, 'type' => $node->type,
+            'host' => $node->host, 'port' => (string) $node->port, 'server_port' => $node->server_port,
+            'rate' => 1, 'kernel_type' => 'xray', 'protocol_settings' => $node->protocol_settings,
+            'machine_id' => $targetId, 'enabled' => true,
+        ])->assertOk()->assertJsonPath('data', true);
+        $this->assertSame($state, $target->fresh()->traffic_state);
+        $policy = $this->postJson('/api/v2/server/machine/nodes', [
+            'machine_id' => $targetId, 'token' => $target->token,
+        ])->assertOk()->json('traffic');
+        $this->assertFalse($policy['initialized']);
+        $this->assertNull($policy['error']);
+        $this->assertSame(0, $policy['used']);
+        $this->assertFalse($this->send($target, $this->sample($target))['blocked']);
+        $this->assertSame([$node->id], ServerService::getMachineNodes($target->fresh())->pluck('id')->all());
+        $this->assertSame(300, Traffic::view($source->fresh())['used']);
     }
 
     public function test_old_machine_is_unlimited_and_first_enable_starts_at_zero_without_calibration(): void

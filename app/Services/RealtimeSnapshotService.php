@@ -56,11 +56,11 @@ class RealtimeSnapshotService
             $allNodes = Server::query()->where(function ($query) use ($userIds, $subscription) {
                 $query->whereIn('id', $subscription['nodes']);
                 if ($userIds !== []) {
-                    $query->orWhere(fn ($q) => $q->whereNull('relay_entry_id')->orWhere('relay_entry_id', 0));
+                    $query->orWhere(fn ($q) => $q->whereNull('relay_pool_id')->where(fn ($entry) => $entry->whereNull('relay_entry_id')->orWhere('relay_entry_id', 0)));
                 }
-            })->get(['id', 'type', 'parent_id', 'relay_entry_id', 'group_ids', 'enabled', 'u', 'd', 'usage_u', 'usage_d']);
+            })->get(['id', 'type', 'parent_id', 'relay_entry_id', 'relay_pool_id', 'group_ids', 'enabled', 'u', 'd', 'usage_u', 'usage_d']);
             $displayNodes = $allNodes->whereIn('id', $subscription['nodes']);
-            $nodes = $allNodes->filter(fn ($node) => !$node->relay_entry_id);
+            $nodes = $allNodes->filter(fn ($node) => !$node->relay_entry_id && !$node->relay_pool_id);
             $runtime->readMany(array_merge(
                 $userIds === [] ? [] : $nodes->map(fn ($node) => 'node:' . $node->id)->all(),
                 $displayNodes->map(fn ($node) => 'node:' . ($node->parent_id ?: $node->id))->all(),

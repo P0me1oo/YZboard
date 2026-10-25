@@ -36,10 +36,12 @@ class ManageController extends Controller
             // 供节点列表的「前置入口」列直接展示；入口已被删除时为 null，与未设置的显示一致。
             $entryId = $item->relayEntryId();
             $item['relay_entry_name'] = $entryId === null ? null : $nameById->get($entryId);
+            if ($item->relay_pool_id) $item['relay_entry_name'] = \App\Models\BalancerPool::find($item->relay_pool_id)?->name;
             $item['relay_entry_supported'] = ServerRelayService::isSupportedEntry($item);
-            $item['effective_rate'] = $item->isRelayChild() && !$item->relay_rate_override
+            $item['ddns'] = \App\Services\DdnsService::view('node', $item->id);
+            $item['effective_rate'] = $item->relay_pool_id ? $item->getEffectiveRate() : ($item->isRelayChild() && !$item->relay_rate_override
                 ? $rateById->get($entryId, $rateById->get($item->id))
-                : $rateById->get($item->id);
+                : $rateById->get($item->id));
             return $item;
         });
 
@@ -83,6 +85,12 @@ class ManageController extends Controller
                 if (!$server) {
                     return $this->fail([400202, '服务器不存在']);
                 }
+                $ddns = $params['ddns'] ?? null;
+                if ($ddns === null && $server->exists) {
+                    $binding = \App\Services\DdnsService::current('node', $server->id);
+                    if ($binding?->enabled) $ddns = ['enabled' => true, 'preset_id' => $binding->preset_id, 'prefix' => $binding->prefix];
+                }
+                unset($params['ddns']);
                 $server->fill($params);
                 if (!$server->exists) {
                     // 新建时显隐跟随开关；未传开关沿用数据库默认开启，显式空值保留独立部署设置。
@@ -92,6 +100,7 @@ class ManageController extends Controller
                     }
                 }
                 $server->save();
+                app(\App\Services\DdnsService::class)->configure('node', $server, $ddns);
                 return $this->success(true);
             }, 3);
         } catch (ValidationException $e) {
@@ -189,6 +198,7 @@ class ManageController extends Controller
         $request->validate([
             'id' => 'required|integer',
         ]);
+        if (\App\Models\BalancerMember::where('source_node_id', $request->id)->exists()) throw ValidationException::withMessages(['id' => '节点被前置池引用，请先移除对应成员']);
         try {
             return DB::transaction(function () use ($request) {
                 $server = Server::whereKey($request->id)->lockForUpdate()->first();
@@ -220,6 +230,7 @@ class ManageController extends Controller
         ]);
 
         $ids = $request->input('ids');
+        if (\App\Models\BalancerMember::whereIn('source_node_id', $ids)->exists()) throw ValidationException::withMessages(['ids' => '选中的节点被前置池引用，请先移除对应成员']);
         if (empty($ids)) {
             return $this->fail([400, '请选择要删除的节点']);
         }

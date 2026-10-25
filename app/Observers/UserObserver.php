@@ -26,7 +26,10 @@ class UserObserver
     $snapshot = clone $user;
     $user->getConnection()->afterCommit(function () use ($snapshot, $recalculate, $needsSync, $oldGroups) {
       if ($recalculate && $snapshot->fresh()) $this->recalculateNextResetAt($snapshot);
-      if ($needsSync) NodeUserSyncJob::dispatch($snapshot->id, 'updated', $oldGroups);
+      if ($needsSync) {
+        NodeUserSyncJob::dispatch($snapshot->id, 'updated', $oldGroups);
+        \App\Services\DdnsService::notify();
+      }
     });
   }
 
@@ -37,11 +40,13 @@ class UserObserver
       if (!$snapshot->fresh()) return;
       $this->recalculateNextResetAt($snapshot);
       NodeUserSyncJob::dispatch($snapshot->id, 'created');
+      \App\Services\DdnsService::notify();
     });
   }
 
   public function deleted(User $user): void
   {
+    \App\Services\DdnsService::notify();
     if ($user->effectiveGroupIds() !== []) {
       $id = $user->id;
       $groups = $user->effectiveGroupIds();

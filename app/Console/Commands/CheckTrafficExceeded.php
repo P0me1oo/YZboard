@@ -48,9 +48,12 @@ class CheckTrafficExceeded extends Command
                 $query->orWhereJsonContains('group_ids', (string) $groupId)
                     ->orWhereJsonContains('group_ids', (int) $groupId);
             }
-        })->get(['id', 'type', 'group_ids', 'relay_entry_id']);
+        })->get(['id', 'type', 'group_ids', 'relay_entry_id', 'relay_pool_id']);
         $entryIds = $servers->filter(fn (Server $server) => $server->isRelayChild())
-            ->pluck('relay_entry_id')->unique()->values()->all();
+            ->pluck('relay_entry_id')->filter()->unique()->values()->all();
+        $poolIds = $servers->pluck('relay_pool_id')->filter()->unique();
+        $entryIds = array_values(array_unique(array_merge($entryIds,
+            Server::whereIn('balancer_pool_id', $poolIds)->where('balancer_role', 'member')->pluck('id')->all())));
         $notifiedCount = 0;
         foreach ($servers as $server) {
             if ($server->isRelayChild() || in_array($server->id, $entryIds)) continue;

@@ -32,7 +32,7 @@ class ProxyAccessLog
         $now = now()->timestamp;
         $cutoff = $now - self::RETENTION_DAYS * 86400;
         // 认证仍属于上报入口，只允许归属本节点或它自己的中转落地。
-        $children = Server::query()->where('relay_entry_id', $node->id)->pluck('name', 'id');
+        $children = ServerRelayService::childrenQuery($node)->pluck('name', 'id');
         $nodes = $children->all();
         if (!$node->isRelayChild()) $nodes[$node->id] = $node->name;
         $rows = [];

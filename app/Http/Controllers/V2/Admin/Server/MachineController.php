@@ -81,6 +81,11 @@ class MachineController extends Controller
         if (!empty($params['id'])) {
             DB::transaction(function () use ($params) {
                 $machine = ServerMachine::whereKey($params['id'])->lockForUpdate()->firstOrFail();
+                if (($params['traffic_mode'] ?? $machine->traffic_mode) === 'proxy'
+                    && ($params['traffic_limit_gb'] ?? ($machine->traffic_limit / 1073741824)) > 0
+                    && \App\Models\BalancerPool::where('gateway_machine_id', $machine->id)->exists()) {
+                    throw \Illuminate\Validation\ValidationException::withMessages(['traffic_mode' => '调度入口设置流量限额时请使用网卡计量模式']);
+                }
                 MachineTrafficService::configure($machine, $params);
                 $machine->fill(array_intersect_key($params, array_flip(['name', 'notes', 'is_active'])))->save();
                 DB::afterCommit(fn () => MachineTrafficService::notify($machine->id));

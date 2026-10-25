@@ -156,7 +156,9 @@ class NodeSyncService
         })->get();
         // 落地不保存面板用户，线路权限变化必须通知承载认证的前置入口。
         $entryIds = $servers->pluck('relay_entry_id')->filter()->unique();
-        return $servers->concat(Server::whereIn('id', $entryIds)->get())->unique('id')->values();
+        $poolIds = $servers->pluck('relay_pool_id')->filter()->unique();
+        return $servers->concat(Server::whereIn('id', $entryIds)->get())
+            ->concat(Server::whereIn('balancer_pool_id', $poolIds)->where('balancer_role', 'member')->get())->unique('id')->values();
     }
 
     /**

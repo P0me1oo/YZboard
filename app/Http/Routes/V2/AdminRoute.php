@@ -45,6 +45,25 @@ class AdminRoute
                 $router->post('/cleanup', [\App\Http\Controllers\V2\Admin\DatabaseController::class, 'cleanup']);
             });
             // Config
+            $router->group(['prefix' => 'config/ddns'], function ($router) {
+                $controller = \App\Http\Controllers\V2\Admin\DdnsController::class;
+                $router->get('/fetch', [$controller, 'fetch']);
+                $router->post('/preset/save', [$controller, 'savePreset']);
+                $router->post('/preset/delete', [$controller, 'deletePreset']);
+                $router->post('/check', [$controller, 'check']);
+                $router->post('/sync', [$controller, 'sync']);
+                $router->post('/cleanup', [$controller, 'cleanup']);
+            });
+            $router->group(['prefix' => 'server/load-balancer'], function ($router) {
+                $controller = \App\Http\Controllers\V2\Admin\Server\LoadBalancerController::class;
+                $router->get('/fetch', [$controller, 'fetch']);
+                $router->post('/save', [$controller, 'save']);
+                $router->post('/delete', [$controller, 'delete']);
+                $router->post('/settings', [$controller, 'settings']);
+                $router->post('/preset/save', [$controller, 'savePreset']);
+                $router->post('/preset/delete', [$controller, 'deletePreset']);
+                $router->post('/dns/sync', [$controller, 'syncDns']);
+            });
             $router->group([
                 'prefix' => 'config'
             ], function ($router) {

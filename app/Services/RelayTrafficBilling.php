@@ -20,8 +20,8 @@ class RelayTrafficBilling
             return [];
         }
         $rates = [];
-        foreach (Server::query()->whereIn('id', array_keys($ids))
-            ->where('relay_entry_id', $entry->id)->where('relay_rate_override', true)->get() as $child) {
+        foreach (ServerRelayService::childrenQuery($entry)->whereIn('id', array_keys($ids))
+            ->where('relay_rate_override', true)->get() as $child) {
             if ($child->isRelayChild()) {
                 $rates[$child->id] = $child->getCurrentRate();
             }

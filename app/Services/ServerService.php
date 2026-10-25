@@ -33,7 +33,7 @@ class ServerService
      */
     public static function getAllServers(): Collection
     {
-        $query = Server::orderBy('sort', 'ASC');
+        $query = Server::whereNull('balancer_role')->orderBy('sort', 'ASC');
 
         return $query->get()->append([
             'last_check_at',
@@ -58,6 +58,8 @@ class ServerService
         }
         return Server::where('machine_id', $machine->id)
             ->where('enabled', true)
+            ->when(!LoadBalancerService::agentCompatible($machine), fn ($query) => $query->whereNull('balancer_role')
+                ->where(fn ($node) => $node->whereNull('relay_pool_id')->orWhere('type', '!=', 'wireguard')))
             ->orderBy('sort', 'ASC')
             ->get();
     }
@@ -174,6 +176,7 @@ class ServerService
      */
     public static function getAvailableUsers(Server $node, ?int $userId = null)
     {
+        if ($node->balancer_role === 'gateway') return collect();
         if (MachineTrafficService::nodeBlocked($node)) {
             return collect();
         }
@@ -362,8 +365,7 @@ class ServerService
         if ($counts === []) {
             return false;
         }
-        $children = Server::query()
-            ->where('relay_entry_id', $entry->id)
+        $children = ServerRelayService::childrenQuery($entry)
             ->pluck('id')->map(fn ($id) => (int) $id)->flip()->all();
         $nodes = [];
         foreach ($counts as $userKey => $userNodes) {
@@ -430,13 +432,19 @@ class ServerService
     /**
      * 标记节点心跳
      */
-    public static function touchNode(Server $node): void
+    public static function touchNode(Server $node, ?int $receivedAt = null): void
     {
+        $receivedAt ??= time();
         Cache::put(
             CacheKey::get('SERVER_' . strtoupper($node->type) . '_LAST_CHECK_AT', $node->id),
-            time(),
+            $receivedAt,
             3600
         );
+        if ($node->balancer_role === 'member') {
+            \App\Models\BalancerMember::where('runtime_node_id', $node->id)
+                ->where(fn ($query) => $query->whereNull('last_report_at')->orWhere('last_report_at', '<', $receivedAt))
+                ->update(['last_report_at' => $receivedAt]);
+        }
     }
 
     /**
@@ -582,8 +590,7 @@ class ServerService
      */
     public static function processRelayUserAlive(Server $entry, array $alive): void
     {
-        $children = Server::query()
-            ->where('relay_entry_id', $entry->id)
+        $children = ServerRelayService::childrenQuery($entry)
             ->pluck('id')
             ->map(fn ($id) => (int) $id)
             ->flip()
@@ -631,6 +638,7 @@ class ServerService
 
     public static function buildNodeConfig(Server $node): array
     {
+        if ($node->balancer_role === 'gateway') return LoadBalancerService::gatewayConfig($node);
         $nodeType = $node->type;
         $protocolSettings = $node->protocol_settings;
         $serverPort = $node->server_port;
@@ -824,6 +832,12 @@ class ServerService
             $response['device_ip_exclude'] = $deviceIpExclude;
         }
 
+        if ($node->balancer_role === 'member') {
+            $pool = \App\Models\BalancerPool::findOrFail($node->balancer_pool_id);
+            if (filter_var(trim($node->host, '[]'), FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) $response['listen_ip'] = '::';
+            $response['balancer_receiver'] = ['trusted_addresses' => $pool->gateway_source_ips ?: [$pool->gateway_address]];
+            $response['accept_proxy_protocol'] = true;
+        }
         return $response;
     }
 
@@ -872,7 +886,7 @@ class ServerService
             return null;
         }
 
-        $outbounds = $children->map(function (Server $child) {
+        $outbounds = $children->map(function (Server $child) use ($node) {
             $outbound = [
                 'node_id' => (int) $child->id,
                 'tag' => ServerRelayService::outboundTag((int) $child->id),
@@ -883,7 +897,7 @@ class ServerService
             ];
 
             if ($child->type === Server::TYPE_WIREGUARD) {
-                $outbound['wireguard'] = ServerRelayService::wireGuardConfig($child, false);
+                $outbound['wireguard'] = ServerRelayService::wireGuardConfig($child, false, $node);
             } elseif ($child->type === Server::TYPE_SHADOWSOCKS) {
                 $credential = ServerRelayService::transitCredential($child);
                 $outbound['cipher'] = $credential['cipher'];
@@ -952,7 +966,7 @@ class ServerService
             }
 
             $child = Server::find($nodeId);
-            if (!$child || (int) $child->relayEntryId() !== (int) $entry->id) {
+            if (!$child || !ServerRelayService::ownsChild($entry, $child)) {
                 continue;
             }
 
@@ -1001,7 +1015,7 @@ class ServerService
                 }
 
                 $child = Server::find($nodeId);
-                if (!$child || (int) $child->relayEntryId() !== (int) $entry->id) {
+                if (!$child || !ServerRelayService::ownsChild($entry, $child)) {
                     continue;
                 }
 

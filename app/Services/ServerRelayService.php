@@ -156,6 +156,10 @@ class ServerRelayService
      */
     public static function entryFor(Server $child): ?Server
     {
+        if ($child->relay_pool_id) {
+            $entry = LoadBalancerService::entryForPool((int) $child->relay_pool_id);
+            return $entry && self::isSupportedLanding($child, $entry) ? $entry : null;
+        }
         if (!self::isSupportedLanding($child)) {
             return null;
         }
@@ -181,7 +185,7 @@ class ServerRelayService
             return collect();
         }
 
-        return Server::where('relay_entry_id', $entry->id)
+        return self::childrenQuery($entry)
             ->whereIn('type', Server::RELAY_TRANSIT_TYPES)
             ->where(function ($query) {
                 $query->where('enabled', true)->orWhereNull('enabled');
@@ -190,6 +194,23 @@ class ServerRelayService
             ->get()
             ->filter(fn(Server $child) => self::isSupportedLanding($child, $entry) && !MachineTrafficService::nodeBlocked($child))
             ->values();
+    }
+
+    public static function childrenQuery(Server $entry): \Illuminate\Database\Eloquent\Builder
+    {
+        return Server::query()->where(function ($query) use ($entry) {
+            $query->where('relay_entry_id', $entry->id);
+            if ($entry->balancer_role === 'member' && $entry->balancer_pool_id) {
+                $query->orWhere('relay_pool_id', $entry->balancer_pool_id);
+            }
+        });
+    }
+
+    public static function ownsChild(Server $entry, Server $child): bool
+    {
+        return (int) $child->relayEntryId() === (int) $entry->id
+            || ($entry->balancer_role === 'member' && $entry->balancer_pool_id
+                && (int) $child->relay_pool_id === (int) $entry->balancer_pool_id);
     }
 
     public static function hasRelayChildren(Server $entry): bool
@@ -203,7 +224,7 @@ class ServerRelayService
         if (!self::isSupportedEntry($entry)) {
             return [];
         }
-        return Server::where('relay_entry_id', $entry->id)->orderBy('id')->get()
+        return self::childrenQuery($entry)->orderBy('id')->get()
             ->filter(fn (Server $child) => $child->enabled === false || MachineTrafficService::nodeBlocked($child))
             ->map(fn (Server $child) => self::ensureRouteId($child))->all();
     }
@@ -211,7 +232,7 @@ class ServerRelayService
     /** 入口按实际内核校验，且自身不能再连接其它前置入口。 */
     public static function isSupportedEntry(Server $entry): bool
     {
-        return $entry->relayEntryId() === null
+        return $entry->relayEntryId() === null && !$entry->relay_pool_id
             && self::validateEntrySettings(
                 $entry->type,
                 (array) $entry->protocol_settings,
@@ -223,6 +244,7 @@ class ServerRelayService
     /** 旧数据中的无效落地也不能进入订阅或入口配置。 */
     private static function isSupportedLanding(Server $child, ?Server $entry = null): bool
     {
+        if ($entry === null && $child->relay_pool_id) $entry = LoadBalancerService::entryForPool((int) $child->relay_pool_id);
         $entry ??= $child->relayEntry;
         return $child->isRelayChild()
             && $entry !== null
@@ -283,7 +305,7 @@ class ServerRelayService
             implode('|', [
                 'xboard-relay-shadowsocks',
                 (string) $child->id,
-                (string) $child->relay_entry_id,
+                $child->relay_pool_id ? 'pool:' . $child->relay_pool_id : (string) $child->relay_entry_id,
                 (string) $child->getRawOriginal('created_at'),
             ]),
             (string) config('app.key'),
@@ -389,7 +411,7 @@ class ServerRelayService
             implode('|', [
                 $domain,
                 (string) $child->id,
-                (string) $child->relay_entry_id,
+                $child->relay_pool_id ? 'pool:' . $child->relay_pool_id : (string) $child->relay_entry_id,
                 (string) $child->getRawOriginal('created_at'),
             ]),
             (string) config('app.key'),
@@ -692,8 +714,9 @@ class ServerRelayService
     }
 
     /** 每条链路独立派生两端密钥，只下发本端私钥和对端公钥，不进入订阅或数据库。 */
-    public static function wireGuardConfig(Server $child, bool $landing): array
+    public static function wireGuardConfig(Server $child, bool $landing, ?Server $entry = null): array
     {
+        if ($child->relay_pool_id) return self::poolWireGuardConfig($child, $landing, $entry);
         $entryKey = self::deriveMaterial($child, 'yz-relay-wireguard-entry');
         $landingKey = self::deriveMaterial($child, 'yz-relay-wireguard-landing');
         $peerKey = $landing ? $entryKey : $landingKey;
@@ -708,5 +731,30 @@ class ServerRelayService
             'mtu' => (int) data_get($child->protocol_settings, 'mtu', 1420),
             'keepalive' => $landing ? 0 : (int) data_get($child->protocol_settings, 'keepalive', 25),
         ];
+    }
+
+    private static function poolWireGuardConfig(Server $child, bool $landing, ?Server $entry): array
+    {
+        $members = \App\Models\BalancerMember::with('runtimeNode')->where('pool_id', $child->relay_pool_id)->orderBy('id')->get();
+        $landingKey = self::deriveMaterial($child, 'yz-relay-wireguard-landing');
+        $landingPublic = base64_encode(\ParagonIE_Sodium_Compat::crypto_scalarmult_base($landingKey));
+        $peers = [];
+        foreach ($members as $member) {
+            $front = $member->runtimeNode;
+            if (!$front) continue;
+            $route = self::ensureRouteId($front);
+            $addresses = ['10.252.' . intdiv($route, 256) . '.' . ($route % 256) . '/32', 'fd7a:797a:1::' . dechex($route) . '/128'];
+            $key = self::deriveMaterial($child, 'yz-relay-wireguard-entry-' . $front->id);
+            if (!$landing && $entry?->id === $front->id) {
+                return ['private_key' => base64_encode($key), 'peer_public_key' => $landingPublic, 'address' => $addresses,
+                    'allowed_ips' => ['0.0.0.0/0', '::/0'], 'mtu' => (int) data_get($child->protocol_settings, 'mtu', 1420),
+                    'keepalive' => (int) data_get($child->protocol_settings, 'keepalive', 25)];
+            }
+            $peers[] = ['public_key' => base64_encode(\ParagonIE_Sodium_Compat::crypto_scalarmult_base($key)), 'allowed_ips' => $addresses];
+        }
+        if (!$landing || $peers === []) throw new \RuntimeException('前置池 WG 对端配置不完整');
+        return ['private_key' => base64_encode($landingKey), 'peer_public_key' => $peers[0]['public_key'],
+            'address' => ['10.253.0.2/32', 'fd7a:797a::2/128'], 'allowed_ips' => array_merge(...array_column($peers, 'allowed_ips')),
+            'peers' => $peers, 'mtu' => (int) data_get($child->protocol_settings, 'mtu', 1420), 'keepalive' => 0];
     }
 }

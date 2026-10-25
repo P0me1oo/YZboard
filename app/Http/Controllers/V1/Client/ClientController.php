@@ -83,6 +83,7 @@ class ClientController extends Controller
         );
 
         $serversFiltered = $this->addPrefixToServerName($serversFiltered);
+        $serversFiltered = app(\App\Services\DdnsService::class)->project($serversFiltered, $user);
         $this->setSubscribeInfoToServers($serversFiltered, $user, count($servers) - count($serversFiltered));
 
         // Instantiate the protocol class with filtered servers and client info

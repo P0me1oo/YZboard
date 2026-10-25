@@ -13,6 +13,7 @@ class ServerObserver
      */
     private const RELAY_ENTRY_FIELDS = [
         'relay_entry_id',
+        'relay_pool_id',
         'type',
         'host',
         'port',
@@ -28,8 +29,10 @@ class ServerObserver
     {
         $snapshot = clone $server;
         $server->getConnection()->afterCommit(function () use ($snapshot) {
+            \App\Services\DdnsService::notify();
             $this->notifyMachineNodesChanged($snapshot->machine_id);
             $this->notifyRelayEntry($snapshot->relay_entry_id);
+            $this->notifyRelayPool($snapshot->relay_pool_id);
         });
     }
 
@@ -41,6 +44,7 @@ class ServerObserver
 
     private function updatedAfterCommit(Server $server): void
     {
+        if ($server->wasChanged(['host', 'enabled', 'group_ids', 'relay_entry_id', 'relay_pool_id'])) \App\Services\DdnsService::notify();
         if ($server->wasChanged('group_ids')) {
             NodeSyncService::notifyFullSync($server->id);
         } elseif ($server->wasChanged([
@@ -48,6 +52,7 @@ class ServerObserver
             'protocol_settings',
             'type',
             'relay_entry_id',
+            'relay_pool_id',
             'route_ids',
             'custom_outbounds',
             'custom_routes',
@@ -69,6 +74,8 @@ class ServerObserver
         if ($server->wasChanged(self::RELAY_ENTRY_FIELDS)) {
             $this->notifyRelayEntry($server->relay_entry_id);
             $this->notifyRelayEntry($server->getOriginal('relay_entry_id'));
+            $this->notifyRelayPool($server->relay_pool_id);
+            $this->notifyRelayPool($server->getOriginal('relay_pool_id'));
         }
     }
 
@@ -80,8 +87,10 @@ class ServerObserver
 
     private function deletedAfterCommit(Server $server): void
     {
+        \App\Services\DdnsService::notify();
         $this->notifyMachineChange(null, $server->getOriginal('machine_id') ?: $server->machine_id);
         $this->notifyRelayEntry($server->getOriginal('relay_entry_id') ?: $server->relay_entry_id);
+        $this->notifyRelayPool($server->getOriginal('relay_pool_id') ?: $server->relay_pool_id);
         app(DeviceHandoverService::class)->deletedNode((int) $server->id);
     }
 
@@ -106,6 +115,14 @@ class ServerObserver
 
         if ($oldMachineId && !in_array($oldMachineId, $notified, true)) {
             NodeSyncService::notifyMachineNodesChanged($oldMachineId);
+        }
+    }
+
+    private function notifyRelayPool(?int $poolId): void
+    {
+        if (!$poolId) return;
+        foreach (Server::where('balancer_pool_id', $poolId)->where('balancer_role', 'member')->pluck('id') as $id) {
+            NodeSyncService::notifyFullSync((int) $id);
         }
     }
 

@@ -167,6 +167,8 @@ class Server extends Model
         'usage_d' => 'integer',
         'kernel_type' => 'string',
         'relay_entry_id' => 'integer',
+        'relay_pool_id' => 'integer',
+        'balancer_pool_id' => 'integer',
         'relay_rate_override' => 'boolean',
         'vless_route' => 'integer',
     ];
@@ -376,6 +378,11 @@ class Server extends Model
 
     protected static function booted(): void
     {
+        static::deleting(function (self $server) {
+            if (\Illuminate\Support\Facades\Schema::hasTable('v2_balancer_member') && BalancerMember::where('source_node_id', $server->id)->exists()) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['id' => '节点被前置池引用，请先移除对应的池成员']);
+            }
+        });
         // 路由编号由面板自动分配，管理端无需填写；新建节点（含复制）始终获得独立编号。
         static::creating(function (self $server) {
             $server->vless_route = ServerRelayService::allocateRouteId();
@@ -602,7 +609,7 @@ class Server extends Model
      */
     public function isRelayChild(): bool
     {
-        return $this->relayEntryId() !== null
+        return ($this->relayEntryId() !== null || $this->relay_pool_id)
             && in_array($this->type, self::RELAY_TRANSIT_TYPES, true);
     }
 
@@ -613,6 +620,9 @@ class Server extends Model
      */
     public function getEffectiveRate(): float
     {
+        if ($this->relay_pool_id && !$this->relay_rate_override) {
+            return \App\Services\LoadBalancerService::entryForPool((int) $this->relay_pool_id)?->getCurrentRate() ?? $this->getCurrentRate();
+        }
         if ($this->isRelayChild() && !$this->relay_rate_override && $this->relayEntry) {
             return $this->relayEntry->getCurrentRate();
         }

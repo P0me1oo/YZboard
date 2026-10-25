@@ -16,6 +16,7 @@ class ServerSave extends FormRequest
 {
     protected function prepareForValidation(): void
     {
+        if ($this->has('relay_pool_id') && !(int) $this->input('relay_pool_id')) $this->merge(['relay_pool_id' => null]);
         if (!$this->input('id') && !$this->has('auto_firewall')) {
             $this->merge(['auto_firewall' => true]);
         }
@@ -173,11 +174,16 @@ class ServerSave extends FormRequest
             'route_ids' => 'nullable|array',
             'parent_id' => 'nullable|integer',
             'relay_entry_id' => 'nullable|integer',
+            'relay_pool_id' => 'nullable|integer|min:0',
             'relay_rate_override' => 'sometimes|boolean',
             'machine_id' => 'nullable|integer',
             'kernel_type' => 'nullable|string|in:xray,singbox,sing-box',
             'enabled' => 'nullable|boolean',
             'host' => 'required',
+            'ddns' => 'sometimes|nullable|array:enabled,preset_id,prefix',
+            'ddns.enabled' => 'required_with:ddns|boolean',
+            'ddns.preset_id' => 'nullable|integer',
+            'ddns.prefix' => 'nullable|string|max:63',
             'port' => 'required',
             'server_port' => 'required|integer|min:1|max:65535',
             'tags' => 'nullable|array',
@@ -362,6 +368,31 @@ class ServerSave extends FormRequest
             // 0、空串和 null 都表示“不使用中转”，管理端会把“无”提交为 0。
             // 编辑时省略可选字段表示保留已保存值，校验必须与实际更新一致。
             $entryId = (int) $this->input('relay_entry_id', $existing?->relay_entry_id);
+
+            $poolId = (int) $this->input('relay_pool_id', $existing?->relay_pool_id);
+            if ($poolId > 0) {
+                if ($entryId > 0) $validator->errors()->add('relay_pool_id', '前置节点与前置池只能选择一种');
+                $pool = \App\Models\BalancerPool::with('members.runtimeNode')->find($poolId);
+                if (!$pool || !$pool->enabled || $pool->members->isEmpty()) {
+                    $validator->errors()->add('relay_pool_id', '请选择已启用且有成员的前置池');
+                } else {
+                    if ($this->input('type') === 'wireguard') {
+                        $landingMachine = \App\Models\ServerMachine::find((int) $this->input('machine_id', $existing?->machine_id));
+                        if (!$landingMachine || !\App\Services\LoadBalancerService::agentCompatible($landingMachine)) {
+                            $validator->errors()->add('relay_pool_id', 'WG 多前置落地请绑定已运行 Node v2.25.0 的服务器');
+                        }
+                    }
+                    foreach ($pool->members as $member) {
+                        if (!$member->runtimeNode) continue;
+                        $error = ServerRelayService::validateTransitSettings($this->input('type'),
+                            (array) $this->input('protocol_settings', []), $this->input('host'), $member->runtimeNode->kernel_type);
+                        if ($error) $validator->errors()->add('relay_pool_id', $error);
+                    }
+                    if ($selfId && \App\Models\BalancerMember::where('source_node_id', $selfId)->exists()) {
+                        $validator->errors()->add('relay_pool_id', '作为前置模板的节点不能再绑定前置池');
+                    }
+                }
+            }
 
             $error = ServerRelayService::validateEntry(
                 $selfId,

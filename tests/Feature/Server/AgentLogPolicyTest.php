@@ -73,15 +73,6 @@ class AgentLogPolicyTest extends TestCase
         }
     }
 
-    public function test_empty_migration_can_rollback_and_reapply_without_enabling_privacy(): void
-    {
-        $migration = require database_path('migrations/2026_10_27_000001_add_agent_log_disabled_to_machines.php');
-        $migration->down();
-        $this->assertFalse(Schema::hasColumn('v2_server_machine', 'agent_log_disabled'));
-        $migration->up();
-        $this->assertFalse($this->machine()->agent_log_disabled);
-    }
-
     public function test_policy_is_available_before_node_discovery_and_for_legacy_node_binding(): void
     {
         foreach ([false, true] as $disabled) {

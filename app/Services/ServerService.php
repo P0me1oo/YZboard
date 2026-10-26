@@ -661,7 +661,8 @@ class ServerService
             'protocol' => $nodeType,
             // 节点内核独立于协议；历史节点的空值按默认 Xray 下发。
             'kernel_type' => Server::effectiveKernelType($node->kernel_type),
-            'listen_ip' => '0.0.0.0',
+            // IPv6 连接地址需要双栈监听，防火墙跟随实际监听范围放行。
+            'listen_ip' => filter_var(trim((string) $host, '[]'), FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) ? '::' : '0.0.0.0',
             'server_port' => (int) $serverPort,
             'network' => data_get($protocolSettings, 'network'),
             'networkSettings' => data_get($protocolSettings, 'network_settings') ?: null,
@@ -834,7 +835,6 @@ class ServerService
 
         if ($node->balancer_role === 'member') {
             $pool = \App\Models\BalancerPool::findOrFail($node->balancer_pool_id);
-            if (filter_var(trim($node->host, '[]'), FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) $response['listen_ip'] = '::';
             $response['balancer_receiver'] = ['trusted_addresses' => $pool->gateway_source_ips ?: [$pool->gateway_address]];
             $response['accept_proxy_protocol'] = true;
         }

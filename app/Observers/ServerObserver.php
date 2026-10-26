@@ -48,6 +48,7 @@ class ServerObserver
         if ($server->wasChanged('group_ids')) {
             NodeSyncService::notifyFullSync($server->id);
         } elseif ($server->wasChanged([
+            'host',
             'server_port',
             'protocol_settings',
             'type',

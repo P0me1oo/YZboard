@@ -27,6 +27,10 @@ class AgentLog
         ])->validate();
         if (!array_is_list($data['records'])) throw \Illuminate\Validation\ValidationException::withMessages(['records' => '日志必须为列表']);
         $machine ??= $node?->machine_id ? ServerMachine::find($node->machine_id) : null;
+        if (AgentLogPolicy::disabled($machine, $node)) {
+            // 确认并丢弃旧 Agent 或在途批次，不重新入库或触发日志通知。
+            return ['batch_id' => $data['batch_id']];
+        }
         $allowed = $node ? collect([$node->id => $node]) : Server::where('machine_id', $machine->id)->get()->keyBy('id');
         $owner = $node ? 'node:' . $node->id : 'machine:' . $machine->id;
         $rows = [];

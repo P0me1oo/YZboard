@@ -3621,6 +3621,8 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
       "notesPlaceholder": "Необязательные заметки о сервере",
       "isActive": "Включить сервер",
       "isActiveDescription": "Отключённые серверы не используются xboard-node.",
+      "disableLogs": "Навсегда отключить журналы работы",
+      "disableLogsDescription": "Отключает журналы Agent и ядер. После сохранения включить их снова нельзя.",
       "cancel": "Отмена",
       "submit": "Сохранить",
       "update": "Обновить"

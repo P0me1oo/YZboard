@@ -1,5 +1,7 @@
 # Xboard
 
+本地开发版 `1.107.0` 配套 Agent `v2.26.0`、管理端 `0.78.0`，支持在服务器管理中永久停用指定机器的运行日志，保存后无法重新开启。尚未发布，见[运行日志设置](docs/agent-log-policy.md)。
+
 [v1.106.2](https://github.com/P0me1oo/YZboard/releases/tag/v1.106.2) 已发布，配套 Agent `v2.25.0`、管理端 `0.77.0`：新增 VLESS Reality 前置负载均衡和用户个人 DDNS，修复解析更新、归属恢复及旧订阅兼容问题。双数据库完整回归、双架构镜像及附件均已核验，`latest` 已更新。先更新面板，再升级 Agent；来源、更新顺序和回滚见[兼容矩阵](YZ_COMPATIBILITY.md)。
 
 [v1.104.5](https://github.com/P0me1oo/YZboard/releases/tag/v1.104.5) 已发布，容器固定使用 PHP `8.2.35`，修复 `CVE-2026-109618`、`CVE-2026-109619`，同时交付首次设备状态与授权合并。双数据库回归、双架构镜像及附件已核验，`latest` 已更新；配套 Agent `v2.24.2`，来源及更新顺序见[兼容矩阵](YZ_COMPATIBILITY.md)。

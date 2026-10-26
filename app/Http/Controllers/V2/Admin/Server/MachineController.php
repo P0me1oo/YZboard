@@ -45,6 +45,7 @@ class MachineController extends Controller
                     'name' => $machine->name,
                     'notes' => $machine->notes,
                     'is_active' => $machine->is_active,
+                    'agent_log_disabled' => $machine->agent_log_disabled,
                     'last_seen_at' => $machine->last_seen_at,
                     'load_status' => $machine->load_status,
                     'agent_runtime' => \App\Services\MachineAgentService::runtimeView($machine->agent_runtime),
@@ -71,6 +72,7 @@ class MachineController extends Controller
             'name' => 'required|string|max:255',
             'notes' => 'nullable|string',
             'is_active' => 'nullable|boolean',
+            'agent_log_disabled' => 'sometimes|required|boolean',
             'traffic_limit_gb' => 'sometimes|required|numeric|min:0|max:8388607',
             'traffic_mode' => 'sometimes|required|in:outbound,both,proxy',
             'traffic_reset_day' => 'sometimes|required|integer|min:1|max:31',
@@ -87,7 +89,7 @@ class MachineController extends Controller
                     throw \Illuminate\Validation\ValidationException::withMessages(['traffic_mode' => '调度入口设置流量限额时请使用网卡计量模式']);
                 }
                 MachineTrafficService::configure($machine, $params);
-                $machine->fill(array_intersect_key($params, array_flip(['name', 'notes', 'is_active'])))->save();
+                $machine->fill(array_intersect_key($params, array_flip(['name', 'notes', 'is_active', 'agent_log_disabled'])))->save();
                 DB::afterCommit(fn () => MachineTrafficService::notify($machine->id));
             }, 3);
             return $this->success(true);
@@ -97,6 +99,7 @@ class MachineController extends Controller
             'name' => $params['name'],
             'notes' => $params['notes'] ?? null,
             'is_active' => $params['is_active'] ?? true,
+            'agent_log_disabled' => $params['agent_log_disabled'] ?? false,
             'traffic_mode' => $params['traffic_mode'] ?? 'both',
             'token' => ServerMachine::generateToken(),
         ]);

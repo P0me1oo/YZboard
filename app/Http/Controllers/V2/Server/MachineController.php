@@ -103,7 +103,8 @@ class MachineController extends Controller
         $machine = $this->authenticateMachine($request);
         $command = \App\Services\MachineAgentService::exchange($machine, $report, $request->ip());
         $scan = ($report['reality_scan_supported'] ?? false) ? \App\Services\RealityScanService::exchange($machine, $report) : null;
-        return response()->json(['command' => $command, 'reality_scan' => $scan]);
+        return response()->json(['command' => $command, 'reality_scan' => $scan,
+            'log_policy' => \App\Services\AgentLogPolicy::view($machine)]);
     }
 
     /**
@@ -132,6 +133,7 @@ class MachineController extends Controller
 
         return response()->json([
             'nodes' => $nodes,
+            'log_policy' => \App\Services\AgentLogPolicy::view($machine),
             'traffic' => \App\Services\MachineTrafficService::view($machine),
             'base_config' => [
                 'push_interval' => (int) admin_setting('server_push_interval', 60),

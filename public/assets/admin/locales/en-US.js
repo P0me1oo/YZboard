@@ -3706,6 +3706,8 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "notesPlaceholder": "Optional notes about this server",
       "isActive": "Enable Server",
       "isActiveDescription": "Disabled servers will not be used by xboard-node.",
+      "disableLogs": "Permanently disable runtime logs",
+      "disableLogsDescription": "Stop Agent and core runtime logs. Cannot be reversed after saving.",
       "cancel": "Cancel",
       "submit": "Submit",
       "update": "Update"

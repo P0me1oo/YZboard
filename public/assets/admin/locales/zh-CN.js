@@ -3733,6 +3733,8 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
       "notesPlaceholder": "关于此服务器的可选备注",
       "isActive": "启用服务器",
       "isActiveDescription": "禁用后 xboard-node 将不再使用此服务器。",
+      "disableLogs": "永久停用运行日志",
+      "disableLogsDescription": "停止 Agent 和核心运行日志，保存后无法重新开启。",
       "cancel": "取消",
       "submit": "提交",
       "update": "更新"

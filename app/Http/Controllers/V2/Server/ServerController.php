@@ -40,6 +40,7 @@ class ServerController extends Controller
         }
 
         return response()->json([
+            'log_policy' => \App\Services\AgentLogPolicy::view($request->attributes->get('machine_info'), $node),
             'access_log' => ['version' => 2, 'retention_days' => \App\Services\ProxyAccessLog::RETENTION_DAYS],
             'agent_log' => ['version' => 1, 'retention_days' => \App\Services\AgentLog::RETENTION_DAYS, 'events' => ['xray.crash']],
             'websocket' => $websocket,

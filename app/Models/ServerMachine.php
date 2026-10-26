@@ -27,8 +27,11 @@ class ServerMachine extends Model
 
     protected $guarded = ['id'];
 
+    protected $attributes = ['agent_log_disabled' => false];
+
     protected $casts = [
         'is_active' => 'boolean',
+        'agent_log_disabled' => 'boolean',
         'proxy_u' => 'integer',
         'proxy_d' => 'integer',
         'traffic_limit' => 'integer',
@@ -44,6 +47,18 @@ class ServerMachine extends Model
     ];
 
     protected $hidden = ['token'];
+
+    protected static function booted(): void
+    {
+        static::saving(function (self $machine): void {
+            if ($machine->exists && $machine->isDirty('agent_log_disabled') && !$machine->agent_log_disabled
+                && self::whereKey($machine->id)->value('agent_log_disabled')) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'agent_log_disabled' => '运行日志已永久停用，不能重新开启',
+                ]);
+            }
+        });
+    }
 
     public function servers(): HasMany
     {

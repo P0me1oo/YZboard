@@ -43,7 +43,8 @@ class Kernel extends ConsoleKernel
         $schedule->command('machine:prune-history')->hourlyAt(30)->onOneServer()->withoutOverlapping(10)->runInBackground();
         // reset
         $schedule->command('reset:traffic')->everyMinute()->onOneServer()->withoutOverlapping(10);
-        $schedule->command('reset:log')->daily()->onOneServer()->withoutOverlapping(30);
+        $schedule->command('reset:log')->daily()->onOneServer()->withoutOverlapping(30)->runInBackground();
+        $schedule->command('reset:log --resume')->everyFiveMinutes()->onOneServer()->withoutOverlapping(30)->runInBackground();
         $schedule->call(fn () => app(\App\Services\SubscriptionRestrictionService::class)->prune())
             ->name('subscription-protection:prune')->hourly()->onOneServer()->withoutOverlapping(10);
         $schedule->command('inbound-ip:refresh')->everyMinute()->onOneServer()->withoutOverlapping(5)->runInBackground();

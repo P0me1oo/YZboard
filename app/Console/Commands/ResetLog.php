@@ -3,10 +3,14 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class ResetLog extends Command
 {
+    public const PENDING_SETTING = 'runtime_log_cleanup_pending';
+    public const LOCK_KEY = 'runtime:reset-log';
+
     protected $builder;
     /**
      * The name and signature of the console command.
@@ -14,6 +18,7 @@ class ResetLog extends Command
      * @var string
      */
     protected $signature = 'reset:log
+        {--resume : 仅继续尚未完成的历史清理}
         {--batch=500 : 每批最多删除的历史记录数}
         {--batches=100 : 单轮最多批次数}
         {--max-seconds=20 : 达到该时长后不再开始下一批}';
@@ -23,7 +28,7 @@ class ResetLog extends Command
      *
      * @var string
      */
-    protected $description = '清空日志';
+    protected $description = '分批清理到期的统计和日志，未完成时自动续跑';
 
     /**
      * Create a new command instance.
@@ -40,7 +45,30 @@ class ResetLog extends Command
      *
      * @return mixed
      */
-    public function handle()
+    public function handle(): int
+    {
+        // 日常、续跑和手工入口共用锁，避免不同调度事件同时清理。
+        $lock = Cache::lock(self::LOCK_KEY, 1800);
+        if (!$lock->get()) {
+            $this->info('已有历史清理正在执行，本轮跳过。');
+            return self::SUCCESS;
+        }
+
+        try {
+            $pending = DB::table('v2_settings')->where('name', self::PENDING_SETTING);
+            if ($this->option('resume') && !$pending->exists()) {
+                return self::SUCCESS;
+            }
+
+            // 先持久化续跑标记，再开始删除；失败、进程退出或清空缓存都不会丢失待办。
+            DB::table('v2_settings')->updateOrInsert(['name' => self::PENDING_SETTING], ['value' => '1']);
+            return $this->prune();
+        } finally {
+            $lock->release();
+        }
+    }
+
+    private function prune(): int
     {
         $size = max(1, min(500, (int) $this->option('batch')));
         $batches = max(1, min(1000, (int) $this->option('batches')));
@@ -50,6 +78,7 @@ class ResetLog extends Command
         $hourCutoff = \App\Services\TrafficStatisticsRetention::hourlyStart()->timestamp;
         $today = \App\Services\TrafficStatisticsRetention::today()->timestamp;
         $deleted = 0;
+        $complete = false;
         for ($round = 0; $round < $batches; $round++) {
             $roundDeleted = 0;
             $roundDeleted += $this->deleteIds('v2_stat_user', 'id', fn ($q) => $q->where('record_at', '<', $cutoff), $size);
@@ -64,9 +93,18 @@ class ResetLog extends Command
             $roundDeleted += $this->deleteOldNames($cutoff, $size);
             $roundDeleted += $this->deleteIds('v2_admin_audit_log', 'id', fn ($q) => $q->where('created_at', '<', strtotime('-3 month', time())), $size);
             $deleted += $roundDeleted;
-            if ($roundDeleted === 0 || hrtime(true) - $started >= $seconds * 1_000_000_000) break;
+            if ($roundDeleted === 0) {
+                // 只有完整检查一轮且没有到期记录，才停止续跑。
+                DB::table('v2_settings')->where('name', self::PENDING_SETTING)->delete();
+                $complete = true;
+                break;
+            }
+            if (hrtime(true) - $started >= $seconds * 1_000_000_000) break;
         }
         $this->info("已分批清理 {$deleted} 条历史记录。保留周期和防重记录未改变。");
+        if (!$complete) {
+            $this->info('本轮达到清理上限，已保留待办，定时任务每五分钟尝试续跑。');
+        }
         return self::SUCCESS;
     }
 

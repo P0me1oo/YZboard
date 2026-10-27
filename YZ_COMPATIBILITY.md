@@ -1,5 +1,16 @@
 # YZboard 兼容矩阵
 
+## 1.107.1 正式发布核验（2026-10-27）
+
+- [Release v1.107.1](https://github.com/P0me1oo/YZboard/releases/tag/v1.107.1) 已发布，固定来源 `809728d9263b759c385047e6af174483bc3bb4db`，[发布流程](https://github.com/P0me1oo/YZboard/actions/runs/40397044661) 全部通过。管理端 `0.78.0` 来源 `e85325a07326dcff1d27273277a671754e64a3d6`，配套 Agent `v2.26.0` / `e1068a733bc5b03cc30e119f9db2202bc3689e93`。
+- PHP `8.2.35` / Linux 完整回归通过：SQLite 1,358 项、14,309 条断言，10 项环境型跳过；MariaDB `11.4.8` 严格分组 1,358 项、14,318 条断言，无跳过。资源检查 5 项通过；既有本地专项与桌面、手机页面检查复用，不重复运行。
+- 不可变镜像 `ghcr.io/p0me1oo/yzboard:1.107.1-809728d`、`1.107.1` 和 `latest` 均为 `sha256:af865c8fe17d27206bf756812ccda40779b8e8c45d9bb1990950f28063da8a9f`。平台为 `linux/amd64`（`sha256:b93eb6c665a1b8ac5763263ef66153a69418a27a6f0f3ca9809fd6d97cce3b18`）和 `linux/arm64`（`sha256:899e926ca3f8e145b5999616157e45e3b46a372788f952ac311e581c6c0d51c2`）。
+- 已匿名核对两个平台的 OCI revision、应用版本 `1.107.1`、策略源码、迁移及全部 16 份管理资源。实际文件与固定来源逐字节一致，主脚本 SHA-256 为 `c51189306a4b6b8274582ec6a6699772594836718f1b6e741090d1752d0a3df4`。
+- [verification.json](https://github.com/P0me1oo/YZboard/releases/download/v1.107.1/verification.json) 与校验文件均已匿名下载核对，JSON SHA-256 为 `e569626d01ceb381739610b0656dc40c91c8bf10425fb29aa4c59391f7b94be7`，GitHub Release 的 latest 指向 `v1.107.1`。
+- 上一版镜像 `1.106.4-1f331ad` / `sha256:c0652e0631b811154efba213cf4cdbcdcc927146a12c93b8053b1e170200afb7` 已核对双架构可获取。永久停用后不能回滚删除设置字段；旧 Agent 不支持保持静默。生产更新由用户执行，先面板后 Agent，本次没有连接或操作生产服务器。
+
+以下保留开发与发布准备记录；正式结果以上方核验为准。分支后补仅涉及文档，复用正式来源成功结果，不重复产品回归。
+
 ## 1.107.1 永久停用运行日志（2026-10-27，本地未发布）
 
 - 面板基线为 `master` / `d82575a97fe10c436e29bb0d7d5ae014d22ae951`，配套 Agent `v2.26.0` 和管理端 `0.78.0`。按机器保存单向停用设置，并在握手、发现及控制回报中下发；Agent 本地不能恢复日志。

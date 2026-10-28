@@ -12,6 +12,13 @@ use Illuminate\Support\Facades\Cache;
 
 class ServerController extends Controller
 {
+    public function privacy(Request $request): JsonResponse
+    {
+        return response()->json(['data' => \App\Services\AgentPrivacy::view(
+            $request->attributes->get('machine_info'), $request->attributes->get('node_info'), !$request->boolean('probe'))])
+            ->header('Cache-Control', 'no-store')->header('Pragma', 'no-cache');
+    }
+
     /**
      * server handshake api
      */
@@ -41,8 +48,8 @@ class ServerController extends Controller
 
         return response()->json([
             'log_policy' => \App\Services\AgentLogPolicy::view($request->attributes->get('machine_info'), $node),
-            'access_log' => ['version' => 2, 'retention_days' => \App\Services\ProxyAccessLog::RETENTION_DAYS],
-            'agent_log' => ['version' => 1, 'retention_days' => \App\Services\AgentLog::RETENTION_DAYS, 'events' => ['xray.crash']],
+            'access_log' => ['version' => 2, 'retention_days' => \App\Services\LogSettings::days('access')],
+            'agent_log' => ['version' => 1, 'retention_days' => \App\Services\LogSettings::days('agent'), 'events' => ['xray.crash']],
             'websocket' => $websocket,
             'settings' => [
                 'push_interval' => (int) admin_setting('server_push_interval', 60),
@@ -57,6 +64,7 @@ class ServerController extends Controller
                 'device_handover_ws' => 1,
                 'device_handover_renewal' => 1,
                 'device_handover_admit_sync' => 1,
+                'device_lease_cache' => 1,
             ],
         ]);
     }

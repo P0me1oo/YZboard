@@ -29,8 +29,9 @@ class ProxyAccessLog
         if (!array_is_list($data['records'])) {
             throw ValidationException::withMessages(['records' => '访问记录必须为列表。']);
         }
+        [$enabled, $cutoff] = LogSettings::recording('access');
+        if (!$enabled) return ['batch_id' => $data['batch_id']];
         $now = now()->timestamp;
-        $cutoff = $now - self::RETENTION_DAYS * 86400;
         // 认证仍属于上报入口，只允许归属本节点或它自己的中转落地。
         $children = ServerRelayService::childrenQuery($node)->pluck('name', 'id');
         $nodes = $children->all();
@@ -93,14 +94,15 @@ class ProxyAccessLog
         $now = CarbonImmutable::now(config('app.timezone'));
         // 翻页、切换排序和展开详情使用同一个时间边界，跨午夜也不会换成另一天。
         $anchor = isset($input['snapshot_at']) ? CarbonImmutable::createFromTimestamp((int) $input['snapshot_at'], $now->timezone) : $now;
-        $oldest = $now->subSeconds(self::RETENTION_DAYS * 86400);
+        $days = LogSettings::days('access');
+        $oldest = $now->subSeconds($days * 86400);
         $period = $input['period'] ?? 'today';
-        $start = $period === 'custom' ? CarbonImmutable::createFromFormat('!Y-m-d\TH:i', $input['start_at'], $now->timezone) : ($period === '7d' ? $anchor->subSeconds(self::RETENTION_DAYS * 86400) : $anchor->startOfDay());
+        $start = $period === 'custom' ? CarbonImmutable::createFromFormat('!Y-m-d\TH:i', $input['start_at'], $now->timezone) : ($period === '7d' ? $anchor->subSeconds(7 * 86400) : $anchor->startOfDay());
         $end = $period === 'custom' ? CarbonImmutable::createFromFormat('!Y-m-d\TH:i', $input['end_at'], $now->timezone) : $anchor->addMinutes(5);
         if ($period === 'today') $end = $end->min($anchor->startOfDay()->addDay());
-        if (($period === 'custom' && $start < $anchor->subSeconds(self::RETENTION_DAYS * 86400)->startOfMinute()) || $end > $now->addMinutes(5)->endOfMinute() || $start >= $end
+        if (($period === 'custom' && $start < $anchor->subSeconds($days * 86400)->startOfMinute()) || $end > $now->addMinutes(5)->endOfMinute() || $start >= $end
             || ($period === 'custom' && ($start->format('Y-m-d\TH:i') !== $input['start_at'] || $end->format('Y-m-d\TH:i') !== $input['end_at']))) {
-            throw ValidationException::withMessages(['start_at' => '请选择最近 7 天内的有效时间。']);
+            throw ValidationException::withMessages(['start_at' => "请选择最近 {$days} 天内的有效时间。"]);
         }
         $query = DB::table('v2_proxy_access_log as a')
             ->where('a.connected_at', '>=', max($start->timestamp, $oldest->timestamp))->where('a.connected_at', '<', $end->timestamp);
@@ -168,14 +170,14 @@ class ProxyAccessLog
             ] + ($view === 'targets' ? ['destination' => $row->destination, 'port' => (int) $row->port] : []))->all();
         return compact('list', 'page', 'total') + ['page_size' => $size, 'last_page' => max(1, (int) ceil($total / $size)), 'snapshot_id' => (string) $snapshot,
             'snapshot_at' => $anchor->timestamp,
-            'meta' => ['timezone' => config('app.timezone'), 'retention_days' => self::RETENTION_DAYS,
+            'meta' => ['timezone' => config('app.timezone'), 'retention_days' => $days,
                 'min_at' => $oldest->format('Y-m-d\TH:i'), 'max_at' => $now->addMinutes(5)->format('Y-m-d\TH:i'),
                 'start_at' => $start->format('Y-m-d\TH:i'), 'end_at' => $now->format('Y-m-d\TH:i')]];
     }
 
     public function prune(): int
     {
-        $cutoff = now()->timestamp - self::RETENTION_DAYS * 86400;
+        $cutoff = now()->timestamp - LogSettings::days('access') * 86400;
         $deleted = 0;
         // 分批删除，不在一次事务内锁住全部过期记录。
         do {

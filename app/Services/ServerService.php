@@ -33,7 +33,7 @@ class ServerService
      */
     public static function getAllServers(): Collection
     {
-        $query = Server::whereNull('balancer_role')->orderBy('sort', 'ASC');
+        $query = Server::whereNull('balancer_role')->orderBy('sort', 'ASC')->orderBy('id');
 
         return $query->get()->append([
             'last_check_at',
@@ -289,6 +289,7 @@ class ServerService
     /** 更新节点最近一次有效流量推送时间。 */
     public static function touchPush(Server $node): void
     {
+        ServerAutoSort::onReport($node);
         $nodeType = strtoupper($node->type);
         Cache::put(
             CacheKey::get("SERVER_{$nodeType}_LAST_PUSH_AT", $node->id),
@@ -401,6 +402,7 @@ class ServerService
      */
     public static function processStatus(Server $node, array $status): void
     {
+        ServerAutoSort::onReport($node);
         $nodeType = strtoupper($node->type);
         $nodeId = $node->id;
 

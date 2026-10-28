@@ -18,6 +18,7 @@ class ServerRoute
         ], function ($route) {
             $route->match(['GET', 'POST'], 'handshake', [ServerController::class, 'handshake']);
             $route->post('report', [ServerController::class, 'report']);
+            $route->post('privacy', [ServerController::class, 'privacy']);
             $route->post('access-log', [\App\Http\Controllers\V2\Server\AccessLogController::class, 'report']);
             $route->post('agent-log', [\App\Http\Controllers\V2\Server\AgentLogController::class, 'report']);
             $route->post('realtime/begin', [\App\Http\Controllers\V2\Server\RealtimeController::class, 'begin']);
@@ -38,6 +39,7 @@ class ServerRoute
             'prefix' => 'server/machine',
         ], function ($route) {
             $route->post('nodes', [MachineController::class, 'nodes']);
+            $route->post('privacy', [MachineController::class, 'privacy']);
             $route->post('agent-log', [MachineController::class, 'agentLog']);
             $route->post('traffic', [MachineController::class, 'traffic']);
             $route->post('status', [MachineController::class, 'status']);

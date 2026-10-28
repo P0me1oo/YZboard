@@ -11,6 +11,8 @@ use Symfony\Component\HttpKernel\Exception\PreconditionFailedHttpException;
 /** 按账号协调来源名额，旧连接的关闭必须由所属节点的完整快照确认。 */
 class DeviceHandoverService
 {
+    use DeviceLeaseCache;
+
     public const COOLDOWN_MS = 60000;
     private const CLAIM_MS = 5000;
 
@@ -32,9 +34,9 @@ class DeviceHandoverService
         Cache::forget($this->queueKey($nodeId));
     }
 
-    public function begin(int $nodeId, string $run): array
+    public function begin(int $nodeId, string $run, bool $leaseCache = false): array
     {
-        return Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($nodeId, $run): array {
+        return Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($nodeId, $run, $leaseCache): array {
             $current = Cache::get($this->nodeKey($nodeId));
             if (($current['run'] ?? null) !== $run) {
                 foreach (array_unique(array_column($current['sources'] ?? [], 'user_id')) as $userId) {
@@ -42,10 +44,11 @@ class DeviceHandoverService
                 }
                 Cache::forever($this->nodeKey($nodeId), [
                     'run' => $run, 'sequence' => 0, 'pending' => [], 'sources' => [], 'version' => 1, 'seen_at' => $this->now(),
+                    'lease_cache' => $leaseCache,
                 ]);
                 Cache::forget($this->progressKey($nodeId));
             }
-            return ['version' => 1, 'run' => $run];
+            return ['version' => 1, 'run' => $run, 'lease_cache' => (int) (($current['run'] ?? null) === $run ? ($current['lease_cache'] ?? false) : $leaseCache)];
         });
     }
 
@@ -65,6 +68,7 @@ class DeviceHandoverService
 
     public function sync(int $nodeId, array $data): array
     {
+        if (!empty($data['lease_cache'])) return $this->syncLeases($nodeId, $data);
         Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($nodeId, $data): void {
             if (!empty($data['unchanged'])) {
                 $this->renew($nodeId, $data);
@@ -103,6 +107,7 @@ class DeviceHandoverService
         $state = [
             'run' => $data['run'], 'sequence' => $data['sequence'],
             'pending' => array_fill_keys($data['pending'], true), 'sources' => $sources, 'version' => 1, 'seen_at' => $now,
+            'lease_cache' => $current['lease_cache'] ?? false,
         ];
         if (!Cache::forever($this->nodeKey($nodeId), $state)) {
             throw new \RuntimeException('设备来源完整快照写入失败');
@@ -162,6 +167,7 @@ class DeviceHandoverService
     {
         return Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($nodeId, $userId, $limit, $data): array {
             $node = isset($data['snapshot']) ? $this->storeSnapshot($nodeId, $data['snapshot']) : $this->node($nodeId, $data['run']);
+            if (!empty($data['lease_cache'])) $this->requireLeaseCache($node);
             // 较新状态已确认申请结束，迟到的旧快照不能复活该申请。
             if (isset($data['snapshot']) && !isset($node['pending'][$data['sequence']])) {
                 throw new PreconditionFailedHttpException('设备来源申请已结束');
@@ -175,6 +181,9 @@ class DeviceHandoverService
 
     private function decide(array &$state, int $nodeId, int $userId, int $limit, array $data): array
     {
+        if (!empty($data['lease_cache']) && isset($data['snapshot'])) {
+            $this->retireLeases($state, $nodeId, $data['snapshot']);
+        }
         $reply = $this->decideAdmission($state, $nodeId, $userId, $limit, $data);
         if (isset($data['snapshot'])) {
             $reply['sync'] = ['run' => $data['snapshot']['run'], 'sequence' => $data['snapshot']['sequence'],
@@ -199,6 +208,8 @@ class DeviceHandoverService
         if ($existing !== null && !$existing['revoked']) {
             return $this->grant($state, $nodeId, $userId, $raw, $data, $limit, $count);
         }
+        // 已撤销但仍有离线持有者的来源不能在同 IP 重试时复活。
+        if ($existing !== null) return $this->waiting($state, $nodeId, $limit, $count);
         if ($key === null || $limit <= 0) {
             if ($existing !== null) return $this->waiting($state, $nodeId, $limit, $count);
             return $this->grant($state, $nodeId, $userId, $raw, $data, $limit, $count);
@@ -258,7 +269,12 @@ class DeviceHandoverService
         }
         $owner['sequence'] = max($owner['sequence'], $data['sequence']);
         $source['owners'][$nodeId] = $owner;
-        return $this->answer('allowed', $limit, $count) + ['lease' => $source['lease']];
+        $reply = $this->answer('allowed', $limit, $count) + ['lease' => $source['lease']];
+        if (!empty($data['lease_cache'])) {
+            $reply += $this->confirmLease($source, $nodeId, $data['run'], $data['sequence']);
+            $reply['server_time'] = $this->now();
+        }
+        return $reply;
     }
 
     private function reconcile(array &$state): void
@@ -277,6 +293,7 @@ class DeviceHandoverService
         // 只释放数据库确认已删除的节点；超时或缓存丢失不代表连接已经关闭。
         $existingNodes = $nodeIds === [] ? [] : Server::query()->whereIn('id', array_keys($nodeIds))->pluck('id')->flip()->all();
         foreach ($state['sources'] as $ip => &$source) {
+            $this->expireLeaseHolders($source, $now);
             foreach ($source['owners'] as $nodeId => &$owner) {
                 if (!isset($existingNodes[$nodeId])) {
                     unset($source['owners'][$nodeId]);
@@ -300,7 +317,7 @@ class DeviceHandoverService
                 }
             }
             unset($owner);
-            if ($source['owners'] === []) unset($state['sources'][$ip]);
+            if ($source['owners'] === [] && empty($source['holders'])) unset($state['sources'][$ip]);
         }
         unset($source);
         if ($state['pending'] !== null && !$state['pending']['closed']) {
@@ -361,7 +378,7 @@ class DeviceHandoverService
     {
         $result = [];
         foreach ($state['sources'] as $source) {
-            if ($source['revoked'] && isset($source['owners'][$nodeId])) {
+            if ($source['revoked'] && (isset($source['owners'][$nodeId]) || $this->nodeHoldsLease($source, $nodeId))) {
                 $result[] = ['user_id' => $source['user_id'], 'ip' => $source['ip'], 'lease' => $source['lease']];
             }
         }
@@ -381,6 +398,7 @@ class DeviceHandoverService
             }
             if (!$saved) throw new \RuntimeException('设备来源名额写入失败');
             foreach ($state['sources'] as $source) {
+                foreach ($source['holders'] ?? [] as $holder) $this->queue($holder['node_id'], $userId, true);
                 foreach ($source['owners'] as $nodeId => $owner) {
                     if ($source['revoked'] || $owner['connect_sequence'] === 0) $this->queue((int) $nodeId, $userId, true);
                 }

@@ -221,6 +221,14 @@ class MachineController extends Controller
         return response()->json(['data' => $logs->accept(null, $machine, $request->json()->all())]);
     }
 
+    public function privacy(Request $request)
+    {
+        // 停用机器仍可解密自己的本地数据；运行权限继续由既有接口控制。
+        $machine = $this->authenticateMachine($request, true);
+        return response()->json(['data' => \App\Services\AgentPrivacy::view($machine, null, !$request->boolean('probe'))])
+            ->header('Cache-Control', 'no-store')->header('Pragma', 'no-cache');
+    }
+
     private function authenticateMachine(Request $request, bool $allowDisabled = false): ServerMachine
     {
         $request->validate([

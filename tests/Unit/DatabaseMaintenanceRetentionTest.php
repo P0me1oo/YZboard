@@ -11,6 +11,7 @@ class DatabaseMaintenanceRetentionTest extends TestCase
 {
     public function test_seven_day_cleanup_matches_scheduled_retention_across_daylight_saving_changes(): void
     {
+        \Illuminate\Support\Facades\Cache::store('redis')->forever(\App\Support\Setting::CACHE_KEY, []);
         $timezone = date_default_timezone_get();
         try {
             date_default_timezone_set('America/New_York');

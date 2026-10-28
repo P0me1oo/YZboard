@@ -15,7 +15,7 @@ class DeviceHandoverProtocol
 
     public function handle(Server $node, string $action, array $payload): array
     {
-        $rules = ['run' => self::RUN];
+        $rules = ['run' => self::RUN, 'lease_cache' => 'sometimes|integer|in:1'];
         if ($action === 'admit') {
             $rules += ['sequence' => self::SEQUENCE, 'user_id' => 'required|integer|min:1', 'ip' => 'required|ip'];
             $rules += ['snapshot' => 'sometimes|array:run,sequence,pending,sources,retired'];
@@ -42,7 +42,7 @@ class DeviceHandoverProtocol
         if (isset($data['snapshot'])) {
             abort_unless(in_array((int) $data['sequence'], array_map('intval', $data['snapshot']['pending']), true), 422, '完整快照必须包含当前申请');
         }
-        if ($action === 'begin') return $this->service->begin((int) $node->id, $data['run']);
+        if ($action === 'begin') return $this->service->begin((int) $node->id, $data['run'], !empty($data['lease_cache']));
         if ($action === 'sync') return $this->service->sync((int) $node->id, $data);
 
         $user = ServerService::getAvailableUsers($node, (int) $data['user_id'])->first();

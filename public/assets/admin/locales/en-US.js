@@ -58,6 +58,16 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     "keepToken":"Leave blank to keep the saved token","offlineThreshold":"Offline threshold (seconds)","poolOption":"Pool: {{name}}","poolReadFailed":"Could not load entry pools. Try again."
   },
   "logs": {
+    "settings": {
+      "title": "Log settings",
+      "description": "Choose which logs the panel records and how many days to keep them.",
+      "modules": { "system": "Panel system logs", "audit": "Admin activity logs", "agent": "Agent logs", "user": "User logs", "access": "Proxy access records" },
+      "enabled": "Recording", "disabled": "Off", "retention": "Keep for", "days": "days",
+      "daysLabel": "{{module}} retention days",
+      "expiry": "Keep logs for 1–365 days. Expired records are deleted automatically, including when recording is off. Shortening retention permanently deletes older records. Machine settings control local Agent logs.",
+      "invalidDays": "Enter a whole number from 1 to 365.", "loadFailed": "Unable to load log settings. Try again.",
+      "saveFailed": "Unable to save log settings. Try again.", "save": "Save settings", "saving": "Saving…", "saved": "Saved"
+    },
     "userName": "User",
     "userFilter": "User email or ID",
     "navigation": "Logs",
@@ -1388,6 +1398,10 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
         "strict": "Strict Mode",
         "relaxed": "Relaxed Mode",
         "placeholder": "Select device limit mode"
+      },
+      "server_auto_sort_enable": {
+        "title": "Automatic server sorting",
+        "description": "After a new server first reports and its country or region is recognized, place it after the last server in the same group and region. If all servers are ungrouped, match by region. Keep its creation position when no match exists. Enabling this leaves existing servers in place."
       },
       "server_ws_enable": {
         "title": "Enable WebSocket Communication",
@@ -3706,8 +3720,8 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "notesPlaceholder": "Optional notes about this server",
       "isActive": "Enable Server",
       "isActiveDescription": "Disabled servers will not be used by xboard-node.",
-      "disableLogs": "Permanently disable runtime logs",
-      "disableLogsDescription": "Stop Agent and core runtime logs. Cannot be reversed after saving.",
+      "disableLogs": "Privacy protection mode",
+      "disableLogsDescription": "Encrypt sensitive data saved by the Agent and permanently disable Agent and core runtime logs. Cannot be turned off after saving.",
       "cancel": "Cancel",
       "submit": "Submit",
       "update": "Update"

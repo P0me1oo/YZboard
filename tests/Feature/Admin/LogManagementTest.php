@@ -22,10 +22,12 @@ use Tests\TestCase;
 class LogManagementTest extends TestCase
 {
     use RefreshDatabase;
+    use \Tests\Concerns\IsolatesLogStorage;
     private const URL = '/_tests/log-admin/logs/';
     protected function setUp(): void
     {
         parent::setUp();
+        $this->isolateLogStorage();
         $this->travelTo(now()->startOfSecond());
         $router = app('router'); $router->setRoutes(new RouteCollection());
         admin_setting(['secure_path' => 'log-admin']);
@@ -34,6 +36,12 @@ class LogManagementTest extends TestCase
         Route::post('/_tests/server/agent-log', [\App\Http\Controllers\V2\Server\AgentLogController::class, 'report'])->middleware('server.v2');
         Route::post('/_tests/machine/agent-log', [\App\Http\Controllers\V2\Server\MachineController::class, 'agentLog']);
     }
+    protected function tearDown(): void
+    {
+        $this->removeLogStorage();
+        parent::tearDown();
+    }
+
     private function user(bool $admin = false): User
     {
         return User::create(['email' => Str::random(12) . '@logs.example.invalid', 'password' => password_hash('test-only', PASSWORD_DEFAULT),

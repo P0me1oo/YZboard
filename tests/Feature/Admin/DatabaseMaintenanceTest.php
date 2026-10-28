@@ -117,7 +117,7 @@ class DatabaseMaintenanceTest extends TestCase
     {
         $admin = $this->login();
         $before = $admin->fresh()->getAttributes();
-        $cutoff = strtotime('-3 month', now()->timestamp);
+        $cutoff = now()->timestamp - 90 * 86400;
         $old = $this->audit($cutoff - 1);
         $boundary = $this->audit($cutoff);
         $recent = $this->audit(now()->timestamp);

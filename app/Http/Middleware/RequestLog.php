@@ -17,6 +17,7 @@ class RequestLog
         $response = $next($request);
 
         try {
+            if (!\App\Services\LogSettings::enabled('audit')) return $response;
             $admin = $request->user();
             if (!$admin || !$admin->is_admin) {
                 return $response;

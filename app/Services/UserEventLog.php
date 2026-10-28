@@ -14,6 +14,7 @@ class UserEventLog
     {
         // 日志写入失败不改变登录和改密的结果，也不记录密码、令牌或请求正文。
         try {
+            if (!LogSettings::enabled('user')) return;
             $ip = request()?->ip();
             DB::table('v2_user_event_log')->insert([
                 'user_id' => $user->id, 'event' => $event, 'result' => $result,
@@ -27,13 +28,15 @@ class UserEventLog
 
     public function limits(Server $node, array $events, ?string $reportId): void
     {
+        [$enabled, $cutoff] = LogSettings::recording('user');
+        if (!$enabled) return;
         $users = User::whereIn('id', array_column($events, 'user_id'))->pluck('id')->flip();
         $rows = [];
         foreach ($events as $event) {
             if ($event['count'] <= 0 || $event['limit'] <= 0 || !$users->has($event['user_id'])) continue;
             $snapshot = $event['snapshot'] ?? [];
             $at = (int) ($snapshot['occurred_at'] ?? $event['occurred_at'] ?? now()->timestamp);
-            if ($at < now()->subDays(self::RETENTION_DAYS)->timestamp) continue;
+            if ($at < $cutoff) continue;
             $kind = $event['kind'];
             $key = $reportId ? hash('sha256', $node->id . '|' . $reportId . '|' . $event['user_id'] . '|' . $kind) : null;
             $rows[] = [

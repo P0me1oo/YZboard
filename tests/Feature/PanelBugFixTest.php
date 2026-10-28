@@ -36,13 +36,21 @@ use Tests\TestCase;
 class PanelBugFixTest extends TestCase
 {
     use RefreshDatabase;
+    use \Tests\Concerns\IsolatesLogStorage;
 
     protected function setUp(): void
     {
         parent::setUp();
+        $this->isolateLogStorage();
         Queue::fake([NodeUserSyncJob::class]);
         Http::preventStrayRequests();
         Redis::shouldReceive('publish')->byDefault()->andReturn(1);
+    }
+
+    protected function tearDown(): void
+    {
+        $this->removeLogStorage();
+        parent::tearDown();
     }
 
     private function user(array $extra = []): User

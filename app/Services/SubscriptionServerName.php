@@ -25,7 +25,7 @@ class SubscriptionServerName
         return $name;
     }
 
-    private static function country(string $name): ?string
+    public static function country(string $name): ?string
     {
         // 国家、城市和缩写沿用管理端节点分类词表；不把运营商名称当成地区。
         self::$countryRules ??= self::buildCountryRules();
@@ -34,6 +34,19 @@ class SubscriptionServerName
         $best = null;
         $bestPosition = PHP_INT_MAX;
         $bestLength = 0;
+        if (preg_match_all('/[\x{1F1E6}-\x{1F1FF}]{2}/u', $name, $flags, PREG_OFFSET_CAPTURE)) {
+            $codes = array_column(self::$countryRules, 0);
+            foreach ($flags[0] as [$flag, $position]) {
+                $code = chr(mb_ord(mb_substr($flag, 0, 1)) - 0x1F1E6 + 65)
+                    . chr(mb_ord(mb_substr($flag, 1, 1)) - 0x1F1E6 + 65);
+                if (in_array($code, $codes, true)) {
+                    $best = $code;
+                    $bestPosition = $position;
+                    $bestLength = 2;
+                    break;
+                }
+            }
+        }
         foreach (self::$countryRules as [$code, $pattern, $length]) {
             if (!preg_match($pattern, $name, $match, PREG_OFFSET_CAPTURE)) continue;
             $position = $match[0][1];

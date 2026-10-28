@@ -7,6 +7,7 @@ use App\Models\Plan;
 use App\Models\Server;
 use App\Models\ServerGroup;
 use App\Models\User;
+use App\Services\SubscriptionClientControl;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -77,22 +78,27 @@ class GroupController extends Controller
     public function drop(Request $request)
     {
         $groupId = $request->input('id');
+        return SubscriptionClientControl::changeSettings(function () use ($groupId) {
+            $serverGroup = ServerGroup::query()->lockForUpdate()->find($groupId);
+            if (!$serverGroup) {
+                return $this->fail([400202, '组不存在']);
+            }
+            if (Server::whereJsonContains('group_ids', (string) $groupId)
+                ->orWhereJsonContains('group_ids', (int) $groupId)->exists()) {
+                return $this->fail([400, '该组已被节点所使用，无法删除']);
+            }
 
-        $serverGroup = ServerGroup::find($groupId);
-        if (!$serverGroup) {
-            return $this->fail([400202, '组不存在']);
-        }
-        if (Server::whereJsonContains('group_ids', (string) $groupId)
-            ->orWhereJsonContains('group_ids', (int) $groupId)->exists()) {
-            return $this->fail([400, '该组已被节点所使用，无法删除']);
-        }
-
-        if (Plan::where('group_id', $groupId)->orWhereJsonContains('group_ids', (int) $groupId)->exists()) {
-            return $this->fail([400, '该组已被订阅所使用，无法删除']);
-        }
-        if (User::where('group_id', $groupId)->orWhereJsonContains('group_ids', (int) $groupId)->exists()) {
-            return $this->fail([400, '该组已被用户所使用，无法删除']);
-        }
-        return $this->success($serverGroup->delete());
+            if (Plan::where('group_id', $groupId)->orWhereJsonContains('group_ids', (int) $groupId)->exists()) {
+                return $this->fail([400, '该组已被订阅所使用，无法删除']);
+            }
+            if (User::where('group_id', $groupId)->orWhereJsonContains('group_ids', (int) $groupId)->exists()) {
+                return $this->fail([400, '该组已被用户所使用，无法删除']);
+            }
+            $deleted = $serverGroup->delete();
+            if ($deleted) {
+                SubscriptionClientControl::removeExemptGroup((int) $groupId);
+            }
+            return $this->success($deleted);
+        });
     }
 }

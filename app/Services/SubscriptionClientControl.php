@@ -2,12 +2,19 @@
 
 namespace App\Services;
 
+use App\Models\ServerGroup;
+use App\Models\Setting as SettingModel;
 use App\Models\User;
+use App\Support\Setting;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /** 只检查下载软件上报的名称，订阅格式参数不参与判断。 */
 class SubscriptionClientControl
 {
     public const SETTING = 'subscribe_client_control';
+    private const SETTINGS_LOCK = 'subscription-client-control:settings-lock';
 
     public static function defaults(): array
     {
@@ -24,6 +31,50 @@ class SubscriptionClientControl
     public static function settings(): array
     {
         return admin_setting(self::SETTING, self::defaults());
+    }
+
+    /** 保存与删除权限组串行执行，提交后重新失效缓存。 */
+    public static function changeSettings(callable $change): mixed
+    {
+        $cache = Cache::store('redis');
+        return $cache->lock(self::SETTINGS_LOCK, 10)->block(2, function () use ($cache, $change) {
+            try {
+                return DB::transaction($change);
+            } finally {
+                $cache->forget(Setting::CACHE_KEY);
+                app()->forgetInstance(Setting::class);
+            }
+        });
+    }
+
+    public static function saveSettings(array $settings): void
+    {
+        self::changeSettings(function () use ($settings): void {
+            $settings = self::normalize($settings);
+            $existing = ServerGroup::whereIn('id', $settings['exempt_group_ids'])->pluck('id')->all();
+            // 请求校验完成后仍可能发生删除，写入前在同一把锁内再次核对。
+            foreach ($settings['exempt_group_ids'] as $index => $id) {
+                if (!in_array($id, $existing)) {
+                    throw ValidationException::withMessages([
+                        self::SETTING . ".exempt_group_ids.$index" => "豁免权限组 #$id 已删除或不存在，请移除后重试。",
+                    ]);
+                }
+            }
+            admin_setting([self::SETTING => $settings]);
+        });
+    }
+
+    /** 在删除权限组的事务内调用，仅修改该组的豁免引用。 */
+    public static function removeExemptGroup(int $groupId): void
+    {
+        $settings = SettingModel::where('name', self::SETTING)->lockForUpdate()->first()?->value;
+        if (!is_array($settings) || !in_array($groupId, $settings['exempt_group_ids'] ?? [])) {
+            return;
+        }
+        $settings['exempt_group_ids'] = array_values(array_filter(
+            $settings['exempt_group_ids'], fn ($id) => (int) $id !== $groupId
+        ));
+        admin_setting([self::SETTING => $settings]);
     }
 
     /** 保存整个规则对象，避免模式和名单分开写入时出现中间状态。 */

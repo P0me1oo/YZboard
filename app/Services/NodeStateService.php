@@ -47,6 +47,7 @@ class NodeStateService
     /** 复用原报告处理次序，尤其是中转来源必须早于整个入口的设备快照。 */
     public static function apply(Server $node, array $state, ?int $receivedAt = null): void
     {
+        ServerAutoSort::onReport($node);
         ServerService::touchNode($node, $receivedAt);
         if (is_array($state['relay_user_alive'] ?? null) && $state['relay_user_alive'] !== []) {
             ServerService::processRelayUserAlive($node, $state['relay_user_alive']);

@@ -1,5 +1,7 @@
 # Xboard
 
+[v1.111.2](https://github.com/P0me1oo/YZboard/releases/tag/v1.111.2) 已发布，修复跨节点许可持续同步时向全部持有节点重复加锁、重写队列造成的性能退化。保留 `1.111.1` 的隐私和许可功能，管理端仍为 `0.81.0`，本次无需升级 Agent 或核心，无新增数据库迁移。双数据库完整回归、双架构镜像、附件与 `latest` 已核验，见[兼容矩阵](YZ_COMPATIBILITY.md)。
+
 [v1.111.1](https://github.com/P0me1oo/YZboard/releases/tag/v1.111.1) 已发布，配套 Agent [v2.28.1](https://github.com/P0me1oo/YZ-Agent/releases/tag/v2.28.1)、管理端 `0.81.0`。修复过期设备许可队列残留及 Agent 加密配置启动、同名文件漏加密，一并交付此前日志设置、服务器自动排序、隐私保护和跨节点许可。包含节点排序迁移；双数据库完整回归、双架构镜像、附件和 `latest` 已核验，先面板后 Agent，见[兼容矩阵](YZ_COMPATIBILITY.md)。
 
 [v1.107.1](https://github.com/P0me1oo/YZboard/releases/tag/v1.107.1) 已发布，配套 Agent `v2.26.0`、管理端 `0.78.0`。服务器管理支持永久停用指定机器的运行日志，保存后无法重新开启；双数据库完整回归和双架构镜像已核验，见[使用说明](docs/agent-log-policy.md)与[发布记录](YZ_COMPATIBILITY.md)。

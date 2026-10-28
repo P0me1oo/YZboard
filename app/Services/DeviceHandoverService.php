@@ -397,14 +397,30 @@ class DeviceHandoverService
                 $saved = Cache::forever($key, $state);
             }
             if (!$saved) throw new \RuntimeException('设备来源名额写入失败');
-            foreach ($state['sources'] as $source) {
-                foreach ($source['holders'] ?? [] as $holder) $this->queue($holder['node_id'], $userId, true);
-                foreach ($source['owners'] as $nodeId => $owner) {
-                    if ($source['revoked'] || $owner['connect_sequence'] === 0) $this->queue((int) $nodeId, $userId, true);
-                }
-            }
+            $this->ensureQueued($userId, $state);
             return $result;
         });
+    }
+
+    /** 调用方持有账号锁；队列成员未变时只批量读取，不向全部持有节点反复加锁、写入。 */
+    private function ensureQueued(int $userId, array $state): void
+    {
+        $nodes = [];
+        foreach ($state['sources'] as $source) {
+            foreach ($source['holders'] ?? [] as $holder) $nodes[(int) $holder['node_id']] = true;
+            foreach ($source['owners'] as $nodeId => $owner) {
+                if ($source['revoked'] || $owner['connect_sequence'] === 0) $nodes[(int) $nodeId] = true;
+            }
+        }
+        if ($nodes === []) return;
+        $keys = array_map(fn ($nodeId) => $this->queueKey($nodeId), array_keys($nodes));
+        $queues = Cache::many($keys);
+        foreach (array_keys($nodes) as $nodeId) {
+            // 同账号的增删都受账号锁保护；其他账号仍可并发改变同一节点队列。
+            if (!in_array($userId, $queues[$this->queueKey($nodeId)] ?? [], true)) {
+                $this->queue($nodeId, $userId, true);
+            }
+        }
     }
 
     private function queue(int $nodeId, int $userId, bool $add): void
@@ -412,6 +428,7 @@ class DeviceHandoverService
         $key = $this->queueKey($nodeId);
         Cache::lock($key . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($key, $userId, $add): void {
             $users = array_fill_keys(Cache::get($key, []), true);
+            if (isset($users[$userId]) === $add) return;
             if ($add) $users[$userId] = true;
             else unset($users[$userId]);
             Cache::forever($key, array_keys($users));

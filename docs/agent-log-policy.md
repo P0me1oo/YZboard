@@ -1,6 +1,6 @@
 # 隐私保护模式
 
-本地面板 `1.110.0`、管理端 `0.81.0`、Agent `v2.27.0` 在“隐私保护模式”中增加本地文件加密，保留原永久停用日志及保存后锁定。已开启旧设置的机器直接沿用；需要先更新面板，再更新 Agent。当前修改尚未发布。
+面板 [v1.111.1](https://github.com/P0me1oo/YZboard/releases/tag/v1.111.1)、管理端 `0.81.0`、Agent [v2.28.1](https://github.com/P0me1oo/YZ-Agent/releases/tag/v2.28.1) 已发布，一并交付 `1.110.0` / `v2.27.0` 开发阶段的本地文件加密，保留原永久停用日志及保存后锁定。已开启旧设置的机器直接沿用；先更新面板，再更新 Agent。
 
 面板 [v1.107.1](https://github.com/P0me1oo/YZboard/releases/tag/v1.107.1)、管理端 `0.78.0`、Agent [v2.26.0](https://github.com/P0me1oo/YZ-Agent/releases/tag/v2.26.0) 已发布，配套使用。
 

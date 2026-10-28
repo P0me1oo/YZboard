@@ -1,5 +1,7 @@
 # Xboard
 
+[v1.111.1](https://github.com/P0me1oo/YZboard/releases/tag/v1.111.1) 已发布，配套 Agent [v2.28.1](https://github.com/P0me1oo/YZ-Agent/releases/tag/v2.28.1)、管理端 `0.81.0`。修复过期设备许可队列残留及 Agent 加密配置启动、同名文件漏加密，一并交付此前日志设置、服务器自动排序、隐私保护和跨节点许可。包含节点排序迁移；双数据库完整回归、双架构镜像、附件和 `latest` 已核验，先面板后 Agent，见[兼容矩阵](YZ_COMPATIBILITY.md)。
+
 [v1.107.1](https://github.com/P0me1oo/YZboard/releases/tag/v1.107.1) 已发布，配套 Agent `v2.26.0`、管理端 `0.78.0`。服务器管理支持永久停用指定机器的运行日志，保存后无法重新开启；双数据库完整回归和双架构镜像已核验，见[使用说明](docs/agent-log-policy.md)与[发布记录](YZ_COMPATIBILITY.md)。
 
 [v1.106.2](https://github.com/P0me1oo/YZboard/releases/tag/v1.106.2) 已发布，配套 Agent `v2.25.0`、管理端 `0.77.0`：新增 VLESS Reality 前置负载均衡和用户个人 DDNS，修复解析更新、归属恢复及旧订阅兼容问题。双数据库完整回归、双架构镜像及附件均已核验，`latest` 已更新。先更新面板，再升级 Agent；来源、更新顺序和回滚见[兼容矩阵](YZ_COMPATIBILITY.md)。

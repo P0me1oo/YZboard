@@ -1,5 +1,7 @@
 # Xboard
 
+[v1.111.5](https://github.com/P0me1oo/YZboard/releases/tag/v1.111.5) 已发布，修复空闲设备协调记录无限续期，减少持续同步的重复查询与缓存读写，并修复 Telegram 投递错误分类受认证字符串干扰的问题。双数据库完整回归、管理端资源检查和双架构镜像发布流程通过；无数据库迁移，现有 Agent `v2.28.2`、管理端及核心无需升级。来源和发布记录见[兼容矩阵](YZ_COMPATIBILITY.md)，线上 CPU 降幅仍需部署后对比。
+
 [v1.111.2](https://github.com/P0me1oo/YZboard/releases/tag/v1.111.2) 已发布，修复跨节点许可持续同步时向全部持有节点重复加锁、重写队列造成的性能退化。保留 `1.111.1` 的隐私和许可功能，管理端仍为 `0.81.0`，本次无需升级 Agent 或核心，无新增数据库迁移。双数据库完整回归、双架构镜像、附件与 `latest` 已核验，见[兼容矩阵](YZ_COMPATIBILITY.md)。
 
 [v1.111.1](https://github.com/P0me1oo/YZboard/releases/tag/v1.111.1) 已发布，配套 Agent [v2.28.1](https://github.com/P0me1oo/YZ-Agent/releases/tag/v2.28.1)、管理端 `0.81.0`。修复过期设备许可队列残留及 Agent 加密配置启动、同名文件漏加密，一并交付此前日志设置、服务器自动排序、隐私保护和跨节点许可。包含节点排序迁移；双数据库完整回归、双架构镜像、附件和 `latest` 已核验，先面板后 Agent，见[兼容矩阵](YZ_COMPATIBILITY.md)。

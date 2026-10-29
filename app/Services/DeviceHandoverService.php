@@ -117,19 +117,24 @@ class DeviceHandoverService
     }
 
     /** 未变化的快照只更新小记录，不反复读取、序列化和写入全部来源。 */
-    private function renew(int $nodeId, array $data): void
+    private function renew(int $nodeId, array $data, ?int $snapshotSequence = null): array
     {
         $progress = Cache::get($this->progressKey($nodeId));
         if (!is_array($progress) || $progress['run'] !== $data['run']) {
             $this->node($nodeId, $data['run']);
             throw new PreconditionFailedHttpException('设备来源需要完整快照');
         }
-        if ($progress['base_sequence'] !== (int) $data['base_sequence'] || !$this->snapshotExists($nodeId)) {
+        if ($progress['base_sequence'] !== (int) $data['base_sequence']
+            || ($snapshotSequence !== null && $progress['base_sequence'] !== $snapshotSequence)
+            || !$this->snapshotExists($nodeId)) {
             throw new PreconditionFailedHttpException('设备来源快照基线已失效');
         }
         if ($data['sequence'] > $progress['sequence']) {
-            $this->saveProgress($nodeId, $data['run'], $data['sequence'], $progress['base_sequence'], $this->now());
+            $progress['sequence'] = (int) $data['sequence'];
+            $progress['seen_at'] = $this->now();
+            $this->saveProgress($nodeId, $data['run'], $progress['sequence'], $progress['base_sequence'], $progress['seen_at']);
         }
+        return $progress;
     }
 
     private function snapshotExists(int $nodeId): bool
@@ -271,7 +276,8 @@ class DeviceHandoverService
         $source['owners'][$nodeId] = $owner;
         $reply = $this->answer('allowed', $limit, $count) + ['lease' => $source['lease']];
         if (!empty($data['lease_cache'])) {
-            $reply += $this->confirmLease($source, $nodeId, $data['run'], $data['sequence']);
+            // 等待中的同一申请会携带更新快照；按本次核验序号确认，不能返回撤销前的旧期限。
+            $reply += $this->confirmLease($source, $nodeId, $data['run'], $data['snapshot']['sequence'] ?? $data['sequence']);
             $reply['server_time'] = $this->now();
         }
         return $reply;
@@ -435,11 +441,11 @@ class DeviceHandoverService
         });
     }
 
-    private function node(int $nodeId, string $run): array
+    private function node(int $nodeId, string $run, bool $withProgress = true): array
     {
         $state = Cache::get($this->nodeKey($nodeId));
         if (!is_array($state) || ($state['run'] ?? null) !== $run) throw new ConflictHttpException('设备来源会话已失效');
-        return $this->withProgress($state, Cache::get($this->progressKey($nodeId)));
+        return $withProgress ? $this->withProgress($state, Cache::get($this->progressKey($nodeId))) : $state;
     }
 
     private function answer(string $status, int $limit, int $count, string $reason = ''): array

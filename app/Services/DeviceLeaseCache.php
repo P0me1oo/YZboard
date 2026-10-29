@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Server;
+use Illuminate\Cache\RedisStore;
 use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
@@ -27,7 +28,8 @@ trait DeviceLeaseCache
                 'confirmed_at' => $now, 'expires_at' => $now + self::LEASE_GRACE_MS];
             $source['holders'][$key] = $holder;
         }
-        return ['confirmed_at' => $holder['confirmed_at'], 'expires_at' => $holder['expires_at']];
+        return ['confirmed_at' => $holder['confirmed_at'], 'expires_at' => $holder['expires_at'],
+            'confirmed_sequence' => $holder['sequence']];
     }
 
     private function nodeHoldsLease(array $source, int $nodeId): bool
@@ -68,11 +70,13 @@ trait DeviceLeaseCache
     private function syncLeases(int $nodeId, array $data): array
     {
         return Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($nodeId, $data): array {
-            $node = $this->node($nodeId, $data['run']);
+            $node = $this->node($nodeId, $data['run'], false);
             $this->requireLeaseCache($node);
             if (!empty($data['unchanged'])) {
-                $this->renew($nodeId, $data);
-                $node = $this->node($nodeId, $data['run']);
+                $progress = $this->renew($nodeId, $data, (int) $node['sequence']);
+                // 已持有节点锁，复用刚校验的完整快照，只合并成功保存的续期进度。
+                $node['sequence'] = $progress['sequence'];
+                $node['seen_at'] = $progress['seen_at'];
             } else {
                 $node = $this->storeSnapshot($nodeId, $data);
             }
@@ -82,11 +86,15 @@ trait DeviceLeaseCache
             $ids = array_unique(array_merge($available->keys()->all(), array_keys($queued),
                 array_column($node['sources'], 'user_id'), array_column($data['retired'] ?? [], 'user_id')));
             // 批量找出已有许可的账号；不为整个用户名单创建空协调记录。
-            $states = Cache::many(array_map(fn ($id) => 'device_handover:user:' . $id, $ids));
+            $coordinated = $this->coordinatedUsers($ids);
+            $reportedByUser = [];
+            foreach ($node['sources'] as $key => $source) {
+                $reportedByUser[$source['user_id']][$key] = $source;
+            }
             $leases = $revoked = [];
             foreach ($ids as $id) {
-                $reported = array_filter($node['sources'], fn ($s) => $s['user_id'] === (int) $id);
-                if (($states['device_handover:user:' . $id] ?? null) === null && $reported === [] && !isset($queued[$id])) continue;
+                $reported = $reportedByUser[$id] ?? [];
+                if (!isset($coordinated[$id]) && $reported === [] && !isset($queued[$id])) continue;
                 $result = $this->locked((int) $id, function (array &$state) use ($nodeId, $data, $node, $available, $id, $reported): array {
                     if (empty($data['unchanged'])) $this->retireLeases($state, $nodeId, $data);
                     $this->reconcile($state);
@@ -120,5 +128,35 @@ trait DeviceLeaseCache
             return ['run' => $data['run'], 'sequence' => $data['sequence'], 'revoked' => $revoked,
                 'lease_cache' => 1, 'server_time' => $this->now(), 'leases' => $leases];
         });
+    }
+
+    /** 筛选只需要知道记录是否存在；完整许可仍在取得账号锁后读取。 */
+    private function coordinatedUsers(array $ids): array
+    {
+        $present = [];
+        $store = Cache::getStore();
+        foreach (array_chunk(array_values($ids), 256) as $chunk) {
+            $keys = array_map(fn ($id) => 'device_handover:user:' . $id, $chunk);
+            if ($store instanceof RedisStore) {
+                $script = 'local found = {} for i, key in ipairs(KEYS) do found[i] = redis.call("EXISTS", key) end return found';
+                $found = $store->connection()->eval($script, count($keys),
+                    ...array_map(fn ($key) => $store->getPrefix() . $key, $keys));
+                if (!is_array($found) || count($found) !== count($keys)) {
+                    throw new \RuntimeException('设备许可存在状态读取失败');
+                }
+                foreach ($chunk as $index => $id) {
+                    if (!in_array($found[$index], [0, 1], true)) {
+                        throw new \RuntimeException('设备许可存在状态无效');
+                    }
+                    if ($found[$index] === 1) $present[$id] = true;
+                }
+            } else {
+                $records = Cache::many($keys);
+                foreach ($chunk as $index => $id) {
+                    if (($records[$keys[$index]] ?? null) !== null) $present[$id] = true;
+                }
+            }
+        }
+        return $present;
     }
 }

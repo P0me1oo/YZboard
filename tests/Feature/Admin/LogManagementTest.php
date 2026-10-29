@@ -95,9 +95,9 @@ class LogManagementTest extends TestCase
         $node = $this->node($machine); $other = $this->node($machine);
         $logs = app(AgentLog::class);
         $logs->accept(null, $machine, ['batch_id' => str_repeat('c', 32), 'records' => [
-            ['node_id' => $node->id, 'source' => 'agent', 'level' => 'info', 'message' => '节点配置更新', 'occurred_at' => now()->timestamp],
+            ['node_id' => $node->id, 'source' => 'agent', 'level' => 'warn', 'message' => '节点配置警告', 'occurred_at' => now()->timestamp],
             ['node_id' => $node->id, 'source' => 'singbox', 'level' => 'error', 'message' => '节点监听失败', 'occurred_at' => now()->timestamp],
-            ['node_id' => $other->id, 'source' => 'agent', 'level' => 'info', 'message' => '其他节点', 'occurred_at' => now()->timestamp],
+            ['node_id' => $other->id, 'source' => 'agent', 'level' => 'warn', 'message' => '其他节点', 'occurred_at' => now()->timestamp],
             ['source' => 'xray', 'level' => 'error', 'message' => '机器级日志', 'occurred_at' => now()->timestamp],
         ]]);
         Sanctum::actingAs($this->user(true));
@@ -145,6 +145,28 @@ class LogManagementTest extends TestCase
         catch (\Symfony\Component\HttpKernel\Exception\HttpException $error) { $this->assertSame(403, $error->getStatusCode()); }
         $this->travel(8)->days();
         $this->getJson(self::URL . 'agent')->assertOk()->assertJsonPath('data.total', 0);
+    }
+    public function test_runtime_log_filter_acknowledges_low_levels_and_preserves_original_batch_positions(): void
+    {
+        $machine = ServerMachine::create(['name' => '日志过滤测试', 'token' => Str::random(32), 'is_active' => true]);
+        $node = $this->node($machine);
+        $logs = app(AgentLog::class);
+        $batch = ['batch_id' => str_repeat('e', 32), 'records' => []];
+        foreach (['debug', 'warn', 'info', 'error', 'fatal'] as $index => $level) {
+            $batch['records'][] = ['node_id' => $node->id, 'source' => ['agent', 'xray', 'singbox'][$index % 3],
+                'level' => $level, 'message' => '日志级别测试', 'occurred_at' => now()->timestamp];
+        }
+        foreach (range(1, 2) as $attempt) {
+            $this->assertSame(['batch_id' => $batch['batch_id']], $logs->accept(null, $machine, $batch));
+        }
+        $this->assertSame(['error', 'fatal', 'warn'], DB::table('v2_agent_log')->orderBy('level')->pluck('level')->all());
+        foreach ([1, 3, 4] as $index) {
+            $this->assertDatabaseHas('v2_agent_log', ['event_key' => hash('sha256', 'machine:' . $machine->id . '|' . $batch['batch_id'] . '|' . $index)]);
+        }
+        $batch['batch_id'] = str_repeat('f', 32);
+        $batch['records'] = array_values(array_filter($batch['records'], fn ($row) => in_array($row['level'], ['debug', 'info'], true)));
+        $this->assertSame(['batch_id' => $batch['batch_id']], $logs->accept($node, null, $batch));
+        $this->assertDatabaseCount('v2_agent_log', 3);
     }
     public function test_login_is_recorded_after_session_issuance_and_log_failure_does_not_break_login(): void
     {

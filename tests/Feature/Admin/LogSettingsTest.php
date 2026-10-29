@@ -70,7 +70,7 @@ class LogSettingsTest extends TestCase
     private function agentBatch(int $at, string $id = 'a'): array
     {
         return ['batch_id' => str_repeat($id, 32), 'records' => [
-            ['source' => 'agent', 'level' => 'info', 'message' => '测试运行日志', 'occurred_at' => $at],
+            ['source' => 'agent', 'level' => 'warn', 'message' => '测试运行日志', 'occurred_at' => $at],
         ]];
     }
 

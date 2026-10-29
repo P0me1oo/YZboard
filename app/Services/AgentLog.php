@@ -46,6 +46,8 @@ class AgentLog
                 abort(403, '日志节点不属于上报身份');
             }
             if ($record['occurred_at'] < $cutoff) continue;
+            // 保留原批次下标参与防重；普通日志也正常确认，避免节点反复补报。
+            if (!in_array($record['level'], ['warn', 'error', 'fatal'], true)) continue;
             $rows[] = [
                 'event_key' => hash('sha256', $owner . '|' . $data['batch_id'] . '|' . $index),
                 'machine_id' => $machine?->id, 'machine_name' => $machine?->name,
@@ -55,6 +57,7 @@ class AgentLog
                 'message' => LogSanitizer::text($record['message']), 'occurred_at' => $record['occurred_at'],
             ];
         }
+        if ($rows === []) return ['batch_id' => $data['batch_id']];
         DB::transaction(function () use ($rows) {
             $ordinary = array_values(array_filter($rows, fn ($row) => $row['event'] === null));
             foreach (array_chunk($ordinary, 100) as $chunk) DB::table('v2_agent_log')->insertOrIgnore($chunk);

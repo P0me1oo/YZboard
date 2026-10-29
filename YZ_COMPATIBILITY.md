@@ -1,5 +1,13 @@
 # YZboard 兼容矩阵
 
+## 1.111.3 正式发布核验（2026-10-29）
+
+- [Release v1.111.3](https://github.com/P0me1oo/YZboard/releases/tag/v1.111.3) 已发布，固定来源 `d6c2f332105d4d0df562ff17f29913c820a29d15`。纳入本次设备许可恢复与此前全部未提交的许可同步、日志筛选及清理续跑修改；配套 Agent `v2.28.2` / `698e7df5712e848e2a45eb835ad367c55f948c4d`。管理端和两个核心固定依赖不变，无数据库迁移。
+- [发布流程](https://github.com/P0me1oo/YZboard/actions/runs/40890098634) 的 PHP `8.2.35` 完整回归通过：SQLite 1,423 项、16,080 条断言，10 项 MariaDB 专属用例跳过；MariaDB `11.4.8` 严格模式 1,423 项、16,089 条断言全部通过。Redis `7.4.2` 恢复检查与管理端资源 5 项通过，每个必需环境仅执行一轮完整回归。
+- 固定镜像 `ghcr.io/p0me1oo/yzboard:1.111.3-d6c2f33`，版本别名 `1.111.3` 和 `latest` 指向同一 manifest：`sha256:d08e61f5f3fd1d66b6b1b766330862cc355ba91b12e9f41ddb2999f328cec527`。Linux amd64、arm64 的 OCI revision 均与上述来源一致，可匿名获取；[verification.json](https://github.com/P0me1oo/YZboard/releases/download/v1.111.3/verification.json) 与校验文件已核对下载。
+- 先更新面板，再更新全部相关 Agent；只更新一侧不能获得完整恢复修复。回滚基线为面板 `1.111.2-67abf3f` / `sha256:814d2151189518866b09f2513c6a549592e1a870fab6eb9d1d11566ba47de517` 和 Node `v2.28.1`，已确认可获取。服务器更新由用户执行，本次未连接或操作服务器；生产故障是否全部由此造成仍未最终确认。
+- 下节保留开发阶段的来源、专项与限制记录；正式发布结果以本节为准。完整核验记录位于 `D:/tmp/yz-release-20261029-lease/`，补交发布文档不重跑产品回归。
+
 ## 1.111.3 设备许可撤销恢复修复（2026-10-29，本地未发布）
 
 - 在 `master` / `8ba3916073e069d7c5cf894201691c6ddcb7d6b4` 及下节已有未提交修改上继续，原设备同步优化与日志修改均保留。配套 Agent `v2.28.2`；管理端、两个核心和固定依赖不变，无数据库迁移、查询或额度规则变更。

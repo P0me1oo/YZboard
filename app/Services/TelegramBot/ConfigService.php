@@ -388,7 +388,9 @@ class ConfigService
         }
 
         // 只展示可识别的错误类别，远端原文可能含地址或认证信息，不能直接保存或回显。
-        $error = $webhook['last_error_message'];
+        // 认证字符串中的 SSL、DNS 等片段不是错误原因，分类前先移除已知凭据。
+        $credentials = array_filter([$config->token, $config->webhook_secret], fn ($value) => is_string($value) && $value !== '');
+        $error = str_replace($credentials, '', $webhook['last_error_message']);
         if (preg_match('/\AWrong response from the webhook: ([1-5][0-9]{2})(?:\s|$)/i', $error, $match)) {
             $status = (int) $match[1];
             $hint = match (true) {

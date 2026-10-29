@@ -92,12 +92,13 @@ trait DeviceLeaseCache
                 $reportedByUser[$source['user_id']][$key] = $source;
             }
             $leases = $revoked = [];
+            $existingNodes = [$nodeId => true];
             foreach ($ids as $id) {
                 $reported = $reportedByUser[$id] ?? [];
                 if (!isset($coordinated[$id]) && $reported === [] && !isset($queued[$id])) continue;
-                $result = $this->locked((int) $id, function (array &$state) use ($nodeId, $data, $node, $available, $id, $reported): array {
+                $result = $this->locked((int) $id, function (array &$state, array &$reads) use ($nodeId, $data, $node, $available, $id, $reported): array {
                     if (empty($data['unchanged'])) $this->retireLeases($state, $nodeId, $data);
-                    $this->reconcile($state);
+                    $this->reconcile($state, $reads);
                     $grants = $denied = [];
                     $canUse = $available->has($id);
                     foreach ($reported as $item) {
@@ -119,9 +120,15 @@ trait DeviceLeaseCache
                     }
                     unset($source);
                     // 在账号锁内确认无下发或撤销任务后清理；过期协调记录也需经过此处。
-                    if ($grants === [] && $denied === []) $this->queue($nodeId, (int) $id, false);
+                    if ($grants === [] && $denied === []) {
+                        // 读取与移除均在账号锁内；队列中已无本账号时无需再抢队列锁。
+                        if (in_array((int) $id, $reads['queues'][$this->queueKey($nodeId)] ?? [], true)) {
+                            $this->queue($nodeId, (int) $id, false);
+                        }
+                        unset($reads['queues'][$this->queueKey($nodeId)]);
+                    }
                     return [$grants, array_values($denied)];
-                });
+                }, [$nodeId => $node], $existingNodes);
                 array_push($leases, ...$result[0]);
                 array_push($revoked, ...$result[1]);
             }

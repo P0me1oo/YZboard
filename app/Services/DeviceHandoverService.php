@@ -27,7 +27,7 @@ class DeviceHandoverService
             return array_unique(array_merge(array_column($node['sources'] ?? [], 'user_id'), Cache::get($this->queueKey($nodeId), [])));
         });
         foreach ($users as $userId) {
-            $this->locked((int) $userId, function (array &$state): void { $this->reconcile($state); });
+            $this->locked((int) $userId, function (array &$state, array $reads): void { $this->reconcile($state, $reads); });
         }
         Cache::forget($this->nodeKey($nodeId));
         Cache::forget($this->progressKey($nodeId));
@@ -63,7 +63,7 @@ class DeviceHandoverService
             Cache::forget($this->progressKey($nodeId));
             return array_unique(array_merge(array_column($current['sources'] ?? [], 'user_id'), Cache::get($this->queueKey($nodeId), [])));
         });
-        foreach ($users as $userId) $this->locked((int) $userId, function (array &$state): void { $this->reconcile($state); });
+        foreach ($users as $userId) $this->locked((int) $userId, function (array &$state, array $reads): void { $this->reconcile($state, $reads); });
     }
 
     public function sync(int $nodeId, array $data): array
@@ -80,10 +80,16 @@ class DeviceHandoverService
         $revoked = [];
         $users = array_unique(array_merge(Cache::get($this->queueKey($nodeId), []), array_column($data['retired'] ?? [], 'user_id')));
         foreach ($users as $userId) {
-            $items = $this->locked((int) $userId, function (array &$state) use ($nodeId, $userId): array {
-                $this->reconcile($state);
+            $items = $this->locked((int) $userId, function (array &$state, array &$reads) use ($nodeId, $userId): array {
+                $this->reconcile($state, $reads);
                 $items = $this->revocations($state, $nodeId);
-                if ($items === []) $this->queue($nodeId, (int) $userId, false);
+                if ($items === []) {
+                    $queueKey = $this->queueKey($nodeId);
+                    if (!array_key_exists($queueKey, $reads['queues']) || in_array((int) $userId, $reads['queues'][$queueKey] ?? [], true)) {
+                        $this->queue($nodeId, (int) $userId, false);
+                    }
+                    unset($reads['queues'][$queueKey]);
+                }
                 return $items;
             });
             array_push($revoked, ...$items);
@@ -139,7 +145,11 @@ class DeviceHandoverService
 
     private function snapshotExists(int $nodeId): bool
     {
-        $key = $this->nodeKey($nodeId);
+        return $this->cacheKeyExists($this->nodeKey($nodeId));
+    }
+
+    private function cacheKeyExists(string $key): bool
+    {
         $store = Cache::getStore();
         // 框架的 has() 会读取并反序列化全部内容，Redis 直接检查键即可。
         if ($store instanceof RedisStore) {
@@ -177,19 +187,19 @@ class DeviceHandoverService
             if (isset($data['snapshot']) && !isset($node['pending'][$data['sequence']])) {
                 throw new PreconditionFailedHttpException('设备来源申请已结束');
             }
-            return $this->locked($userId, function (array &$state) use ($nodeId, $userId, $limit, $data): array {
+            return $this->locked($userId, function (array &$state, array $reads) use ($nodeId, $userId, $limit, $data): array {
                 // 合并请求只协调本次账号，其他账号仍由周期同步处理。
-                return $this->decide($state, $nodeId, $userId, $limit, $data);
-            });
+                return $this->decide($state, $nodeId, $userId, $limit, $data, $reads);
+            }, [$nodeId => $node]);
         });
     }
 
-    private function decide(array &$state, int $nodeId, int $userId, int $limit, array $data): array
+    private function decide(array &$state, int $nodeId, int $userId, int $limit, array $data, array $reads): array
     {
         if (!empty($data['lease_cache']) && isset($data['snapshot'])) {
             $this->retireLeases($state, $nodeId, $data['snapshot']);
         }
-        $reply = $this->decideAdmission($state, $nodeId, $userId, $limit, $data);
+        $reply = $this->decideAdmission($state, $nodeId, $userId, $limit, $data, $reads);
         if (isset($data['snapshot'])) {
             $reply['sync'] = ['run' => $data['snapshot']['run'], 'sequence' => $data['snapshot']['sequence'],
                 'revoked' => $this->revocations($state, $nodeId)];
@@ -197,9 +207,9 @@ class DeviceHandoverService
         return $reply;
     }
 
-    private function decideAdmission(array &$state, int $nodeId, int $userId, int $limit, array $data): array
+    private function decideAdmission(array &$state, int $nodeId, int $userId, int $limit, array $data, array $reads): array
     {
-        $this->reconcile($state);
+        $this->reconcile($state, $reads);
         $raw = PublicDeviceIp::normalize($data['ip']);
         if ($raw === null) return $this->answer('denied', $limit, 0, 'invalid_source');
         $key = DeviceIpExclusion::countKey($raw);
@@ -283,29 +293,17 @@ class DeviceHandoverService
         return $reply;
     }
 
-    private function reconcile(array &$state): void
+    private function reconcile(array &$state, array $reads): void
     {
         $now = $this->now();
-        $nodeIds = [];
-        foreach ($state['sources'] as $source) {
-            foreach ($source['owners'] as $nodeId => $_) $nodeIds[$nodeId] = true;
-        }
-        $keys = [];
-        foreach (array_keys($nodeIds) as $nodeId) {
-            $keys[] = $this->nodeKey((int) $nodeId);
-            $keys[] = $this->progressKey((int) $nodeId);
-        }
-        $nodes = $keys === [] ? [] : Cache::many($keys);
-        // 只释放数据库确认已删除的节点；超时或缓存丢失不代表连接已经关闭。
-        $existingNodes = $nodeIds === [] ? [] : Server::query()->whereIn('id', array_keys($nodeIds))->pluck('id')->flip()->all();
         foreach ($state['sources'] as $ip => &$source) {
             $this->expireLeaseHolders($source, $now);
             foreach ($source['owners'] as $nodeId => &$owner) {
-                if (!isset($existingNodes[$nodeId])) {
+                if (!isset($reads['existing_nodes'][$nodeId])) {
                     unset($source['owners'][$nodeId]);
                     continue;
                 }
-                $node = $this->withProgress($nodes[$this->nodeKey((int) $nodeId)] ?? null, $nodes[$this->progressKey((int) $nodeId)] ?? null);
+                $node = $reads['nodes'][$nodeId] ?? null;
                 // 缺失状态不能证明连接已经关闭，保留名额等待节点恢复或明确换代。
                 if ($node === null) continue;
                 if ($node['run'] !== $owner['run']) {
@@ -391,25 +389,60 @@ class DeviceHandoverService
         return $result;
     }
 
-    private function locked(int $userId, callable $action): mixed
+    private function locked(int $userId, callable $action, array $knownNodes = [], ?array &$existingNodes = null): mixed
     {
         $key = 'device_handover:user:' . $userId;
-        return Cache::lock($key . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($key, $userId, $action): mixed {
-            $state = Cache::get($key, ['sources' => [], 'cooldown' => [], 'pending' => null]);
-            $result = $action($state);
-            if ($state['sources'] === [] && $state['pending'] === null) {
-                $saved = Cache::put($key, $state, 120);
-            } else {
-                $saved = Cache::forever($key, $state);
+        return Cache::lock($key . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($key, $userId, $action, $knownNodes, &$existingNodes): mixed {
+            $previous = Cache::get($key);
+            $state = $previous ?? ['sources' => [], 'cooldown' => [], 'pending' => null];
+            $reads = $this->coordinationReads($state, $knownNodes, $existingNodes);
+            $result = $action($state, $reads);
+            // 空记录按原期限退出协调，不能被每轮同步无限续期；重复确认也不重写权威状态。
+            $reserved = $state['sources'] !== [] || $state['pending'] !== null;
+            if ($state !== $previous || ($reserved && !$this->cacheKeyExists($key))) {
+                $saved = $state['sources'] === [] && $state['pending'] === null
+                    ? Cache::put($key, $state, 120) : Cache::forever($key, $state);
+                if (!$saved) throw new \RuntimeException('设备来源名额写入失败');
             }
-            if (!$saved) throw new \RuntimeException('设备来源名额写入失败');
-            $this->ensureQueued($userId, $state);
+            // 状态未变也核对队列，保留缓存丢失与部分失败后的修复能力。
+            $this->ensureQueued($userId, $state, $reads['queues']);
             return $result;
         });
     }
 
-    /** 调用方持有账号锁；队列成员未变时只批量读取，不向全部持有节点反复加锁、写入。 */
-    private function ensureQueued(int $userId, array $state): void
+    /** 只在当前账号锁内复用读取；knownNodes 必须来自调用方仍持有的节点锁。 */
+    private function coordinationReads(array $state, array $knownNodes, ?array &$existingNodes): array
+    {
+        $owners = [];
+        foreach ($state['sources'] as $source) {
+            foreach ($source['owners'] as $nodeId => $_) $owners[(int) $nodeId] = true;
+        }
+        $queueNodes = $this->queueNodes($state);
+        foreach (array_keys($knownNodes) as $nodeId) $queueNodes[$nodeId] = true;
+        $queueKeys = array_map(fn ($id) => $this->queueKey($id), array_keys($queueNodes));
+        $keys = $queueKeys;
+        foreach (array_keys($owners) as $nodeId) {
+            if (array_key_exists($nodeId, $knownNodes)) continue;
+            $keys[] = $this->nodeKey($nodeId);
+            $keys[] = $this->progressKey($nodeId);
+        }
+        $values = $keys === [] ? [] : Cache::many($keys);
+        $nodes = $knownNodes;
+        foreach (array_keys($owners) as $nodeId) {
+            if (array_key_exists($nodeId, $nodes)) continue;
+            $nodes[$nodeId] = $this->withProgress($values[$this->nodeKey($nodeId)] ?? null, $values[$this->progressKey($nodeId)] ?? null);
+        }
+        // 本轮只复用“存在”的结论；删除至多延至下一轮核对，缺失结果不缓存，避免漏掉并发创建。
+        $existing = $existingNodes ?? [];
+        $unknown = array_diff_key($owners, $existing);
+        if ($unknown !== []) {
+            foreach (Server::query()->whereIn('id', array_keys($unknown))->pluck('id') as $nodeId) $existing[(int) $nodeId] = true;
+        }
+        if ($existingNodes !== null) $existingNodes = $existing;
+        return ['nodes' => $nodes, 'existing_nodes' => $existing, 'queues' => array_intersect_key($values, array_flip($queueKeys))];
+    }
+
+    private function queueNodes(array $state): array
     {
         $nodes = [];
         foreach ($state['sources'] as $source) {
@@ -418,9 +451,17 @@ class DeviceHandoverService
                 if ($source['revoked'] || $owner['connect_sequence'] === 0) $nodes[(int) $nodeId] = true;
             }
         }
+        return $nodes;
+    }
+
+    /** 队列读取来自同一账号锁；其他账号的并发变更仍由原队列锁合并。 */
+    private function ensureQueued(int $userId, array $state, array $queues = []): void
+    {
+        $nodes = $this->queueNodes($state);
         if ($nodes === []) return;
         $keys = array_map(fn ($nodeId) => $this->queueKey($nodeId), array_keys($nodes));
-        $queues = Cache::many($keys);
+        $missing = array_values(array_diff($keys, array_keys($queues)));
+        if ($missing !== []) $queues += Cache::many($missing);
         foreach (array_keys($nodes) as $nodeId) {
             // 同账号的增删都受账号锁保护；其他账号仍可并发改变同一节点队列。
             if (!in_array($userId, $queues[$this->queueKey($nodeId)] ?? [], true)) {

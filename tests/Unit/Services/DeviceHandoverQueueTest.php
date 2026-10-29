@@ -6,6 +6,7 @@ use App\Services\DeviceHandoverService;
 use App\Services\DeviceStateService;
 use Illuminate\Cache\ArrayStore;
 use Illuminate\Cache\Repository;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
@@ -55,6 +56,8 @@ class DeviceQueueRecordingStore extends ArrayStore
 
 class DeviceHandoverQueueTest extends TestCase
 {
+    use RefreshDatabase;
+
     private const USER = 999001;
     private DeviceQueueRecordingStore $store;
     private DeviceHandoverService $service;

@@ -31,7 +31,7 @@ class DeviceLeaseCacheTest extends TestCase
         $this->mock(DeviceStateService::class, fn ($mock) => $mock->shouldReceive('getDeviceSources')->andReturn([]));
         $this->user = User::create(['email' => 'lease-cache@example.invalid', 'password' => 'unused-lease-cache-test',
             'uuid' => '44444444-4444-4444-4444-444444444444', 'token' => str_repeat('d', 32), 'group_id' => 1, 'device_limit' => 1,
-            'transfer_enable' => 100000, 'u' => 0, 'd' => 0, 'expired_at' => now()->addDays(2)->timestamp, 'banned' => 0]);
+            'transfer_enable' => 100000, 'u' => 0, 'd' => 0, 'expired_at' => time() + 2 * 86400, 'banned' => 0]);
         $this->protocol = app(DeviceHandoverProtocol::class);
         foreach ([1, 2, 3] as $id) {
             $this->nodes[$id] = Server::create(['name' => '许可缓存测试', 'type' => Server::TYPE_VMESS,

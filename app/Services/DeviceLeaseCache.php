@@ -93,6 +93,7 @@ trait DeviceLeaseCache
             }
             $leases = $revoked = [];
             $existingNodes = [$nodeId => true];
+            $readContext = new DeviceCoordinationReadContext();
             foreach ($ids as $id) {
                 $reported = $reportedByUser[$id] ?? [];
                 if (!isset($coordinated[$id]) && $reported === [] && !isset($queued[$id])) continue;
@@ -128,7 +129,7 @@ trait DeviceLeaseCache
                         unset($reads['queues'][$this->queueKey($nodeId)]);
                     }
                     return [$grants, array_values($denied)];
-                }, [$nodeId => $node], $existingNodes);
+                }, [$nodeId => $node], $existingNodes, $readContext);
                 array_push($leases, ...$result[0]);
                 array_push($revoked, ...$result[1]);
             }

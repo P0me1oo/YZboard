@@ -85,4 +85,17 @@ class ServerMachine extends Model
     {
         return $this->forceFill(['last_seen_at' => now()->timestamp])->save();
     }
+
+    /** 同一秒的请求共用已持久化心跳；延迟请求不能把较新的时间写回旧值。 */
+    public function recordHeartbeat(): void
+    {
+        $seenAt = now()->timestamp;
+        if (($this->last_seen_at ?? 0) >= $seenAt) return;
+
+        self::query()->whereKey($this->id)
+            ->where(fn ($query) => $query->whereNull('last_seen_at')->orWhere('last_seen_at', '<', $seenAt))
+            ->update(['last_seen_at' => $seenAt]);
+        $this->setAttribute('last_seen_at', $seenAt);
+        $this->syncOriginalAttribute('last_seen_at');
+    }
 }

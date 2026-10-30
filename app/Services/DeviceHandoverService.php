@@ -389,13 +389,13 @@ class DeviceHandoverService
         return $result;
     }
 
-    private function locked(int $userId, callable $action, array $knownNodes = [], ?array &$existingNodes = null): mixed
+    private function locked(int $userId, callable $action, array $knownNodes = [], ?array &$existingNodes = null, ?DeviceCoordinationReadContext $readContext = null): mixed
     {
         $key = 'device_handover:user:' . $userId;
-        return Cache::lock($key . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($key, $userId, $action, $knownNodes, &$existingNodes): mixed {
+        return Cache::lock($key . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($key, $userId, $action, $knownNodes, &$existingNodes, $readContext): mixed {
             $previous = Cache::get($key);
             $state = $previous ?? ['sources' => [], 'cooldown' => [], 'pending' => null];
-            $reads = $this->coordinationReads($state, $knownNodes, $existingNodes);
+            $reads = $this->coordinationReads($state, $knownNodes, $existingNodes, $readContext);
             $result = $action($state, $reads);
             // 空记录按原期限退出协调，不能被每轮同步无限续期；重复确认也不重写权威状态。
             $reserved = $state['sources'] !== [] || $state['pending'] !== null;
@@ -411,7 +411,7 @@ class DeviceHandoverService
     }
 
     /** 只在当前账号锁内复用读取；knownNodes 必须来自调用方仍持有的节点锁。 */
-    private function coordinationReads(array $state, array $knownNodes, ?array &$existingNodes): array
+    private function coordinationReads(array $state, array $knownNodes, ?array &$existingNodes, ?DeviceCoordinationReadContext $readContext): array
     {
         $owners = [];
         foreach ($state['sources'] as $source) {
@@ -426,7 +426,7 @@ class DeviceHandoverService
             $keys[] = $this->nodeKey($nodeId);
             $keys[] = $this->progressKey($nodeId);
         }
-        $values = $keys === [] ? [] : Cache::many($keys);
+        $values = $readContext === null ? Cache::many($keys) : $readContext->many($keys);
         $nodes = $knownNodes;
         foreach (array_keys($owners) as $nodeId) {
             if (array_key_exists($nodeId, $nodes)) continue;

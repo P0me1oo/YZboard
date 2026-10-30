@@ -1,5 +1,15 @@
 # YZboard 兼容矩阵
 
+## 1.111.8 设备许可生命周期修复与正式发布（2026-10-30）
+
+- [Release v1.111.8](https://github.com/P0me1oo/YZboard/releases/tag/v1.111.8) 已发布，固定来源 `80b8f9a917c28eeb71eed59dcf905095725d8640`，配套 Agent `v2.28.3` / `361a57ce8625e9d7bdb2d8fec79af7f2291c3b4e`。基于 1.111.6 修复设备空闲后反复续期、旧会话归还及停用节点退出问题，无数据库迁移。
+- 生产只读复核确认 1.111.6 的空闲 holder 在持续同步下仍把期限推至当前时间后一小时。新版本停止向无申请节点预发许可，在线空闲有序停用并归还；实际活动连接正常核验，断联未撤销、未归还许可保留原固定期限。旧核验不能删除重新授权后的许可，已撤销许可允许较新完整关闭快照确认丢失回包后的退出。
+- [发布流水线](https://github.com/P0me1oo/YZboard/actions/runs/41010849949) 全部通过。PHP `8.2.35`：SQLite 1,479 项、17,690 断言，10 项 MariaDB 专属用例跳过；MariaDB `11.4.8` 严格模式 1,479 项、17,699 断言全部通过。两套均执行真实 Redis `7.4.2` 生命周期与 8 进程并发准入，管理端资源 5 项通过。
+- 本地先用旧代码复现后修复；PHP `8.4.27` / Redis `8.0.2` 的设备专项在 SQLite 与 MariaDB `11.4.8` 各 164 项、3,716 断言通过。覆盖持续空闲、多节点、会话与核验交错、丢失续期回包、撤销、到期、停用、写入失败和缓存丢失；此前设备及机器/通信相关 MariaDB 检查 268 项、4,734 断言通过。
+- 镜像 `ghcr.io/p0me1oo/yzboard:1.111.8-80b8f9a`、`1.111.8` 与 `latest` 均指向 `sha256:6c78e6dfa0a1cdbcbebd7b18285a8d1e618e06e3d4370fc8fc40430f2155c439`。amd64、arm64 的 OCI revision 均与固定提交一致，清单与配置已匿名核验；详见 [registry-verification.json](https://github.com/P0me1oo/YZboard/releases/download/v1.111.8/registry-verification.json)。
+- 中间标签 `v1.111.7` 保留；补充测试发现撤销与丢失续期回包的组合后，取消其镜像构建，完整修复纳入 1.111.8。没有覆盖标签或改写历史。
+- 本次只发布，未部署 Cloudnium-US 或修改生产数据。旧版 `1.111.6-3f78a6c` 及 Agent `v2.28.2` 保留；回滚会恢复旧空闲缓存行为，不能恢复已归还的许可。无固定到期保证的完全失联旧协议 owner，仍需真实关闭证据后单独处理，不能按心跳或停用标志删除。尚无修复后的生产 CPU 对照结果。
+
 ## 1.111.6 正式发布与 Cloudnium-US 复测（2026-10-30）
 
 - [Release v1.111.6](https://github.com/P0me1oo/YZboard/releases/tag/v1.111.6) 已发布，固定来源 `3f78a6c925a9bf271871ad6bf5ec247008c54500`。[发布工作流](https://github.com/P0me1oo/YZboard/actions/runs/40994330763) 和[主分支回归](https://github.com/P0me1oo/YZboard/actions/runs/40994330319)均成功。

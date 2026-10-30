@@ -108,7 +108,7 @@ class DeviceCoordinationPerformanceTest extends TestCase
         $this->seedCoordination(true);
         DB::listen(function ($query): void {
             $sql = str_replace(['"', chr(96)], '', $query->sql);
-            if (str_starts_with($sql, 'select id from v2_server where')) $this->existenceQueries++;
+            if (str_starts_with($sql, 'select enabled, id from v2_server where')) $this->existenceQueries++;
         });
     }
 

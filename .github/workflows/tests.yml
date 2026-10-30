@@ -62,6 +62,7 @@ jobs:
           LOG_CHANNEL: stderr
           LOG_LEVEL: critical
           YZ_TEST_SUBSCRIPTION_REDIS_PORT: '6379'
+          YZ_TEST_DEVICE_REDIS_PORT: '6379'
         run: php vendor/bin/phpunit --do-not-cache-result
 
       - name: MariaDB 严格分组完整回归
@@ -69,6 +70,7 @@ jobs:
           LOG_CHANNEL: stderr
           LOG_LEVEL: critical
           YZ_TEST_SUBSCRIPTION_REDIS_PORT: '6379'
+          YZ_TEST_DEVICE_REDIS_PORT: '6379'
         run: php vendor/bin/phpunit --bootstrap tests/bootstrap-mariadb.php --do-not-cache-result
 
       - name: 配置管理端测试环境

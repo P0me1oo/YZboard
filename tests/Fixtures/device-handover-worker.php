@@ -18,6 +18,10 @@ $app['config']->set([
 ]);
 $app['db']->purge('sqlite');
 $app['cache']->forgetDriver('file');
+if ($port = getenv('YZ_TEST_DEVICE_REDIS_PORT')) {
+    $redis = new \Tests\Support\DeviceRedisCache($app, (int) $port, $directory);
+    $redis->install($app);
+}
 $devices = new class extends DeviceStateService {
     public function getDeviceSources(int $userId): array { return []; }
 };

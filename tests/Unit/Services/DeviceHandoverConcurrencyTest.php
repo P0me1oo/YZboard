@@ -19,12 +19,17 @@ class DeviceHandoverConcurrencyTest extends TestCase
             mkdir($directory, 0700, true);
             $processes = [];
             $connection = new \PDO('sqlite:' . $directory . '/database.sqlite');
-            $connection->exec('CREATE TABLE v2_server (id INTEGER PRIMARY KEY)');
-            $connection->exec('INSERT INTO v2_server VALUES (1)');
+            $connection->exec('CREATE TABLE v2_server (id INTEGER PRIMARY KEY, enabled INTEGER NOT NULL)');
+            $connection->exec('INSERT INTO v2_server VALUES (1, 1)');
             $connection = null;
             config(['cache.stores.device_concurrency' => ['driver' => 'file', 'path' => $directory . '/cache', 'lock_path' => $directory . '/locks'],
                 'cache.default' => 'device_concurrency']);
             app('cache')->forgetDriver('device_concurrency');
+            $redis = null;
+            if ($port = getenv('YZ_TEST_DEVICE_REDIS_PORT')) {
+                $redis = new \Tests\Support\DeviceRedisCache($this->app, (int) $port, $directory);
+                $redis->install($this->app);
+            }
             $devices = new class extends DeviceStateService { public function getDeviceSources(int $userId): array { return []; } };
             (new DeviceHandoverService($devices))->begin(1, str_repeat('a', 32), $cached);
             try {
@@ -68,6 +73,9 @@ class DeviceHandoverConcurrencyTest extends TestCase
                 }
             } finally {
                 foreach ($processes as $process) if ($process->isRunning()) $process->stop();
+                $redis?->close();
+                Cache::clearResolvedInstance('cache');
+                $this->app->forgetInstance('cache');
                 config(['cache.default' => 'array']);
                 app('cache')->forgetDriver('device_concurrency');
                 $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS), \RecursiveIteratorIterator::CHILD_FIRST);

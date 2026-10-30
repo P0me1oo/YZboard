@@ -28,6 +28,11 @@ trait DeviceLeaseCache
                 'confirmed_at' => $now, 'expires_at' => $now + self::LEASE_GRACE_MS];
             $source['holders'][$key] = $holder;
         }
+        return $this->leaseReply($holder);
+    }
+
+    private function leaseReply(array $holder): array
+    {
         return ['confirmed_at' => $holder['confirmed_at'], 'expires_at' => $holder['expires_at'],
             'confirmed_sequence' => $holder['sequence']];
     }
@@ -54,16 +59,23 @@ trait DeviceLeaseCache
     private function retireLeases(array &$state, int $nodeId, array $snapshot): void
     {
         $live = array_fill_keys(array_column($snapshot['sources'] ?? [], 'lease'), true);
-        $key = $nodeId . ':' . $snapshot['run'];
         foreach ($snapshot['retired'] ?? [] as $item) {
+            if (!isset($state['sources'][$item['ip']])) continue;
             $source = &$state['sources'][$item['ip']];
-            if ($source !== null && $source['user_id'] === $item['user_id'] && $source['lease'] === $item['lease']
-                && !isset($live[$item['lease']]) && ($source['holders'][$key]['sequence'] ?? PHP_INT_MAX) < $snapshot['sequence']) {
+            $run = $item['run'] ?? $snapshot['run'];
+            $key = $nodeId . ':' . $run;
+            $holder = $source['holders'][$key] ?? null;
+            // 跨会话序号不能比较。新客户端携带被归还的原会话与核验序号，
+            // 只删除该次许可；旧客户端只能确认当前会话且必须晚于原核验。
+            $matches = isset($item['confirmed_sequence'])
+                ? $holder !== null && (int) $holder['sequence'] === (int) $item['confirmed_sequence']
+                : $run === $snapshot['run'] && $holder !== null && $holder['sequence'] < $snapshot['sequence'];
+            if ($source['user_id'] === $item['user_id'] && $source['lease'] === $item['lease'] && $matches
+                && ($run !== $snapshot['run'] || !isset($live[$item['lease']]))) {
                 unset($source['holders'][$key]);
+                if (($source['owners'][$nodeId]['run'] ?? null) === $run) unset($source['owners'][$nodeId]);
             }
             unset($source);
-            // 对未知许可的确认只能拒绝，不能从节点上报内容重建许可。
-            if (($state['sources'][$item['ip']] ?? null) === null) unset($state['sources'][$item['ip']]);
         }
     }
 
@@ -91,20 +103,23 @@ trait DeviceLeaseCache
             foreach ($node['sources'] as $key => $source) {
                 $reportedByUser[$source['user_id']][$key] = $source;
             }
-            $leases = $revoked = [];
-            $existingNodes = [$nodeId => true];
+            $leases = $revoked = $idle = [];
+            $existingNodes = [$nodeId => (bool) $server->enabled];
             $readContext = new DeviceCoordinationReadContext();
             foreach ($ids as $id) {
                 $reported = $reportedByUser[$id] ?? [];
                 if (!isset($coordinated[$id]) && $reported === [] && !isset($queued[$id])) continue;
                 $result = $this->locked((int) $id, function (array &$state, array &$reads) use ($nodeId, $data, $node, $available, $id, $reported): array {
-                    if (empty($data['unchanged'])) $this->retireLeases($state, $nodeId, $data);
+                    if (empty($data['unchanged']) && (int) $node['sequence'] === (int) $data['sequence']) {
+                        $this->retireLeases($state, $nodeId, $data);
+                    }
                     $this->reconcile($state, $reads);
-                    $grants = $denied = [];
+                    $grants = $denied = $returns = [];
                     $canUse = $available->has($id);
                     foreach ($reported as $item) {
                         $known = $state['sources'][$item['ip']] ?? null;
-                        if (!$canUse || $known === null || $known['lease'] !== $item['lease'] || $known['revoked']) {
+                        if (!$canUse || $known === null || $known['lease'] !== $item['lease'] || $known['revoked']
+                            || !isset($known['holders'][$nodeId . ':' . $data['run']])) {
                             $denied[$item['lease']] = array_intersect_key($item, array_flip(['user_id', 'ip', 'lease']));
                         }
                     }
@@ -115,9 +130,20 @@ trait DeviceLeaseCache
                             }
                             continue;
                         }
-                        // 账号/节点权限和权威许可仍有效才确认。上报或心跳本身不是续期依据。
-                        $grants[] = array_intersect_key($source, array_flip(['user_id', 'ip', 'lease']))
-                            + $this->confirmLease($source, $nodeId, $data['run'], (int) $data['sequence']);
+                        $holder = $source['holders'][$nodeId . ':' . $data['run']] ?? null;
+                        // 没有实际申请的节点不再预发许可。空闲只返回原固定期限，
+                        // 由 Agent 停用后确认归还；一次空快照本身不能释放占位。
+                        if ($holder === null) continue;
+                        $item = array_intersect_key($source, array_flip(['user_id', 'ip', 'lease']));
+                        $active = $reported[$source['lease']] ?? null;
+                        if ($active !== null && $active['ip'] === $source['ip']) {
+                            $grants[] = $item + $this->confirmLease($source, $nodeId, $data['run'], (int) $data['sequence']);
+                            $source['owners'][$nodeId] = ['run' => $data['run'], 'sequence' => $node['sequence'],
+                                'connect_sequence' => $active['connect_sequence'], 'last_new_at' => $active['last_new_at']];
+                        } else {
+                            $grants[] = $item + $this->leaseReply($holder);
+                            $returns[] = $item;
+                        }
                     }
                     unset($source);
                     // 在账号锁内确认无下发或撤销任务后清理；过期协调记录也需经过此处。
@@ -128,13 +154,14 @@ trait DeviceLeaseCache
                         }
                         unset($reads['queues'][$this->queueKey($nodeId)]);
                     }
-                    return [$grants, array_values($denied)];
+                    return [$grants, array_values($denied), $returns];
                 }, [$nodeId => $node], $existingNodes, $readContext);
                 array_push($leases, ...$result[0]);
                 array_push($revoked, ...$result[1]);
+                array_push($idle, ...$result[2]);
             }
             return ['run' => $data['run'], 'sequence' => $data['sequence'], 'revoked' => $revoked,
-                'lease_cache' => 1, 'server_time' => $this->now(), 'leases' => $leases];
+                'lease_cache' => 1, 'server_time' => $this->now(), 'leases' => $leases, 'idle' => $idle];
         });
     }
 

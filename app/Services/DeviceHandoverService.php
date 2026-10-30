@@ -42,10 +42,10 @@ class DeviceHandoverService
                 foreach (array_unique(array_column($current['sources'] ?? [], 'user_id')) as $userId) {
                     $this->queue($nodeId, (int) $userId, true);
                 }
-                Cache::forever($this->nodeKey($nodeId), [
+                if (!Cache::forever($this->nodeKey($nodeId), [
                     'run' => $run, 'sequence' => 0, 'pending' => [], 'sources' => [], 'version' => 1, 'seen_at' => $this->now(),
                     'lease_cache' => $leaseCache,
-                ]);
+                ])) throw new \RuntimeException('设备来源会话写入失败');
                 Cache::forget($this->progressKey($nodeId));
             }
             return ['version' => 1, 'run' => $run, 'lease_cache' => (int) (($current['run'] ?? null) === $run ? ($current['lease_cache'] ?? false) : $leaseCache)];
@@ -78,7 +78,8 @@ class DeviceHandoverService
         });
 
         $revoked = [];
-        $users = array_unique(array_merge(Cache::get($this->queueKey($nodeId), []), array_column($data['retired'] ?? [], 'user_id')));
+        $users = array_unique(array_merge(Cache::get($this->queueKey($nodeId), []),
+            array_column($data['sources'] ?? [], 'user_id'), array_column($data['retired'] ?? [], 'user_id')));
         foreach ($users as $userId) {
             $items = $this->locked((int) $userId, function (array &$state, array &$reads) use ($nodeId, $userId): array {
                 $this->reconcile($state, $reads);
@@ -196,7 +197,8 @@ class DeviceHandoverService
 
     private function decide(array &$state, int $nodeId, int $userId, int $limit, array $data, array $reads): array
     {
-        if (!empty($data['lease_cache']) && isset($data['snapshot'])) {
+        if (!empty($data['lease_cache']) && isset($data['snapshot'])
+            && ($reads['nodes'][$nodeId]['sequence'] ?? null) === (int) $data['snapshot']['sequence']) {
             $this->retireLeases($state, $nodeId, $data['snapshot']);
         }
         $reply = $this->decideAdmission($state, $nodeId, $userId, $limit, $data, $reads);
@@ -303,6 +305,8 @@ class DeviceHandoverService
                     unset($source['owners'][$nodeId]);
                     continue;
                 }
+                // 停用不是连接已关闭的证明；进入定向撤销并保留占位等待确认。
+                if (!$reads['existing_nodes'][$nodeId]) $owner['retiring'] = true;
                 $node = $reads['nodes'][$nodeId] ?? null;
                 // 缺失状态不能证明连接已经关闭，保留名额等待节点恢复或明确换代。
                 if ($node === null) continue;
@@ -382,7 +386,8 @@ class DeviceHandoverService
     {
         $result = [];
         foreach ($state['sources'] as $source) {
-            if ($source['revoked'] && (isset($source['owners'][$nodeId]) || $this->nodeHoldsLease($source, $nodeId))) {
+            if (($source['revoked'] && (isset($source['owners'][$nodeId]) || $this->nodeHoldsLease($source, $nodeId)))
+                || !empty($source['owners'][$nodeId]['retiring'])) {
                 $result[] = ['user_id' => $source['user_id'], 'ip' => $source['ip'], 'lease' => $source['lease']];
             }
         }
@@ -406,6 +411,13 @@ class DeviceHandoverService
             }
             // 状态未变也核对队列，保留缓存丢失与部分失败后的修复能力。
             $this->ensureQueued($userId, $state, $reads['queues']);
+            // 已退出的离线节点可能永远不会再同步；保存成功后按账号移除其旧队列项。
+            // 当前请求节点仍可能需要接收未知来源的撤销，由其同步路径决定退出。
+            foreach (array_diff_key($this->queueNodes($previous ?? ['sources' => []]), $this->queueNodes($state), $knownNodes) as $nodeId => $_) {
+                if (in_array($userId, $reads['queues'][$this->queueKey($nodeId)] ?? [], true)) {
+                    $this->queue((int) $nodeId, $userId, false);
+                }
+            }
             return $result;
         });
     }
@@ -436,7 +448,9 @@ class DeviceHandoverService
         $existing = $existingNodes ?? [];
         $unknown = array_diff_key($owners, $existing);
         if ($unknown !== []) {
-            foreach (Server::query()->whereIn('id', array_keys($unknown))->pluck('id') as $nodeId) $existing[(int) $nodeId] = true;
+            foreach (Server::query()->whereIn('id', array_keys($unknown))->pluck('enabled', 'id') as $nodeId => $enabled) {
+                $existing[(int) $nodeId] = (bool) $enabled;
+            }
         }
         if ($existingNodes !== null) $existingNodes = $existing;
         return ['nodes' => $nodes, 'existing_nodes' => $existing, 'queues' => array_intersect_key($values, array_flip($queueKeys))];
@@ -448,7 +462,7 @@ class DeviceHandoverService
         foreach ($state['sources'] as $source) {
             foreach ($source['holders'] ?? [] as $holder) $nodes[(int) $holder['node_id']] = true;
             foreach ($source['owners'] as $nodeId => $owner) {
-                if ($source['revoked'] || $owner['connect_sequence'] === 0) $nodes[(int) $nodeId] = true;
+                if ($source['revoked'] || $owner['connect_sequence'] === 0 || !empty($owner['retiring'])) $nodes[(int) $nodeId] = true;
             }
         }
         return $nodes;

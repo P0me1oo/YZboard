@@ -63,6 +63,8 @@ class DeviceHandoverProtocol
             $prefix . 'retired' => 'sometimes|array|max:65536', $prefix . 'retired.*.user_id' => 'required|integer|min:1',
             $prefix . 'retired.*.ip' => 'required|ip',
             $prefix . 'retired.*.lease' => ['required', 'string', 'distinct', 'regex:/\A[a-f0-9]{32}\z/'],
+            $prefix . 'retired.*.run' => ['sometimes', 'string', 'regex:/\A[a-f0-9]{32}\z/'],
+            $prefix . 'retired.*.confirmed_sequence' => 'sometimes|integer|min:1|max:9007199254740991',
         ];
     }
 }

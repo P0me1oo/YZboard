@@ -103,7 +103,13 @@ abstract class AbstractPlugin
     protected function registerCommand(string $commandClass): void
     {
         if (class_exists($commandClass)) {
-            app('Illuminate\Contracts\Console\Kernel')->registerCommand(new $commandClass());
+            $kernel = app(\Illuminate\Contracts\Console\Kernel::class);
+            $command = new $commandClass();
+            if ($kernel instanceof \App\Console\Kernel) {
+                $kernel->registerPluginCommand($command);
+            } else {
+                $kernel->registerCommand($command);
+            }
         }
     }
 

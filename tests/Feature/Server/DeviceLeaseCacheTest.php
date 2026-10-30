@@ -107,6 +107,28 @@ class DeviceLeaseCacheTest extends TestCase
         $this->assertSame('waiting', $this->admit(3, '1.1.1.1')['status']);
     }
 
+    public function test_large_decoded_state_cannot_hide_revocation_or_missing_authority(): void
+    {
+        $first = $this->admit();
+        $key = 'device_handover:user:' . $this->user->id;
+        $state = Cache::get($key);
+        $state['padding'] = str_repeat('x', 8192);
+        Cache::forever($key, $state);
+        $this->sync(1);
+        $this->sync(1);
+        $state = Cache::get($key);
+        $state['sources']['8.8.8.8']['revoked'] = true;
+        Cache::forever($key, $state);
+        $reply = $this->sync(1, [$this->active($first)]);
+        $this->assertSame([], $reply['leases']);
+        $this->assertSame([$first['lease']], array_column($reply['revoked'], 'lease'));
+        Cache::forget($key);
+        $missing = $this->sync(1, [$this->active($first)]);
+        $this->assertSame([], $missing['leases']);
+        $this->assertSame([$first['lease']], array_column($missing['revoked'], 'lease'));
+        $this->assertSame([], Cache::get($key)['sources']);
+    }
+
     public function test_return_write_failure_preserves_reservation_and_retry_completes(): void
     {
         $first = $this->admit();

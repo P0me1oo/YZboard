@@ -137,6 +137,7 @@ return [
     'warm' => [
         ...Octane::defaultServicesToWarm(),
         \App\Services\Plugin\PluginManager::class,
+        \App\Services\DeviceCoordinationStateReader::class,
     ],
 
     'flush' => [

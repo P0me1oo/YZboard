@@ -398,7 +398,7 @@ class DeviceHandoverService
     {
         $key = 'device_handover:user:' . $userId;
         return Cache::lock($key . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($key, $userId, $action, $knownNodes, &$existingNodes, $readContext): mixed {
-            $previous = Cache::get($key);
+            $previous = app(DeviceCoordinationStateReader::class)->get($key);
             $state = $previous ?? ['sources' => [], 'cooldown' => [], 'pending' => null];
             $reads = $this->coordinationReads($state, $knownNodes, $existingNodes, $readContext);
             $result = $action($state, $reads);
@@ -410,10 +410,11 @@ class DeviceHandoverService
                 if (!$saved) throw new \RuntimeException('设备来源名额写入失败');
             }
             // 状态未变也核对队列，保留缓存丢失与部分失败后的修复能力。
-            $this->ensureQueued($userId, $state, $reads['queues']);
+            $queueNodes = $this->queueNodes($state);
+            $this->ensureQueued($userId, $queueNodes, $reads['queues']);
             // 已退出的离线节点可能永远不会再同步；保存成功后按账号移除其旧队列项。
             // 当前请求节点仍可能需要接收未知来源的撤销，由其同步路径决定退出。
-            foreach (array_diff_key($this->queueNodes($previous ?? ['sources' => []]), $this->queueNodes($state), $knownNodes) as $nodeId => $_) {
+            foreach (array_diff_key($reads['queue_nodes'], $queueNodes, $knownNodes) as $nodeId => $_) {
                 if (in_array($userId, $reads['queues'][$this->queueKey($nodeId)] ?? [], true)) {
                     $this->queue((int) $nodeId, $userId, false);
                 }
@@ -430,6 +431,7 @@ class DeviceHandoverService
             foreach ($source['owners'] as $nodeId => $_) $owners[(int) $nodeId] = true;
         }
         $queueNodes = $this->queueNodes($state);
+        $previousQueueNodes = $queueNodes;
         foreach (array_keys($knownNodes) as $nodeId) $queueNodes[$nodeId] = true;
         $queueKeys = array_map(fn ($id) => $this->queueKey($id), array_keys($queueNodes));
         $keys = $queueKeys;
@@ -453,7 +455,8 @@ class DeviceHandoverService
             }
         }
         if ($existingNodes !== null) $existingNodes = $existing;
-        return ['nodes' => $nodes, 'existing_nodes' => $existing, 'queues' => array_intersect_key($values, array_flip($queueKeys))];
+        return ['nodes' => $nodes, 'existing_nodes' => $existing, 'queue_nodes' => $previousQueueNodes,
+            'queues' => array_intersect_key($values, array_flip($queueKeys))];
     }
 
     private function queueNodes(array $state): array
@@ -469,9 +472,8 @@ class DeviceHandoverService
     }
 
     /** 队列读取来自同一账号锁；其他账号的并发变更仍由原队列锁合并。 */
-    private function ensureQueued(int $userId, array $state, array $queues = []): void
+    private function ensureQueued(int $userId, array $nodes, array $queues = []): void
     {
-        $nodes = $this->queueNodes($state);
         if ($nodes === []) return;
         $keys = array_map(fn ($nodeId) => $this->queueKey($nodeId), array_keys($nodes));
         $missing = array_values(array_diff($keys, array_keys($queues)));

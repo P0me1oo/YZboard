@@ -70,6 +70,11 @@ trait DeviceLeaseCache
             $matches = isset($item['confirmed_sequence'])
                 ? $holder !== null && (int) $holder['sequence'] === (int) $item['confirmed_sequence']
                 : $run === $snapshot['run'] && $holder !== null && $holder['sequence'] < $snapshot['sequence'];
+            // 已撤销的来源或本节点许可不会被同步重新授予。即使最后一次续期
+            // 回包丢失，较新的完整关闭快照仍能确认退出。重新准入会移除 holder
+            // 撤销标记并产生新核验，届时仍必须精确匹配，不能误删恢复后的许可。
+            if (($source['revoked'] || !empty($holder['revoked'])) && $run === $snapshot['run'] && $holder !== null
+                && $holder['sequence'] < $snapshot['sequence']) $matches = true;
             if ($source['user_id'] === $item['user_id'] && $source['lease'] === $item['lease'] && $matches
                 && ($run !== $snapshot['run'] || !isset($live[$item['lease']]))) {
                 unset($source['holders'][$key]);
@@ -119,12 +124,15 @@ trait DeviceLeaseCache
                     foreach ($reported as $item) {
                         $known = $state['sources'][$item['ip']] ?? null;
                         if (!$canUse || $known === null || $known['lease'] !== $item['lease'] || $known['revoked']
-                            || !isset($known['holders'][$nodeId . ':' . $data['run']])) {
+                            || !isset($known['holders'][$nodeId . ':' . $data['run']])
+                            || !empty($known['holders'][$nodeId . ':' . $data['run']]['revoked'])) {
                             $denied[$item['lease']] = array_intersect_key($item, array_flip(['user_id', 'ip', 'lease']));
                         }
                     }
                     foreach ($state['sources'] as &$source) {
-                        if (!$canUse || $source['revoked']) {
+                        $holderKey = $nodeId . ':' . $data['run'];
+                        if (!$canUse && isset($source['holders'][$holderKey])) $source['holders'][$holderKey]['revoked'] = true;
+                        if (!$canUse || $source['revoked'] || !empty($source['holders'][$holderKey]['revoked'])) {
                             if (isset($source['owners'][$nodeId]) || $this->nodeHoldsLease($source, $nodeId)) {
                                 $denied[$source['lease']] = array_intersect_key($source, array_flip(['user_id', 'ip', 'lease']));
                             }

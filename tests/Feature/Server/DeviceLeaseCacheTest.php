@@ -168,6 +168,46 @@ class DeviceLeaseCacheTest extends TestCase
         $this->assertSame($new['confirmed_sequence'], $holder['sequence']);
     }
 
+    public function test_revocation_with_lost_renewal_reply_can_finish_real_close(): void
+    {
+        $first = $this->admit();
+        // 面板已核验活动快照，但该回包丢失，Agent 只知道首次核验编号。
+        $this->sync(1, [$this->active($first)]);
+        $this->assertSame('waiting', $this->admit(2, '1.1.1.1')['status']);
+        $this->sync(1, [], [$this->retired($first) + ['run' => $this->runID(1),
+            'confirmed_sequence' => $first['confirmed_sequence']]]);
+        $this->assertSame('allowed', $this->admit(2, '1.1.1.1')['status']);
+    }
+
+    public function test_permission_revocation_with_lost_reply_retires_only_that_node(): void
+    {
+        $first = $this->admit();
+        $this->admit(2);
+        $this->sync(1, [$this->active($first)]);
+        $this->nodes[1]->forceFill(['group_ids' => [2]])->saveQuietly();
+        $this->sync(1);
+        $this->sync(1, [], [$this->retired($first) + ['run' => $this->runID(1),
+            'confirmed_sequence' => $first['confirmed_sequence']]]);
+        $holders = Cache::get('device_handover:user:' . $this->user->id)['sources']['8.8.8.8']['holders'];
+        $this->assertArrayNotHasKey($this->nodes[1]->id . ':' . $this->runID(1), $holders);
+        $this->assertArrayHasKey($this->nodes[2]->id . ':' . $this->runID(2), $holders);
+    }
+
+    public function test_permission_regrant_cannot_be_removed_by_old_retirement(): void
+    {
+        $old = $this->admit();
+        $this->nodes[1]->forceFill(['group_ids' => [2]])->saveQuietly();
+        $this->sync(1);
+        $this->nodes[1]->forceFill(['group_ids' => [1]])->saveQuietly();
+        $this->assertSame([], $this->sync(1)['leases'], '恢复用户名单不能重新下发已撤销许可');
+        $fresh = $this->admit();
+        $this->sync(1, [], [$this->retired($old) + ['run' => $this->runID(1),
+            'confirmed_sequence' => $old['confirmed_sequence']]]);
+        $holder = Cache::get('device_handover:user:' . $this->user->id)['sources']['8.8.8.8']['holders'][$this->nodes[1]->id . ':' . $this->runID(1)];
+        $this->assertEmpty($holder['revoked'] ?? false);
+        $this->assertSame($fresh['confirmed_sequence'], $holder['sequence']);
+    }
+
     public function test_late_empty_snapshot_cannot_retire_after_newer_activity_snapshot_was_saved(): void
     {
         $first = $this->admit();

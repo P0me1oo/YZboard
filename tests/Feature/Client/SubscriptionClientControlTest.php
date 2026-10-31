@@ -3,11 +3,15 @@
 namespace Tests\Feature\Client;
 
 use App\Http\Controllers\V2\Admin\ConfigController;
+use App\Http\Controllers\V2\Admin\Server\GroupController;
 use App\Models\ServerGroup;
+use App\Models\Setting as SettingModel;
 use App\Models\User;
 use App\Services\SubscriptionClientControl;
 use App\Support\Setting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Database\QueryException;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -247,5 +251,93 @@ class SubscriptionClientControlTest extends TestCase
         $this->actingAs($this->user(), 'sanctum');
         $this->postJson('/_tests/client-control/config', [SubscriptionClientControl::SETTING => SubscriptionClientControl::defaults()])
             ->assertForbidden();
+    }
+
+    public function test_group_deletion_removes_only_its_exemption_using_latest_saved_rules(): void
+    {
+        $deleted = ServerGroup::forceCreate(['name' => '待删除']);
+        $kept = ServerGroup::forceCreate(['name' => '保留']);
+        $saved = $this->configure('whitelist', ['exempt_group_ids' => [$deleted->id, $kept->id]]);
+        SubscriptionClientControl::settings();
+        // 模拟另一请求已保存，而当前请求仍持有旧配置缓存。
+        $saved['clients'][0]['name'] = '最新软件名称';
+        SettingModel::createOrUpdate(SubscriptionClientControl::SETTING, $saved);
+
+        $response = app(GroupController::class)->drop(Request::create('/', 'POST', ['id' => $deleted->id]));
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertTrue($response->getData(true)['data']);
+        $saved['exempt_group_ids'] = [$kept->id];
+        $this->assertSame($saved, SubscriptionClientControl::settings());
+        $this->assertDatabaseMissing('v2_server_group', ['id' => $deleted->id]);
+        $this->assertSame(400, app(GroupController::class)->drop(Request::create('/', 'POST', ['id' => $deleted->id]))->getStatusCode());
+        $this->assertSame($saved, SubscriptionClientControl::settings());
+
+        $this->actingAs($this->user(['is_admin' => true]), 'sanctum');
+        $this->postJson('/_tests/client-control/config', [SubscriptionClientControl::SETTING => $saved])->assertOk();
+    }
+
+    public function test_group_still_used_by_user_cannot_be_deleted_or_lose_exemption(): void
+    {
+        $group = ServerGroup::forceCreate(['name' => '在用组']);
+        $this->user(['group_ids' => [$group->id]]);
+        $saved = $this->configure('blacklist', ['exempt_group_ids' => [$group->id]]);
+        $response = app(GroupController::class)->drop(Request::create('/', 'POST', ['id' => $group->id]));
+        $this->assertSame(400, $response->getStatusCode());
+        $this->assertDatabaseHas('v2_server_group', ['id' => $group->id]);
+        $this->assertSame($saved, SubscriptionClientControl::settings());
+    }
+
+    public static function deletionFailures(): array
+    {
+        return [
+            '权限组删除失败' => ['/delete from ["`]?v2_server_group/i'],
+            '豁免配置写入失败' => ['/update ["`]?v2_settings/i'],
+        ];
+    }
+
+    #[DataProvider('deletionFailures')]
+    public function test_group_and_exemption_changes_rollback_together(string $pattern): void
+    {
+        $group = ServerGroup::forceCreate(['name' => '删除回滚']);
+        $saved = $this->configure('blacklist', ['exempt_group_ids' => [$group->id]]);
+        $this->failNextQueryMatching($pattern);
+        try {
+            app(GroupController::class)->drop(Request::create('/', 'POST', ['id' => $group->id]));
+            $this->fail('应返回数据库写入异常');
+        } catch (QueryException) {
+            $this->assertDatabaseHas('v2_server_group', ['id' => $group->id]);
+            $this->assertSame($saved, SubscriptionClientControl::settings());
+        }
+        $this->assertSame(200, app(GroupController::class)->drop(Request::create('/', 'POST', ['id' => $group->id]))->getStatusCode());
+        $this->assertSame([], SubscriptionClientControl::settings()['exempt_group_ids']);
+    }
+
+    public function test_deleted_group_returns_readable_validation_error_without_overwriting_rules(): void
+    {
+        $group = ServerGroup::forceCreate(['name' => '旧页面中的组']);
+        $stale = $this->configure('whitelist', ['exempt_group_ids' => [$group->id]]);
+        app(GroupController::class)->drop(Request::create('/', 'POST', ['id' => $group->id]));
+        $saved = SubscriptionClientControl::settings();
+        $message = "豁免权限组 #{$group->id} 已删除或不存在，请移除后重试。";
+        $this->actingAs($this->user(['is_admin' => true]), 'sanctum');
+        $response = $this->postJson('/_tests/client-control/config', [SubscriptionClientControl::SETTING => $stale])
+            ->assertUnprocessable()->assertJsonValidationErrors('subscribe_client_control.exempt_group_ids.0');
+        $this->assertSame([$message], $response->json('errors')['subscribe_client_control.exempt_group_ids.0']);
+        // 即使请求校验先通过，实际写入时也不能重新引入已删除的组。
+        try {
+            SubscriptionClientControl::saveSettings($stale);
+            $this->fail('应拒绝已经删除的组');
+        } catch (\Illuminate\Validation\ValidationException $error) {
+            $this->assertSame([$message], $error->errors()['subscribe_client_control.exempt_group_ids.0']);
+        }
+        $this->assertSame($saved, SubscriptionClientControl::settings());
+    }
+
+    public function test_deleting_group_without_client_control_setting_does_not_create_rules(): void
+    {
+        $group = ServerGroup::forceCreate(['name' => '无规则']);
+        $this->assertSame(200, app(GroupController::class)->drop(Request::create('/', 'POST', ['id' => $group->id]))->getStatusCode());
+        $this->assertDatabaseMissing('v2_settings', ['name' => SubscriptionClientControl::SETTING]);
+        $this->assertSame(SubscriptionClientControl::defaults(), SubscriptionClientControl::settings());
     }
 }

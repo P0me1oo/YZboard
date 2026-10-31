@@ -156,6 +156,7 @@ class ConfigController extends Controller
                 'server_token' => admin_setting('server_token'),
                 'server_pull_interval' => admin_setting('server_pull_interval', 60),
                 'server_push_interval' => admin_setting('server_push_interval', 60),
+                'server_auto_sort_enable' => (bool) admin_setting('server_auto_sort_enable', false),
                 'device_limit_mode' => (int) admin_setting('device_limit_mode', 0),
                 'server_ws_enable' => (bool) admin_setting('server_ws_enable', 1),
                 'server_ws_url' => admin_setting('server_ws_url', ''),
@@ -232,10 +233,6 @@ class ConfigController extends Controller
             $data[SubscriptionProtection::SETTING] = SubscriptionProtection::normalize($data[SubscriptionProtection::SETTING]);
         }
 
-        if (array_key_exists(SubscriptionClientControl::SETTING, $data)) {
-            $data[SubscriptionClientControl::SETTING] = SubscriptionClientControl::normalize($data[SubscriptionClientControl::SETTING]);
-        }
-
         if (array_key_exists(RealityScanService::SETTING, $data)) {
             $input = trim($data[RealityScanService::SETTING] ?? '');
             $data[RealityScanService::SETTING] = $input === '' ? null : implode("\n", RealityScanService::targets($input));
@@ -262,6 +259,10 @@ class ConfigController extends Controller
         ];
 
         foreach ($data as $k => $v) {
+            if ($k === SubscriptionClientControl::SETTING) {
+                SubscriptionClientControl::saveSettings($v);
+                continue;
+            }
             if ($k === SubscriptionProtection::SETTING) {
                 app(\App\Services\SubscriptionRestrictionService::class)->saveSettings($v);
                 continue;

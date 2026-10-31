@@ -17,6 +17,10 @@
 
 ## 本地执行
 
+设备许可的真实 Redis 回归使用 `YZ_TEST_DEVICE_REDIS_PORT`，仅连接已确认的本机专用实例。`DeviceLeaseRedisTest` 使用随机前缀运行生命周期、权限、会话、乱序、缓存丢失和写入失败用例；`DeviceHandoverConcurrencyTest` 提供该变量时使用真实 Redis 锁和缓存运行 8 进程准入。测试只清理本例前缀，不清空 Redis。发布流水线在两套数据库完整回归中均设置该变量。
+
+设备同步解码回归 `DeviceCoordinationRedisTest` 沿用 `YZ_TEST_SUBSCRIPTION_REDIS_PORT`；验证完整设备路径时两个变量指向同一个专用测试实例。
+
 订阅统计的局部检查可运行 `php vendor/bin/phpunit tests/Feature/SubscriptionStatisticsTest.php --do-not-cache-result`。真实 Redis 恢复检查为 `SubscriptionStatisticsRedisTest`，仅通过 `YZ_TEST_SUBSCRIPTION_REDIS_PORT` 连接已确认的本机专用实例，使用随机测试键并在结束后删除；本地未提供实例时会标为跳过。CI 固定使用独立的 Redis `7.4.2`，在两套数据库回归中执行该检查。并发检查 `SubscriptionStatisticsConcurrencyTest` 使用下文 MariaDB 引导入口，只在专用测试库运行。不能把未提供依赖导致的跳过报告为通过。
 
 安装项目测试依赖后，在仓库根目录执行 SQLite 完整测试与资源检查：

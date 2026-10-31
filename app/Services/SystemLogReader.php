@@ -8,8 +8,9 @@ class SystemLogReader
     {
         $date = $filters['date'] ?? now()->toDateString();
         $dates = [];
-        for ($i = 0; $i < 14; $i++) $dates[] = now()->subDays($i)->toDateString();
-        abort_unless(in_array($date, $dates, true), 422, '系统日志仅支持最近 14 天');
+        $days = LogSettings::days('system');
+        for ($i = 0; $i < $days; $i++) $dates[] = now()->subDays($i)->toDateString();
+        abort_unless(in_array($date, $dates, true), 422, "系统日志仅支持最近 {$days} 天");
         $directory = realpath(storage_path('logs'));
         $rows = []; $limited = false;
         foreach (['laravel-' . $date . '.log', 'deprecations-' . $date . '.log', ...( $date === now()->toDateString() ? ['laravel.log'] : [])] as $name) {
@@ -41,6 +42,6 @@ class SystemLogReader
         $total = count($rows);
         return ['list' => array_slice($rows, ($page - 1) * $size, $size), 'page' => $page, 'page_size' => $size,
             'total' => $total, 'last_page' => max(1, (int) ceil($total / $size)), 'date' => $date, 'dates' => $dates,
-            'limited' => $limited, 'retention_days' => 14, 'timezone' => config('app.timezone')];
+            'limited' => $limited, 'retention_days' => $days, 'timezone' => config('app.timezone')];
     }
 }

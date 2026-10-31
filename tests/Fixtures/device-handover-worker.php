@@ -7,6 +7,8 @@ use Illuminate\Contracts\Console\Kernel;
 require dirname(__DIR__, 2) . '/vendor/autoload.php';
 
 [$script, $directory, $index, $mode] = $argv;
+$cached = str_starts_with($mode, 'cached-');
+if ($cached) $mode = substr($mode, 7);
 $app = require dirname(__DIR__, 2) . '/bootstrap/app.php';
 $app->make(Kernel::class)->bootstrap();
 $app['config']->set([
@@ -16,6 +18,10 @@ $app['config']->set([
 ]);
 $app['db']->purge('sqlite');
 $app['cache']->forgetDriver('file');
+if ($port = getenv('YZ_TEST_DEVICE_REDIS_PORT')) {
+    $redis = new \Tests\Support\DeviceRedisCache($app, (int) $port, $directory);
+    $redis->install($app);
+}
 $devices = new class extends DeviceStateService {
     public function getDeviceSources(int $userId): array { return []; }
 };
@@ -32,5 +38,5 @@ $sequence = (int) $index + 1;
 $reply = $service->admit(1, $mode === 'users' ? $sequence : 10, 1, [
     'run' => $run, 'sequence' => $sequence, 'ip' => $mode === 'same' ? '8.8.8.8' : '8.8.8.' . (10 + $sequence),
     'snapshot' => ['run' => $run, 'sequence' => 20 + $sequence, 'pending' => range(1, 8), 'sources' => [], 'retired' => []],
-]);
+]+ ($cached ? ['lease_cache' => 1] : []));
 echo json_encode($reply);

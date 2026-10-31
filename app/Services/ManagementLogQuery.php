@@ -14,7 +14,7 @@ class ManagementLogQuery
         $nodes = Server::query()->get(['id', 'name'])->keyBy('id');
         // 已删除节点仍可查询保留期内的日志，名称取最近入库的一条记录。
         $latest = DB::table('v2_agent_log')->whereNotNull('node_id')
-            ->whereBetween('occurred_at', [now()->subDays(AgentLog::RETENTION_DAYS)->timestamp, now()->timestamp])
+            ->whereBetween('occurred_at', [now()->timestamp - LogSettings::days('agent') * 86400, now()->timestamp])
             ->select('node_id', DB::raw('MAX(id) as latest_id'))->groupBy('node_id');
         $history = DB::table('v2_agent_log as logs')->joinSub($latest, 'latest', function ($join) {
             $join->on('logs.id', '=', 'latest.latest_id');
@@ -53,8 +53,8 @@ class ManagementLogQuery
         abort_if($category === 'agent' && !empty($data['source']) && !in_array($data['source'], ['agent', 'xray', 'singbox']), 422);
         $table = $audit ? 'v2_admin_audit_log' : ($category === 'agent' ? 'v2_agent_log' : 'v2_user_event_log');
         $at = $audit ? 'created_at' : 'occurred_at';
-        $days = $audit ? 90 : ($category === 'agent' ? AgentLog::RETENTION_DAYS : UserEventLog::RETENTION_DAYS);
-        $query = DB::table($table)->where($at, '>=', max(now()->subDays($days)->timestamp, (int) ($data['start_at'] ?? 0)))
+        $days = LogSettings::days($audit ? 'audit' : $category);
+        $query = DB::table($table)->where($at, '>=', max(now()->timestamp - $days * 86400, (int) ($data['start_at'] ?? 0)))
             ->where($at, '<=', (int) ($data['end_at'] ?? now()->timestamp));
         foreach (['node_id', 'machine_id', 'level', 'event'] as $key) {
             if (!$audit && !empty($data[$key]) && ($category === 'agent' ? $key !== 'event' : $key !== 'level')) $query->where($key, $data[$key]);

@@ -58,6 +58,16 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     "keepToken":"留空保留原 Token","offlineThreshold":"离线阈值（秒）","poolOption":"前置池：{{name}}","poolReadFailed":"前置池读取失败，请重试"
   },
   "logs": {
+    "settings": {
+      "title": "日志设置",
+      "description": "设置各类日志是否在面板记录，以及保存天数。",
+      "modules": { "system": "面板系统日志", "audit": "管理员操作日志", "agent": "Agent 日志", "user": "用户日志", "access": "代理访问记录" },
+      "enabled": "记录", "disabled": "不记录", "retention": "保存", "days": "天",
+      "daysLabel": "{{module}}保存天数",
+      "expiry": "可保存 1–365 天，到期自动清理；关闭后历史记录仍会清理。缩短期限会删除超期记录，无法恢复。Agent 本地日志由机器设置控制。",
+      "invalidDays": "保存天数须为 1–365 的整数。", "loadFailed": "日志设置读取失败，请重试。",
+      "saveFailed": "日志设置保存失败，请重试。", "save": "保存设置", "saving": "保存中…", "saved": "已保存"
+    },
     "userName": "用户",
     "userFilter": "用户邮箱或编号",
     "navigation": "日志管理",
@@ -2090,6 +2100,10 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
         "relaxed": "宽松模式",
         "placeholder": "请选择设备限制模式"
       },
+      "server_auto_sort_enable": {
+        "title": "服务器自动排序",
+        "description": "新服务器首次上报并识别出国家/地区后，排到同组同地区的最后一台后面。全部未分组时按地区归位；没有匹配节点时保留创建位置。开启不会重排已有服务器。"
+      },
       "server_ws_enable": {
         "title": "启用 WebSocket 通信",
         "description": "开启后节点将通过 WebSocket 与面板进行实时通信，延迟更低、推送更及时。",
@@ -3733,8 +3747,8 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
       "notesPlaceholder": "关于此服务器的可选备注",
       "isActive": "启用服务器",
       "isActiveDescription": "禁用后 xboard-node 将不再使用此服务器。",
-      "disableLogs": "永久停用运行日志",
-      "disableLogsDescription": "停止 Agent 和核心运行日志，保存后无法重新开启。",
+      "disableLogs": "隐私保护模式",
+      "disableLogsDescription": "加密程序保存的敏感数据，永久停用 Agent 和核心运行日志。保存后无法关闭。",
       "cancel": "取消",
       "submit": "提交",
       "update": "更新"

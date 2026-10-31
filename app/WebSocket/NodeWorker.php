@@ -275,7 +275,7 @@ class NodeWorker
 
         $nodes = ServerService::getMachineNodes($machine);
 
-        $machine->forceFill(['last_seen_at' => now()->timestamp])->saveQuietly();
+        $machine->recordHeartbeat();
         NodeRegistry::addMachine($machineId, $conn);
 
         // 把同一个连接注册到该机器下所有节点

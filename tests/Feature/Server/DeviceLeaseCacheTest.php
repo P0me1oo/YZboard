@@ -1,0 +1,653 @@
+<?php
+
+namespace Tests\Feature\Server;
+
+use App\Models\Server;
+use App\Models\ServerMachine;
+use App\Models\User;
+use App\Services\DeviceHandoverProtocol;
+use App\Services\DeviceHandoverService;
+use App\Services\DeviceStateService;
+use App\Services\MachineTrafficService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Tests\TestCase;
+
+class DeviceLeaseCacheTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private array $nodes = [];
+    private array $sequences = [];
+    private User $user;
+    private DeviceHandoverProtocol $protocol;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        Cache::flush();
+        $this->initializeCache();
+        Carbon::setTestNow('2026-10-28 00:00:00');
+        $this->mock(DeviceStateService::class, fn ($mock) => $mock->shouldReceive('getDeviceSources')->andReturn([]));
+        $this->user = User::create(['email' => 'lease-cache@example.invalid', 'password' => 'unused-lease-cache-test',
+            'uuid' => '44444444-4444-4444-4444-444444444444', 'token' => str_repeat('d', 32), 'group_id' => 1, 'device_limit' => 1,
+            'transfer_enable' => 100000, 'u' => 0, 'd' => 0, 'expired_at' => time() + 2 * 86400, 'banned' => 0]);
+        $this->protocol = app(DeviceHandoverProtocol::class);
+        foreach ([1, 2, 3] as $id) {
+            $this->nodes[$id] = Server::create(['name' => '许可缓存测试', 'type' => Server::TYPE_VMESS,
+                'host' => '127.0.0.1', 'port' => 443, 'server_port' => 443, 'rate' => '1', 'group_ids' => [1], 'enabled' => true]);
+            $this->sequences[$id] = 0;
+            $reply = $this->protocol->handle($this->nodes[$id], 'begin', ['run' => $this->runID($id), 'lease_cache' => 1]);
+            $this->assertSame(1, $reply['lease_cache']);
+        }
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+        parent::tearDown();
+    }
+
+    protected function initializeCache(): void {}
+
+    private function runID(int $node): string { return str_repeat(dechex($node), 32); }
+
+    private function admit(int $node = 1, string $ip = '8.8.8.8'): array
+    {
+        $sequence = ++$this->sequences[$node];
+        return $this->protocol->handle($this->nodes[$node], 'admit', ['run' => $this->runID($node),
+            'sequence' => $sequence, 'user_id' => $this->user->id, 'ip' => $ip, 'lease_cache' => 1,
+            'snapshot' => ['run' => $this->runID($node), 'sequence' => ++$this->sequences[$node],
+                'pending' => [$sequence], 'sources' => [], 'retired' => []]]);
+    }
+
+    private function sync(int $node, array $sources = [], array $retired = []): array
+    {
+        return $this->protocol->handle($this->nodes[$node], 'sync', ['run' => $this->runID($node),
+            'sequence' => ++$this->sequences[$node], 'lease_cache' => 1, 'pending' => [], 'sources' => $sources, 'retired' => $retired]);
+    }
+
+    private function retired(array $lease): array
+    {
+        return ['user_id' => $this->user->id, 'ip' => '8.8.8.8', 'lease' => $lease['lease']];
+    }
+
+    private function active(array $lease): array
+    {
+        return $this->retired($lease) + ['connect_sequence' => 1, 'age_ms' => 0];
+    }
+
+    public function test_idle_sync_never_renews_and_acknowledged_return_frees_last_slot(): void
+    {
+        $first = $this->admit();
+        $this->sync(1, [$this->active($first)]);
+        Carbon::setTestNow(now()->addMinute());
+        $idle = $this->sync(1);
+        $this->assertSame($first['expires_at'], $idle['leases'][0]['expires_at']);
+        $this->assertSame([$first['lease']], array_column($idle['idle'], 'lease'));
+        Carbon::setTestNow(now()->addMinute());
+        $again = $this->sync(1);
+        $this->assertSame($idle['leases'], $again['leases']);
+        $this->sync(1, [], [$this->retired($first)]);
+        $this->assertSame([], Cache::get('device_handover:user:' . $this->user->id)['sources']);
+        $this->assertSame('allowed', $this->admit(2, '1.1.1.1')['status']);
+    }
+
+    public function test_idle_nodes_do_not_receive_new_unsolicited_holders(): void
+    {
+        $first = $this->admit();
+        $this->sync(1, [$this->active($first)]);
+        $this->assertSame([], $this->sync(2)['leases']);
+        $this->assertSame($first['lease'], $this->admit(2)['lease']);
+        $this->sync(1, [], [$this->retired($first)]);
+        $state = Cache::get('device_handover:user:' . $this->user->id);
+        $this->assertCount(1, $state['sources']['8.8.8.8']['holders']);
+        $this->assertSame([], $this->sync(1)['leases']);
+        $this->assertSame('waiting', $this->admit(3, '1.1.1.1')['status']);
+    }
+
+    public function test_large_decoded_state_cannot_hide_revocation_or_missing_authority(): void
+    {
+        $first = $this->admit();
+        $key = 'device_handover:user:' . $this->user->id;
+        $state = Cache::get($key);
+        $state['padding'] = str_repeat('x', 8192);
+        Cache::forever($key, $state);
+        $this->sync(1);
+        $this->sync(1);
+        $state = Cache::get($key);
+        $state['sources']['8.8.8.8']['revoked'] = true;
+        Cache::forever($key, $state);
+        $reply = $this->sync(1, [$this->active($first)]);
+        $this->assertSame([], $reply['leases']);
+        $this->assertSame([$first['lease']], array_column($reply['revoked'], 'lease'));
+        Cache::forget($key);
+        $missing = $this->sync(1, [$this->active($first)]);
+        $this->assertSame([], $missing['leases']);
+        $this->assertSame([$first['lease']], array_column($missing['revoked'], 'lease'));
+        $this->assertSame([], Cache::get($key)['sources']);
+    }
+
+    public function test_return_write_failure_preserves_reservation_and_retry_completes(): void
+    {
+        $first = $this->admit();
+        $key = 'device_handover:user:' . $this->user->id;
+        $before = Cache::get($key);
+        $repository = new class(Cache::getStore()) extends \Illuminate\Cache\Repository {
+            public bool $fail = true;
+            public function put($key, $value, $ttl = null)
+            {
+                if ($this->fail && str_starts_with($key, 'device_handover:user:')) {
+                    $this->fail = false;
+                    return false;
+                }
+                return parent::put($key, $value, $ttl);
+            }
+        };
+        Cache::swap($repository);
+        $request = ['run' => $this->runID(1), 'sequence' => ++$this->sequences[1], 'lease_cache' => 1,
+            'pending' => [], 'sources' => [], 'retired' => [$this->retired($first)]];
+        try {
+            $this->protocol->handle($this->nodes[1], 'sync', $request);
+            $this->fail('归还写入失败不能返回成功');
+        } catch (\RuntimeException $error) {
+            $this->assertSame('设备来源名额写入失败', $error->getMessage());
+        }
+        $this->assertSame($before, Cache::get($key));
+        $this->protocol->handle($this->nodes[1], 'sync', $request);
+        $this->assertSame([], Cache::get($key)['sources']);
+    }
+
+    public function test_old_run_return_is_scoped_to_exact_confirmation_and_cannot_retire_new_run(): void
+    {
+        $old = $this->admit();
+        $this->admit(2);
+        $newRun = str_repeat('f', 32);
+        $this->protocol->handle($this->nodes[1], 'begin', ['run' => $newRun, 'lease_cache' => 1]);
+        $request = ['run' => $newRun, 'sequence' => 1, 'user_id' => $this->user->id,
+            'ip' => '8.8.8.8', 'lease_cache' => 1, 'snapshot' => ['run' => $newRun, 'sequence' => 2,
+                'pending' => [1], 'sources' => [], 'retired' => []]];
+        $this->protocol->handle($this->nodes[1], 'admit', $request);
+        $payload = ['run' => $newRun, 'sequence' => 3, 'lease_cache' => 1, 'pending' => [], 'sources' => [],
+            'retired' => [$this->retired($old) + ['run' => $this->runID(1), 'confirmed_sequence' => $old['confirmed_sequence']]]];
+        $this->protocol->handle($this->nodes[1], 'sync', $payload);
+        $holders = Cache::get('device_handover:user:' . $this->user->id)['sources']['8.8.8.8']['holders'];
+        $this->assertArrayNotHasKey($this->nodes[1]->id . ':' . $this->runID(1), $holders);
+        $this->assertArrayHasKey($this->nodes[1]->id . ':' . $newRun, $holders);
+        $this->assertArrayHasKey($this->nodes[2]->id . ':' . $this->runID(2), $holders);
+        $this->protocol->handle($this->nodes[1], 'sync', $payload);
+        $this->assertSame($holders, Cache::get('device_handover:user:' . $this->user->id)['sources']['8.8.8.8']['holders']);
+    }
+
+    public function test_retirement_of_an_earlier_confirmation_cannot_remove_reverified_holder(): void
+    {
+        $old = $this->admit();
+        Carbon::setTestNow(now()->addSecond());
+        $new = $this->admit();
+        $this->sync(1, [], [$this->retired($old) + ['run' => $this->runID(1), 'confirmed_sequence' => $old['confirmed_sequence']]]);
+        $holder = Cache::get('device_handover:user:' . $this->user->id)['sources']['8.8.8.8']['holders'][$this->nodes[1]->id . ':' . $this->runID(1)];
+        $this->assertSame($new['confirmed_sequence'], $holder['sequence']);
+    }
+
+    public function test_revocation_with_lost_renewal_reply_can_finish_real_close(): void
+    {
+        $first = $this->admit();
+        // 面板已核验活动快照，但该回包丢失，Agent 只知道首次核验编号。
+        $this->sync(1, [$this->active($first)]);
+        $this->assertSame('waiting', $this->admit(2, '1.1.1.1')['status']);
+        $this->sync(1, [], [$this->retired($first) + ['run' => $this->runID(1),
+            'confirmed_sequence' => $first['confirmed_sequence']]]);
+        $this->assertSame('allowed', $this->admit(2, '1.1.1.1')['status']);
+    }
+
+    public function test_permission_revocation_with_lost_reply_retires_only_that_node(): void
+    {
+        $first = $this->admit();
+        $this->admit(2);
+        $this->sync(1, [$this->active($first)]);
+        $this->nodes[1]->forceFill(['group_ids' => [2]])->saveQuietly();
+        $this->sync(1);
+        $this->sync(1, [], [$this->retired($first) + ['run' => $this->runID(1),
+            'confirmed_sequence' => $first['confirmed_sequence']]]);
+        $holders = Cache::get('device_handover:user:' . $this->user->id)['sources']['8.8.8.8']['holders'];
+        $this->assertArrayNotHasKey($this->nodes[1]->id . ':' . $this->runID(1), $holders);
+        $this->assertArrayHasKey($this->nodes[2]->id . ':' . $this->runID(2), $holders);
+    }
+
+    public function test_permission_regrant_cannot_be_removed_by_old_retirement(): void
+    {
+        $old = $this->admit();
+        $this->nodes[1]->forceFill(['group_ids' => [2]])->saveQuietly();
+        $this->sync(1);
+        $this->nodes[1]->forceFill(['group_ids' => [1]])->saveQuietly();
+        $this->assertSame([], $this->sync(1)['leases'], '恢复用户名单不能重新下发已撤销许可');
+        $fresh = $this->admit();
+        $this->sync(1, [], [$this->retired($old) + ['run' => $this->runID(1),
+            'confirmed_sequence' => $old['confirmed_sequence']]]);
+        $holder = Cache::get('device_handover:user:' . $this->user->id)['sources']['8.8.8.8']['holders'][$this->nodes[1]->id . ':' . $this->runID(1)];
+        $this->assertEmpty($holder['revoked'] ?? false);
+        $this->assertSame($fresh['confirmed_sequence'], $holder['sequence']);
+    }
+
+    public function test_late_empty_snapshot_cannot_retire_after_newer_activity_snapshot_was_saved(): void
+    {
+        $first = $this->admit();
+        $old = ['run' => $this->runID(1), 'sequence' => ++$this->sequences[1], 'lease_cache' => 1,
+            'pending' => [], 'sources' => [], 'retired' => [$this->retired($first) +
+                ['run' => $this->runID(1), 'confirmed_sequence' => $first['confirmed_sequence']]]];
+        // 模拟完整快照写入成功，而后面的账号记录写入失败：holder 仍为旧核验。
+        $key = 'device_handover:node:' . $this->nodes[1]->id;
+        $node = Cache::get($key);
+        $node['sequence'] = ++$this->sequences[1];
+        $node['sources'] = [$first['lease'] => $this->active($first) + ['last_new_at' => now()->getTimestampMs()]];
+        Cache::forever($key, $node);
+        $this->protocol->handle($this->nodes[1], 'sync', $old);
+        $source = Cache::get('device_handover:user:' . $this->user->id)['sources']['8.8.8.8'];
+        $this->assertSame($first['lease'], $source['lease']);
+        $this->assertCount(1, $source['holders']);
+        $this->assertCount(1, $source['owners']);
+    }
+
+    public function test_disabled_cached_node_keeps_other_holders_and_expires_at_fixed_deadline(): void
+    {
+        $first = $this->admit();
+        $this->admit(2);
+        $this->nodes[1]->forceFill(['enabled' => false])->saveQuietly();
+        $reply = $this->sync(1);
+        $this->assertSame([], $reply['leases']);
+        $this->assertSame([$first['lease']], array_column($reply['revoked'], 'lease'));
+        $this->sync(2, [], [$this->retired($first)]);
+        $this->assertSame('waiting', $this->admit(3, '1.1.1.1')['status']);
+        Carbon::setTestNow(Carbon::createFromTimestampMs($first['expires_at'] - 1));
+        $this->assertSame('waiting', $this->admit(3, '1.1.1.1')['status']);
+        Carbon::setTestNow(now()->addMillisecond());
+        $this->assertSame('allowed', $this->admit(3, '1.1.1.1')['status']);
+        $this->assertNotContains($this->user->id, Cache::get('device_handover:queue:' . $this->nodes[1]->id, []));
+    }
+
+    public function test_disabled_legacy_owner_is_revoked_but_not_released_by_timeout_or_empty_other_node(): void
+    {
+        $service = app(DeviceHandoverService::class);
+        // 单独建立旧协议会话，模拟没有固定到期保证的历史 owner。
+        Cache::forget('device_handover:node:' . $this->nodes[1]->id);
+        $service->begin($this->nodes[1]->id, $this->runID(1), false);
+        $lease = $service->admit($this->nodes[1]->id, $this->user->id, 1,
+            ['run' => $this->runID(1), 'sequence' => 1, 'ip' => '8.8.8.8']);
+        $service->sync($this->nodes[1]->id, ['run' => $this->runID(1), 'sequence' => 2,
+            'pending' => [], 'sources' => [$this->active($lease)]]);
+        $this->nodes[1]->forceFill(['enabled' => false])->saveQuietly();
+        Carbon::setTestNow(now()->addDays(15));
+        $this->sync(2);
+        $state = Cache::get('device_handover:user:' . $this->user->id);
+        $this->assertNotEmpty($state['sources']['8.8.8.8']['owners']);
+        $reply = $service->sync($this->nodes[1]->id, ['run' => $this->runID(1), 'sequence' => 3,
+            'pending' => [], 'sources' => [$this->active($lease)]]);
+        $this->assertSame([$lease['lease']], array_column($reply['revoked'], 'lease'));
+        $service->sync($this->nodes[1]->id, ['run' => $this->runID(1), 'sequence' => 4, 'pending' => [], 'sources' => []]);
+        $this->assertSame([], Cache::get('device_handover:user:' . $this->user->id)['sources']);
+    }
+
+    public function test_machine_report_timeout_and_recovery_reconfirm_shared_lease_without_changing_identity(): void
+    {
+        $machine = ServerMachine::create(['name' => '许可恢复测试', 'is_active' => true, 'token' => bin2hex(random_bytes(16))]);
+        MachineTrafficService::configure($machine, ['traffic_limit_gb' => 1]);
+        $machine->saveQuietly();
+        $this->nodes[1]->forceFill(['machine_id' => $machine->id])->saveQuietly();
+        $view = MachineTrafficService::view($machine);
+        $report = ['epoch' => $view['epoch'], 'period_start' => $view['period_start'], 'sequence' => 1,
+            'initialized' => true, 'rx' => 0, 'tx' => 0];
+        $this->assertFalse(MachineTrafficService::exchange($machine->id, $report)['blocked']);
+        $first = $this->admit();
+        $this->sync(1);
+        $other = $this->admit(2);
+        Carbon::setTestNow(now()->addSeconds(MachineTrafficService::LEASE_SECONDS));
+        $this->assertTrue(MachineTrafficService::nodeBlocked($this->nodes[1]));
+        $denied = $this->sync(1);
+        $this->assertSame([], $denied['leases']);
+        $this->assertSame([$first['lease']], array_column($denied['revoked'], 'lease'));
+        $this->assertSame($other['lease'], $this->sync(2)['leases'][0]['lease']);
+        // 节点已真实关闭并停用本地许可；另一台仍持有同一个设备名额。
+        $this->sync(1, [], [$this->retired($first)]);
+        $this->assertTrue(MachineTrafficService::exchange($machine->id, $report)['blocked'], '旧报告不能恢复机器权限');
+        $report['sequence']++;
+        $this->assertFalse(MachineTrafficService::exchange($machine->id, $report)['blocked']);
+        $restored = $this->admit(1);
+        $this->assertSame($first['lease'], $restored['lease']);
+        $this->assertSame($this->sequences[1], $restored['confirmed_sequence']);
+        $this->assertSame($other['lease'], $this->sync(2)['leases'][0]['lease']);
+        $state = Cache::get('device_handover:user:' . $this->user->id);
+        $this->assertCount(1, $state['sources']);
+        $this->assertCount(2, $state['sources']['8.8.8.8']['holders']);
+    }
+
+    public function test_permission_recovery_uses_new_verification_for_same_pending_admission(): void
+    {
+        $sequence = ++$this->sequences[1];
+        $request = ['run' => $this->runID(1), 'sequence' => $sequence, 'user_id' => $this->user->id,
+            'ip' => '8.8.8.8', 'lease_cache' => 1, 'snapshot' => ['run' => $this->runID(1),
+                'sequence' => ++$this->sequences[1], 'pending' => [$sequence], 'sources' => [], 'retired' => []]];
+        $first = $this->protocol->handle($this->nodes[1], 'admit', $request);
+        $this->assertSame($request['snapshot']['sequence'], $first['confirmed_sequence']);
+        $this->admit(2);
+        $this->nodes[1]->forceFill(['group_ids' => [2]])->saveQuietly();
+        $blocked = $request['snapshot'];
+        $blocked['sequence'] = ++$this->sequences[1];
+        $denied = $this->protocol->handle($this->nodes[1], 'sync', $blocked + ['lease_cache' => 1]);
+        $this->assertSame([$first['lease']], array_column($denied['revoked'], 'lease'));
+        $this->nodes[1]->forceFill(['group_ids' => [1]])->saveQuietly();
+        Carbon::setTestNow(now()->addSecond());
+        $request['snapshot']['sequence'] = ++$this->sequences[1];
+        $restored = $this->protocol->handle($this->nodes[1], 'admit', $request);
+        $this->assertSame($first['lease'], $restored['lease']);
+        $this->assertSame($request['snapshot']['sequence'], $restored['confirmed_sequence']);
+        $this->assertGreaterThan($first['confirmed_at'], $restored['confirmed_at']);
+        Carbon::setTestNow(now()->addSecond());
+        $repeat = $this->protocol->handle($this->nodes[1], 'admit', $request);
+        $this->assertSame($restored['confirmed_at'], $repeat['confirmed_at']);
+        $this->assertSame($restored['expires_at'], $repeat['expires_at']);
+        $this->assertSame($restored['confirmed_sequence'], $repeat['confirmed_sequence']);
+        $this->sync(1);
+        $this->expectException(\Symfony\Component\HttpKernel\Exception\PreconditionFailedHttpException::class);
+        $this->protocol->handle($this->nodes[1], 'admit', $request);
+    }
+
+    public function test_repeated_and_late_retirement_cannot_remove_new_confirmation_or_other_holder(): void
+    {
+        $first = $this->admit();
+        $this->sync(1);
+        $this->admit(2);
+        $request = ['run' => $this->runID(1), 'sequence' => ++$this->sequences[1], 'lease_cache' => 1,
+            'pending' => [], 'sources' => [], 'retired' => [$this->retired($first)]];
+        $restored = $this->protocol->handle($this->nodes[1], 'sync', $request);
+        $this->assertSame([], $restored['leases']);
+        $this->admit(1);
+        $fresh = $this->sync(1);
+        Carbon::setTestNow(now()->addSecond());
+        foreach (range(1, 2) as $_) {
+            $repeat = $this->protocol->handle($this->nodes[1], 'sync', $request);
+            $this->assertSame($fresh['leases'], $repeat['leases']);
+        }
+        $this->assertSame($first['lease'], $fresh['leases'][0]['lease']);
+        $state = Cache::get('device_handover:user:' . $this->user->id);
+        $this->assertCount(1, $state['sources']);
+        $this->assertCount(2, $state['sources']['8.8.8.8']['holders']);
+    }
+
+    private function redisCache(callable $lookup, ?callable $read = null): void
+    {
+        $backing = Cache::getStore();
+        $prefix = 'lease-read-test:';
+        $connection = \Mockery::mock(\Illuminate\Redis\Connections\Connection::class);
+        $connection->shouldReceive('eval')->andReturnUsing($lookup);
+        $connection->shouldReceive('exists')->andReturnUsing(fn ($key) => (int) ($backing->get(substr($key, strlen($prefix))) !== null));
+        $factory = \Mockery::mock(\Illuminate\Contracts\Redis\Factory::class);
+        $factory->shouldReceive('connection')->with('cache')->andReturn($connection);
+        $store = \Mockery::mock(\Illuminate\Cache\RedisStore::class . '[get,many,put,forever,forget,lock]', [$factory, $prefix, 'cache']);
+        $store->shouldReceive('get')->andReturnUsing(function ($key) use ($backing, $read) {
+            if ($read) $read([$key], false);
+            return $backing->get($key);
+        });
+        $store->shouldReceive('many')->andReturnUsing(function ($keys) use ($backing, $read) {
+            if ($read) $read($keys, true);
+            return $backing->many($keys);
+        });
+        foreach (['put', 'forever', 'forget', 'lock'] as $method) {
+            $store->shouldReceive($method)->andReturnUsing(fn (...$arguments) => $backing->$method(...$arguments));
+        }
+        Cache::swap(new \Illuminate\Cache\Repository($store));
+    }
+
+    public function test_redis_renewal_reads_snapshot_once_and_screens_large_user_list_without_loading_records(): void
+    {
+        $first = $this->admit();
+        $base = $this->sync(1);
+        $users = [];
+        for ($index = 0; $index < 599; $index++) {
+            $row = $this->user->getAttributes();
+            unset($row['id']);
+            $row['email'] = 'lease-bulk-' . $index . '@example.invalid';
+            $row['uuid'] = sprintf('00000000-0000-0000-0000-%012d', $index);
+            $row['token'] = hash('md5', 'lease-bulk-' . $index);
+            $users[] = $row;
+        }
+        foreach (array_chunk($users, 50) as $chunk) User::insert($chunk);
+        $backing = Cache::getStore();
+        $snapshotReads = $lookups = 0;
+        $this->redisCache(function ($script, $count, ...$keys) use ($backing, &$lookups): array {
+            $lookups++;
+            $this->assertLessThanOrEqual(256, $count);
+            $this->assertCount($count, $keys);
+            foreach ($keys as $key) $this->assertStringStartsWith('lease-read-test:device_handover:user:', $key);
+            return array_map(fn ($key) => (int) ($backing->get(substr($key, strlen('lease-read-test:'))) !== null), $keys);
+        }, function ($keys, $bulk) use (&$snapshotReads): void {
+            foreach ($keys as $key) {
+                if ($bulk) $this->assertStringStartsNotWith('device_handover:user:', $key);
+                if (!$bulk && $key === 'device_handover:node:' . $this->nodes[1]->id) $snapshotReads++;
+            }
+        });
+        Carbon::setTestNow(now()->addSecond());
+        $payload = ['run' => $this->runID(1), 'lease_cache' => 1, 'sequence' => ++$this->sequences[1],
+            'unchanged' => true, 'base_sequence' => $base['sequence']];
+        $reply = $this->protocol->handle($this->nodes[1], 'sync', $payload);
+        $this->assertSame(1, $snapshotReads);
+        $this->assertSame(3, $lookups);
+        $this->assertSame([$first['lease']], array_column($reply['leases'], 'lease'));
+        Carbon::setTestNow(now()->addSecond());
+        $repeat = $this->protocol->handle($this->nodes[1], 'sync', $payload);
+        $this->assertSame($reply['leases'], $repeat['leases']);
+    }
+
+    public function test_invalid_redis_presence_response_cannot_confirm_or_extend_license(): void
+    {
+        $this->admit();
+        $base = $this->sync(1);
+        $key = 'device_handover:user:' . $this->user->id;
+        $original = Cache::get($key);
+        $this->redisCache(fn () => ['1']);
+        Carbon::setTestNow(now()->addMinute());
+        try {
+            $this->protocol->handle($this->nodes[1], 'sync', ['run' => $this->runID(1), 'lease_cache' => 1,
+                'sequence' => ++$this->sequences[1], 'unchanged' => true, 'base_sequence' => $base['sequence']]);
+            $this->fail('无效缓存响应不能确认许可');
+        } catch (\RuntimeException $error) {
+            $this->assertSame('设备许可存在状态无效', $error->getMessage());
+        }
+        $this->assertSame($original, Cache::get($key));
+    }
+
+    public function test_partial_snapshot_write_cannot_merge_old_progress_or_confirm_license(): void
+    {
+        $this->admit();
+        $base = $this->sync(1);
+        $key = 'device_handover:node:' . $this->nodes[1]->id;
+        $snapshot = Cache::get($key);
+        $snapshot['sequence'] = ++$this->sequences[1];
+        Cache::forever($key, $snapshot);
+        $progressKey = $key . ':progress';
+        $progress = Cache::get($progressKey);
+        $stateKey = 'device_handover:user:' . $this->user->id;
+        $state = Cache::get($stateKey);
+        try {
+            $this->protocol->handle($this->nodes[1], 'sync', ['run' => $this->runID(1), 'lease_cache' => 1,
+                'sequence' => ++$this->sequences[1], 'unchanged' => true, 'base_sequence' => $base['sequence']]);
+            $this->fail('完整快照与进度不一致时必须要求重新同步');
+        } catch (\Symfony\Component\HttpKernel\Exception\PreconditionFailedHttpException) {
+            $this->assertSame($progress, Cache::get($progressKey));
+            $this->assertSame($state, Cache::get($stateKey));
+        }
+        $this->assertNotEmpty($this->sync(1)['leases']);
+    }
+
+    public function test_unchanged_snapshot_still_checks_ban_expiry_quota_and_node_permissions(): void
+    {
+        $first = $this->admit();
+        $base = $this->sync(1);
+        $original = $this->user->getAttributes();
+        foreach ([['banned' => 1], ['expired_at' => time() - 1], ['u' => 100000]] as $patch) {
+            $this->user->forceFill($patch)->saveQuietly();
+            $reply = $this->protocol->handle($this->nodes[1], 'sync', ['run' => $this->runID(1), 'lease_cache' => 1,
+                'sequence' => ++$this->sequences[1], 'unchanged' => true, 'base_sequence' => $base['sequence']]);
+            $this->assertSame([], $reply['leases']);
+            $this->assertSame($first['lease'], $reply['revoked'][0]['lease']);
+            $this->user->forceFill($original)->saveQuietly();
+        }
+        $this->nodes[1]->forceFill(['group_ids' => [2]])->save();
+        $reply = $this->protocol->handle($this->nodes[1], 'sync', ['run' => $this->runID(1), 'lease_cache' => 1,
+            'sequence' => ++$this->sequences[1], 'unchanged' => true, 'base_sequence' => $base['sequence']]);
+        $this->assertSame([], $reply['leases']);
+        $this->assertSame($first['lease'], $reply['revoked'][0]['lease']);
+    }
+
+    public function test_same_account_and_ip_are_synced_to_permitted_nodes_as_one_slot(): void
+    {
+        $first = $this->admit();
+        $this->assertSame(DeviceHandoverService::LEASE_GRACE_MS, $first['expires_at'] - $first['confirmed_at']);
+        $this->assertSame([], $this->sync(2)['leases']);
+        $again = $this->admit(2);
+        $synced = $this->sync(2);
+        $this->assertSame($first['lease'], $synced['leases'][0]['lease']);
+        $this->assertSame($first['lease'], $again['lease']);
+        $state = Cache::get('device_handover:user:' . $this->user->id);
+        $this->assertCount(1, $state['sources']);
+        $this->assertCount(2, $state['sources']['8.8.8.8']['holders']);
+    }
+
+    public function test_idle_and_disconnected_holders_reserve_slot_until_last_expiry(): void
+    {
+        $first = $this->admit();
+        $this->sync(1);
+        Carbon::setTestNow(now()->addMinutes(10));
+        $second = $this->admit(2);
+        $this->assertSame('waiting', $this->admit(3, '1.1.1.1')['status']);
+        Carbon::setTestNow(Carbon::createFromTimestampMs($first['expires_at']));
+        $this->assertSame('waiting', $this->admit(3, '1.1.1.1')['status']);
+        Carbon::setTestNow(Carbon::createFromTimestampMs($second['expires_at'] - 1));
+        $this->assertSame('waiting', $this->admit(3, '1.1.1.1')['status']);
+        Carbon::setTestNow(now()->addMillisecond());
+        $this->assertSame('allowed', $this->admit(3, '1.1.1.1')['status']);
+        $this->assertCount(1, Cache::get('device_handover:user:' . $this->user->id)['sources']);
+    }
+
+    public function test_repeated_sync_does_not_extend_confirmation_but_new_verified_sync_does(): void
+    {
+        $lease = $this->admit();
+        $first = $this->sync(1, [$this->active($lease)]);
+        Carbon::setTestNow(now()->addMinutes(20));
+        $repeat = $this->protocol->handle($this->nodes[1], 'sync', ['run' => $this->runID(1), 'lease_cache' => 1,
+            'sequence' => $first['sequence'], 'pending' => [], 'sources' => [$this->active($lease)], 'retired' => []]);
+        $this->assertSame($first['leases'], $repeat['leases']);
+        $renewed = $this->protocol->handle($this->nodes[1], 'sync', ['run' => $this->runID(1), 'lease_cache' => 1,
+            'sequence' => ++$this->sequences[1], 'unchanged' => true, 'base_sequence' => $first['sequence']]);
+        $this->assertSame(now()->getTimestampMs(), $renewed['leases'][0]['confirmed_at']);
+        $this->assertGreaterThan($first['leases'][0]['expires_at'], $renewed['leases'][0]['expires_at']);
+    }
+
+    public function test_revoked_license_waits_for_every_holder_to_retire_and_never_renews(): void
+    {
+        $first = $this->admit();
+        $this->sync(1);
+        $this->admit(2);
+        $this->assertSame('waiting', $this->admit(3, '1.1.1.1')['status']);
+        $reply = $this->sync(1);
+        $this->assertSame([], $reply['leases']);
+        $this->assertSame($first['lease'], $reply['revoked'][0]['lease']);
+        $this->sync(1, [], [$this->retired($first)]);
+        $this->assertSame('waiting', $this->admit(3, '1.1.1.1')['status']);
+        $this->assertSame([], $this->sync(2)['leases']);
+        $this->sync(2, [], [$this->retired($first)]);
+        $this->assertSame('allowed', $this->admit(3, '1.1.1.1')['status']);
+        $recovered = $this->sync(1);
+        $this->assertNotContains($first['lease'], array_column($recovered['leases'], 'lease'));
+    }
+
+    public function test_banned_user_and_removed_node_permission_cannot_renew_cached_license(): void
+    {
+        $first = $this->admit();
+        $this->admit(2);
+        $this->nodes[2]->forceFill(['group_ids' => [2]])->save();
+        $reply = $this->sync(2);
+        $this->assertSame([], $reply['leases']);
+        $this->assertSame($first['lease'], $reply['revoked'][0]['lease']);
+        $this->user->forceFill(['banned' => 1])->saveQuietly();
+        $reply = $this->sync(1);
+        $this->assertSame([], $reply['leases']);
+        $this->assertSame($first['lease'], $reply['revoked'][0]['lease']);
+    }
+
+    public function test_expired_license_removes_idle_account_from_node_queue(): void
+    {
+        $first = $this->admit();
+        $snapshot = $this->sync(1);
+        $key = 'device_handover:queue:' . $this->nodes[1]->id;
+        $this->assertContains($this->user->id, Cache::get($key, []));
+        Carbon::setTestNow(Carbon::createFromTimestampMs($first['expires_at']));
+        $reply = $this->protocol->handle($this->nodes[1], 'sync', ['run' => $this->runID(1), 'lease_cache' => 1,
+            'sequence' => ++$this->sequences[1], 'unchanged' => true, 'base_sequence' => $snapshot['sequence']]);
+        $this->assertSame([], $reply['leases']);
+        $this->assertSame([], $reply['revoked']);
+        $this->assertSame([], Cache::get('device_handover:user:' . $this->user->id)['sources']);
+        $this->assertNotContains($this->user->id, Cache::get($key, []));
+        $this->sync(1);
+        $this->assertNotContains($this->user->id, Cache::get($key, []));
+        $this->assertSame('allowed', $this->admit()['status']);
+        $this->assertContains($this->user->id, Cache::get($key, []));
+    }
+
+    public function test_queue_entry_without_coordination_record_is_removed(): void
+    {
+        $this->admit();
+        $key = 'device_handover:queue:' . $this->nodes[1]->id;
+        $this->assertContains($this->user->id, Cache::get($key, []));
+        Cache::forget('device_handover:user:' . $this->user->id);
+        // 已失去节点权限的旧账号也必须清理，不能依赖当前可用账号列表。
+        $this->nodes[1]->forceFill(['group_ids' => [2]])->save();
+        $reply = $this->sync(1);
+        $this->assertSame([], $reply['leases']);
+        $this->assertSame([], $reply['revoked']);
+        $this->assertNotContains($this->user->id, Cache::get($key, []));
+    }
+
+    public function test_revocation_keeps_queue_until_local_holder_retires(): void
+    {
+        $first = $this->admit();
+        $this->admit(2);
+        $key = 'device_handover:queue:' . $this->nodes[1]->id;
+        $this->assertSame('waiting', $this->admit(3, '1.1.1.1')['status']);
+        $reply = $this->sync(1);
+        $this->assertSame($first['lease'], $reply['revoked'][0]['lease']);
+        $this->assertContains($this->user->id, Cache::get($key, []));
+        $this->sync(1, [], [$this->retired($first)]);
+        $this->assertNotContains($this->user->id, Cache::get($key, []));
+        $this->assertContains($this->user->id, Cache::get('device_handover:queue:' . $this->nodes[2]->id, []));
+        $this->assertSame($first['lease'], $this->sync(2)['revoked'][0]['lease']);
+    }
+
+    public function test_unknown_report_keeps_queue_until_node_reports_no_sources(): void
+    {
+        $first = $this->admit();
+        $key = 'device_handover:queue:' . $this->nodes[1]->id;
+        Cache::forget('device_handover:user:' . $this->user->id);
+        $reply = $this->sync(1, [['user_id' => $this->user->id, 'ip' => '8.8.8.8', 'lease' => $first['lease'],
+            'connect_sequence' => 1, 'age_ms' => 0]]);
+        $this->assertSame($first['lease'], $reply['revoked'][0]['lease']);
+        $this->assertContains($this->user->id, Cache::get($key, []));
+        $this->sync(1);
+        $this->assertNotContains($this->user->id, Cache::get($key, []));
+    }
+
+    public function test_node_restart_and_unknown_report_do_not_recreate_authoritative_license(): void
+    {
+        $first = $this->admit();
+        $this->sync(1);
+        $this->assertSame('waiting', $this->admit(3, '1.1.1.1')['status']);
+        app(DeviceHandoverService::class)->begin((int) $this->nodes[1]->id, str_repeat('f', 32), true);
+        $this->assertSame('waiting', $this->admit(3, '1.1.1.1')['status'], '换代不能提前释放离线缓存占位');
+        Carbon::setTestNow(Carbon::createFromTimestampMs($first['expires_at']));
+        $this->assertSame('allowed', $this->admit(3, '1.1.1.1')['status']);
+        $reply = $this->sync(2, [['user_id' => $this->user->id, 'ip' => '8.8.8.8', 'lease' => $first['lease'],
+            'connect_sequence' => 1, 'age_ms' => 0]]);
+        $this->assertNotContains($first['lease'], array_column($reply['leases'], 'lease'));
+        $this->assertSame($first['lease'], $reply['revoked'][0]['lease']);
+    }
+}

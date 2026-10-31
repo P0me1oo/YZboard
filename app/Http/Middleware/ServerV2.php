@@ -90,7 +90,7 @@ class ServerV2
             $request->attributes->set('node_info', $serverInfo);
         }
 
-        $machine->forceFill(['last_seen_at' => now()->timestamp])->saveQuietly();
+        $machine->recordHeartbeat();
 
         $request->attributes->set('machine_info', $machine);
     }

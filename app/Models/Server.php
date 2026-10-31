@@ -139,6 +139,7 @@ class Server extends Model
     protected $table = 'v2_server';
 
     protected $guarded = ['id'];
+    protected $hidden = ['auto_sort_pending'];
     protected $attributes = ['accept_proxy_protocol' => false, 'auto_firewall' => true];
     protected $casts = [
         'group_ids' => 'array',
@@ -155,6 +156,7 @@ class Server extends Model
         'enabled' => 'boolean',
         'accept_proxy_protocol' => 'boolean',
         'auto_firewall' => 'boolean',
+        'auto_sort_pending' => 'boolean',
         'created_at' => 'timestamp',
         'updated_at' => 'timestamp',
         'rate_time_ranges' => 'array',
@@ -386,6 +388,7 @@ class Server extends Model
         // 路由编号由面板自动分配，管理端无需填写；新建节点（含复制）始终获得独立编号。
         static::creating(function (self $server) {
             $server->vless_route = ServerRelayService::allocateRouteId();
+            $server->auto_sort_pending = (bool) admin_setting('server_auto_sort_enable', false);
         });
     }
 

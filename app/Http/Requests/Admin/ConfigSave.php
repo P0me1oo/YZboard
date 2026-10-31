@@ -70,6 +70,7 @@ class ConfigSave extends FormRequest
         'server_token' => 'nullable|min:16',
         'server_pull_interval' => 'integer',
         'server_push_interval' => 'integer',
+        'server_auto_sort_enable' => 'sometimes|boolean',
         'device_limit_mode' => 'integer',
         'server_ws_enable' => 'boolean',
         'server_ws_url' => 'nullable|url',
@@ -209,6 +210,7 @@ class ConfigSave extends FormRequest
         // illiteracy prompt
         return [
             'app_url.url' => '站点URL格式不正确，必须携带http(s)://',
+            'subscribe_client_control.exempt_group_ids.*.exists' => '豁免权限组 #:input 已删除或不存在，请移除后重试。',
             'subscribe_url.url' => '订阅URL格式不正确，必须携带http(s)://',
             'server_token.min' => '通讯密钥长度必须大于16位',
             'tos_url.url' => '服务条款URL格式不正确，必须携带http(s)://',

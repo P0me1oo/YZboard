@@ -10,6 +10,28 @@ use Illuminate\Support\Facades\Cache;
 
 class Kernel extends ConsoleKernel
 {
+    /** 插件先登记命令，真正调用 Artisan 时再装配控制台应用。 */
+    private array $pendingPluginCommands = [];
+
+    public function registerPluginCommand(\Symfony\Component\Console\Command\Command $command): void
+    {
+        // 无名称等无效命令仍在插件初始化时走原校验及异常处理。
+        if ($this->artisan !== null || !$command->getName()) {
+            $this->registerCommand($command);
+            return;
+        }
+        $this->pendingPluginCommands[] = $command;
+    }
+
+    protected function getArtisan()
+    {
+        $artisan = parent::getArtisan();
+        $commands = $this->pendingPluginCommands;
+        $this->pendingPluginCommands = [];
+        foreach ($commands as $command) $artisan->add($command);
+        return $artisan;
+    }
+
     /**
      * The Artisan commands provided by your application.
      *
@@ -50,6 +72,7 @@ class Kernel extends ConsoleKernel
         $schedule->command('inbound-ip:refresh')->everyMinute()->onOneServer()->withoutOverlapping(5)->runInBackground();
         $schedule->command('access-log:prune')->everyFiveMinutes()->onOneServer()->withoutOverlapping(10)->runInBackground();
         $schedule->command('management-log:prune')->everyFiveMinutes()->onOneServer()->withoutOverlapping(10)->runInBackground();
+        $schedule->command('management-log:prune --resume')->everyMinute()->onOneServer()->withoutOverlapping(10)->runInBackground();
         $schedule->job(new \App\Jobs\FlushSubscriptionStatistics())->everyMinute()->onOneServer();
         $schedule->command('subscription-statistics:maintain')->everyFiveMinutes()->onOneServer()->withoutOverlapping(10)->runInBackground();
         $schedule->command('telegram-bot:prune-updates')->daily()->onOneServer()->withoutOverlapping(10);

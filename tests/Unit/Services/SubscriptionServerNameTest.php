@@ -8,6 +8,16 @@ use Tests\TestCase;
 
 class SubscriptionServerNameTest extends TestCase
 {
+    public function test_country_detection_includes_flags_and_respects_first_country(): void
+    {
+        $hk = mb_chr(0x1F1ED) . mb_chr(0x1F1F0);
+        $this->assertSame('HK', SubscriptionServerName::country($hk . ' 01'));
+        $this->assertSame('JP', SubscriptionServerName::country('日本 ' . $hk));
+        $this->assertSame('HK', SubscriptionServerName::country($hk . ' 日本'));
+        $this->assertNull(SubscriptionServerName::country('亚洲 01'));
+        $this->assertNull(SubscriptionServerName::country('中国电信 CN2'));
+    }
+
     public static function countries(): array
     {
         return [

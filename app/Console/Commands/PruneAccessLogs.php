@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 class PruneAccessLogs extends Command
 {
     protected $signature = 'access-log:prune';
-    protected $description = '清理超过 7 天的代理访问记录';
+    protected $description = '按保存天数清理到期的代理访问记录';
 
     public function handle(ProxyAccessLog $logs): int
     {

@@ -27,7 +27,8 @@ class AgentLog
         ])->validate();
         if (!array_is_list($data['records'])) throw \Illuminate\Validation\ValidationException::withMessages(['records' => '日志必须为列表']);
         $machine ??= $node?->machine_id ? ServerMachine::find($node->machine_id) : null;
-        if (AgentLogPolicy::disabled($machine, $node)) {
+        [$enabled, $cutoff] = LogSettings::recording('agent');
+        if (!$enabled || AgentLogPolicy::disabled($machine, $node)) {
             // 确认并丢弃旧 Agent 或在途批次，不重新入库或触发日志通知。
             return ['batch_id' => $data['batch_id']];
         }
@@ -44,7 +45,9 @@ class AgentLog
                 if (!Server::where('id', $nodeId)->exists()) continue;
                 abort(403, '日志节点不属于上报身份');
             }
-            if ($record['occurred_at'] < now()->subDays(self::RETENTION_DAYS)->timestamp) continue;
+            if ($record['occurred_at'] < $cutoff) continue;
+            // 保留原批次下标参与防重；普通日志也正常确认，避免节点反复补报。
+            if (!in_array($record['level'], ['warn', 'error', 'fatal'], true)) continue;
             $rows[] = [
                 'event_key' => hash('sha256', $owner . '|' . $data['batch_id'] . '|' . $index),
                 'machine_id' => $machine?->id, 'machine_name' => $machine?->name,
@@ -54,6 +57,7 @@ class AgentLog
                 'message' => LogSanitizer::text($record['message']), 'occurred_at' => $record['occurred_at'],
             ];
         }
+        if ($rows === []) return ['batch_id' => $data['batch_id']];
         DB::transaction(function () use ($rows) {
             $ordinary = array_values(array_filter($rows, fn ($row) => $row['event'] === null));
             foreach (array_chunk($ordinary, 100) as $chunk) DB::table('v2_agent_log')->insertOrIgnore($chunk);

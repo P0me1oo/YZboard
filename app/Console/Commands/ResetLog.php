@@ -78,6 +78,7 @@ class ResetLog extends Command
         $hourCutoff = \App\Services\TrafficStatisticsRetention::hourlyStart()->timestamp;
         $today = \App\Services\TrafficStatisticsRetention::today()->timestamp;
         $deleted = 0;
+        $auditCutoff = now()->timestamp - \App\Services\LogSettings::days('audit') * 86400;
         $complete = false;
         for ($round = 0; $round < $batches; $round++) {
             $roundDeleted = 0;
@@ -91,7 +92,7 @@ class ResetLog extends Command
             $roundDeleted += $this->deleteIds('v2_stat_route_minute', 'id', fn ($q) => $q->where('record_at', '<', $today), $size);
             $roundDeleted += $this->deleteOrphanIps($size);
             $roundDeleted += $this->deleteOldNames($cutoff, $size);
-            $roundDeleted += $this->deleteIds('v2_admin_audit_log', 'id', fn ($q) => $q->where('created_at', '<', strtotime('-3 month', time())), $size);
+            $roundDeleted += $this->deleteIds('v2_admin_audit_log', 'id', fn ($q) => $q->where('created_at', '<', $auditCutoff), $size);
             $deleted += $roundDeleted;
             if ($roundDeleted === 0) {
                 // 只有完整检查一轮且没有到期记录，才停止续跑。

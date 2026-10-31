@@ -21,20 +21,25 @@ return [
         ],
 
         'single' => [
-            'driver' => 'single',
+            'driver' => 'daily',
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
+            'days' => 0,
+            'tap' => [App\Logging\ApplyLogSettings::class],
         ],
 
         'daily' => [
             'driver' => 'daily',
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
-            'days' => 14,
+            // 到期文件由调度器按设置清理，避免按文件数量提前删除。
+            'days' => 0,
+            'tap' => [App\Logging\ApplyLogSettings::class],
         ],
 
         'stderr' => [
             'driver' => 'monolog',
+            'tap' => [App\Logging\ApplyLogSettings::class],
             'level' => env('LOG_LEVEL', 'debug'),
             'handler' => StreamHandler::class,
             'formatter' => env('LOG_STDERR_FORMATTER'),
@@ -45,11 +50,13 @@ return [
 
         'syslog' => [
             'driver' => 'syslog',
+            'tap' => [App\Logging\ApplyLogSettings::class],
             'level' => env('LOG_LEVEL', 'debug'),
         ],
 
         'errorlog' => [
             'driver' => 'errorlog',
+            'tap' => [App\Logging\ApplyLogSettings::class],
             'level' => env('LOG_LEVEL', 'debug'),
         ],
 
@@ -57,7 +64,8 @@ return [
             'driver' => 'daily',
             'path' => storage_path('logs/deprecations.log'),
             'level' => 'debug',
-            'days' => 14,
+            'days' => 0,
+            'tap' => [App\Logging\ApplyLogSettings::class],
         ],
     ],
 

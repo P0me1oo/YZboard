@@ -305,6 +305,24 @@ class TelegramBotTest extends TestCase
         }
     }
 
+    public function test_delivery_error_classification_ignores_keywords_inside_credentials(): void
+    {
+        $this->asAdmin();
+        $this->remoteUrl = self::SITE . ConfigService::WEBHOOK_PATH;
+        $this->secret = str_repeat('sSlDnS', 8);
+        $this->token = self::BOT_ID . ':' . str_repeat('TlS', 11) . 'aa';
+        TelegramBotConfig::findOrFail(1)->update(['token' => $this->token, 'webhook_secret' => $this->secret]);
+        foreach (['Failed to resolve host' => '域名解析失败', 'Connection timed out' => '超时',
+            'Connection refused' => '连接被拒绝', 'Unrecognized failure' => '面板入口和服务日志'] as $remote => $expected) {
+            $this->webhookInfo = ['last_error_message' => $remote . ' ' . $this->secret . ' ' . $this->token];
+            $response = $this->postJson($this->adminPath('check'))->assertOk();
+            $this->assertStringContainsString($expected, $response->json('data.last_error'));
+            $this->assertStringNotContainsString($this->secret, $response->getContent());
+            $this->assertStringNotContainsString($this->token, $response->getContent());
+            $this->assertSame($response->json('data.last_error'), TelegramBotConfig::first()->last_error);
+        }
+    }
+
     public function test_received_messages_clear_historical_errors_only_when_no_messages_are_pending(): void
     {
         $this->asAdmin();

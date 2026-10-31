@@ -81,9 +81,9 @@ class DatabaseMaintenance
     public function preview(array $targets, int $adminId): array
     {
         $now = now();
-        $cutoffs = ['access' => $now->timestamp - ProxyAccessLog::RETENTION_DAYS * 86400,
+        $cutoffs = ['access' => $now->timestamp - LogSettings::days('access') * 86400,
             'machine' => $now->copy()->subHours(24)->timestamp,
-            'audit' => strtotime('-3 month', $now->timestamp),
+            'audit' => $now->timestamp - LogSettings::days('audit') * 86400,
             'telegram' => $now->timestamp - 7 * 86400];
         $items = [];
         foreach ($targets as $key) {
@@ -144,6 +144,10 @@ class DatabaseMaintenance
     private function query(array $item): Builder
     {
         [$table, $column] = self::TARGETS[$item['target']];
+        // 预览后延长保存期限时，旧预览不能删除新策略仍需保留的记录。
+        if (in_array($item['target'], ['access', 'audit'], true)) {
+            $item['cutoff'] = min($item['cutoff'], now()->timestamp - LogSettings::days($item['target']) * 86400);
+        }
         return DB::table($table)->where($column, '<', $item['cutoff'])->where('id', '<=', $item['max_id']);
     }
 

@@ -12,19 +12,26 @@ class DeviceHandoverConcurrencyTest extends TestCase
 {
     public function test_parallel_combined_admissions_preserve_limits_and_deduplicate_sources(): void
     {
-        foreach (['different', 'same', 'users'] as $mode) {
+        foreach (['different', 'same', 'users', 'cached-different', 'cached-same', 'cached-users'] as $mode) {
+            $cached = str_starts_with($mode, 'cached-');
+            $kind = $cached ? substr($mode, 7) : $mode;
             $directory = (getenv('YZ_TEST_TEMP_DIR') ?: storage_path('framework/testing')) . '/device-concurrency-' . bin2hex(random_bytes(8));
             mkdir($directory, 0700, true);
             $processes = [];
             $connection = new \PDO('sqlite:' . $directory . '/database.sqlite');
-            $connection->exec('CREATE TABLE v2_server (id INTEGER PRIMARY KEY)');
-            $connection->exec('INSERT INTO v2_server VALUES (1)');
+            $connection->exec('CREATE TABLE v2_server (id INTEGER PRIMARY KEY, enabled INTEGER NOT NULL)');
+            $connection->exec('INSERT INTO v2_server VALUES (1, 1)');
             $connection = null;
             config(['cache.stores.device_concurrency' => ['driver' => 'file', 'path' => $directory . '/cache', 'lock_path' => $directory . '/locks'],
                 'cache.default' => 'device_concurrency']);
             app('cache')->forgetDriver('device_concurrency');
+            $redis = null;
+            if ($port = getenv('YZ_TEST_DEVICE_REDIS_PORT')) {
+                $redis = new \Tests\Support\DeviceRedisCache($this->app, (int) $port, $directory);
+                $redis->install($this->app);
+            }
             $devices = new class extends DeviceStateService { public function getDeviceSources(int $userId): array { return []; } };
-            (new DeviceHandoverService($devices))->begin(1, str_repeat('a', 32));
+            (new DeviceHandoverService($devices))->begin(1, str_repeat('a', 32), $cached);
             try {
                 foreach (range(0, 7) as $index) {
                     $process = new Process([PHP_BINARY, base_path('tests/Fixtures/device-handover-worker.php'), $directory, (string) $index, $mode],
@@ -51,14 +58,24 @@ class DeviceHandoverConcurrencyTest extends TestCase
                     if ($reply['status'] === 'allowed') $grants[] = $reply['lease'];
                     else $this->assertContains($reply['status'], ['waiting', 'denied']);
                 }
-                $this->assertCount($mode === 'different' ? 1 : 8, $grants);
-                if ($mode === 'same') $this->assertCount(1, array_unique($grants));
+                $this->assertCount($kind === 'different' ? 1 : 8, $grants);
+                if ($kind === 'same') $this->assertCount(1, array_unique($grants));
                 $state = Cache::get('device_handover:node:1');
                 $this->assertSame(28, $state['sequence']);
                 $this->assertCount(8, $state['pending']);
-                if ($mode !== 'users') $this->assertCount(1, Cache::get('device_handover:user:10')['sources']);
+                if ($kind !== 'users') $this->assertCount(1, Cache::get('device_handover:user:10')['sources']);
+                if ($cached) {
+                    foreach ($kind === 'users' ? range(1, 8) : [10] as $id) {
+                        foreach (Cache::get('device_handover:user:' . $id)['sources'] as $source) {
+                            $this->assertCount(1, $source['holders'], '并发申请不能遗漏或重复缓存占位');
+                        }
+                    }
+                }
             } finally {
                 foreach ($processes as $process) if ($process->isRunning()) $process->stop();
+                $redis?->close();
+                Cache::clearResolvedInstance('cache');
+                $this->app->forgetInstance('cache');
                 config(['cache.default' => 'array']);
                 app('cache')->forgetDriver('device_concurrency');
                 $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS), \RecursiveIteratorIterator::CHILD_FIRST);

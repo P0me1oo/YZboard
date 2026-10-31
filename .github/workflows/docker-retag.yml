@@ -3,6 +3,11 @@ name: Retag existing YZboard image
 on:
   workflow_dispatch:
     inputs:
+      confirm_retag:
+        description: "确认已获得 Docker 镜像标签更新授权"
+        required: true
+        default: false
+        type: boolean
       source_tag:
         description: "现有不可变镜像标签，例如 1.5.0-1ea82ab"
         required: true
@@ -23,6 +28,7 @@ env:
 jobs:
   retag:
     name: Verify and retag existing manifest
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_retag }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

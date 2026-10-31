@@ -1,11 +1,13 @@
 name: Build and publish YZboard image
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
+      publish_image:
+        description: "确认已获得 Docker 镜像发布授权"
+        required: true
+        default: false
+        type: boolean
       source_ref:
         description: "固定来源：完整 commit SHA 或 Git Tag，禁止填写分支名"
         required: true
@@ -16,7 +18,7 @@ on:
         default: true
         type: boolean
       publish_latest:
-        description: "手动发布时同时更新生产 Compose 使用的 latest"
+        description: "同时更新镜像 latest 标签"
         required: true
         default: false
         type: boolean
@@ -31,6 +33,7 @@ concurrency:
 jobs:
   tests:
     name: 发布前完整回归
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_image }}
     uses: ./.github/workflows/tests.yml
     with:
       source_ref: ${{ github.event_name == 'workflow_dispatch' && inputs.source_ref || github.sha }}
@@ -39,6 +42,7 @@ jobs:
 
   build:
     name: Build linux/amd64 and linux/arm64
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_image }}
     needs: tests
     runs-on: ubuntu-latest
     permissions:
@@ -138,8 +142,8 @@ jobs:
           flavor: latest=false
           tags: |
             type=raw,value=${{ steps.release.outputs.immutable_tag }}
-            type=raw,value=${{ steps.release.outputs.app_version }},enable=${{ github.event_name == 'push' || inputs.publish_version_alias }}
-            type=raw,value=latest,enable=${{ github.event_name == 'push' || inputs.publish_latest }}
+            type=raw,value=${{ steps.release.outputs.app_version }},enable=${{ inputs.publish_version_alias }}
+            type=raw,value=latest,enable=${{ inputs.publish_latest }}
           labels: |
             org.opencontainers.image.title=YZboard
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}

@@ -5,6 +5,9 @@ namespace App\Services;
 use Illuminate\Cache\RedisStore;
 use Illuminate\Cache\CacheManager;
 use Illuminate\Cache\Repository;
+use Illuminate\Cache\Events\CacheHit;
+use Illuminate\Cache\Events\CacheMissed;
+use Illuminate\Cache\Events\RetrievingKey;
 use Illuminate\Redis\Connections\PhpRedisConnection;
 use Illuminate\Support\Facades\Cache;
 
@@ -28,10 +31,14 @@ class DeviceCoordinationStateReader
         if (get_class($connection) !== PhpRedisConnection::class || $connection->serialized() || $connection->compressed()) {
             return Cache::get($key);
         }
+        $events = $repository->getEventDispatcher();
+        $storeName = $repository->getName();
+        $events?->dispatch(new RetrievingKey($storeName, $key));
         $raw = $connection->get($store->getPrefix() . $key);
         $identity = $store->getPrefix() . $key;
         if ($raw === null) {
             $this->forget($identity);
+            $events?->dispatch(new CacheMissed($storeName, $key));
             return null;
         }
         if (!is_string($raw)) throw new \RuntimeException('设备协调状态响应无效');
@@ -40,6 +47,7 @@ class DeviceCoordinationStateReader
             // 移到末尾；返回数组按值隔离，调用方不能修改备忘中的权限状态。
             unset($this->entries[$identity]);
             $this->entries[$identity] = $entry;
+            $events?->dispatch(new CacheHit($storeName, $key, $entry['value']));
             return $entry['value'];
         }
         $this->forget($identity);
@@ -52,6 +60,7 @@ class DeviceCoordinationStateReader
             $this->entries[$identity] = ['raw' => $raw, 'value' => $value, 'bytes' => $length];
             $this->bytes += $length;
         }
+        $events?->dispatch(new CacheHit($storeName, $key, $value));
         return $value;
     }
 

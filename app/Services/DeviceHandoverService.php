@@ -494,7 +494,9 @@ class DeviceHandoverService
             if (isset($users[$userId]) === $add) return;
             if ($add) $users[$userId] = true;
             else unset($users[$userId]);
-            Cache::forever($key, array_keys($users));
+            if (!Cache::forever($key, array_keys($users))) {
+                throw new \RuntimeException('设备同步队列写入失败');
+            }
         });
     }
 

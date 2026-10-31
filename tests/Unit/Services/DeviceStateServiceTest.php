@@ -9,6 +9,75 @@ use Tests\TestCase;
 
 class DeviceStateServiceTest extends TestCase
 {
+    public function test_node_snapshot_batches_reads_and_preserves_node_and_expiry_filtering(): void
+    {
+        $now = time();
+        Redis::shouldReceive('exists')->once()->with('node_devices_seen:1')->andReturn(1);
+        Redis::shouldReceive('smembers')->once()->with('node_devices:1')->andReturn(['15', '16']);
+        Redis::shouldReceive('pipeline')->once()->andReturnUsing(function ($callback) use ($now): array {
+            $pipe = \Mockery::mock();
+            $pipe->shouldReceive('hgetall')->once()->with('user_devices:15');
+            $pipe->shouldReceive('hgetall')->once()->with('user_devices:16');
+            $callback($pipe);
+            return [
+                ['1:8.8.8.8' => $now, '2:1.1.1.1' => $now, '1:8.8.4.4' => $now - 301],
+                ['1:2001:4860:4860::8888' => $now, '2:9.9.9.9' => $now],
+            ];
+        });
+        $this->assertSame([15 => ['8.8.8.8'], 16 => ['2001:4860:4860::8888']],
+            (new DeviceStateService())->getNodeDevices(1));
+    }
+
+    public function test_node_snapshot_limits_each_batch_and_rereads_on_the_next_call(): void
+    {
+        $userIds = range(1, 257);
+        $sizes = [];
+        Redis::shouldReceive('exists')->twice()->andReturn(1);
+        Redis::shouldReceive('smembers')->twice()->andReturn($userIds);
+        Redis::shouldReceive('pipeline')->times(4)->andReturnUsing(function ($callback) use (&$sizes): array {
+            $commands = [];
+            $pipe = \Mockery::mock();
+            $pipe->shouldReceive('hgetall')->andReturnUsing(function ($key) use (&$commands): void {
+                $commands[] = $key;
+            });
+            $callback($pipe);
+            $sizes[] = count($commands);
+            return array_fill(0, count($commands), count($sizes) <= 2 ? ['1:8.8.8.8' => time()] : []);
+        });
+        $service = new DeviceStateService();
+        $this->assertCount(257, $service->getNodeDevices(1));
+        $this->assertSame([], $service->getNodeDevices(1));
+        $this->assertSame([256, 1, 256, 1], $sizes);
+    }
+
+    public function test_node_snapshot_rejects_incomplete_batch_results(): void
+    {
+        Redis::shouldReceive('exists')->once()->andReturn(1);
+        Redis::shouldReceive('smembers')->once()->andReturn([15, 16]);
+        Redis::shouldReceive('pipeline')->once()->andReturn([[]]);
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('节点设备状态读取失败');
+        (new DeviceStateService())->getNodeDevices(1);
+    }
+
+    public function test_node_snapshot_rejects_failed_reads_instead_of_returning_an_empty_snapshot(): void
+    {
+        Redis::shouldReceive('exists')->once()->andReturn(1);
+        Redis::shouldReceive('smembers')->once()->andReturn([15, 16]);
+        Redis::shouldReceive('pipeline')->once()->andReturn([[], false]);
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('节点设备状态读取结果无效');
+        (new DeviceStateService())->getNodeDevices(1);
+    }
+
+    public function test_node_snapshot_with_no_indexed_users_does_not_issue_hash_reads(): void
+    {
+        Redis::shouldReceive('exists')->once()->andReturn(1);
+        Redis::shouldReceive('smembers')->once()->andReturn([]);
+        Redis::shouldNotReceive('pipeline', 'hgetall');
+        $this->assertSame([], (new DeviceStateService())->getNodeDevices(1));
+    }
+
     public function test_custom_single_user_reader_is_preserved_for_multiple_users(): void
     {
         $service = new class extends DeviceStateService {

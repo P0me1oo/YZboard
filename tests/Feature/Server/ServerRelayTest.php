@@ -7,6 +7,7 @@ use App\Http\Requests\Admin\ServerSave;
 use App\Jobs\RelayNodeTrafficJob;
 use App\Jobs\TrafficFetchJob;
 use App\Models\Server;
+use App\Models\ServerMachine;
 use App\Models\StatServer;
 use App\Models\User;
 use App\Protocols\ClashMeta;
@@ -27,6 +28,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Validation\ValidationException;
 use Mockery\MockInterface;
@@ -225,6 +227,38 @@ class ServerRelayTest extends TestCase
             'sort' => 2,
             'protocol_settings' => ['cipher' => '2022-blake3-aes-128-gcm'],
         ], $overrides));
+    }
+
+    public function test_relay_filter_batches_machine_reads_and_rechecks_protection_on_the_next_call(): void
+    {
+        $entry = $this->makeEntry();
+        $machine = ServerMachine::create([
+            'name' => '共享落地机器', 'token' => str_repeat('t', 32), 'is_active' => true,
+        ]);
+        $first = $this->makeChild($entry, ['machine_id' => $machine->id, 'sort' => 3]);
+        $second = $this->makeChild($entry, ['machine_id' => $machine->id, 'sort' => 2]);
+        $disabled = $this->makeChild($entry, ['machine_id' => $machine->id, 'enabled' => false]);
+
+        DB::enableQueryLog();
+        DB::flushQueryLog();
+        try {
+            $this->assertSame([$second->id, $first->id], ServerRelayService::childrenOf($entry)->pluck('id')->all());
+            $queries = array_filter(DB::getQueryLog(), fn ($query) =>
+                str_starts_with(strtolower($query['query']), 'select')
+                && str_contains($query['query'], 'v2_server_machine'));
+            $this->assertCount(1, $queries);
+        } finally {
+            DB::disableQueryLog();
+            DB::flushQueryLog();
+        }
+        $this->assertSame([$disabled->vless_route], array_values(ServerRelayService::blockedWireGuardRoutes($entry)));
+
+        ServerMachine::whereKey($machine->id)->update(['is_active' => false]);
+        $this->assertCount(0, ServerRelayService::childrenOf($entry));
+        $this->assertSame([$first->vless_route, $second->vless_route, $disabled->vless_route],
+            array_values(ServerRelayService::blockedWireGuardRoutes($entry)));
+        ServerMachine::whereKey($machine->id)->update(['is_active' => true]);
+        $this->assertSame([$second->id, $first->id], ServerRelayService::childrenOf($entry)->pluck('id')->all());
     }
 
     private function makeHysteriaEntry(array $overrides = []): Server

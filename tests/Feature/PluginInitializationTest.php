@@ -14,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
 use Symfony\Component\Console\Output\BufferedOutput;
+use Symfony\Component\Console\Input\InputDefinition;
 use Tests\TestCase;
 
 class InitializationCommand extends Command
@@ -37,6 +38,26 @@ class InitializationPlugin extends AbstractPlugin
     {
         $tenant = request()->header('X-Test-Tenant');
         $this->filter('test.plugin.tenant', fn () => $tenant);
+    }
+}
+
+class InitializationInvalidDefinitionCommand extends \Symfony\Component\Console\Command\Command
+{
+    public function getDefinition(): InputDefinition
+    {
+        throw new \Symfony\Component\Console\Exception\LogicException('plugin-invalid-definition-test');
+    }
+}
+
+class InitializationEnablementCommand extends Command
+{
+    protected $signature = 'test:plugin-enablement';
+    public function isEnabled(): bool
+    {
+        if ($this->getLaravel() === null || $this->getApplication() === null) {
+            throw new \RuntimeException('plugin-command-context-missing');
+        }
+        return false;
     }
 }
 
@@ -136,6 +157,60 @@ PHP);
         $this->assertSame($second, $this->kernel->all()['test:replacement']);
         $this->assertSame($second, $this->kernel->all()['test:replacement-alias']);
         $this->assertSame($second, $this->kernel->all()['test:replacement']);
+    }
+
+    public function test_invalid_named_definition_is_rejected_during_registration(): void
+    {
+        $this->expectException(\Symfony\Component\Console\Exception\LogicException::class);
+        $this->expectExceptionMessage('plugin-invalid-definition-test');
+        $this->kernel->registerPluginCommand(new InitializationInvalidDefinitionCommand('test:invalid-definition'));
+    }
+
+    public function test_invalid_named_command_cannot_poison_other_plugin_commands(): void
+    {
+        $this->kernel->registerPluginCommand(new \Symfony\Component\Console\Command\Command('test:valid-before'));
+        try {
+            $this->kernel->registerPluginCommand(new InitializationInvalidDefinitionCommand('test:invalid-definition'));
+            $this->fail('无效命令应在插件注册时拒绝');
+        } catch (\Symfony\Component\Console\Exception\LogicException $error) {
+            $this->assertSame('plugin-invalid-definition-test', $error->getMessage());
+        }
+        $this->kernel->registerPluginCommand(new \Symfony\Component\Console\Command\Command('test:valid-after'));
+        $commands = $this->kernel->all();
+        $this->assertArrayHasKey('test:valid-before', $commands);
+        $this->assertArrayHasKey('test:valid-after', $commands);
+        $this->assertArrayNotHasKey('test:invalid-definition', $commands);
+    }
+
+    public function test_custom_enablement_uses_original_registration_context(): void
+    {
+        $this->kernel->registerPluginCommand(new InitializationEnablementCommand());
+        $this->assertNotNull($this->consoleApplication());
+        $this->assertArrayNotHasKey('test:plugin-enablement', $this->kernel->all());
+    }
+
+    public function test_console_assembly_failure_keeps_later_commands_for_retry(): void
+    {
+        foreach (['before', 'failure', 'after'] as $name) {
+            $this->kernel->registerPluginCommand(new \Symfony\Component\Console\Command\Command('test:assembly-' . $name));
+        }
+        $application = $this->createMock(\Illuminate\Console\Application::class);
+        $seen = [];
+        $application->method('add')->willReturnCallback(function ($command) use (&$seen) {
+            $seen[] = $command->getName();
+            if ($command->getName() === 'test:assembly-failure') throw new \RuntimeException('plugin-assembly-test-failure');
+            return $command;
+        });
+        $this->kernel->setArtisan($application);
+        $getArtisan = new \ReflectionMethod(Kernel::class, 'getArtisan');
+        try {
+            $getArtisan->invoke($this->kernel);
+            $this->fail('注入的装配故障应传播');
+        } catch (\RuntimeException $error) {
+            $this->assertSame('plugin-assembly-test-failure', $error->getMessage());
+        }
+        $getArtisan->invoke($this->kernel);
+        $this->assertSame(['test:assembly-before', 'test:assembly-failure', 'test:assembly-after'], $seen);
     }
 
     public function test_dynamic_plugin_routes_and_hooks_are_still_request_scoped(): void

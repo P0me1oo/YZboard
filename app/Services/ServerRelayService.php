@@ -185,15 +185,16 @@ class ServerRelayService
             return collect();
         }
 
-        return self::childrenQuery($entry)
+        $children = self::childrenQuery($entry)
             ->whereIn('type', Server::RELAY_TRANSIT_TYPES)
             ->where(function ($query) {
                 $query->where('enabled', true)->orWhereNull('enabled');
             })
             ->orderBy('sort', 'ASC')
             ->get()
-            ->filter(fn(Server $child) => self::isSupportedLanding($child, $entry) && !MachineTrafficService::nodeBlocked($child))
-            ->values();
+            ->filter(fn (Server $child) => self::isSupportedLanding($child, $entry));
+        $blocked = MachineTrafficService::nodeBlockedMany($children);
+        return $children->filter(fn (Server $child) => !$blocked[(int) $child->id])->values();
     }
 
     public static function childrenQuery(Server $entry): \Illuminate\Database\Eloquent\Builder
@@ -224,8 +225,12 @@ class ServerRelayService
         if (!self::isSupportedEntry($entry)) {
             return [];
         }
-        return self::childrenQuery($entry)->orderBy('id')->get()
-            ->filter(fn (Server $child) => $child->enabled === false || MachineTrafficService::nodeBlocked($child))
+        $children = self::childrenQuery($entry)->orderBy('id')->get();
+        $blocked = MachineTrafficService::nodeBlockedMany(
+            $children->filter(fn (Server $child) => $child->enabled !== false)
+        );
+        return $children
+            ->filter(fn (Server $child) => $child->enabled === false || $blocked[(int) $child->id])
             ->map(fn (Server $child) => self::ensureRouteId($child))->all();
     }
 

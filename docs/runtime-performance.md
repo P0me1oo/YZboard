@@ -1,5 +1,38 @@
 # 节点状态与设备同步读取优化
 
+## 1.111.11：中转保护查询与节点设备读取
+
+中转可用节点及受保护线路筛选，在每次调用内一次读取所属机器，复用同台机器的当前状态。单节点检查仍从数据库读取，批量结果不存入模型关联、常驻服务或全局缓存；下一次调用重新检查机器停用、额度耗尽和报告超时。缺失机器和未绑定节点沿用原处理，路由排序与编号分配不变。
+
+节点设备快照保留节点索引读取，账号设备按每批最多 256 个 Redis 命令发送。命令数量不减少，减少的是通信往返与系统调用；单账号仍直接读取。只筛选当前节点、原 300 秒期限内的设备，保留其他节点记录与原始公网 IP。任一批缺项、返回错误或异常时不返回成功快照。
+
+相关回归覆盖批量机器查询次数、同台机器复用、下一次调用重新读取、单节点保护、额度与报告超时、缺失机器，以及节点设备隔离、过期、分批与读取故障；数据库路径需分别在 SQLite 和严格分组 MariaDB 验证，Redis 路径需使用专用测试实例核对。
+
+DartNode-US 的后端连接复用需要重新读取实际 Nginx 版本及生效配置，核对两个代理层后再修改。普通 HTTP 清除逐跳连接头并复用后端连接，WebSocket 保留升级头；先备份、检查配置，再平滑重载。CLI OPcache 和进程回收阈值不属于本批变更。
+
+待核对的上游定义见[连接复用示例](examples/nginx-yzboard-keepalive.conf)，默认端口来自此前诊断，尚未在当前服务器验证。外层现有普通 HTTP 转发仅替换为以下相关指令，保留原 URI、认证、Host、转发头、超时及访问规则：
+
+```nginx
+proxy_pass http://yzboard_http_entry;
+proxy_http_version 1.1;
+proxy_set_header Upgrade $http_upgrade;
+proxy_set_header Connection $yzboard_keepalive_connection;
+```
+
+内层普通 HTTP 转发使用 `proxy_pass http://yzboard_http_worker;`、`proxy_http_version 1.1;` 和 `proxy_set_header Connection "";`。现有独立 WebSocket 路由继续使用原后端和升级配置。示例未构成服务器已生效的配置；完整配置须通过 `nginx -t` 并验证 HTTP 与 WebSocket 后才能重载。
+
+本版本未部署生产，尚无 CPU 降幅数据。前后采样应保持相近的节点数、上报量与观察时长，记录整机及各服务 CPU、实际内存、数据库查询量、Redis 命令量和 TCP 建连速率，并检查上报新鲜度与错误。
+
+### 合并与验证范围
+
+原优化增量基于 `1.111.9` 的 `a55ba1454600711607d29af39876044a773137ed`，现与性能边界修复合并到已发布 `1.111.10` 的源码上，统一版本为 `1.111.11`。原草稿版本号不代表这批优化已包含在正式 `1.111.10` 中。查询次数、保护状态重读、限额与超时、节点隔离、设备分批及失败路径均有回归；真实 Redis 用例沿用 `YZ_TEST_SUBSCRIPTION_REDIS_PORT` 指向专用本机实例并只清理本例随机前缀。
+
+发布前按[测试说明](testing.md)完成 SQLite、严格分组 MariaDB、真实 Redis 和管理端资源完整检查，实际结果记录在对应 Release 核验附件中。局部复核可使用以下入口，并通过 `tests/bootstrap-mariadb.php` 再验证数据库路径；Nginx 示例须另在目标服务器核对后验证，不属于源码测试已经覆盖的配置：
+
+```bash
+php vendor/bin/phpunit --do-not-cache-result --filter 'MachineTrafficTest|MachineTrafficConcurrencyTest|ServerRelayTest|RelayPermissionTest|RelayRateTest|LoadBalancerTest|DeviceStateServiceTest|DeviceStateRefreshTest|NodeRegistryDeviceSyncTest|DeviceSyncSchedulerTest|NodeDeviceSnapshotRedisTest'
+```
+
 ## 1.82.2：第二批历史与统计写入优化
 
 入站历史的重复写入、可靠流量批次内部的集中统计，以及 SQLite/MariaDB 验证与合成基准见[第二批性能优化](performance-batch2.md)。可见时间、可靠接收和原事务边界保持不变。

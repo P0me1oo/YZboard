@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Server;
 use App\Models\ServerMachine;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /** 服务器额度独立于用户扣费和管理员运行开关，两种计量来源分别累计。 */
@@ -67,6 +68,20 @@ class MachineTrafficService
     {
         $machine = $node->machine_id ? ServerMachine::find($node->machine_id) : null;
         return $machine !== null && self::blocked($machine);
+    }
+
+    /** 本次筛选一次读取机器状态，返回按节点 ID 索引的保护结果，不跨调用缓存。 */
+    public static function nodeBlockedMany(Collection $nodes): array
+    {
+        $machineIds = $nodes->pluck('machine_id')->filter()->unique()->values();
+        $machines = $machineIds->isEmpty() ? collect()
+            : ServerMachine::whereIn('id', $machineIds)->get()->keyBy('id');
+        $machineBlocks = $machines->map(fn (ServerMachine $machine) => self::blocked($machine));
+        $blocked = [];
+        foreach ($nodes as $node) {
+            $blocked[(int) $node->id] = $machineBlocks->get($node->machine_id, false);
+        }
+        return $blocked;
     }
 
     public static function view(ServerMachine $machine): array

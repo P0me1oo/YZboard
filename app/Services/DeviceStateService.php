@@ -63,13 +63,26 @@ class DeviceStateService
         $prefix = "{$nodeId}:";
         $result = [];
         $now = time();
-        foreach ($userIds as $userId) {
-            $uid = (int) $userId;
-            $data = Redis::hgetall(self::PREFIX . $uid);
-            foreach ($data as $field => $timestamp) {
-                if (str_starts_with($field, $prefix) && $now - (int) $timestamp <= self::TTL) {
-                    $ip = substr($field, strlen($prefix));
-                    $result[$uid][] = $ip;
+        foreach (array_chunk(array_values($userIds), 256) as $chunk) {
+            $rows = count($userIds) === 1
+                ? [Redis::hgetall(self::PREFIX . (int) $chunk[0])]
+                : Redis::pipeline(function ($pipe) use ($chunk): void {
+                    foreach ($chunk as $userId) {
+                        $pipe->hgetall(self::PREFIX . (int) $userId);
+                    }
+                });
+            if (!is_array($rows) || count($rows) !== count($chunk)) {
+                throw new \RuntimeException('节点设备状态读取失败');
+            }
+            foreach ($chunk as $index => $userId) {
+                if (!is_array($rows[$index])) {
+                    throw new \RuntimeException('节点设备状态读取结果无效');
+                }
+                foreach ($rows[$index] as $field => $timestamp) {
+                    if (str_starts_with($field, $prefix) && $now - (int) $timestamp <= self::TTL) {
+                        $ip = substr($field, strlen($prefix));
+                        $result[(int) $userId][] = $ip;
+                    }
                 }
             }
         }

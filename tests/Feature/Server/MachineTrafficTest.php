@@ -14,6 +14,7 @@ use App\Services\ServerService;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
@@ -71,6 +72,77 @@ class MachineTrafficTest extends TestCase
             'type' => 'vless', 'kernel_type' => 'xray', 'host' => '127.0.0.1', 'port' => 24443,
             'server_port' => 24443, 'protocol_settings' => ['tls' => 0, 'network' => 'tcp'],
             'enabled' => true, 'show' => true, 'group_ids' => ['1'], 'rate' => 1], $extra));
+    }
+
+    public function test_batch_node_protection_reads_shared_machines_once_and_rereads_next_call(): void
+    {
+        $machine = $this->machine();
+        $nodes = collect([$this->node($machine), $this->node($machine), $this->node($machine)]);
+        $stale = clone $machine;
+        $stale->is_active = false;
+        foreach ($nodes as $node) $node->setRelation('machine', $stale);
+
+        DB::enableQueryLog();
+        DB::flushQueryLog();
+        try {
+            $this->assertSame(array_fill_keys($nodes->pluck('id')->all(), false), Traffic::nodeBlockedMany($nodes));
+            $queries = array_filter(DB::getQueryLog(), fn ($query) =>
+                str_starts_with(strtolower($query['query']), 'select')
+                && str_contains($query['query'], 'v2_server_machine'));
+            $this->assertCount(1, $queries, '同次筛选不应按节点重复查询同台机器');
+        } finally {
+            DB::disableQueryLog();
+            DB::flushQueryLog();
+        }
+
+        ServerMachine::whereKey($machine->id)->update(['is_active' => false]);
+        $this->assertSame(array_fill_keys($nodes->pluck('id')->all(), true), Traffic::nodeBlockedMany($nodes));
+        $this->assertTrue(Traffic::nodeBlocked($nodes->first()));
+        ServerMachine::whereKey($machine->id)->update(['is_active' => true]);
+        $this->assertSame(array_fill_keys($nodes->pluck('id')->all(), false), Traffic::nodeBlockedMany($nodes));
+    }
+
+    public function test_batch_node_protection_preserves_missing_and_unbound_machine_handling(): void
+    {
+        $machine = $this->machine();
+        $unbound = $this->node($machine);
+        $unbound->machine_id = null;
+        $missing = $this->node($machine);
+        $missing->machine_id = 999999;
+        $this->assertSame([], Traffic::nodeBlockedMany(collect()));
+        $this->assertSame([$unbound->id => false, $missing->id => false],
+            Traffic::nodeBlockedMany(collect([$unbound, $missing])));
+    }
+
+    public function test_batch_node_protection_rechecks_report_expiry_and_quota_with_the_same_nodes(): void
+    {
+        $machine = $this->machine();
+        $nodes = collect([$this->node($machine)]);
+        $state = ['initialized' => true, 'reported_at' => now()->timestamp, 'tx' => 0];
+        ServerMachine::whereKey($machine->id)->update([
+            'traffic_limit' => Traffic::GB, 'traffic_mode' => 'outbound',
+            'traffic_state' => json_encode($state),
+        ]);
+        $id = $nodes->first()->id;
+        $this->assertSame([$id => false], Traffic::nodeBlockedMany($nodes));
+        $this->travel(Traffic::LEASE_SECONDS)->seconds();
+        $this->assertSame([$id => true], Traffic::nodeBlockedMany($nodes));
+        ServerMachine::whereKey($machine->id)->update(['traffic_state' => json_encode([
+            ...$state, 'reported_at' => now()->timestamp, 'tx' => Traffic::GB,
+        ])]);
+        $this->assertSame([$id => true], Traffic::nodeBlockedMany($nodes));
+        ServerMachine::whereKey($machine->id)->update(['traffic_state' => json_encode([
+            ...$state, 'reported_at' => now()->timestamp,
+        ])]);
+        $this->assertSame([$id => false], Traffic::nodeBlockedMany($nodes));
+    }
+
+    public function test_batch_node_protection_does_not_hide_a_database_read_failure(): void
+    {
+        $nodes = collect([$this->node($this->machine())]);
+        $this->failNextQueryMatching('/select .*v2_server_machine/i');
+        $this->expectException(\Illuminate\Database\QueryException::class);
+        Traffic::nodeBlockedMany($nodes);
     }
 
     public function test_new_machine_defaults_to_both_and_existing_modes_are_preserved(): void

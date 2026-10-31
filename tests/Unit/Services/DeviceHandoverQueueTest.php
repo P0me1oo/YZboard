@@ -16,6 +16,7 @@ class DeviceQueueRecordingStore extends ArrayStore
     public int $queueLocks = 0;
     public int $queueBatches = 0;
     public ?string $failQueue = null;
+    public bool $failWithFalse = false;
     public ?\Closure $afterQueueRead = null;
 
     public function forever($key, $value)
@@ -24,6 +25,7 @@ class DeviceQueueRecordingStore extends ArrayStore
             $this->queueWrites++;
             if ($key === $this->failQueue) {
                 $this->failQueue = null;
+                if ($this->failWithFalse) return false;
                 throw new \RuntimeException('queue-write-test-failure');
             }
         }
@@ -153,6 +155,41 @@ class DeviceHandoverQueueTest extends TestCase
         $this->reconcileUnchanged();
         $this->assertSame(0, $this->store->queueWrites);
         $this->assertSame(0, $this->store->queueLocks);
+    }
+
+    public function test_false_queue_write_is_not_confirmed_and_retry_repairs_membership(): void
+    {
+        $this->seedHolders(false);
+        $this->store->failQueue = 'device_handover:queue:1001';
+        $this->store->failWithFalse = true;
+        try {
+            $this->reconcileUnchanged();
+            $this->fail('队列写入返回 false 不能确认成功');
+        } catch (\RuntimeException $error) {
+            $this->assertSame('设备同步队列写入失败', $error->getMessage());
+        }
+        $this->assertNull(Cache::get('device_handover:queue:1001'));
+        $this->assertCount(3, Cache::get('device_handover:user:' . self::USER)['sources']);
+        $this->reconcileUnchanged();
+        foreach (range(1001, 1029) as $node) $this->assertSame([self::USER], Cache::get('device_handover:queue:' . $node));
+    }
+
+    public function test_false_queue_removal_preserves_other_accounts_and_can_retry(): void
+    {
+        $key = 'device_handover:queue:1001';
+        Cache::forever($key, [self::USER, self::USER + 1]);
+        $this->store->failQueue = $key;
+        $this->store->failWithFalse = true;
+        $queue = new \ReflectionMethod(DeviceHandoverService::class, 'queue');
+        try {
+            $queue->invoke($this->service, 1001, self::USER, false);
+            $this->fail('移除队列写入返回 false 不能确认成功');
+        } catch (\RuntimeException $error) {
+            $this->assertSame('设备同步队列写入失败', $error->getMessage());
+        }
+        $this->assertSame([self::USER, self::USER + 1], Cache::get($key));
+        $queue->invoke($this->service, 1001, self::USER, false);
+        $this->assertSame([self::USER + 1], Cache::get($key));
     }
 
     public function test_other_accounts_added_after_batch_read_are_preserved(): void

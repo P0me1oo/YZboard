@@ -3,6 +3,11 @@
 namespace App\Services;
 
 use Illuminate\Cache\RedisStore;
+use Illuminate\Cache\CacheManager;
+use Illuminate\Cache\Repository;
+use Illuminate\Cache\Events\CacheHit;
+use Illuminate\Cache\Events\CacheMissed;
+use Illuminate\Cache\Events\RetrievingManyKeys;
 use Illuminate\Redis\Connections\PhpRedisConnection;
 use Illuminate\Support\Facades\Cache;
 
@@ -17,7 +22,10 @@ class DeviceCoordinationReadContext
     public function many(array $keys): array
     {
         if ($keys === []) return [];
-        $store = Cache::getStore();
+        $repository = Cache::getFacadeRoot();
+        if ($repository instanceof CacheManager) $repository = $repository->store();
+        if (get_class($repository) !== Repository::class || !array_is_list($keys)) return Cache::many($keys);
+        $store = $repository->getStore();
         // 自定义缓存、客户端序列化和压缩继续走原读取，不能误解其格式或绕过扩展行为。
         if (get_class($store) !== RedisStore::class || count($keys) > self::MAX_KEYS) return Cache::many($keys);
         $connection = $store->connection();
@@ -25,6 +33,9 @@ class DeviceCoordinationReadContext
             return Cache::many($keys);
         }
 
+        $events = $repository->getEventDispatcher();
+        $storeName = $repository->getName();
+        $events?->dispatch(new RetrievingManyKeys($storeName, $keys));
         $reply = $connection->mget(array_map(fn ($key) => $store->getPrefix() . $key, $keys));
         if (!is_array($reply) || count($reply) !== count($keys)) {
             throw new \RuntimeException('设备协调状态读取失败');
@@ -49,6 +60,12 @@ class DeviceCoordinationReadContext
                 }
             } else {
                 throw new \RuntimeException('设备协调状态响应无效');
+            }
+        }
+        // 按唯一结果发事件，与框架 many() 一致；重复键不重复计数。
+        if ($events !== null) {
+            foreach ($result as $key => $value) {
+                $events->dispatch($value === null ? new CacheMissed($storeName, $key) : new CacheHit($storeName, $key, $value));
             }
         }
         return $result;

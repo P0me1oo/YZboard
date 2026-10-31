@@ -15,12 +15,23 @@ class Kernel extends ConsoleKernel
 
     public function registerPluginCommand(\Symfony\Component\Console\Command\Command $command): void
     {
-        // 无名称等无效命令仍在插件初始化时走原校验及异常处理。
-        if ($this->artisan !== null || !$command->getName()) {
+        // 自定义注册钩子可能依赖控制台及容器，继续由原注册路径即时校验。
+        if ($this->artisan !== null || !$command->getName() || !$this->canDeferPluginCommand($command)) {
             $this->registerCommand($command);
             return;
         }
+        $command->getDefinition();
         $this->pendingPluginCommands[] = $command;
+    }
+
+    private function canDeferPluginCommand(\Symfony\Component\Console\Command\Command $command): bool
+    {
+        foreach (['getName', 'getAliases', 'getDefinition', 'isEnabled', 'setApplication', 'setHelperSet'] as $method) {
+            if ((new \ReflectionMethod($command, $method))->getDeclaringClass()->getName()
+                !== \Symfony\Component\Console\Command\Command::class) return false;
+        }
+        return !($command instanceof \Illuminate\Console\Command)
+            || (new \ReflectionMethod($command, 'setLaravel'))->getDeclaringClass()->getName() === \Illuminate\Console\Command::class;
     }
 
     protected function getArtisan()
@@ -28,7 +39,15 @@ class Kernel extends ConsoleKernel
         $artisan = parent::getArtisan();
         $commands = $this->pendingPluginCommands;
         $this->pendingPluginCommands = [];
-        foreach ($commands as $command) $artisan->add($command);
+        foreach ($commands as $index => $command) {
+            try {
+                $artisan->add($command);
+            } catch (\Throwable $error) {
+                // 失败命令不重复登记；尚未处理的命令保留给下一次控制台调用。
+                $this->pendingPluginCommands = array_merge(array_slice($commands, $index + 1), $this->pendingPluginCommands);
+                throw $error;
+            }
+        }
         return $artisan;
     }
 

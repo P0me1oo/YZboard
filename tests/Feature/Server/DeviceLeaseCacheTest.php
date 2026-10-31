@@ -159,6 +159,37 @@ class DeviceLeaseCacheTest extends TestCase
         $this->assertSame([], Cache::get($key)['sources']);
     }
 
+    public function test_admission_queue_false_write_is_not_acknowledged_and_retry_keeps_one_lease(): void
+    {
+        $queueKey = 'device_handover:queue:' . $this->nodes[1]->id;
+        $repository = new class(Cache::getStore(), $queueKey) extends \Illuminate\Cache\Repository {
+            public bool $failQueue = true;
+            public function __construct($store, private readonly string $queueKey) { parent::__construct($store); }
+            public function forever($key, $value)
+            {
+                if ($this->failQueue && $key === $this->queueKey) return false;
+                return parent::forever($key, $value);
+            }
+        };
+        Cache::swap($repository);
+        try {
+            $this->admit();
+            $this->fail('队列未登记不能回复准入成功');
+        } catch (\RuntimeException $error) {
+            $this->assertSame('设备同步队列写入失败', $error->getMessage());
+        }
+        $stateKey = 'device_handover:user:' . $this->user->id;
+        $saved = Cache::get($stateKey);
+        $this->assertCount(1, $saved['sources']);
+        $this->assertNull(Cache::get($queueKey));
+        $repository->failQueue = false;
+        $retry = $this->admit();
+        $this->assertSame('allowed', $retry['status']);
+        $this->assertSame($saved['sources']['8.8.8.8']['lease'], $retry['lease']);
+        $this->assertCount(1, Cache::get($stateKey)['sources']);
+        $this->assertSame([$this->user->id], Cache::get($queueKey));
+    }
+
     public function test_old_run_return_is_scoped_to_exact_confirmation_and_cannot_retire_new_run(): void
     {
         $old = $this->admit();

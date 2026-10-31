@@ -87,9 +87,9 @@ class ServerMachine extends Model
     }
 
     /** 同一秒的请求共用已持久化心跳；延迟请求不能把较新的时间写回旧值。 */
-    public function recordHeartbeat(): void
+    public function recordHeartbeat(?int $seenAt = null): void
     {
-        $seenAt = now()->timestamp;
+        $seenAt ??= now()->timestamp;
         if (($this->last_seen_at ?? 0) >= $seenAt) return;
 
         self::query()->whereKey($this->id)

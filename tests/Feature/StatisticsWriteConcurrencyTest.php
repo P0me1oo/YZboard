@@ -130,6 +130,9 @@ class StatisticsWriteConcurrencyTest extends TestCase
             $this->assertSame(612, (int) DB::table($table)->sum('u'));
         }
         $this->assertSame(864, (int) DB::table('v2_stat_server')->sum('u'));
+        foreach (['u', 'd'] as $column) {
+            $this->assertSame((int) DB::table('v2_user')->sum($column), (int) DB::table('v2_stat_user')->sum($column));
+        }
         $this->assertSame(612, (int) DB::table('v2_stat_proxy_traffic')->where('scope', 'node')->where('unit', 'day')->sum('u'));
         $this->assertSame('processed', $batch->fresh()->status);
         $this->assertSame('processed', $other->fresh()->status);

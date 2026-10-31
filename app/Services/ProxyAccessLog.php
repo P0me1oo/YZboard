@@ -177,14 +177,6 @@ class ProxyAccessLog
 
     public function prune(): int
     {
-        $cutoff = now()->timestamp - LogSettings::days('access') * 86400;
-        $deleted = 0;
-        // 分批删除，不在一次事务内锁住全部过期记录。
-        do {
-            $ids = DB::table('v2_proxy_access_log')->where('connected_at', '<', $cutoff)->orderBy('connected_at')->limit(2000)->pluck('id');
-            if ($ids->isEmpty()) break;
-            $deleted += DB::table('v2_proxy_access_log')->whereIn('id', $ids)->delete();
-        } while ($ids->count() === 2000);
-        return $deleted;
+        return app(AccessLogPruner::class)->run()['deleted'];
     }
 }

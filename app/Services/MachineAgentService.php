@@ -98,7 +98,8 @@ class MachineAgentService
                 }
             }
             $machine->forceFill([
-                'agent_runtime' => $runtime, 'agent_operation' => $operation, 'last_seen_at' => time(),
+                'agent_runtime' => $runtime, 'agent_operation' => $operation,
+                'last_seen_at' => max((int) $machine->last_seen_at, time()),
             ])->saveQuietly();
             return $operation && in_array($operation['status'], ['pending', 'running'], true) ? $operation : null;
         });

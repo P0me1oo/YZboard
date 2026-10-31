@@ -7,6 +7,7 @@ use App\Models\StatServer;
 use App\Models\StatUser;
 use App\Services\Plugin\HookManager;
 use App\Services\TrafficStatisticsRecorder;
+use App\Services\TrafficStatWriter;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -127,6 +128,7 @@ class ProcessNodeReportBatch implements ShouldQueue
         $userIds = [];
         $statistics = [];
         $batchStatistics = $this->canBatchStatistics();
+        $atomicDaily = $batchStatistics && $this->supportsAtomicDailyStats();
 
         foreach ($traffic as $userId => $value) {
             if (!is_numeric($userId) || !is_array($value) || count($value) !== 2) {
@@ -158,10 +160,10 @@ class ProcessNodeReportBatch implements ShouldQueue
                     }
                 }
                 foreach ($statLines as $line) {
-                    $this->incrementUserStat($userId, $line['rate'], $recordAt, $line['billed_u'], $line['billed_d'], $now);
+                    $this->incrementUserStat($userId, $line['rate'], $recordAt, $line['billed_u'], $line['billed_d'], $now, $atomicDaily);
                 }
             } else {
-                $this->incrementUserStat($userId, $rate, $recordAt, $ratedU, $ratedD, $now);
+                $this->incrementUserStat($userId, $rate, $recordAt, $ratedU, $ratedD, $now, $atomicDaily);
             }
 
             DB::table('v2_user')
@@ -178,7 +180,7 @@ class ProcessNodeReportBatch implements ShouldQueue
         if ($batchStatistics) app(TrafficStatisticsRecorder::class)->addMany($statistics);
 
         if ($totalU > 0 || $totalD > 0) {
-            $this->incrementServerStat($serverId, $serverType, $recordAt, $totalU, $totalD, $now);
+            $this->incrementServerStat($serverId, $serverType, $recordAt, $totalU, $totalD, $now, $atomicDaily);
             DB::table('v2_server')
                 ->where('id', $serverId)
                 ->incrementEach(['u' => $totalU, 'd' => $totalD], ['updated_at' => now()]);
@@ -190,6 +192,7 @@ class ProcessNodeReportBatch implements ShouldQueue
     private function applyRelayTraffic(NodeReportBatch $batch): void
     {
         $now = time();
+        $atomicDaily = $this->canBatchStatistics() && $this->supportsAtomicDailyStats();
         foreach ((array) $batch->relay_traffic as $item) {
             if (!is_array($item)) {
                 continue;
@@ -209,7 +212,8 @@ class ProcessNodeReportBatch implements ShouldQueue
                 (int) $batch->record_at,
                 $u,
                 $d,
-                $now
+                $now,
+                $atomicDaily
             );
             DB::table('v2_server')
                 ->where('id', $serverId)
@@ -231,19 +235,38 @@ class ProcessNodeReportBatch implements ShouldQueue
         return true;
     }
 
+    private function supportsAtomicDailyStats(): bool
+    {
+        // 既有 SQLite 日账本没有业务唯一键，继续用原查询/模型路径，不在运行时补索引。
+        return in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true);
+    }
+
+    private function addDailyStat(string $table, array $keys, int $u, int $d, int $now): void
+    {
+        // 单条语句仍按原账本顺序取得行锁，且共用批次事务；保留已有行的创建时间和种类。
+        TrafficStatWriter::add($table, [$keys + [
+            'record_type' => 'd', 'u' => $u, 'd' => $d, 'created_at' => $now, 'updated_at' => $now,
+        ]], array_keys($keys), ['u', 'd'], ['updated_at']);
+    }
+
     private function incrementUserStat(
         int $userId,
         float $rate,
         int $recordAt,
         int $u,
         int $d,
-        int $now
+        int $now,
+        bool $atomic
     ): void {
         $keys = [
             'user_id' => $userId,
             'server_rate' => $rate,
             'record_at' => $recordAt,
         ];
+        if ($atomic) {
+            $this->addDailyStat('v2_stat_user', $keys, $u, $d, $now);
+            return;
+        }
         $stat = StatUser::query()->where($keys)->lockForUpdate()->first();
 
         if ($stat) {
@@ -270,13 +293,18 @@ class ProcessNodeReportBatch implements ShouldQueue
         int $recordAt,
         int $u,
         int $d,
-        int $now
+        int $now,
+        bool $atomic
     ): void {
         $keys = [
             'server_id' => $serverId,
             'server_type' => $serverType,
             'record_at' => $recordAt,
         ];
+        if ($atomic) {
+            $this->addDailyStat('v2_stat_server', $keys, $u, $d, $now);
+            return;
+        }
         $stat = StatServer::query()->where($keys)->lockForUpdate()->first();
 
         if ($stat) {

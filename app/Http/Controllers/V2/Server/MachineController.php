@@ -100,8 +100,19 @@ class MachineController extends Controller
             'reality_scan.results.*.http.status' => 'required_with:reality_scan.results.*.http|in:received,timeout,failed,not_checked',
             'reality_scan.results.*.http.status_code' => 'required_if:reality_scan.results.*.http.status,received|prohibited_unless:reality_scan.results.*.http.status,received|integer|min:100|max:599',
         ]);
-        $machine = $this->authenticateMachine($request);
-        $command = \App\Services\MachineAgentService::exchange($machine, $report, $request->ip());
+        $machine = $this->authenticateMachine($request, recordHeartbeat: false);
+        $authenticatedAt = now()->timestamp;
+        try {
+            // 控制上报本来就会保存机器行，心跳一起提交，避免先做一次独立更新。
+            $command = \App\Services\MachineAgentService::exchange($machine, $report, $request->ip());
+        } catch (\Throwable $exception) {
+            // 上报失败仍保留认证时的心跳；补写失败不能覆盖原始异常。
+            try {
+                $machine->recordHeartbeat($authenticatedAt);
+            } catch (\Throwable) {
+            }
+            throw $exception;
+        }
         $scan = ($report['reality_scan_supported'] ?? false) ? \App\Services\RealityScanService::exchange($machine, $report) : null;
         return response()->json(['command' => $command, 'reality_scan' => $scan,
             'log_policy' => \App\Services\AgentLogPolicy::view($machine)]);
@@ -229,7 +240,7 @@ class MachineController extends Controller
             ->header('Cache-Control', 'no-store')->header('Pragma', 'no-cache');
     }
 
-    private function authenticateMachine(Request $request, bool $allowDisabled = false): ServerMachine
+    private function authenticateMachine(Request $request, bool $allowDisabled = false, bool $recordHeartbeat = true): ServerMachine
     {
         $request->validate([
             'machine_id' => 'required|integer',
@@ -244,7 +255,7 @@ class MachineController extends Controller
             abort(403, 'Machine not found or disabled');
         }
 
-        $machine->recordHeartbeat();
+        if ($recordHeartbeat) $machine->recordHeartbeat();
 
         return $machine;
     }

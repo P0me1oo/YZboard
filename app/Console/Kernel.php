@@ -89,7 +89,9 @@ class Kernel extends ConsoleKernel
         $schedule->call(fn () => app(\App\Services\SubscriptionRestrictionService::class)->prune())
             ->name('subscription-protection:prune')->hourly()->onOneServer()->withoutOverlapping(10);
         $schedule->command('inbound-ip:refresh')->everyMinute()->onOneServer()->withoutOverlapping(5)->runInBackground();
-        $schedule->command('access-log:prune')->everyFiveMinutes()->onOneServer()->withoutOverlapping(10)->runInBackground();
+        // 常规访问日志清理错开其他每五分钟任务；积压仅以小批预算续跑。
+        $schedule->command('access-log:prune')->cron('1-59/5 * * * *')->onOneServer()->withoutOverlapping(10)->runInBackground();
+        $schedule->command('access-log:prune --resume')->everyMinute()->onOneServer()->withoutOverlapping(10)->runInBackground();
         $schedule->command('management-log:prune')->everyFiveMinutes()->onOneServer()->withoutOverlapping(10)->runInBackground();
         $schedule->command('management-log:prune --resume')->everyMinute()->onOneServer()->withoutOverlapping(10)->runInBackground();
         $schedule->job(new \App\Jobs\FlushSubscriptionStatistics())->everyMinute()->onOneServer();

@@ -25,6 +25,37 @@ class StatisticsWriteBatchTest extends TestCase
         $this->travelTo(\Carbon\Carbon::parse('2026-10-16 12:00:00', 'Asia/Shanghai'));
     }
 
+    public function test_daily_ledger_atomic_additions_keep_identity_and_skip_locking_reads_on_mysql(): void
+    {
+        ['batch' => $batch] = Fixture::make(2);
+        Redis::shouldReceive('sadd')->twice()->andReturn(2);
+        (new ProcessNodeReportBatch($batch->id))->handle();
+        $totals = Fixture::totals();
+        $identity = [];
+        foreach (['v2_stat_user', 'v2_stat_server'] as $table) {
+            DB::table($table)->update(['created_at' => 1234567890, 'record_type' => 'm']);
+            $identity[$table] = DB::table($table)->orderBy('id')->pluck('id')->all();
+        }
+        $next = $batch->replicate();
+        $next->forceFill(['report_id' => 'next-daily-test', 'report_key' => hash('sha256', 'next-daily-test'),
+            'status' => 'pending', 'processed_at' => null, 'attempts' => 0])->save();
+        DB::enableQueryLog();
+        (new ProcessNodeReportBatch($next->id))->handle();
+        $queries = DB::getQueryLog(); DB::disableQueryLog(); DB::flushQueryLog();
+        $after = Fixture::totals();
+        foreach (['v2_stat_user', 'v2_stat_server'] as $table) {
+            $this->assertSame($totals[$table]['u'] * 2, $after[$table]['u']);
+            $this->assertSame($totals[$table]['d'] * 2, $after[$table]['d']);
+            $this->assertSame($identity[$table], DB::table($table)->orderBy('id')->pluck('id')->all());
+            $this->assertSame(0, DB::table($table)->where('created_at', '!=', 1234567890)->count());
+            $this->assertSame(0, DB::table($table)->where('record_type', '!=', 'm')->count());
+            if (in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)) {
+                $reads = array_filter($queries, fn ($query) => preg_match('/^select.*["`]' . $table . '["`]/i', $query['query']));
+                $this->assertCount(0, $reads, '原子累加不再读取整个日账本行');
+            }
+        }
+    }
+
     public function test_large_batch_totals_rounding_query_count_and_duplicate_processing(): void
     {
         ['batch' => $batch, 'users' => $users, 'nodes' => $nodes] = Fixture::make(150);

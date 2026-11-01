@@ -61,3 +61,5 @@ YZ_TEST_SUBSCRIPTION_REDIS_PORT=<专用本机端口> php vendor/bin/phpunit test
 基准输出一致性检查 27 次断言通过。首次完整测试发现临时 PHP 缺少二维码依赖的 `iconv` 扩展，补齐临时配置后通过；未修改二维码功能。最终空闲快速路径也经过回归检查。
 
 生产更新后仍需在相近节点数和报告量下比较整机、WebSocket、PHP、Redis CPU 与上报延迟；本页局部基准不代表生产降幅。
+
+正式发布前的 PHP 8.2.35 / MariaDB 11.4.8 检查及 DartNode-US 部署已完成。实机存在间歇 HTTP 超时，旧版同机对照也能复现；恢复时曾出现 Web 启动重试。具体结果见[部署验证](deployment-1.112.1.md)，不能将开发基准作为生产稳定性或降幅的结论。

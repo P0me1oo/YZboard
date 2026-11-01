@@ -25,6 +25,7 @@ class EventServiceProvider extends ServiceProvider
         $this->app->scoped(\App\Services\TelemetryDemand::class);
         // 仅复用内容完全一致的大记录解码；账号锁内仍先读取当前 Redis 原值。
         $this->app->singleton(\App\Services\DeviceCoordinationStateReader::class);
+        $this->app->singleton(\App\Services\DeviceSnapshotReader::class);
     }
 
     /**

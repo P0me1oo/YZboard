@@ -138,6 +138,7 @@ return [
         ...Octane::defaultServicesToWarm(),
         \App\Services\Plugin\PluginManager::class,
         \App\Services\DeviceCoordinationStateReader::class,
+        \App\Services\DeviceSnapshotReader::class,
     ],
 
     'flush' => [

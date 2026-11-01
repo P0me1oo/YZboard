@@ -58,9 +58,11 @@ class NodeControlStateService
     private function capture(string $name, callable $collect): array
     {
         $key = 'realtime:control:' . $name;
-        return Cache::lock($key . ':lock', 30)->block(2, function () use ($key, $collect): array {
+        return Cache::lock($key . ':lock', 30)->block(2, function () use ($key, $name, $collect): array {
             $data = $collect();
-            $hash = hash('sha256', json_encode($data, JSON_THROW_ON_ERROR));
+            $hash = str_starts_with($name, 'devices:') && get_class(app(DeviceStateService::class)) === DeviceStateService::class
+                ? app(DeviceSnapshotReader::class)->hash($key, $data)
+                : hash('sha256', json_encode($data, JSON_THROW_ON_ERROR));
             $current = Cache::get($key);
             if (!$this->validVersion($current)) {
                 if ($current !== null) {

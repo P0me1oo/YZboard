@@ -332,6 +332,10 @@ class DeviceStateService
         }
         $userIds = array_values(array_unique(array_map('intval', $userIds)));
         if ($userIds === []) return [];
+        if (get_class($this) === self::class && $runtime === null && !$legacyOnly) {
+            $snapshot = $this->readSnapshotDevices($userIds);
+            if ($snapshot !== null) return $snapshot;
+        }
         if (count($userIds) === 1 && $runtime === null && !$legacyOnly) {
             $ips = $this->getDeviceIPs($userIds[0]);
             return $ips === [] ? [] : [$userIds[0] => $ips];
@@ -366,6 +370,43 @@ class DeviceStateService
             }
         }
 
+        return $result;
+    }
+
+    private function readSnapshotDevices(array $userIds): ?array
+    {
+        $reader = app(DeviceSnapshotReader::class);
+        $now = time();
+        $fields = $reader->read($userIds, $now, self::TTL);
+        if ($fields === null) return null;
+        if (!array_filter($fields)) return time() === $now ? [] : null;
+        $sources = [];
+        $userSources = [];
+        foreach ($fields as $id => $items) {
+            $userSources[$id] = [];
+            foreach ($items as $field) {
+                $nodeId = (int) strstr($field, ':', true);
+                if ($nodeId > 0) $userSources[$id]['node:' . $nodeId] = true;
+            }
+            $sources += $userSources[$id];
+        }
+        $states = app(RealtimeStateStore::class)->readMany(array_keys($sources));
+        // 与原路径一样，在来源状态读取后确定过滤时间；跨秒或时钟回拨时重新读取。
+        if (time() !== $now) return null;
+        $exclusions = DeviceIpExclusion::entries();
+        $result = [];
+        foreach ($fields as $id => $items) {
+            if ($items === []) continue;
+            $freshness = [];
+            foreach ($userSources[$id] as $source => $_) {
+                $state = $states[$source] ?? null;
+                $freshness[$source] = $state === null ? null : (bool) $state['fresh'];
+            }
+            // Redis 已按同一时间确认这些字段有效；仅在内容、来源新鲜度或规则改变时重新过滤。
+            $devices = $reader->filtered($id, $items, $freshness, $exclusions,
+                fn () => $this->filterDeviceIPs(array_fill_keys($items, $now), $states, $now));
+            if ($devices !== []) $result[$id] = $devices;
+        }
         return $result;
     }
 

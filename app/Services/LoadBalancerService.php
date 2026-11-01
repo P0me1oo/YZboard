@@ -57,8 +57,11 @@ class LoadBalancerService
             $ddns = $data['ddns'] ?? null;
             unset($data['ddns']);
             $pool = isset($data['id']) ? BalancerPool::query()->lockForUpdate()->findOrFail($data['id']) : new BalancerPool();
+            $dnsMode = ($data['mode'] ?? ($pool->exists ? $pool->mode : (isset($data['gateway_machine_id']) ? 'legacy' : 'dns'))) === 'dns';
+            $data['mode'] = $dnsMode ? 'dns' : 'legacy';
+            if ($pool->exists && $pool->mode === 'dns' && !$dnsMode) $this->invalid('mode', 'DNS 调度池不能改回旧转发模式');
             $personalDdns = $ddns['enabled'] ?? ($pool->exists && DdnsService::current('pool', $pool->id)?->enabled);
-            if ($personalDdns && !array_key_exists('gateway_address', $data)) {
+            if (!$dnsMode && $personalDdns && !array_key_exists('gateway_address', $data)) {
                 $this->invalid('gateway_address', '开启 DDNS 时请明确填写统一入口连接 IP');
             }
             $starting = (bool) $data['enabled'];
@@ -100,36 +103,58 @@ class LoadBalancerService
             if ($hosts->unique()->count() !== $hosts->count() || $hosts->contains(strtolower(rtrim($data['domain'], '.')))) {
                 $this->invalid('members', '成员地址必须分别直达各自服务器，不能使用共同的入口域名');
             }
-            $machine = ServerMachine::query()->whereKey($data['gateway_machine_id'])->when($starting, fn ($query) => $query->where('is_active', true))->first();
-            if (!$machine) $this->invalid('gateway_machine_id', '请选择已启用的调度入口服务器');
-            if ($starting && !self::agentCompatible($machine)) $this->invalid('gateway_machine_id', '调度入口服务器需要先运行 Node v2.25.0 或更新版本');
-            if ($machine->traffic_mode === 'proxy' && $machine->traffic_limit > 0) {
-                $this->invalid('gateway_machine_id', '调度入口的流量限额请使用网卡计量模式，避免将转发量误作用户用量');
-            }
-            // 新配置直接读取机器上报与首个节点；已有池编辑、启停不改变当前连接地址。
-            if (!array_key_exists('gateway_address', $data)) {
-                if ($pool->exists && (int) $pool->gateway_machine_id === (int) $machine->id) {
-                    $data['gateway_address'] = $pool->gateway_address;
-                } else {
-                    $addresses = $this->machineAddresses($machine);
-                    if ($addresses === []) $this->invalid('gateway_machine_id', '所选服务器尚未上报公网 IP，请先确认节点程序正常上报');
-                    $data['gateway_address'] = $addresses[0];
-                    if (empty($data['gateway_source_ips'])) $data['gateway_source_ips'] = $addresses;
+            if ($dnsMode) {
+                $preset = \App\Models\BalancerDnsPreset::query()->whereKey($data['dns_preset_id'] ?? 0)->lockForUpdate()->first();
+                if (!$preset || $preset->provider !== 'powerdns') $this->invalid('dns_preset_id', 'DNS 调度请选择 PowerDNS 域名配置');
+                if ($data['domain'] !== $preset->domain && !str_ends_with($data['domain'], '.' . $preset->domain)) $this->invalid('domain', '池域名必须属于所选 PowerDNS 区域');
+                if (($data['personal_domain_enabled'] ?? $pool->personal_domain_enabled) && count(explode('.', $data['domain'])) !== 3) $this->invalid('domain', '用户四级域名需要三级池域名，例如 pool.example.com');
+                if ($pool->exists && $pool->mode !== 'dns') {
+                    if ($pool->enabled || \App\Models\BalancerDnsRecord::where('pool_id', $pool->id)->exists()
+                        || \App\Models\DdnsBinding::where('owner_type', 'pool')->where('owner_id', $pool->id)->exists()) $this->invalid('mode', '转换前请停用旧池、同步清理池 DNS，并清理旧个人 DDNS 绑定');
                 }
+                if (\App\Models\DdnsBinding::where('domain', $data['domain'])->exists()) $this->invalid('domain', '该域名已被节点 DDNS 使用');
+                $port = $pool->exists ? (int) $pool->backend_port : $this->allocatePort($sources->pluck('machine_id')->all(), 0);
+                // 旧字段保留以兼容数据库与旧客户端，DNS 模式从不创建转发实例。
+                $data['gateway_machine_id'] = 0;
+                $data['gateway_address'] = '';
+                $data['gateway_source_ips'] = [];
+                $data['gateway_port'] = $port;
+                $gatewayPort = $port;
+            } else {
+                if (!empty($data['dns_preset_id']) && \App\Models\BalancerDnsPreset::find($data['dns_preset_id'])?->provider === 'powerdns') {
+                    $this->invalid('dns_preset_id', '旧转发池的基础解析保留 Cloudflare；使用 PowerDNS 请先转换为 DNS 调度');
+                }
+                $machine = ServerMachine::query()->whereKey($data['gateway_machine_id'])->when($starting, fn ($query) => $query->where('is_active', true))->first();
+                if (!$machine) $this->invalid('gateway_machine_id', '请选择已启用的调度入口服务器');
+                if ($starting && !self::agentCompatible($machine)) $this->invalid('gateway_machine_id', '调度入口服务器需要先运行 Node v2.25.0 或更新版本');
+                if ($machine->traffic_mode === 'proxy' && $machine->traffic_limit > 0) {
+                    $this->invalid('gateway_machine_id', '调度入口的流量限额请使用网卡计量模式，避免将转发量误作用户用量');
+                }
+                // 新配置直接读取机器上报与首个节点；已有池编辑、启停不改变当前连接地址。
+                if (!array_key_exists('gateway_address', $data)) {
+                    if ($pool->exists && (int) $pool->gateway_machine_id === (int) $machine->id) {
+                        $data['gateway_address'] = $pool->gateway_address;
+                    } else {
+                        $addresses = $this->machineAddresses($machine);
+                        if ($addresses === []) $this->invalid('gateway_machine_id', '所选服务器尚未上报公网 IP，请先确认节点程序正常上报');
+                        $data['gateway_address'] = $addresses[0];
+                        if (empty($data['gateway_source_ips'])) $data['gateway_source_ips'] = $addresses;
+                    }
+                }
+                if (!array_key_exists('gateway_port', $data)) {
+                    $preferred = $pool->exists ? (int) $pool->gateway_port : (int) $first->port;
+                    if ($preferred < 1 || $preferred > 65535) $this->invalid('members', '首个前置节点没有有效的连接端口');
+                    $data['gateway_port'] = $this->gatewayPort((int) $machine->id, $preferred, $pool->gateway_node_id);
+                }
+                $gatewayPort = (int) $data['gateway_port'];
+                if (!empty($data['dns_preset_id'])) \App\Models\BalancerDnsPreset::query()->whereKey($data['dns_preset_id'])->lockForUpdate()->firstOrFail();
+                $occupied = Server::query()->where('machine_id', $machine->id)->where('server_port', $gatewayPort)
+                    ->when($pool->gateway_node_id, fn ($query) => $query->where('id', '!=', $pool->gateway_node_id))->exists();
+                if ($occupied) $this->invalid('gateway_port', '调度入口端口已被其他节点使用');
             }
-            if (!array_key_exists('gateway_port', $data)) {
-                $preferred = $pool->exists ? (int) $pool->gateway_port : (int) $first->port;
-                if ($preferred < 1 || $preferred > 65535) $this->invalid('members', '首个前置节点没有有效的连接端口');
-                $data['gateway_port'] = $this->gatewayPort((int) $machine->id, $preferred, $pool->gateway_node_id);
-            }
-            $gatewayPort = (int) $data['gateway_port'];
-            if (!empty($data['dns_preset_id'])) \App\Models\BalancerDnsPreset::query()->whereKey($data['dns_preset_id'])->lockForUpdate()->firstOrFail();
-            $occupied = Server::query()->where('machine_id', $machine->id)->where('server_port', $gatewayPort)
-                ->when($pool->gateway_node_id, fn ($query) => $query->where('id', '!=', $pool->gateway_node_id))->exists();
-            if ($occupied) $this->invalid('gateway_port', '调度入口端口已被其他节点使用');
-            if ($pool->exists && ($pool->domain !== strtolower($data['domain']) || $pool->dns_preset_id != ($data['dns_preset_id'] ?? null)) && $pool->gateway_node_id) {
+            if ($pool->exists && ($pool->domain !== strtolower($data['domain']) || $pool->dns_preset_id != ($data['dns_preset_id'] ?? null)) && ($pool->gateway_node_id || $dnsMode)) {
                 // 旧域名的托管记录必须先明确移除，避免改名后遗留入口。
-                if (\App\Models\BalancerDnsRecord::where('pool_id', $pool->id)->exists()) {
+                if (\App\Models\BalancerDnsRecord::where('pool_id', $pool->id)->exists() || \App\Models\PowerDnsRecord::where('owner_type', 'pool')->where('owner_id', $pool->id)->exists()) {
                     $this->invalid('domain', '修改域名前请先停用池并完成 DNS 同步');
                 }
             }
@@ -140,8 +165,8 @@ class LoadBalancerService
                 $pool->template_node_id = $first->id;
                 $pool->template_config = collect($first->toArray())->only(['type', 'kernel_type', 'rate', 'group_ids', 'protocol_settings', 'route_ids', 'source_policy', 'rate_time_enable', 'rate_time_ranges'])->all();
             }
-            $pool->backend_port ??= $this->allocatePort($sources->pluck('machine_id')->all(), $gatewayPort);
-            if ($gatewayPort === (int) $pool->backend_port && $sources->contains('machine_id', $machine->id)) {
+            $pool->backend_port ??= $dnsMode ? $gatewayPort : $this->allocatePort($sources->pluck('machine_id')->all(), $gatewayPort);
+            if (!$dnsMode && $gatewayPort === (int) $pool->backend_port && $sources->contains('machine_id', $machine->id)) {
                 $this->invalid('gateway_port', '同一服务器上的调度入口端口不能与池成员端口相同');
             }
             if (Server::whereIn('machine_id', $sources->pluck('machine_id'))->where('server_port', $pool->backend_port)
@@ -173,26 +198,39 @@ class LoadBalancerService
                 $runtime->balancer_pool_id = $pool->id;
                 $runtime->balancer_role = 'member';
                 $runtime->auto_firewall = $source->auto_firewall;
+                if ($dnsMode) $runtime->accept_proxy_protocol = false;
                 $runtime->save();
                 $member->runtime_node_id = $runtime->id;
                 $member->priority = (int) $memberData['priority'];
                 $member->position = $position;
+                if ($dnsMode && !$member->dns_addresses) {
+                    $member->dns_addresses = DnsPoolService::addresses($source);
+                    if (!$member->dns_addresses) $this->invalid('members', 'DNS 调度成员需要有效的连接 IP 或近期公网地址上报');
+                }
                 $member->save();
             }
             foreach ($oldMembers as $member) {
                 $member->runtimeNode?->delete();
                 $member->delete();
             }
-            $gateway = $pool->gateway_node_id ? Server::find($pool->gateway_node_id) : null;
-            $gateway ??= new Server();
-            $gateway->fill(['type' => self::GATEWAY_PROTOCOL, 'kernel_type' => 'xray', 'name' => $pool->name . ' / 调度入口',
-                'host' => $pool->gateway_address, 'port' => (string) $pool->gateway_port, 'server_port' => $pool->gateway_port,
-                'machine_id' => $pool->gateway_machine_id, 'enabled' => $pool->enabled, 'show' => false, 'rate' => 1,
-                'balancer_pool_id' => $pool->id, 'balancer_role' => 'gateway', 'protocol_settings' => [], 'group_ids' => []]);
-            $gateway->save();
-            $pool->gateway_node_id = $gateway->id;
-            $pool->save();
-            app(DdnsService::class)->configure('pool', $pool, $ddns);
+            if (!$dnsMode) {
+                $gateway = $pool->gateway_node_id ? Server::find($pool->gateway_node_id) : null;
+                $gateway ??= new Server();
+                $gateway->fill(['type' => self::GATEWAY_PROTOCOL, 'kernel_type' => 'xray', 'name' => $pool->name . ' / 调度入口',
+                    'host' => $pool->gateway_address, 'port' => (string) $pool->gateway_port, 'server_port' => $pool->gateway_port,
+                    'machine_id' => $pool->gateway_machine_id, 'enabled' => $pool->enabled, 'show' => false, 'rate' => 1,
+                    'balancer_pool_id' => $pool->id, 'balancer_role' => 'gateway', 'protocol_settings' => [], 'group_ids' => []]);
+                $gateway->save();
+                $pool->gateway_node_id = $gateway->id;
+                $pool->save();
+                app(DdnsService::class)->configure('pool', $pool, $ddns);
+            } elseif ($pool->gateway_node_id) {
+                $oldGateway = Server::find($pool->gateway_node_id);
+                $oldMachine = $oldGateway?->machine_id;
+                $oldGateway?->delete();
+                $pool->update(['gateway_node_id' => null]);
+                if ($oldMachine) DB::afterCommit(fn () => NodeSyncService::notifyMachineNodesChanged((int) $oldMachine));
+            }
             DB::afterCommit(fn () => $this->notify($pool));
             return $pool->fresh(['members.sourceNode', 'members.runtimeNode']);
         }, 3);

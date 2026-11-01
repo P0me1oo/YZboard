@@ -1,5 +1,32 @@
 # YZboard 兼容矩阵
 
+## 1.112.0 DartNode-US 部署前验证（2026-11-01）
+
+- 本次固定源码包含 PowerDNS 前置池、管理端 `0.82.0`、每 60 秒后台同步、5 秒 TCP 探测和 180 秒有效计量上报期限。管理端源码提交 `40f3839cc83cf57a678603946648ddf52458fad7`；Agent 的独立 180 秒确认修复提交 `32688999c951cabc071f1d941f6e658b9cac749d`，DartNode-US 未运行 Agent 服务，本次不更新其他机器的 Agent。
+- PHP `8.2.35`、MariaDB `11.4.13`、Redis `8.8.4` 与目标服务器版本一致，测试使用本机隔离的 MariaDB 和 Redis。`php vendor/bin/phpunit --do-not-cache-result`：1,549 项、18,252 条断言，10 项 MariaDB 专属用例跳过；`php vendor/bin/phpunit --bootstrap tests/bootstrap-mariadb.php --do-not-cache-result`：1,549 项、18,264 条断言全部通过。两套均启用真实 Redis 生命周期和并发准入测试。
+- 管理端 3,100 份源码检查、6 项池行为测试和面板 5 项资源检查通过。16 个集成资源与既有成功构建逐字节一致（仅排除源码映射注释），主脚本 SHA-256 仍为 `cd48bb1938130a8f3f55ee47a40e941a5374a82931eb67443ef9d0fe9fad1e88`；复用下方同一前端源码及产物的浏览器验证，不重复构建。
+- 部署前确认目标为 DartNode-US，生产目录 `/root/yzboard`、运行账户 `www-data`，版本 `1.111.12` / `e921376e9510bf646c7f09cb8242182ce1c82c94`。三个面板服务正常，49 台机器中 43 台近期上报，前置池数量为 0；没有运行 PowerDNS 服务。本次只部署程序能力，不创建池或变更 DNS 委托。
+
+## 1.112.0 调度与计量超时调整（2026-11-01，本地未发布）
+
+- 在现有未提交 DNS 调度改动上继续调整：`balancer:sync` 从每 30 秒改为每 60 秒，前置 TCP 探测超时从 2 秒改为 5 秒；全局服务器有效计量上报期限从 30 秒改为 180 秒。面板仍由定时任务提前探测，用户连接时不等待该检查；手动同步立即执行。共用调度任务的旧转发池状态推送周期也改为 60 秒。
+- Agent 当前 `dev` 工作区基于 `ed15db8` / `v2.26.0`，仅同步将代理模式的面板有效确认超时改为 180 秒。未合入其他 Agent 分支；旧 Agent 仍执行原有 30 秒超时，需要配套修改生效。计量与上报频率、额度和错误保护、协议、数据库结构、前端与核心依赖均未在本次调整。
+- 临时 PHP `8.4.27` 复用项目 Composer 依赖，`php vendor/bin/phpunit --do-not-cache-result --filter 'MachineTrafficTest|DnsSchedulingTest|LoadBalancerTest|Relay|FrontendHealthCheckerTest|DeviceLeaseCacheTest'`：156 项、3602 条断言通过。覆盖三种计量模式的 31 / 179 / 180 秒边界、零用量有效新报告、重复和过期报告、恢复、DNS 剔除及设备许可恢复。
+- 临时 Go `1.27.3`，`CGO_ENABLED=0 GOTOOLCHAIN=local go test -mod=readonly -v ./internal/machinetraffic` 通过，包括超时续期、跨月、计量与存储失败、并发采样及隔离网络空间读取。未执行完整 Agent 或双数据库发布回归，本次不涉及查询或迁移变更。
+- 本机回环 TCP 验证：持续无法建立连接约 5.008 秒返回，延迟建立连接约 3.052 秒仍判定可用；实际调度对象为每分钟执行且无秒级重复。调度检查最初缺少插件测试数据库，改用隔离的插件调度替身后通过，没有修改产品逻辑或连接生产数据。
+- 两仓库差异检查通过。保留已有未提交内容，未提交、推送、发布或部署；临时运行时与检查文件在任务结束清理。
+
+## 1.112.0 前置 DNS 调度（2026-11-01，本地验证与集成完成，未发布）
+
+- 在面板 `edeebec0ba5e47bb01cb320242ffbcb71d169097` 和 Dash `3dd897f5b6659ffae49753d33929a49de07fb287` 上修改，保留原有未提交兼容记录及 Dash README / CHANGELOG 整理。
+- 实现单台 PowerDNS 直连调度、实例心跳与并发 TCP 端口检查、优先级选择、TTL、独立 DDNS / 个人域名 / 状态跟随开关；旧转发池需停用清理后显式转换。使用与 Cloudflare NS 委托见[DNS 调度](docs/load-balancer.md)。Agent 与核心源码未修改。
+- 使用临时 PHP 8.4.27 运行时复用现有 Composer 依赖，24 个修改 PHP 文件语法检查通过。`php vendor/bin/phpunit --filter 'Dns|LoadBalancer|Relay|FrontendHealth'`：145 项、2055 条断言通过，包含迁移、旧方案兼容和真实本机 TCP 端口检查。
+- `php vendor/bin/phpunit` 完成 SQLite 全套：1547 项中 1482 项通过，16622 条断言，65 项 Redis / MariaDB 条件用例沿用现有跳过规则，没有新增跳过或弱化断言。首轮暴露临时 PHP 子进程未继承扩展配置，设置 PHPRC 后完整重跑通过；新 DNS 测试用户补齐有效期，避免数据库默认已到期值干扰恢复用例。
+- 临时 PowerDNS Authoritative 4.9.18 / gsqlite3 仅监听本机随机端口，真实 API、DNS 查询及 TCP 检查共 23 项通过：最高优先级、TTL、comments 归属、四级个人 CNAME、DDNS 关闭时端口故障切换、全离线撤销、恢复原名称、显式用户状态跟随及清理后保留 NS。测试身份与区域均为临时数据，测试进程已停止。
+- 管理端 0.82.0 的 3100 份源码检查、6 项配置行为测试、正式构建和资源检查通过。相关浏览器 15 项分批通过，覆盖 1440 / 320 像素、开关独立保存、TTL、失败重试、刷新回读、PowerDNS 与旧 Cloudflare 配置及旧池编辑；已查看桌面和手机截图。初次浏览器启动因缺少字体失败，临时补齐字体后恢复，并修正失败请求的测试等待和已改名字段的定位。
+- 16 个资源增量集成到 `public/assets/admin`，逐字节核对通过（仅排除源码映射及其注释），原有 16 个 assets 文件保持原内容。面板 `node tests/admin-dist.test.cjs` 的 5 项检查通过。主脚本 `assets/admin-BnYWBJQv.js`，SHA-256 `cd48bb1938130a8f3f55ee47a40e941a5374a82931eb67443ef9d0fe9fad1e88`。
+- 先前网络与自动审批故障已解除，本次必要验证和前端集成已完成；测试运行时、脚本、下载包和临时 DNS 数据在结束时清理。没有连接生产 PowerDNS / Cloudflare、运行生产迁移、提交、推送或部署；65 项专属条件测试及实际客户端经公网 DNS 的连接未在本次执行。
+
 ## 1.111.11 性能边界修复与批量读取（2026-11-01）
 
 - 基于已发布 `1.111.10` / `e13d41349e4084fdacd71c7d777c2c798b4caf5a`，合并性能边界修复 `7727e3450d4c97f9753ee0ac04f1ca14acf97283` 与原 DartNode 性能优化增量。原优化草稿中的 `1.111.10` 统一改为 `1.111.11`，不覆盖既有正式标签。

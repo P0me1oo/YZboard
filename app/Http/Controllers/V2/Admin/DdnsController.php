@@ -23,14 +23,14 @@ class DdnsController extends Controller
     {
         $bindings = DdnsBinding::orderBy('id')->get()->map(function ($binding) {
             $owner = $binding->owner_type === 'node' ? Server::find($binding->owner_id) : BalancerPool::find($binding->owner_id);
-            return [...$binding->only(['id', 'owner_type', 'owner_id', 'preset_id', 'domain', 'enabled', 'retired', 'cleanup_requested', 'error', 'synced_at']),
+            return [...$binding->only(['id', 'owner_type', 'owner_id', 'preset_id', 'domain', 'enabled', 'personal_enabled', 'follow_user_status', 'retired', 'cleanup_requested', 'error', 'synced_at']),
                 'name' => $owner?->name, 'records' => DdnsRecord::where('binding_id', $binding->id)->whereNotNull('record_id')->count(),
                 'aliases' => DdnsAlias::where('binding_id', $binding->id)->count(),
                 'planned_records' => app(DdnsService::class)->plannedRecords($binding)];
         });
         $allPresets = BalancerDnsPreset::orderBy('id')->get();
         $presets = $allPresets->map(function ($preset) use ($bindings, $allPresets) {
-            $capacity = Cache::get('ddns:capacity:' . $preset->zone_id);
+            $capacity = Cache::get('ddns:capacity:' . $preset->provider . ':' . $preset->zone_id);
             $ids = $allPresets->where('zone_id', $preset->zone_id)->pluck('id')->all();
             $zoneBindings = $bindings->whereIn('preset_id', $ids);
             return [...$preset->toArray(), 'capacity' => $capacity,
@@ -56,8 +56,11 @@ class DdnsController extends Controller
         $data = $request->validate(['id' => 'required|integer|exists:v2_balancer_dns_preset,id']);
         $preset = BalancerDnsPreset::findOrFail($data['id']);
         try {
-            $capacity = [...$client->usage($preset), 'checked_at' => now()->toIso8601String()];
-            Cache::put('ddns:capacity:' . $preset->zone_id, $capacity, 3600);
+            $usage = $preset->provider === 'powerdns'
+                ? ['quota' => null, 'usage' => collect(app(\App\Services\PowerDnsClient::class)->request($preset, 'get')['rrsets'])->sum(fn ($r) => count($r['records']))]
+                : $client->usage($preset);
+            $capacity = [...$usage, 'checked_at' => now()->toIso8601String()];
+            Cache::put('ddns:capacity:' . $preset->provider . ':' . $preset->zone_id, $capacity, 3600);
             return $this->success($capacity);
         } catch (DdnsSyncException $error) {
             throw ValidationException::withMessages(['dns' => $error->getMessage()]);
@@ -76,7 +79,7 @@ class DdnsController extends Controller
     {
         $data = $request->validate(['id' => 'required|integer|exists:v2_ddns_binding,id']);
         $binding = DdnsBinding::findOrFail($data['id']);
-        if ($binding->enabled && !$binding->retired) throw ValidationException::withMessages(['id' => '请先关闭该入口的 DDNS']);
+        if (($binding->enabled || $binding->personal_enabled) && !$binding->retired) throw ValidationException::withMessages(['id' => '请先关闭该入口的 DDNS 和用户独立域名']);
         $binding->update(['cleanup_requested' => true, 'fingerprint' => null]);
         DdnsService::notify();
         return $this->success(true);

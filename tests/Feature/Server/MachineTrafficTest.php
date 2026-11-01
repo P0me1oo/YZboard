@@ -335,9 +335,42 @@ class MachineTrafficTest extends TestCase
         $this->postJson('/api/v2/server/machine/traffic', ['machine_id' => $m->id, 'token' => $m->token, 'sample' => []])->assertUnprocessable();
         $this->assertTrue($this->send($m, $this->sample($m, 0, 0, ['error' => 'interfaces_unavailable']))['blocked']);
         $this->assertFalse($this->send($m, $this->sample($m))['blocked']);
-        $this->travel(31)->seconds();
+        $this->travel(180)->seconds();
         $this->assertTrue(Traffic::blocked($m->fresh()));
         $this->assertFalse($this->send($m, $this->sample($m))['blocked']);
+    }
+
+    public function test_report_timeout_is_180_seconds_and_zero_usage_reports_renew_it(): void
+    {
+        foreach (['outbound', 'both', 'proxy'] as $mode) {
+            $machine = $this->machine();
+            $this->configure($machine, ['traffic_limit_gb' => 1, 'traffic_mode' => $mode]);
+            $policy = Traffic::view($machine->fresh());
+            $report = $this->sample($machine, 0, 0, ['mode' => $mode, 'revision' => $policy['revision']]);
+            $this->assertFalse($this->send($machine, $report)['blocked']);
+
+            $this->travel(31)->seconds();
+            $this->assertFalse(Traffic::blocked($machine->fresh()));
+            $this->travel(148)->seconds();
+            $this->assertFalse(Traffic::blocked($machine->fresh()));
+            // 重复报告可以重试，但不能延长有效期。
+            $this->assertFalse($this->send($machine, $report)['blocked']);
+            $this->travel(1)->seconds();
+            $this->assertTrue(Traffic::blocked($machine->fresh()));
+            foreach ([$report, [...$report, 'epoch' => $report['epoch'] - 1, 'sequence' => 99],
+                [...$report, 'period_start' => $report['period_start'] - 86400, 'sequence' => 99]] as $stale) {
+                $this->assertTrue($this->send($machine, $stale)['blocked']);
+            }
+
+            $report['sequence']++;
+            $reply = $this->send($machine, $report);
+            $this->assertFalse($reply['blocked']);
+            $this->assertSame(0, $reply['used']);
+            $this->travel(179)->seconds();
+            $this->assertFalse(Traffic::blocked($machine->fresh()));
+            $this->travel(1)->seconds();
+            $this->assertTrue(Traffic::blocked($machine->fresh()));
+        }
     }
 
     public function test_failed_write_rolls_back_usage_and_same_report_can_be_retried(): void

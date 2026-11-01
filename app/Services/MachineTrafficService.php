@@ -13,7 +13,7 @@ class MachineTrafficService
 {
     public const GB = 1073741824;
     public const MAX_BYTES = 9007199254740991;
-    public const LEASE_SECONDS = 30;
+    public const LEASE_SECONDS = 180;
 
     public static function period(int $day, ?CarbonImmutable $now = null): array
     {

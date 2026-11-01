@@ -837,8 +837,12 @@ class ServerService
 
         if ($node->balancer_role === 'member') {
             $pool = \App\Models\BalancerPool::findOrFail($node->balancer_pool_id);
-            $response['balancer_receiver'] = ['trusted_addresses' => $pool->gateway_source_ips ?: [$pool->gateway_address]];
-            $response['accept_proxy_protocol'] = true;
+            if ($pool->mode !== 'dns') {
+                $response['balancer_receiver'] = ['trusted_addresses' => $pool->gateway_source_ips ?: [$pool->gateway_address]];
+                $response['accept_proxy_protocol'] = true;
+            } else {
+                $response['accept_proxy_protocol'] = false;
+            }
         }
         return $response;
     }

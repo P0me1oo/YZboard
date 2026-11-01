@@ -78,7 +78,7 @@ class DdnsTest extends TestCase
         $preset = BalancerDnsPreset::first() ?? BalancerDnsPreset::create(['name' => '临时测试域名', 'domain' => 'ddns.example.com',
             'zone_id' => str_repeat('a', 32), 'api_token' => Str::random(40)]);
         $type = $owner instanceof Server ? 'node' : 'pool';
-        app(DdnsService::class)->configure($type, $owner, ['enabled' => true, 'preset_id' => $preset->id, 'prefix' => $prefix]);
+        app(DdnsService::class)->configure($type, $owner, ['enabled' => true, 'personal_enabled' => true, 'follow_user_status' => true, 'preset_id' => $preset->id, 'prefix' => $prefix]);
         return DdnsService::current($type, $owner->id);
     }
 
@@ -90,6 +90,34 @@ class DdnsTest extends TestCase
     private function projected(Server $node, User $user): array
     {
         return app(DdnsService::class)->project([$node->fresh()->toArray()], $user->fresh())[0];
+    }
+
+    public function test_new_ddns_and_personal_domain_switches_do_not_implicitly_follow_user_status(): void
+    {
+        $node = $this->node(); $user = $this->user();
+        $preset = BalancerDnsPreset::create(['name' => '测试域名', 'domain' => 'example.com', 'zone_id' => str_repeat('a', 32), 'api_token' => Str::random(40)]);
+        $service = app(DdnsService::class);
+        $data = ['enabled' => true, 'preset_id' => $preset->id, 'prefix' => 'independent'];
+        $service->configure('node', $node, $data);
+        $binding = DdnsService::current('node', $node->id);
+        $this->assertFalse($binding->personal_enabled);
+        $this->assertFalse($binding->follow_user_status);
+        $this->assertTrue($this->sync());
+        $this->assertCount(1, $this->remote);
+        $this->assertSame('independent.example.com', $this->projected($node, $user)['host']);
+        $service->configure('node', $node, [...$data, 'enabled' => false, 'personal_enabled' => true]);
+        $node->update(['host' => '192.0.2.99']);
+        $user->update(['banned' => true]);
+        $this->assertTrue($this->sync());
+        $this->assertCount(2, $this->remote);
+        $this->assertSame('192.0.2.10', DdnsRecord::whereNull('alias_id')->value('content'));
+        $name = $this->projected($node, $user)['host'];
+        $service->configure('node', $node, [...$data, 'enabled' => false, 'personal_enabled' => true, 'follow_user_status' => true]);
+        $this->assertTrue($this->sync());
+        $this->assertCount(1, $this->remote);
+        $user->update(['banned' => false]);
+        $this->assertTrue($this->sync());
+        $this->assertSame($name, $this->projected($node, $user)['host']);
     }
 
     public function test_manual_node_ip_updates_base_only_and_preserves_user_domains_and_tls(): void
@@ -196,7 +224,7 @@ class DdnsTest extends TestCase
     public function test_disable_retains_old_names_and_migration_keeps_them_until_explicit_cleanup(): void
     {
         $node = $this->node(); $user = $this->user(); $old = $this->configure($node); $this->sync();
-        app(DdnsService::class)->configure('node', $node, ['enabled' => false]);
+        app(DdnsService::class)->configure('node', $node, ['enabled' => false, 'personal_enabled' => false]);
         $node->update(['host' => '192.0.2.33']); $this->assertTrue($this->sync());
         $this->assertCount(2, $this->remote);
         $this->assertSame('192.0.2.33', $this->projected($node, $user)['host']);
@@ -318,7 +346,7 @@ class DdnsTest extends TestCase
     public function test_pool_ddns_requires_explicit_ip_even_when_called_without_controller(): void
     {
         try {
-            app(\App\Services\LoadBalancerService::class)->save(['name' => '测试池', 'ddns' => ['enabled' => true]]);
+            app(\App\Services\LoadBalancerService::class)->save(['name' => '测试池', 'mode' => 'legacy', 'ddns' => ['enabled' => true]]);
             $this->fail('不能自动改用机器上报地址');
         } catch (ValidationException $error) {
             $this->assertArrayHasKey('gateway_address', $error->errors());
@@ -351,7 +379,7 @@ class DdnsTest extends TestCase
         $node = $this->node(); $this->user(); $binding = $this->configure($node); $this->sync();
         $entry = $this->node('192.0.2.50');
         $node->update(['host' => '10.0.0.20', 'relay_entry_id' => $entry->id]);
-        app(DdnsService::class)->configure('node', $node, ['enabled' => false]);
+        app(DdnsService::class)->configure('node', $node, ['enabled' => false, 'personal_enabled' => false]);
         $this->assertTrue($this->sync());
         $this->assertCount(0, $this->remote);
         $this->assertSame(0, app(DdnsService::class)->plannedRecords($binding->fresh()));
@@ -435,12 +463,13 @@ class DdnsTest extends TestCase
         $this->assertTrue($this->sync());
         $oldName = $this->projected($node, $revoked)['host'];
         $activeName = $this->projected($node, $active)['host'];
-        app(DdnsService::class)->configure('node', $node, ['enabled' => false]);
+        app(DdnsService::class)->configure('node', $node, ['enabled' => false, 'personal_enabled' => false]);
         $body = $node->only(['id', 'name', 'type', 'host', 'port', 'server_port', 'rate', 'group_ids', 'protocol_settings']);
         $body['host'] = 'new-entry.example.com';
         $this->postJson('/_tests/ddns/node/save', $body)->assertOk();
         $revoked->update(['banned' => true]);
-        $this->assertFalse($this->sync());
+        $this->assertTrue($this->sync());
+        $this->assertSame('192.0.2.10', DdnsRecord::whereNull('alias_id')->value('content'));
         $this->assertFalse(collect($this->remote)->contains('name', $oldName));
         $this->assertTrue(collect($this->remote)->contains('name', $activeName));
         $this->assertSame(2, DdnsAlias::count());
@@ -549,7 +578,7 @@ class DdnsTest extends TestCase
         $this->assertNull($binding->fresh()->synced_at);
         try { $this->projected($node, $user); $this->fail('归属变更后不能继续下发'); }
         catch (HttpResponseException $error) { $this->assertSame(503, $error->getResponse()->getStatusCode()); }
-        app(DdnsService::class)->configure('node', $node, ['enabled' => false]);
+        app(DdnsService::class)->configure('node', $node, ['enabled' => false, 'personal_enabled' => false]);
         (new DdnsController())->cleanup(Request::create('/', 'POST', ['id' => $binding->id]));
         $this->assertFalse($this->sync());
         $this->assertArrayHasKey($id, $this->remote);

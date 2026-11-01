@@ -42,10 +42,10 @@ class DdnsService
     public static function view(string $type, int $id): array
     {
         $binding = self::current($type, $id);
-        return $binding ? ['enabled' => $binding->enabled, 'preset_id' => $binding->preset_id, 'prefix' => $binding->prefix,
+        return $binding ? ['enabled' => $binding->enabled, 'personal_enabled' => $binding->personal_enabled, 'follow_user_status' => $binding->follow_user_status, 'ttl' => $binding->ttl, 'preset_id' => $binding->preset_id, 'prefix' => $binding->prefix,
             'domain' => $binding->domain, 'status' => $binding->error ? 'error' : ($binding->synced_at && $binding->fingerprint ? 'synced' : 'pending'),
             'error' => $binding->error, 'synced_at' => $binding->synced_at?->toIso8601String()]
-            : ['enabled' => false, 'preset_id' => null, 'prefix' => ''];
+            : ['enabled' => false, 'personal_enabled' => false, 'follow_user_status' => false, 'ttl' => 60, 'preset_id' => null, 'prefix' => ''];
     }
 
     /** 绑定单独保存，节点复制不会继承域名或远端记录编号。 */
@@ -53,8 +53,10 @@ class DdnsService
     {
         if ($data === null) return;
         $current = self::current($type, $owner->id);
-        if (!($data['enabled'] ?? false)) {
-            $current?->update(['enabled' => false, 'fingerprint' => null]);
+        $personal = (bool) ($data['personal_enabled'] ?? $current?->personal_enabled ?? false);
+        $follow = (bool) ($data['follow_user_status'] ?? $current?->follow_user_status ?? false);
+        if (!($data['enabled'] ?? false) && !$personal) {
+            $current?->update(['enabled' => false, 'personal_enabled' => false, 'follow_user_status' => $follow, 'fingerprint' => null]);
             self::notify();
             return;
         }
@@ -86,7 +88,7 @@ class DdnsService
         if ($current && $current->id !== $existing?->id) $current->update(['enabled' => false, 'retired' => true, 'fingerprint' => null]);
         $binding = $existing ?? new DdnsBinding(['owner_type' => $type, 'owner_id' => $owner->id,
             'preset_id' => $preset->id, 'prefix' => $prefix, 'domain' => $domain]);
-        $binding->fill(['enabled' => true, 'retired' => false, 'fingerprint' => null, 'error' => null])->save();
+        $binding->fill(['enabled' => (bool) ($data['enabled'] ?? false), 'personal_enabled' => $personal, 'follow_user_status' => $follow, 'ttl' => (int) ($data['ttl'] ?? $current?->ttl ?? 60), 'retired' => false, 'fingerprint' => null, 'error' => null])->save();
         self::notify();
     }
 
@@ -115,28 +117,38 @@ class DdnsService
 
     public function project(array $servers, User|array $user): array
     {
-        if (!self::installed() || !DdnsBinding::where('enabled', true)->where('retired', false)->exists()) return $servers;
+        if (!self::installed()) return $servers;
         foreach ($servers as &$server) {
             [$type, $id] = self::endpoint($server);
+            if ($type === 'pool' && ($pool = BalancerPool::find($id))?->mode === 'dns') {
+                $server['host'] = app(DnsPoolService::class)->project($pool, $user);
+                continue;
+            }
             $binding = self::current($type, $id);
-            if (!$binding?->enabled) continue;
+            if (!$binding || (!$binding->enabled && !$binding->personal_enabled)) continue;
             // 兼容订阅渲染器的数组输入；涉及个人域名时，只信任数据库中的最新资格。
             if (is_array($user)) $user = User::find((int) ($user['id'] ?? 0));
-            if (!$user || $user->banned || $user->u + $user->d >= $user->transfer_enable
+            if (!$user || ($binding->follow_user_status && ($user->banned || $user->u + $user->d >= $user->transfer_enable
                 || ($user->expired_at !== null && $user->expired_at <= time())
-                || !array_intersect($user->effectiveGroupIds(), $this->groupIds($binding))) {
+                || !array_intersect($user->effectiveGroupIds(), $this->groupIds($binding))))) {
                 throw new HttpResponseException(response('当前用户没有该节点的使用权限', 403, ['Cache-Control' => 'private, no-store']));
             }
             $alias = DdnsAlias::where('binding_id', $binding->id)->where('user_id', $user->id)->first();
             $record = $alias ? DdnsRecord::where('binding_id', $binding->id)->where('alias_id', $alias->id)->whereNotNull('record_id')->first() : null;
             $baseReady = DdnsRecord::where('binding_id', $binding->id)->where('name', $binding->domain)
                 ->whereNull('alias_id')->whereNotNull('record_id')->exists();
-            if (!$record || !$baseReady || !$binding->synced_at) {
+            if ($binding->preset?->provider === 'powerdns') {
+                $baseReady = \App\Models\PowerDnsRecord::where('owner_type', 'binding')->where('owner_id', $binding->id)
+                    ->where('name', $binding->domain)->where('confirmed', true)->exists();
+                if ($alias && !\App\Models\PowerDnsRecord::where('owner_type', 'binding')->where('owner_id', $binding->id)
+                    ->where('name', $alias->label . '.' . $binding->domain)->where('confirmed', true)->exists()) $record = null;
+            }
+            if (($binding->personal_enabled && !$record) || !$baseReady || !$binding->synced_at) {
                 self::notify();
                 throw new HttpResponseException(response('节点域名正在准备，请稍后更新订阅', 503,
                     ['Content-Type' => 'text/plain; charset=UTF-8', 'Cache-Control' => 'private, no-store', 'Retry-After' => '30']));
             }
-            $server['host'] = $alias->label . '.' . $binding->domain;
+            $server['host'] = $binding->personal_enabled ? $alias->label . '.' . $binding->domain : $binding->domain;
         }
         unset($server);
         return $servers;
@@ -165,8 +177,8 @@ class DdnsService
     {
         $groups = $this->groupIds($binding);
         if (!$groups) return collect();
-        return User::where('banned', 0)->whereRaw('u + d < transfer_enable')
-            ->where(fn ($q) => $q->whereNull('expired_at')->orWhere('expired_at', '>', time()))
+        return User::query()->when($binding->follow_user_status, fn ($q) => $q->where('banned', 0)->whereRaw('u + d < transfer_enable')
+            ->where(fn ($q) => $q->whereNull('expired_at')->orWhere('expired_at', '>', time())))
             ->where(function ($q) use ($groups) {
                 $q->whereIn('group_id', $groups);
                 foreach ($groups as $group) $q->orWhereJsonContains('group_ids', $group)->orWhereJsonContains('group_ids', (string) $group);
@@ -180,7 +192,7 @@ class DdnsService
         if (!$owner || $owner->enabled === false || $binding->cleanup_requested) return 0;
         if ($binding->owner_type === 'node' && ($owner->isRelayChild() || $owner->balancer_pool_id)) return 0;
         $ids = $this->eligibleUsers($binding)->pluck('id')->all();
-        return 1 + ($binding->enabled && !$binding->retired ? count($ids)
+        return 1 + ($binding->personal_enabled && !$binding->retired ? count($ids)
             : DdnsAlias::where('binding_id', $binding->id)->whereIn('user_id', $ids)->count());
     }
 
@@ -236,10 +248,13 @@ class DdnsService
         $publicEntry = $owner && ($binding->owner_type === 'pool' || (!$owner->isRelayChild() && !$owner->balancer_pool_id));
         if (!$cleanup && $owner->enabled !== false && $publicEntry) {
             $address = $binding->owner_type === 'node' ? $owner->host : $owner->gateway_address;
+            if (!$binding->enabled) {
+                $address = DdnsRecord::where('binding_id', $binding->id)->whereNull('alias_id')->value('content') ?: $address;
+            }
             $addressError = !filter_var($address, FILTER_VALIDATE_IP);
             $desired[$binding->domain] = ['alias_id' => null, 'type' => str_contains($address, ':') ? 'AAAA' : 'A', 'content' => $address];
             $aliases = DdnsAlias::where('binding_id', $binding->id)->get()->keyBy('user_id');
-            if (!$addressError && $binding->enabled && !$binding->retired) {
+            if (!$addressError && $binding->personal_enabled && !$binding->retired) {
                 $missing = [];
                 foreach ($users as $user) {
                     $this->cloudflare->checkpoint();
@@ -259,9 +274,23 @@ class DdnsService
             }
         }
         ksort($desired);
-        $fingerprint = hash('sha256', json_encode($desired, JSON_THROW_ON_ERROR));
+        $fingerprint = hash('sha256', json_encode([$desired, $binding->ttl], JSON_THROW_ON_ERROR));
         if (!$cleanup && !$addressError && !$binding->error && $binding->fingerprint === $fingerprint
             && $binding->synced_at?->gt(now()->subMinutes(10))) return;
+
+        if ($preset->provider === 'powerdns') {
+            if ($addressError) throw new DdnsSyncException('节点连接地址需要有效 IP');
+            $rrsets = [];
+            foreach ($desired as $name => $value) $rrsets[] = ['name' => $name, 'type' => $value['type'],
+                'contents' => [$value['content'] . ($value['type'] === 'CNAME' ? '.' : '')]];
+            app(PowerDnsService::class)->reconcile($preset, 'binding', $binding->id, $rrsets, $binding->ttl);
+            DdnsRecord::where('binding_id', $binding->id)->whereNotIn('name', array_keys($desired))->delete();
+            foreach ($desired as $name => $value) DdnsRecord::updateOrCreate(['binding_id' => $binding->id, 'name' => $name],
+                [...$value, 'record_id' => hash('sha256', $name), 'marker' => 'powerdns']);
+            if ($cleanup) { DdnsAlias::where('binding_id', $binding->id)->delete(); $binding->delete(); return; }
+            $binding->update(['fingerprint' => $fingerprint, 'synced_at' => now(), 'error' => null]);
+            return;
+        }
 
         // 同一轮按区域共用分页快照，避免为每名用户重复读取整个区域。
         $remote = $this->cloudflare->records($preset);
@@ -347,9 +376,9 @@ class DdnsService
             $equal = $value['type'] === 'CNAME' ? strtolower(rtrim((string) $content, '.')) === $value['content']
                 : ($content && @inet_pton($content) === @inet_pton($value['content']));
             if ($existing && $existing['type'] === $value['type'] && $equal
-                && !($existing['proxied'] ?? false) && ($existing['ttl'] ?? 0) === 60) continue;
+                && !($existing['proxied'] ?? false) && ($existing['ttl'] ?? 0) === max(60, $binding->ttl)) continue;
             $payload = ['name' => $name, 'type' => $value['type'], 'content' => $value['content'],
-                'proxied' => false, 'ttl' => 60, 'comment' => $record->marker];
+                'proxied' => false, 'ttl' => max(60, $binding->ttl), 'comment' => $record->marker];
             if ($existing) $payload['id'] = $existing['id'];
             $actions[] = ['operation' => $existing ? 'puts' : 'posts', 'payload' => $payload, 'record' => $record];
         }

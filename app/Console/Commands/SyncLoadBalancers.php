@@ -14,11 +14,15 @@ class SyncLoadBalancers extends Command
 
     public function handle(BalancerDnsService $dns): int
     {
+        $success = true;
         foreach (BalancerPool::with('gateway')->get() as $pool) {
             if ($pool->gateway && $pool->enabled) NodeSyncService::notifyConfigUpdated($pool->gateway->id);
-            if (!$pool->dns_synced_at || $pool->dns_error || $pool->updated_at->gt($pool->dns_synced_at)
-                || $pool->dns_synced_at->lt(now()->subMinutes(10))) $dns->sync($pool);
+            if ($pool->mode === 'dns' || !$pool->dns_synced_at || $pool->dns_error || $pool->updated_at->gt($pool->dns_synced_at)
+                || $pool->dns_synced_at->lt(now()->subMinutes(10))) {
+                try { if (!$dns->sync($pool)) $success = false; }
+                catch (\Throwable) { $success = false; }
+            }
         }
-        return self::SUCCESS;
+        return $success ? self::SUCCESS : self::FAILURE;
     }
 }

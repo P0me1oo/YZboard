@@ -15,6 +15,11 @@ class SyncLoadBalancers extends Command
     public function handle(BalancerDnsService $dns): int
     {
         $success = true;
+        foreach (\App\Models\LandingPool::with('node')->get() as $landing) {
+            try { app(\App\Services\LandingPoolService::class)->sync($landing); }
+            catch (\Throwable $error) { report($error); $success = false; }
+        }
+        \App\Models\SchedulingEvent::where('created_at', '<', now()->subDays(30))->delete();
         foreach (BalancerPool::with('gateway')->get() as $pool) {
             if ($pool->gateway && $pool->enabled) NodeSyncService::notifyConfigUpdated($pool->gateway->id);
             if ($pool->mode === 'dns' || !$pool->dns_synced_at || $pool->dns_error || $pool->updated_at->gt($pool->dns_synced_at)

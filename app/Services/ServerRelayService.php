@@ -192,9 +192,13 @@ class ServerRelayService
             })
             ->orderBy('sort', 'ASC')
             ->get()
-            ->filter(fn (Server $child) => self::isSupportedLanding($child, $entry));
+            ->filter(fn (Server $child) => self::isSupportedLanding($child, $entry) && self::poolRouteAvailable($entry, $child));
         $blocked = MachineTrafficService::nodeBlockedMany($children);
-        return $children->filter(fn (Server $child) => !$blocked[(int) $child->id])->values();
+        $managed = \App\Models\LandingPool::where('enabled', true)->whereIn('node_id', $children->pluck('id'))->get()->keyBy('node_id');
+        return $children->filter(function (Server $child) use ($entry, $blocked, $managed) {
+            if ($managed->has($child->id)) return LandingPoolService::targetFor($child, $entry, $managed[$child->id]) !== null;
+            return !$blocked[(int) $child->id];
+        })->values();
     }
 
     public static function childrenQuery(Server $entry): \Illuminate\Database\Eloquent\Builder
@@ -204,6 +208,7 @@ class ServerRelayService
             if ($entry->balancer_role === 'member' && $entry->balancer_pool_id) {
                 $query->orWhere('relay_pool_id', $entry->balancer_pool_id);
             }
+            $query->orWhereIn('relay_pool_id', \App\Models\BalancerMember::where('runtime_node_id', $entry->id)->pluck('pool_id'));
         });
     }
 
@@ -211,7 +216,15 @@ class ServerRelayService
     {
         return (int) $child->relayEntryId() === (int) $entry->id
             || ($entry->balancer_role === 'member' && $entry->balancer_pool_id
-                && (int) $child->relay_pool_id === (int) $entry->balancer_pool_id);
+                && (int) $child->relay_pool_id === (int) $entry->balancer_pool_id)
+            || ($child->relay_pool_id && \App\Models\BalancerMember::where('runtime_node_id', $entry->id)->where('pool_id', $child->relay_pool_id)->exists());
+    }
+
+    private static function poolRouteAvailable(Server $entry, Server $child): bool
+    {
+        if (!$child->relay_pool_id) return true;
+        $pool = \App\Models\BalancerPool::find($child->relay_pool_id);
+        return $pool && $pool->enabled && ($pool->mode !== 'dns' || LoadBalancerService::memberCompatibility($pool, $entry) === []);
     }
 
     public static function hasRelayChildren(Server $entry): bool
@@ -226,11 +239,15 @@ class ServerRelayService
             return [];
         }
         $children = self::childrenQuery($entry)->orderBy('id')->get();
+        $managedPools = \App\Models\LandingPool::where('enabled', true)->whereIn('node_id', $children->pluck('id'))->get()->keyBy('node_id');
         $blocked = MachineTrafficService::nodeBlockedMany(
             $children->filter(fn (Server $child) => $child->enabled !== false)
         );
         return $children
-            ->filter(fn (Server $child) => $child->enabled === false || $blocked[(int) $child->id])
+            ->filter(function (Server $child) use ($entry, $blocked, $managedPools) {
+                $managed = $managedPools->get($child->id);
+                return $child->enabled === false || ($managed ? LandingPoolService::targetFor($child, $entry, $managed) === null : $blocked[(int) $child->id]) || !self::poolRouteAvailable($entry, $child);
+            })
             ->map(fn (Server $child) => self::ensureRouteId($child))->all();
     }
 

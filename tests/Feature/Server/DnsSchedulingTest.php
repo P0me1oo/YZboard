@@ -12,7 +12,6 @@ use App\Models\ServerMachine;
 use App\Models\User;
 use App\Services\BalancerDnsService;
 use App\Services\DdnsService;
-use App\Services\FrontendHealthChecker;
 use App\Services\LoadBalancerService;
 use App\Services\MachineTrafficService;
 use App\Services\PowerDnsService;
@@ -32,7 +31,7 @@ class DnsSchedulingTest extends TestCase
     use RefreshDatabase;
 
     private array $remote = [];
-    private array $reachable = ['192.0.2.10', '192.0.2.11', '2001:db8::10', '192.0.2.99'];
+    private ?array $reality = null;
     private bool $loseResponse = false;
 
     protected function setUp(): void
@@ -53,7 +52,9 @@ class DnsSchedulingTest extends TestCase
             if ($this->loseResponse) { $this->loseResponse = false; return Http::response([], 503); }
             return Http::response('', 204);
         });
-        $this->mock(FrontendHealthChecker::class)->shouldReceive('reachable')->andReturnUsing(fn ($addresses) => array_values(array_intersect($addresses, $this->reachable)));
+        $this->app->instance('App\\Services\\FrontendHealthChecker', new class {
+            public function reachable(): never { throw new \RuntimeException('DNS 同步不能执行端口探测'); }
+        });
     }
 
     private function preset(): BalancerDnsPreset
@@ -65,12 +66,12 @@ class DnsSchedulingTest extends TestCase
     private function node(string $ip): Server
     {
         $machine = ServerMachine::create(['name' => '前置', 'token' => Str::random(32), 'is_active' => true, 'agent_runtime' => ['version' => 'v2.25.0']]);
+        $this->reality ??= ['server_name' => 'handshake.example.com', 'server_port' => 443, 'short_id' => '0123456789abcdef',
+            'private_key' => rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '='),
+            'public_key' => rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=')];
         return Server::create(['name' => '前置', 'machine_id' => $machine->id, 'host' => $ip, 'type' => 'vless', 'kernel_type' => 'xray',
             'port' => '443', 'server_port' => 443, 'enabled' => true, 'show' => true, 'rate' => 1, 'group_ids' => [1],
-            'protocol_settings' => ['network' => 'tcp', 'tls' => 2, 'flow' => 'xtls-rprx-vision', 'reality_settings' => [
-                'server_name' => 'handshake.example.com', 'server_port' => 443, 'short_id' => bin2hex(random_bytes(8)),
-                'private_key' => rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '='),
-                'public_key' => rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=')]]]);
+            'protocol_settings' => ['network' => 'tcp', 'tls' => 2, 'flow' => 'xtls-rprx-vision', 'reality_settings' => $this->reality]]);
     }
 
     private function pool(array $extra = []): BalancerPool
@@ -106,9 +107,12 @@ class DnsSchedulingTest extends TestCase
         $this->assertFalse($pool->personal_domain_enabled);
         $this->assertFalse($pool->follow_user_status);
         $this->assertNull($pool->gateway_node_id);
-        $this->assertSame(0, Server::where('balancer_role', 'gateway')->count());
+        $this->assertSame(0, Server::whereNotNull('balancer_role')->count());
+        $this->assertSame(2, Server::count());
+        $this->assertSame(443, $pool->gateway_port);
         $this->assertSame($pool->backend_port, $pool->gateway_port);
         foreach ($pool->members as $member) {
+            $this->assertSame($member->source_node_id, $member->runtime_node_id);
             $config = ServerService::buildNodeConfig($member->runtimeNode);
             $this->assertArrayNotHasKey('balancer_receiver', $config);
             $this->assertFalse($config['accept_proxy_protocol']);
@@ -117,24 +121,170 @@ class DnsSchedulingTest extends TestCase
         $this->assertSame($pool->domain, LoadBalancerService::entryForPool($pool->id)->host);
     }
 
-    public function test_failover_uses_heartbeat_and_port_and_recovers_with_ddns_off(): void
+    public function test_nat_reuses_original_services_and_first_public_port_even_when_member_order_changes(): void
+    {
+        $a = $this->node('192.0.2.10'); $b = $this->node('192.0.2.11');
+        $a->update(['port' => '30443', 'server_port' => 443]);
+        $b->update(['port' => '30443', 'server_port' => 8443]);
+        $before = [$a->fresh()->getAttributes(), $b->fresh()->getAttributes()];
+        $preset = $this->preset();
+        $payload = ['mode' => 'dns', 'name' => 'NAT 池', 'domain' => $preset->domain, 'dns_preset_id' => $preset->id,
+            'enabled' => true, 'members' => [['node_id' => $b->id, 'priority' => 2], ['node_id' => $a->id, 'priority' => 1]]];
+        $pool = app(LoadBalancerService::class)->save($payload);
+        $this->assertSame(30443, $pool->gateway_port);
+        $this->assertSame($b->id, $pool->template_node_id);
+        $this->assertSame([$b->id, $a->id], $pool->members->pluck('runtime_node_id')->all());
+        $this->assertSame($before, [$a->fresh()->getAttributes(), $b->fresh()->getAttributes()]);
+        $this->assertSame(2, Server::count());
+        $entry = LoadBalancerService::entryForPool($pool->id);
+        $this->assertSame('30443', $entry->port);
+        $this->assertSame($b->protocol_settings, $entry->protocol_settings);
+        $this->assertSame(8443, ServerService::buildNodeConfig($b->fresh())['server_port']);
+        foreach ([$a, $b] as $node) $node->update(['port' => '15432']);
+        $pool = app(LoadBalancerService::class)->save([...$payload, 'id' => $pool->id,
+            'members' => array_reverse($payload['members'])]);
+        $this->assertSame(15432, $pool->gateway_port);
+        $this->assertSame($a->id, $pool->template_node_id);
+        $this->assertSame(2, Server::count());
+    }
+
+    public function test_incompatible_connections_are_rejected_with_reasons_without_mutating_nodes(): void
+    {
+        $a = $this->node('192.0.2.10'); $b = $this->node('192.0.2.11');
+        $preset = $this->preset();
+        $payload = ['mode' => 'dns', 'name' => '兼容性池', 'domain' => $preset->domain, 'dns_preset_id' => $preset->id,
+            'enabled' => true, 'members' => [['node_id' => $a->id, 'priority' => 1], ['node_id' => $b->id, 'priority' => 1]]];
+        $settings = $b->protocol_settings;
+        $cases = [
+            [['port' => '8443'], '公网端口'],
+            [['port' => '443,8443'], '单一端口'],
+            [['type' => 'trojan'], '协议'],
+            [['protocol_settings' => [...$settings, 'network' => 'ws']], '传输协议'],
+            [['protocol_settings' => [...$settings, 'flow' => '']], '流控'],
+            [['protocol_settings' => [...$settings, 'reality_settings' => [...$this->reality, 'public_key' => 'different-test-key']]], '公钥'],
+            [['protocol_settings' => [...$settings, 'reality_settings' => [...$this->reality, 'short_id' => 'abcd']]], '短 ID'],
+            [['protocol_settings' => [...$settings, 'reality_settings' => [...$this->reality, 'server_name' => 'different.example.test']]], '握手域名'],
+            [['protocol_settings' => [...$settings, 'reality_settings' => [...$this->reality, 'server_port' => 8443]]], '握手端口'],
+            [['accept_proxy_protocol' => true], 'PROXY'],
+        ];
+        foreach ($cases as [$changes, $reason]) {
+            $b->update(['type' => 'vless', 'port' => '443', 'protocol_settings' => $settings, 'accept_proxy_protocol' => false, ...$changes]);
+            $original = $b->fresh()->getAttributes();
+            try { app(LoadBalancerService::class)->save($payload); $this->fail('不兼容成员不能保存'); }
+            catch (ValidationException $error) { $this->assertStringContainsString($reason, implode('；', $error->errors()['members'])); }
+            $this->assertSame($original, $b->fresh()->getAttributes());
+            $this->assertSame(0, BalancerPool::count());
+            $this->assertSame(2, Server::count());
+        }
+    }
+
+    public function test_dns_and_list_use_panel_status_without_a_separate_pool_heartbeat_threshold(): void
+    {
+        $pool = $this->pool();
+        $this->heartbeat($pool->members[0]->source_node_id, time() - 200);
+        admin_setting(['load_balance_offline_threshold' => 30]);
+        $this->assertTrue($this->sync($pool));
+        $this->assertSame(['192.0.2.10'], $this->addresses());
+        // 旧健康结果和检查时间不能影响列表中的原节点在线状态。
+        $pool->members[0]->update(['healthy_addresses' => [], 'checked_at' => now()->subHour()]);
+        $view = (new LoadBalancerController())->fetch()->getData(true)['data']['pools'][0];
+        $this->assertTrue($view['members'][0]['online']);
+        $this->heartbeat($pool->members[0]->source_node_id, time() - 301);
+        $this->assertTrue($this->sync($pool));
+        $this->assertSame(['192.0.2.11'], $this->addresses());
+        $this->heartbeat($pool->members[0]->source_node_id, time());
+        $this->assertTrue($this->sync($pool));
+        $this->assertSame(['192.0.2.10'], $this->addresses());
+        Cache::put('realtime:v1:node:' . $pool->members[0]->source_node_id, ['received_at' => now()->subMinutes(10)->getTimestampMs(), 'data' => []]);
+        // 展示采样缓存不另设 DNS 离线条件，判定与节点列表的可用状态一致。
+        $this->assertTrue($this->sync($pool));
+        $this->assertSame(['192.0.2.10'], $this->addresses());
+    }
+
+    public function test_source_setting_changes_remove_dns_member_and_pool_can_still_be_disabled(): void
+    {
+        $pool = $this->pool();
+        $pool->members[0]->sourceNode->update(['port' => '8443']);
+        $this->assertTrue($this->sync($pool));
+        $this->assertSame(['192.0.2.11'], $this->addresses());
+        $view = (new LoadBalancerController())->fetch()->getData(true)['data']['pools'][0];
+        $this->assertStringContainsString('公网端口', implode('；', $view['members'][0]['compatibility_reasons']));
+        $disabled = app(LoadBalancerService::class)->save(['id' => $pool->id, 'mode' => 'dns', 'name' => $pool->name,
+            'domain' => $pool->domain, 'dns_preset_id' => $pool->dns_preset_id, 'enabled' => false,
+            'members' => $pool->members->map(fn ($member) => ['node_id' => $member->source_node_id, 'priority' => $member->priority])->all()]);
+        $this->assertFalse($disabled->enabled);
+        $this->assertTrue($this->sync($disabled));
+        $this->assertSame([], $this->addresses());
+        $this->assertTrue($pool->members[0]->sourceNode->fresh()->enabled);
+    }
+
+    public function test_reused_entry_serves_pool_routes_and_direct_users_and_removal_preserves_service(): void
+    {
+        $pool = $this->pool();
+        $landing = $this->node('192.0.2.30');
+        $landing->update(['relay_pool_id' => $pool->id, 'group_ids' => [2]]);
+        $entry = $pool->members[0]->sourceNode;
+        $config = ServerService::buildNodeConfig($entry);
+        $this->assertSame($landing->id, $config['relay']['children'][0]['node_id']);
+        $this->assertSame([['server_id' => $landing->id, 'server_type' => 'vless', 'u' => 10, 'd' => 20]],
+            ServerService::normalizeRelayTraffic($entry, [$landing->id => [10, 20]]));
+        foreach ([1, 2] as $group) User::create(['email' => Str::random(10) . '@example.test', 'password' => Str::random(24),
+            'uuid' => Str::uuid()->toString(), 'token' => Str::random(32), 'group_id' => $group, 'banned' => false,
+            'expired_at' => time() + 3600, 'transfer_enable' => 1024, 'u' => 0, 'd' => 0]);
+        $users = ServerService::getAvailableUsers($entry);
+        $this->assertCount(2, $users);
+        $this->assertSame([[$entry->vless_route], [$landing->vless_route]], $users->pluck('relay_routes')->all());
+        $pool->update(['enabled' => false]);
+        $config = ServerService::buildNodeConfig($entry->fresh());
+        $this->assertSame([], $config['relay']['children']);
+        $this->assertContains($landing->vless_route, $config['relay']['blocked_route_ids']);
+        $landing->update(['relay_pool_id' => null]);
+        (new LoadBalancerController())->delete(Request::create('/', 'POST', ['id' => $pool->id]));
+        $this->assertNotNull($entry->fresh());
+        $this->assertTrue($entry->fresh()->enabled);
+        $this->assertSame(3, Server::count());
+    }
+
+    public function test_dns_wireguard_pool_and_member_removal_keep_original_nodes(): void
+    {
+        $pool = $this->pool();
+        $child = Server::create(['name' => 'WG 落地', 'type' => 'wireguard', 'kernel_type' => 'singbox',
+            'host' => '192.0.2.30', 'port' => '23000', 'server_port' => 23000, 'enabled' => true, 'show' => true,
+            'rate' => 1, 'group_ids' => [1], 'relay_pool_id' => $pool->id, 'protocol_settings' => ['mtu' => 1420]]);
+        $landing = ServerService::buildNodeConfig($child)['relay']['wireguard'];
+        $this->assertCount(2, $landing['peers']);
+        $fronts = $pool->members->map(fn ($member) => ServerService::buildNodeConfig($member->sourceNode)['relay']['children'][0]['wireguard']);
+        $this->assertNotSame($fronts[0]['private_key'], $fronts[1]['private_key']);
+        $this->assertSame($landing['peers'][0]['allowed_ips'], $fronts[0]['address']);
+        $removed = $pool->members[1]->sourceNode;
+        $attributes = $removed->getAttributes();
+        $pool = app(LoadBalancerService::class)->save(['id' => $pool->id, 'mode' => 'dns', 'name' => $pool->name,
+            'domain' => $pool->domain, 'dns_preset_id' => $pool->dns_preset_id, 'enabled' => true,
+            'members' => [['node_id' => $pool->members[0]->source_node_id, 'priority' => 1]]]);
+        $this->assertCount(1, $pool->members);
+        $this->assertSame($attributes, $removed->fresh()->getAttributes());
+        $this->assertArrayNotHasKey('relay', ServerService::buildNodeConfig($removed->fresh()));
+        $this->assertCount(1, ServerService::buildNodeConfig($child->fresh())['relay']['wireguard']['peers']);
+    }
+
+    public function test_failover_uses_panel_status_and_recovers_with_ddns_off(): void
     {
         $pool = $this->pool(['dns_ttl' => 120]);
         $this->assertTrue($this->sync($pool));
         $this->assertSame(['192.0.2.10'], $this->addresses());
         $this->assertSame(120, $this->remote['pool.example.com.|A']['ttl']);
-        $this->heartbeat($pool->members[0]->runtime_node_id, time() - 181);
+        $this->heartbeat($pool->members[0]->runtime_node_id, time() - 301);
         // 同步时间很新也必须重新检查心跳，不等待十分钟的远端复核周期。
         $this->artisan('balancer:sync')->assertSuccessful();
         $this->assertSame(['192.0.2.11'], $this->addresses());
         $this->heartbeat($pool->members[0]->runtime_node_id, time());
-        $this->reachable = ['192.0.2.11'];
+        $pool->members[0]->sourceNode->machine->update(['is_active' => false]);
         $this->assertTrue($this->sync($pool));
         $this->assertSame(['192.0.2.11'], $this->addresses());
-        $this->reachable = [];
+        $pool->members[1]->sourceNode->machine->update(['is_active' => false]);
         $this->assertTrue($this->sync($pool));
         $this->assertSame([], $this->addresses());
-        $this->reachable = ['192.0.2.10', '192.0.2.11'];
+        foreach ($pool->members as $member) $member->sourceNode->machine->update(['is_active' => true]);
         $this->assertTrue($this->sync($pool));
         $this->assertSame(['192.0.2.10'], $this->addresses());
         $pool->members[1]->update(['priority' => 1]);
@@ -160,7 +310,7 @@ class DnsSchedulingTest extends TestCase
             $this->assertSame(['192.0.2.10'], $this->addresses());
         }
         $this->travel(1)->seconds();
-        // 保持实例心跳和端口正常，只让计量报告过期。
+        // 保持实例心跳正常，只让计量报告过期。
         foreach ($pool->members as $member) $this->heartbeat($member->runtime_node_id, now()->timestamp);
         $this->assertTrue($this->sync($pool));
         $this->assertSame(['192.0.2.11'], $this->addresses());
@@ -302,8 +452,10 @@ class DnsSchedulingTest extends TestCase
         $converted = app(LoadBalancerService::class)->save($payload);
         $this->assertNull(Server::find($gatewayId));
         $this->assertNull($converted->gateway_node_id);
-        $this->assertSame($pool->backend_port, $converted->gateway_port);
-        $this->assertSame($pool->members[0]->runtime_node_id, $converted->members[0]->runtime_node_id);
+        $this->assertSame(443, $converted->gateway_port);
+        $this->assertSame($source->id, $converted->members[0]->runtime_node_id);
+        $this->assertNull(Server::find($pool->members[0]->runtime_node_id));
+        $this->assertNotNull($source->fresh());
     }
 
     public function test_powerdns_preset_validation_hides_credentials_and_rejects_redirect_url_components(): void

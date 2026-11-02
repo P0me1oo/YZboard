@@ -122,7 +122,7 @@ class ServerObserver
     private function notifyRelayPool(?int $poolId): void
     {
         if (!$poolId) return;
-        foreach (Server::where('balancer_pool_id', $poolId)->where('balancer_role', 'member')->pluck('id') as $id) {
+        foreach (\App\Models\BalancerMember::where('pool_id', $poolId)->pluck('runtime_node_id')->filter()->unique() as $id) {
             NodeSyncService::notifyFullSync((int) $id);
         }
     }

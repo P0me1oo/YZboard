@@ -40,26 +40,7 @@ class DnsPoolService
     {
         $pool->load(['dnsPreset', 'members.sourceNode.machine', 'members.runtimeNode.machine']);
         if (!$pool->dnsPreset || $pool->dnsPreset->provider !== 'powerdns') throw new \RuntimeException('缺少 PowerDNS 配置');
-        $candidates = [];
-        foreach ($pool->members as $member) {
-            $addresses = $member->dns_addresses ?? [];
-            if ($pool->ddns_enabled && $member->sourceNode) {
-                $current = self::addresses($member->sourceNode);
-                if ($current) $addresses = $current;
-            }
-            $candidates[$member->id] = $pool->enabled && $member->runtimeNode && LoadBalancerService::online($member->runtimeNode)
-                && $member->runtimeNode->machine?->is_active ? $addresses : [];
-            if ($member->dns_addresses !== $addresses) $member->update(['dns_addresses' => $addresses]);
-        }
-        $reachable = app(FrontendHealthChecker::class)->reachable(array_merge([], ...array_values($candidates)), (int) $pool->backend_port);
-        $available = [];
-        foreach ($pool->members as $member) {
-            $healthy = array_values(array_intersect($candidates[$member->id], $reachable));
-            $member->update(['healthy_addresses' => $healthy, 'checked_at' => now()]);
-            if ($healthy) $available[$member->priority] = array_merge($available[$member->priority] ?? [], $healthy);
-        }
-        ksort($available, SORT_NUMERIC);
-        $addresses = $available ? reset($available) : [];
+        [$addresses, $state] = app(FrontPoolScheduler::class)->select($pool);
         $desired = [];
         foreach (['A', 'AAAA'] as $type) {
             $values = array_values(array_unique(array_filter($addresses, fn ($ip) => (str_contains($ip, ':') ? 'AAAA' : 'A') === $type)));
@@ -74,6 +55,9 @@ class DnsPoolService
             }
         }
         app(PowerDnsService::class)->reconcile($pool->dnsPreset, 'pool', $pool->id, $desired, $pool->dns_ttl);
+        $previous = $pool->scheduling_state['snapshot'] ?? [];
+        SchedulingEvents::record('front', $pool->id, $pool->name, 'selection_changed', $previous, $state['snapshot']);
+        $pool->update(['scheduling_state' => $state]);
     }
 
     public function project(BalancerPool $pool, User|array $user): string

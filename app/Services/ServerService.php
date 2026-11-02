@@ -86,8 +86,10 @@ class ServerService
             ->get()
             ->append(['last_check_at', 'last_push_at', 'online', 'is_online', 'available_status', 'cache_key', 'server_key']);
 
-        $servers = collect($servers)->map(function ($server) use ($user) {
-            if (MachineTrafficService::nodeBlocked($server)) {
+        $landingPools = \App\Models\LandingPool::where('enabled', true)->whereIn('node_id', $servers->pluck('id'))->get()->keyBy('node_id');
+        $servers = collect($servers)->map(function ($server) use ($user, $landingPools) {
+            $landingPool = $landingPools->get($server->id);
+            if (!$landingPool && MachineTrafficService::nodeBlocked($server)) {
                 return null;
             }
             if ($server->type === Server::TYPE_WIREGUARD && !$server->isRelayChild()) {
@@ -100,6 +102,7 @@ class ServerService
             }
             if ($server->isRelayChild()) {
                 $entry = ServerRelayService::entryFor($server);
+                if ($landingPool && !LandingPoolService::entries($server)->contains(fn ($front) => LandingPoolService::targetFor($server, $front, $landingPool) !== null)) return null;
                 // 拓扑不完整或节点被禁用时直接丢弃，绝不把落地服务器的内部连接信息下发给客户端。
                 if (!$entry || $server->enabled === false || MachineTrafficService::nodeBlocked($entry)) {
                     return null;
@@ -454,6 +457,9 @@ class ServerService
      */
     public static function updateMetrics(Server $node, array $metrics): void
     {
+        if (isset($metrics['scheduling_probes'])) {
+            if (SchedulingProbeService::accept($node, $metrics['scheduling_probes']) && Cache::add('scheduling:refresh:' . $node->id, true, 10)) app(LandingPoolService::class)->syncForEntry($node);
+        }
         $nodeType = strtoupper($node->type);
         $nodeId = $node->id;
         $cacheTime = max(300, (int) admin_setting('server_push_interval', 60) * 3);
@@ -780,6 +786,7 @@ class ServerService
         if ($relay = self::buildRelayConfig($node)) {
             $response['relay'] = $relay;
         }
+        if ($targets = SchedulingProbeService::targets($node)) $response['scheduling_targets'] = $targets;
         if ($nodeType === Server::TYPE_WIREGUARD && !$node->isRelayChild()) {
             $response['wireguard'] = WireGuardService::nodeConfig($node);
         }
@@ -892,24 +899,26 @@ class ServerService
             return null;
         }
 
-        $outbounds = $children->map(function (Server $child) use ($node) {
+        $landingPools = \App\Models\LandingPool::where('enabled', true)->whereIn('node_id', $children->pluck('id'))->get()->keyBy('node_id');
+        $outbounds = $children->map(function (Server $child) use ($node, $landingPools) {
+            $target = LandingPoolService::targetFor($child, $node, $landingPools->get($child->id, false)) ?? $child;
             $outbound = [
                 'node_id' => (int) $child->id,
                 'tag' => ServerRelayService::outboundTag((int) $child->id),
                 'route_id' => ServerRelayService::ensureRouteId($child),
-                'protocol' => $child->type,
-                'address' => $child->host,
-                'port' => (int) $child->port,
+                'protocol' => $target->type,
+                'address' => $target->host,
+                'port' => (int) $target->port,
             ];
 
-            if ($child->type === Server::TYPE_WIREGUARD) {
-                $outbound['wireguard'] = ServerRelayService::wireGuardConfig($child, false, $node);
-            } elseif ($child->type === Server::TYPE_SHADOWSOCKS) {
-                $credential = ServerRelayService::transitCredential($child);
+            if ($target->type === Server::TYPE_WIREGUARD) {
+                $outbound['wireguard'] = ServerRelayService::wireGuardConfig($target, false, $node);
+            } elseif ($target->type === Server::TYPE_SHADOWSOCKS) {
+                $credential = ServerRelayService::transitCredential($target);
                 $outbound['cipher'] = $credential['cipher'];
                 $outbound['password'] = $credential['password'];
             } else {
-                $outbound['vless'] = ServerRelayService::vlessClientConfig($child);
+                $outbound['vless'] = ServerRelayService::vlessClientConfig($target);
             }
 
             return $outbound;

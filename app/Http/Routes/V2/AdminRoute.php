@@ -65,6 +65,11 @@ class AdminRoute
                 $router->post('/preset/save', [$controller, 'savePreset']);
                 $router->post('/preset/delete', [$controller, 'deletePreset']);
                 $router->post('/dns/sync', [$controller, 'syncDns']);
+                $scheduling = \App\Http\Controllers\V2\Admin\Server\SchedulingController::class;
+                $router->get('/scheduling/fetch', [$scheduling, 'fetch']);
+                $router->post('/landing/save', [$scheduling, 'save']);
+                $router->post('/landing/delete', [$scheduling, 'delete']);
+                $router->post('/landing/sync', [$scheduling, 'sync']);
             });
             $router->group([
                 'prefix' => 'config'

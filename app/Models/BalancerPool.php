@@ -12,7 +12,8 @@ class BalancerPool extends Model
     protected $guarded = ['id'];
     protected $hidden = ['template_config'];
     protected $casts = ['enabled' => 'boolean', 'gateway_source_ips' => 'array', 'template_config' => 'encrypted:array', 'dns_synced_at' => 'datetime',
-        'ddns_enabled' => 'boolean', 'personal_domain_enabled' => 'boolean', 'follow_user_status' => 'boolean', 'dns_ttl' => 'integer'];
+        'ddns_enabled' => 'boolean', 'personal_domain_enabled' => 'boolean', 'follow_user_status' => 'boolean', 'dns_ttl' => 'integer',
+        'scheduling_config' => 'array', 'scheduling_state' => 'array'];
 
     public function members(): HasMany
     {

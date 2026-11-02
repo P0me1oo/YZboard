@@ -18,15 +18,16 @@ class LoadBalancerController extends Controller
 {
     public function fetch()
     {
-        $pools = BalancerPool::with(['members.sourceNode', 'members.runtimeNode'])->orderBy('id')->get()->map(function ($pool) {
+        $pools = BalancerPool::with(['members.sourceNode', 'members.runtimeNode.machine'])->orderBy('id')->get()->map(function ($pool) {
             $view = $pool->attributesToArray();
             $view['ddns'] = \App\Services\DdnsService::view('pool', $pool->id);
             $view['effective_rate'] = $pool->members->first()?->runtimeNode?->getCurrentRate();
             $view['members'] = $pool->members->map(fn ($member) => [
                 'node_id' => $member->source_node_id, 'name' => $member->sourceNode?->name, 'priority' => $member->priority,
-                'runtime_node_id' => $member->runtime_node_id, 'online' => $member->runtimeNode && LoadBalancerService::online($member->runtimeNode)
-                    && ($pool->mode !== 'dns' || ($member->checked_at?->gt(now()->subMinutes(2)) && !empty($member->healthy_addresses))),
+                'runtime_node_id' => $member->runtime_node_id, 'online' => LoadBalancerService::memberOnline($pool, $member),
+                'compatibility_reasons' => $pool->mode === 'dns' && $member->runtimeNode ? LoadBalancerService::memberCompatibility($pool, $member->runtimeNode) : [],
                 'addresses' => $member->dns_addresses, 'healthy_addresses' => $member->healthy_addresses, 'checked_at' => $member->checked_at,
+                'scheduling_state' => $member->scheduling_state,
                 'last_report_at' => $member->runtimeNode ? LoadBalancerService::heartbeat($member->runtimeNode) : null,
             ])->values();
             return $view;
@@ -106,6 +107,10 @@ class LoadBalancerController extends Controller
             'dns_preset_id' => 'required_if:mode,dns|nullable|integer|exists:v2_balancer_dns_preset,id',
             'mode' => 'required|in:dns,legacy', 'dns_ttl' => 'sometimes|integer|min:30|max:86400',
             'ddns_enabled' => 'sometimes|boolean', 'personal_domain_enabled' => 'sometimes|boolean', 'follow_user_status' => 'sometimes|boolean',
+            'scheduling_config' => 'sometimes|nullable|array:health_enabled,strategy,latency_node_id,quota_enabled,quota_percent',
+            'scheduling_config.health_enabled' => 'sometimes|boolean', 'scheduling_config.strategy' => 'sometimes|in:priority,latency',
+            'scheduling_config.latency_node_id' => 'nullable|integer|exists:v2_server,id',
+            'scheduling_config.quota_enabled' => 'sometimes|boolean', 'scheduling_config.quota_percent' => 'sometimes|integer|min:1|max:50',
             'gateway_machine_id' => 'exclude_if:mode,dns|required|integer|exists:v2_server_machine,id', 'gateway_address' => 'exclude_if:mode,dns|sometimes|ip',
             'gateway_port' => 'exclude_if:mode,dns|sometimes|integer|min:1|max:65535', 'enabled' => 'required|boolean',
             'ddns' => 'sometimes|nullable|array:enabled,personal_enabled,follow_user_status,ttl,preset_id,prefix',
@@ -152,10 +157,14 @@ class LoadBalancerController extends Controller
             $pool = BalancerPool::query()->lockForUpdate()->findOrFail($data['id']);
             if (Server::where('relay_pool_id', $pool->id)->exists()) throw ValidationException::withMessages(['id' => '请先解除落地节点对该池的引用']);
             if (\App\Models\PowerDnsRecord::where('owner_type', 'pool')->where('owner_id', $pool->id)->exists() || BalancerDnsRecord::where('pool_id', $pool->id)->exists()) throw ValidationException::withMessages(['id' => '请先停用前置池并同步清理 DNS 记录']);
+            $originalIds = $pool->members()->whereColumn('runtime_node_id', 'source_node_id')->pluck('source_node_id')->all();
             foreach (Server::where('balancer_pool_id', $pool->id)->get() as $node) $node->delete();
             $pool->members()->delete();
             \App\Models\PoolDnsAlias::where('pool_id', $pool->id)->delete();
             $pool->delete();
+            DB::afterCommit(function () use ($originalIds) {
+                foreach ($originalIds as $id) \App\Services\NodeSyncService::notifyFullSync((int) $id);
+            });
         });
         });
         return $this->success(true);

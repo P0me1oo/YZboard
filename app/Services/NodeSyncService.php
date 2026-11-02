@@ -24,6 +24,7 @@ class NodeSyncService
      */
     public static function notifyConfigUpdated(int $nodeId): void
     {
+        Cache::forget('scheduling:targets:' . $nodeId);
         if (!self::isNodeOnline($nodeId))
             return;
 
@@ -158,7 +159,7 @@ class NodeSyncService
         $entryIds = $servers->pluck('relay_entry_id')->filter()->unique();
         $poolIds = $servers->pluck('relay_pool_id')->filter()->unique();
         return $servers->concat(Server::whereIn('id', $entryIds)->get())
-            ->concat(Server::whereIn('balancer_pool_id', $poolIds)->where('balancer_role', 'member')->get())->unique('id')->values();
+            ->concat(Server::whereIn('id', \App\Models\BalancerMember::whereIn('pool_id', $poolIds)->pluck('runtime_node_id'))->get())->unique('id')->values();
     }
 
     /**
@@ -166,6 +167,7 @@ class NodeSyncService
      */
     public static function notifyFullSync(int $nodeId): void
     {
+        Cache::forget('scheduling:targets:' . $nodeId);
         if (!self::isNodeOnline($nodeId))
             return;
 

@@ -37,7 +37,6 @@ class LoadBalancerService
         $reasons = [];
         if (!$node->machine_id || !$node->machine) $reasons[] = '未绑定服务器';
         if ($node->parent_id) $reasons[] = '共享节点请使用实际运行的父节点';
-        if ($node->accept_proxy_protocol) $reasons[] = '原节点启用了 PROXY 协议接收，不能直接作为 DNS 入口';
         if ($node->balancer_role !== null || $node->relayEntryId() !== null || $node->relay_pool_id) $reasons[] = '请选择独立前置节点';
         if ($node->type !== 'vless') return [...$reasons, '协议不兼容，仅支持 VLESS Reality'];
         if ((int) data_get($node->protocol_settings, 'tls') !== 2) $reasons[] = 'TLS 模式不兼容，需要 Reality';

@@ -148,6 +148,29 @@ class DnsSchedulingTest extends TestCase
         $this->assertSame(2, Server::count());
     }
 
+    public function test_proxy_receivers_join_dns_pool_and_keep_their_switches_during_sync_and_save(): void
+    {
+        $a = $this->node('192.0.2.10'); $b = $this->node('192.0.2.11');
+        $a->update(['accept_proxy_protocol' => true]);
+        $b->update(['accept_proxy_protocol' => false]);
+        $preset = $this->preset();
+        $payload = ['mode' => 'dns', 'name' => 'PROXY 前置池', 'domain' => $preset->domain, 'dns_preset_id' => $preset->id,
+            'enabled' => true, 'members' => [['node_id' => $a->id, 'priority' => 1], ['node_id' => $b->id, 'priority' => 1]]];
+        $before = [$a->fresh()->getAttributes(), $b->fresh()->getAttributes()];
+        foreach ([$payload['members'], array_reverse($payload['members'])] as $members) {
+            $pool = app(LoadBalancerService::class)->save([...$payload, ...(isset($pool) ? ['id' => $pool->id] : []), 'members' => $members]);
+            foreach ([$a, $b] as $node) $this->heartbeat($node->id, time());
+            $this->assertTrue($this->sync($pool));
+            $this->assertEqualsCanonicalizing(['192.0.2.10', '192.0.2.11'], $this->addresses());
+            $this->assertNotNull(LoadBalancerService::entryForPool($pool->id));
+            foreach ($pool->members as $member) $this->assertSame([], LoadBalancerService::memberCompatibility($pool, $member->runtimeNode));
+            $this->assertTrue(ServerService::buildNodeConfig($a->fresh())['accept_proxy_protocol']);
+            $this->assertFalse(ServerService::buildNodeConfig($b->fresh())['accept_proxy_protocol']);
+            $this->assertSame($before, [$a->fresh()->getAttributes(), $b->fresh()->getAttributes()]);
+        }
+        $this->assertSame(2, Server::count());
+    }
+
     public function test_incompatible_connections_are_rejected_with_reasons_without_mutating_nodes(): void
     {
         $a = $this->node('192.0.2.10'); $b = $this->node('192.0.2.11');
@@ -165,7 +188,6 @@ class DnsSchedulingTest extends TestCase
             [['protocol_settings' => [...$settings, 'reality_settings' => [...$this->reality, 'short_id' => 'abcd']]], '短 ID'],
             [['protocol_settings' => [...$settings, 'reality_settings' => [...$this->reality, 'server_name' => 'different.example.test']]], '握手域名'],
             [['protocol_settings' => [...$settings, 'reality_settings' => [...$this->reality, 'server_port' => 8443]]], '握手端口'],
-            [['accept_proxy_protocol' => true], 'PROXY'],
         ];
         foreach ($cases as [$changes, $reason]) {
             $b->update(['type' => 'vless', 'port' => '443', 'protocol_settings' => $settings, 'accept_proxy_protocol' => false, ...$changes]);

@@ -2,6 +2,14 @@
 
 已发布并部署 2.0.3，固定来源、完整回归、运行核验与 Cloudflare 公网检查限制见[部署记录](docs/deployment-2.0.3.md)。
 
+## 2.0.4 PROXY 前置兼容与域名前缀（2026-11-04，开发验证）
+
+- 面板基线 `3ba6d58af93bf0cd2b96021127ea5b3f37dc07bb`，配套管理端 0.85.4 / `7c7a924a3e341e3fe3e1c3d5dc06ad0b9e3af889`。解除前后端对 PROXY 接收节点的入池限制，复用原节点服务并保留接收开关；成员可以分别开启或关闭接收。域名采用所选 DNS 配置的完整区域，只输入池前缀，编辑及配置切换保留前缀，已有基础域名池原样保存。
+- PHP 8.4.27、内存 SQLite：`vendor/bin/phpunit --filter 'DnsSchedulingTest|SchedulingTest|LoadBalancerTest|ServerProxyProtocolTest'` 通过 51 项、822 条断言；受影响 PHP 文件语法检查通过。覆盖 PROXY 成员作为首选及备用、保存与 DNS 同步不改节点配置，以及原有分配、启停、故障与 PROXY 配置路径。
+- Node 24.22.1：源码检查 3102 份文件、前置池与调度 17 项行为检查、正式构建和资源检查通过。`load-balancer.spec.mjs` 的 23 项浏览器场景全部通过，包含 1440/320 像素、完整 CSP、前缀校验、DNS 配置切换、PROXY 成员选择、失败重试及原页面交互；已查看桌面和手机截图。
+- 16 份构建资源集成到面板并逐字节核对，排除源码映射注释，保留旧哈希资源；面板 5 项资源契约通过。主应用脚本 `assets/admin-CztrUXv6.js`，SHA-256 `636383f43714e9d492739a0bb04c33d2beb50136dc7ae14f8f9a181f337bf9ed`。
+- 验证使用本机隔离运行库、模拟 DNS API 和管理接口，未执行无关完整回归、MariaDB 或真实 Realm 端到端联调。无数据库迁移、Agent 或核心改动；没有提交、推送、发布或部署，原有 Solid-US 文档保留。临时运行库、浏览器服务和验证文件已清理。
+
 ## 2.0.3 发布与 DartNode-US 原生部署完成（2026-11-03）
 
 - 已发布面板 v2.0.3 / `1821ca78897eff6017a255dbd2767a12be2f12cb` 和管理端 v0.85.3 / `ddb637030c8f31826897dcee33ff59c2922fa28a`，源码包、管理端产物及校验附件可获取；没有发布 Docker 镜像。

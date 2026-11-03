@@ -105,7 +105,14 @@ class LoadBalancerService
             $statusOnly = $pool->exists && !$starting
                 && $members->map(fn ($m) => [(int) $m['node_id'], (int) $m['priority'], (int) ($m['weight'] ?? 1)])->values()->all()
                     === $stored->map(fn ($m) => [(int) $m->source_node_id, (int) $m->priority, (int) $m->weight])->values()->all();
-            foreach (collect($data)->except(['id', 'members', 'enabled']) as $key => $value) if ($pool->{$key} != $value) $statusOnly = false;
+            foreach (collect($data)->except(['id', 'members', 'enabled']) as $key => $value) {
+                $current = $pool->{$key};
+                if ($key === 'scheduling_config') {
+                    $current = array_replace(FrontPoolScheduler::DEFAULTS, $current ?? []);
+                    $value = array_replace(FrontPoolScheduler::DEFAULTS, $value ?? []);
+                }
+                if ($current != $value) $statusOnly = false;
+            }
             if ($statusOnly) {
                 $pool->update(['enabled' => false]);
                 DB::afterCommit(fn () => $this->notify($pool));

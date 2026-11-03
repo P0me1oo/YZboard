@@ -527,4 +527,65 @@ class DnsSchedulingTest extends TestCase
         $this->assertSame(2, Server::count());
         $this->assertSame(2, $pool->members()->count());
     }
+
+    public function test_disabling_with_normalized_default_policy_does_not_validate_changed_reality_keys(): void
+    {
+        $pool = $this->pool();
+        $pool->update(['scheduling_config' => null]);
+        $node = $pool->members[1]->sourceNode;
+        $settings = $node->protocol_settings;
+        $settings['reality_settings']['public_key'] = 'changed-test-public-key';
+        $settings['reality_settings']['short_id'] = 'abcd';
+        $node->update(['protocol_settings' => $settings]);
+        $this->assertNull($pool->scheduling_config);
+        (new LoadBalancerController())->save(Request::create('/', 'POST', ['id' => $pool->id, 'mode' => 'dns',
+            'name' => $pool->name, 'domain' => $pool->domain, 'dns_preset_id' => $pool->dns_preset_id, 'enabled' => false,
+            'scheduling_config' => \App\Services\FrontPoolScheduler::DEFAULTS,
+            'members' => $pool->members->map(fn ($m) => ['node_id' => $m->source_node_id, 'priority' => $m->priority, 'weight' => 1])->all()]), app(LoadBalancerService::class));
+        $this->assertFalse($pool->fresh()->enabled);
+        $this->assertSame($settings, $node->fresh()->protocol_settings);
+    }
+
+    public function test_delete_automatically_stops_and_cleans_dns_before_removing_only_pool_configuration(): void
+    {
+        $pool = $this->pool();
+        $this->assertTrue($this->sync($pool));
+        $node = $pool->members[1]->sourceNode;
+        $settings = $node->protocol_settings;
+        $settings['reality_settings']['public_key'] = 'different-test-key';
+        $node->update(['protocol_settings' => $settings]);
+        (new LoadBalancerController())->delete(Request::create('/', 'POST', ['id' => $pool->id]));
+        $this->assertNull($pool->fresh());
+        $this->assertSame([], $this->remote);
+        $this->assertSame(0, PowerDnsRecord::where('owner_type', 'pool')->count());
+        $this->assertSame(2, Server::count());
+        $this->assertSame($settings, $node->fresh()->protocol_settings);
+    }
+
+    public function test_delete_dns_failure_keeps_disabled_pool_and_retry_recovers_owned_records(): void
+    {
+        $pool = $this->pool(); $this->assertTrue($this->sync($pool));
+        $this->loseResponse = true;
+        try { (new LoadBalancerController())->delete(Request::create('/', 'POST', ['id' => $pool->id])); $this->fail('DNS 清理未确认时不能删除配置'); }
+        catch (ValidationException $error) { $this->assertArrayHasKey('dns', $error->errors()); }
+        $this->assertFalse($pool->fresh()->enabled);
+        $this->assertSame(2, $pool->members()->count());
+        $this->assertGreaterThan(0, PowerDnsRecord::where('owner_type', 'pool')->count());
+        (new LoadBalancerController())->delete(Request::create('/', 'POST', ['id' => $pool->id]));
+        $this->assertNull($pool->fresh());
+        $this->assertSame([], $this->remote);
+        $this->assertSame(2, Server::count());
+    }
+
+    public function test_delete_referenced_pool_preserves_enabled_state_and_dns(): void
+    {
+        $pool = $this->pool();
+        $route = $this->node('192.0.2.30'); $route->update(['relay_pool_id' => $pool->id]);
+        $this->assertTrue($this->sync($pool)); $before = $this->remote;
+        try { (new LoadBalancerController())->delete(Request::create('/', 'POST', ['id' => $pool->id])); $this->fail('不能删除仍被落地引用的池'); }
+        catch (ValidationException $error) { $this->assertArrayHasKey('id', $error->errors()); }
+        $this->assertTrue($pool->fresh()->enabled);
+        $this->assertSame($before, $this->remote);
+        $this->assertSame(3, Server::count());
+    }
 }

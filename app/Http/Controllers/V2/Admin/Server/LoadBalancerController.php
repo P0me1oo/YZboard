@@ -135,11 +135,25 @@ class LoadBalancerController extends Controller
     public function delete(Request $request)
     {
         $data = $request->validate(['id' => 'required|integer|exists:v2_balancer_pool,id']);
+        // 删除不走节点参数保存校验；先停用，再清理已托管的解析，成功后才删配置。
+        $pool = \Illuminate\Support\Facades\Cache::lock('balancer:dns:' . $data['id'], 120)->block(2, function () use ($data) {
+            return DB::transaction(function () use ($data) {
+                $pool = BalancerPool::query()->lockForUpdate()->findOrFail($data['id']);
+                if (Server::where('relay_pool_id', $pool->id)->exists()) throw ValidationException::withMessages(['id' => '请先解除落地节点对该池的引用']);
+                $pool->update(['enabled' => false]);
+                DB::afterCommit(fn () => app(LoadBalancerService::class)->notify($pool));
+                return $pool;
+            });
+        });
+        if (\App\Models\PowerDnsRecord::where('owner_type', 'pool')->where('owner_id', $pool->id)->exists()
+            && !app(BalancerDnsService::class)->sync($pool)) {
+            throw ValidationException::withMessages(['dns' => $pool->fresh()->dns_error ?: 'DNS 清理失败，池已停用并保留配置，请重试删除']);
+        }
         \Illuminate\Support\Facades\Cache::lock('balancer:dns:' . $data['id'], 120)->block(2, function () use ($data) {
         DB::transaction(function () use ($data) {
             $pool = BalancerPool::query()->lockForUpdate()->findOrFail($data['id']);
             if (Server::where('relay_pool_id', $pool->id)->exists()) throw ValidationException::withMessages(['id' => '请先解除落地节点对该池的引用']);
-            if (\App\Models\PowerDnsRecord::where('owner_type', 'pool')->where('owner_id', $pool->id)->exists()) throw ValidationException::withMessages(['id' => '请先停用前置池并同步清理 DNS 记录']);
+            if ($pool->enabled || \App\Models\PowerDnsRecord::where('owner_type', 'pool')->where('owner_id', $pool->id)->exists()) throw ValidationException::withMessages(['id' => '池状态已改变，未删除配置，请刷新后重试']);
             $originalIds = $pool->members()->whereColumn('runtime_node_id', 'source_node_id')->pluck('source_node_id')->all();
             $pool->members()->delete();
             \App\Models\PoolDnsAlias::where('pool_id', $pool->id)->delete();

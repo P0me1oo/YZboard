@@ -19,8 +19,8 @@ class FrontPoolScheduler
         $all = []; $members = [];
         foreach ($pool->members as $member) {
             $node = $member->runtimeNode;
-            $addresses = $member->dns_addresses ?? [];
-            if ($pool->ddns_enabled && $member->sourceNode) $addresses = DnsPoolService::addresses($member->sourceNode) ?: $addresses;
+            // 每次同步读取节点连接地址，同时纠正旧池保存的机器上报地址。
+            $addresses = $member->sourceNode ? DnsPoolService::addresses($member->sourceNode) : [];
             $member->dns_addresses = $addresses;
             $reason = !$pool->enabled ? 'disabled' : (!$node || !LoadBalancerService::memberOnline($pool, $member) ? 'offline'
                 : (LoadBalancerService::memberCompatibility($pool, $node) ? 'incompatible' : (!$addresses ? 'no_address' : 'healthy')));

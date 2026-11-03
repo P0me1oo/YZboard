@@ -14,13 +14,39 @@ class DnsPoolService
 {
     public static function addresses(Server $source): array
     {
-        $runtime = MachineAgentService::runtimeView($source->machine?->agent_runtime) ?? [];
-        $addresses = array_key_exists('public_ipv4', $runtime) || array_key_exists('public_ipv6', $runtime)
-            ? [$runtime['public_ipv4'] ?? null, $runtime['public_ipv6'] ?? null] : [$runtime['public_ip'] ?? null];
+        $host = strtolower(rtrim(trim((string) $source->host, " \t\n\r\0\x0B[]"), '.'));
+        // 连接入口由节点配置决定；机器上报地址可能是 NAT 后的其他地址。
+        $addresses = filter_var($host, FILTER_VALIDATE_IP) ? [$host]
+            : (filter_var($host, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME) && str_contains($host, '.')
+                ? app(self::class)->resolveDomain($host) : []);
         $addresses = array_values(array_filter($addresses, fn ($v) => is_string($v) && filter_var($v, FILTER_VALIDATE_IP)
             && !in_array($v, ['0.0.0.0', '::'], true)));
-        if (!$addresses && filter_var($source->host, FILTER_VALIDATE_IP)) $addresses = [$source->host];
         return array_values(array_unique($addresses));
+    }
+
+    public function resolveDomain(string $host): array
+    {
+        $visited = [];
+        for ($depth = 0; $depth < 8 && !isset($visited[$host]); $depth++) {
+            $visited[$host] = true;
+            $records = $this->domainRecords($host);
+            $addresses = []; $target = null;
+            foreach ($records as $record) {
+                if (strtolower(rtrim($record['host'] ?? '', '.')) !== $host) continue;
+                if (isset($record['ip'])) $addresses[] = $record['ip'];
+                if (isset($record['ipv6'])) $addresses[] = $record['ipv6'];
+                if (isset($record['target'])) $target = strtolower(rtrim($record['target'], '.'));
+            }
+            if ($addresses) return $addresses;
+            if (!$target || !filter_var($target, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME)) break;
+            $host = $target;
+        }
+        return [];
+    }
+
+    protected function domainRecords(string $host): array
+    {
+        return @dns_get_record($host, DNS_A | DNS_AAAA | DNS_CNAME) ?: [];
     }
 
     private function users(BalancerPool $pool): Collection

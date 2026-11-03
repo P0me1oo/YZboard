@@ -93,6 +93,8 @@ class LoadBalancerService
             if ($pool->exists && $pool->mode !== 'dns') $this->invalid('mode', '请先在旧版本转换该池');
             $data['mode'] = 'dns';
             $data['personal_domain_enabled'] = true;
+            // 兼容旧管理端传入的开关；池始终跟随节点配置的连接地址。
+            unset($data['ddns_enabled']);
             $starting = (bool) $data['enabled'];
             $members = collect($data['members']);
             if ($members->isEmpty() || $members->pluck('node_id')->unique()->count() !== $members->count()) $this->invalid('members', '请选择不重复的前置节点');
@@ -165,8 +167,8 @@ class LoadBalancerService
                 $member->weight = (int) ($values['weight'] ?? 1);
                 $member->position = $position;
                 $member->dns_label ??= bin2hex(random_bytes(12));
-                $member->dns_addresses = $member->dns_addresses ?: DnsPoolService::addresses($source);
-                if (!$member->dns_addresses) $this->invalid('members', $source->name . '：需要有效公网连接地址');
+                $member->dns_addresses = DnsPoolService::addresses($source);
+                if (!$member->dns_addresses) $this->invalid('members', $source->name . '：请填写有效的节点连接 IP 或可解析域名');
                 $member->save();
             }
             foreach ($stored as $member) {

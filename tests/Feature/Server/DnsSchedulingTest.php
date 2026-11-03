@@ -320,22 +320,112 @@ class DnsSchedulingTest extends TestCase
         $this->assertSame(['192.0.2.10'], $this->addresses());
     }
 
-    public function test_ddns_only_controls_address_changes_and_preserves_other_switches(): void
+    public function test_initial_pool_members_use_configured_connection_ips_instead_of_agent_addresses(): void
     {
-        $pool = $this->pool();
-        $pool->members[0]->sourceNode->machine->update(['agent_runtime' => ['version' => 'v2.25.0', 'public_ipv4' => '192.0.2.99', 'public_ipv6' => '2001:db8::10']]);
+        $a = $this->node('192.0.2.10'); $b = $this->node('2001:db8::11');
+        foreach ([$a, $b] as $node) $node->machine->update(['agent_runtime' => ['version' => 'v2.25.0',
+            'public_ip' => '192.0.2.90', 'public_ipv4' => '192.0.2.99', 'public_ipv6' => '2001:db8::99']]);
+        $preset = $this->preset();
+        $pool = app(LoadBalancerService::class)->save(['name' => '手填入口池', 'domain' => $preset->domain,
+            'dns_preset_id' => $preset->id, 'enabled' => true, 'ddns_enabled' => true,
+            'members' => [['node_id' => $a->id, 'priority' => 1], ['node_id' => $b->id, 'priority' => 1]]]);
+        $this->assertSame([['192.0.2.10'], ['2001:db8::11']], $pool->members->pluck('dns_addresses')->all());
+        foreach ($pool->members as $member) $this->heartbeat($member->source_node_id, time());
         $this->assertTrue($this->sync($pool));
         $this->assertSame(['192.0.2.10'], $this->addresses());
-        $pool->update(['ddns_enabled' => true]);
+        $this->assertSame('2001:db8::11', $this->remote['pool.example.com.|AAAA']['records'][0]['content']);
+        $this->assertSame('192.0.2.10', $a->fresh()->host);
+        $this->assertSame('2001:db8::11', $b->fresh()->host);
+    }
+
+    public function test_node_address_changes_replace_legacy_pool_addresses_regardless_of_ddns_flag(): void
+    {
+        $pool = $this->pool();
+        $member = $pool->members[0];
+        $member->sourceNode->machine->update(['agent_runtime' => ['version' => 'v2.25.0',
+            'public_ipv4' => '192.0.2.99', 'public_ipv6' => '2001:db8::99']]);
+        // 已有池曾保存上报地址，下一轮同步必须自行纠正，不要求重新保存池。
+        $member->update(['dns_addresses' => ['192.0.2.99', '2001:db8::99']]);
         $this->assertTrue($this->sync($pool));
-        $this->assertSame(['192.0.2.99'], $this->addresses());
+        $this->assertSame(['192.0.2.10'], $this->addresses());
+        $this->assertArrayNotHasKey('pool.example.com.|AAAA', $this->remote);
+        $member->sourceNode->update(['host' => '2001:db8::10']);
+        $this->assertTrue($this->sync($pool));
+        $this->assertSame([], $this->addresses());
         $this->assertSame('2001:db8::10', $this->remote['pool.example.com.|AAAA']['records'][0]['content']);
+        $pool->update(['ddns_enabled' => true]);
+        $member->sourceNode->update(['host' => '192.0.2.20']);
+        $this->assertTrue($this->sync($pool));
+        $this->assertSame(['192.0.2.20'], $this->addresses());
+        $this->assertArrayNotHasKey('pool.example.com.|AAAA', $this->remote);
         $this->assertTrue($pool->fresh()->personal_domain_enabled);
         $this->assertFalse($pool->fresh()->follow_user_status);
-        $pool->update(['ddns_enabled' => false]);
-        $pool->members[0]->sourceNode->machine->update(['agent_runtime' => ['version' => 'v2.25.0', 'public_ipv4' => '192.0.2.10']]);
+    }
+
+    public function test_configured_domain_uses_its_resolution_and_failure_never_falls_back_to_agent_or_stored_ip(): void
+    {
+        $resolved = ['192.0.2.50', '2001:db8::50'];
+        $resolver = \Mockery::mock(\App\Services\DnsPoolService::class)->makePartial();
+        $resolver->shouldReceive('resolveDomain')->with('entry.example.test')->andReturnUsing(function () use (&$resolved) { return $resolved; });
+        $this->app->instance(\App\Services\DnsPoolService::class, $resolver);
+        $a = $this->node('entry.example.test'); $b = $this->node('192.0.2.11');
+        $a->machine->update(['agent_runtime' => ['version' => 'v2.25.0', 'public_ipv4' => '192.0.2.99']]);
+        $preset = $this->preset();
+        $pool = app(LoadBalancerService::class)->save(['name' => '域名入口池', 'domain' => $preset->domain,
+            'dns_preset_id' => $preset->id, 'enabled' => true,
+            'members' => [['node_id' => $a->id, 'priority' => 1], ['node_id' => $b->id, 'priority' => 2]]]);
+        foreach ($pool->members as $member) $this->heartbeat($member->source_node_id, time());
+        $this->assertSame($resolved, $pool->members[0]->dns_addresses);
         $this->assertTrue($this->sync($pool));
-        $this->assertSame(['192.0.2.99'], $this->addresses());
+        $this->assertSame(['192.0.2.50'], $this->addresses());
+        $resolved = [];
+        $this->assertTrue($this->sync($pool));
+        $this->assertSame(['192.0.2.11'], $this->addresses());
+        $this->assertSame([], $pool->members[0]->fresh()->dns_addresses);
+        $this->assertArrayNotHasKey('pool.example.com.|AAAA', $this->remote);
+        $resolved = ['192.0.2.51'];
+        $this->assertTrue($this->sync($pool));
+        $this->assertSame(['192.0.2.51'], $this->addresses());
+    }
+
+    public function test_invalid_configured_address_is_not_replaced_by_an_agent_address(): void
+    {
+        $node = $this->node('invalid address');
+        $node->machine->update(['agent_runtime' => ['version' => 'v2.25.0', 'public_ipv4' => '192.0.2.99']]);
+        $preset = $this->preset();
+        $this->expectException(ValidationException::class);
+        app(LoadBalancerService::class)->save(['name' => '无效入口池', 'domain' => $preset->domain,
+            'dns_preset_id' => $preset->id, 'enabled' => true, 'members' => [['node_id' => $node->id, 'priority' => 1]]]);
+    }
+
+    public function test_configured_domain_follows_cname_and_ignores_unrelated_answer_addresses(): void
+    {
+        $resolver = \Mockery::mock(\App\Services\DnsPoolService::class)->makePartial()->shouldAllowMockingProtectedMethods();
+        $resolver->shouldReceive('domainRecords')->with('entry.example.test')->once()->andReturn([
+            ['host' => 'entry.example.test', 'type' => 'CNAME', 'target' => 'actual.example.test.'],
+            ['host' => 'unrelated.example.test', 'type' => 'A', 'ip' => '192.0.2.99'],
+        ]);
+        $resolver->shouldReceive('domainRecords')->with('actual.example.test')->once()->andReturn([
+            ['host' => 'actual.example.test', 'type' => 'A', 'ip' => '192.0.2.50'],
+            ['host' => 'actual.example.test', 'type' => 'AAAA', 'ipv6' => '2001:db8::50'],
+        ]);
+        $this->app->instance(\App\Services\DnsPoolService::class, $resolver);
+        $this->assertSame(['192.0.2.50', '2001:db8::50'], \App\Services\DnsPoolService::addresses($this->node('ENTRY.example.test.')));
+    }
+
+    public function test_cname_loop_returns_no_address_instead_of_using_agent_ip(): void
+    {
+        $resolver = \Mockery::mock(\App\Services\DnsPoolService::class)->makePartial()->shouldAllowMockingProtectedMethods();
+        $resolver->shouldReceive('domainRecords')->with('entry.example.test')->once()->andReturn([
+            ['host' => 'entry.example.test', 'type' => 'CNAME', 'target' => 'loop.example.test.'],
+        ]);
+        $resolver->shouldReceive('domainRecords')->with('loop.example.test')->once()->andReturn([
+            ['host' => 'loop.example.test', 'type' => 'CNAME', 'target' => 'entry.example.test.'],
+        ]);
+        $this->app->instance(\App\Services\DnsPoolService::class, $resolver);
+        $node = $this->node('entry.example.test');
+        $node->machine->update(['agent_runtime' => ['version' => 'v2.25.0', 'public_ipv4' => '192.0.2.99']]);
+        $this->assertSame([], \App\Services\DnsPoolService::addresses($node));
     }
 
     public function test_fixed_fourth_level_alias_and_status_follow_are_independent_of_ddns(): void

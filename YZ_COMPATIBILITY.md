@@ -1,6 +1,13 @@
 # YZboard 兼容矩阵
 
-已发布并部署 2.0.3，固定来源、完整回归、运行核验与 Cloudflare 公网检查限制见[部署记录](docs/deployment-2.0.3.md)。
+已发布面板 2.0.4 和管理端 0.85.4，固定来源、验证与附件校验见[发布记录](docs/release-2.0.4.md)。生产仍为 2.0.3，本次未部署。
+
+## 2.0.4 发布完成（2026-11-04）
+
+- 面板 [v2.0.4](https://github.com/P0me1oo/YZboard/releases/tag/v2.0.4) / `e5d7c95d4687df256dd66e1a155885f887ff4a50`，管理端 [v0.85.4](https://github.com/P0me1oo/YZboard-Dash/releases/tag/v0.85.4) / `7c7a924a3e341e3fe3e1c3d5dc06ad0b9e3af889`。固定源码包、16 份管理端资源包、来源清单和 SHA-256 校验文件已发布，附件下载及内容核验通过。
+- [固定来源完整回归](https://github.com/P0me1oo/YZboard/actions/runs/41693416591)通过：SQLite 1575 项 / 30908 条断言，按设计跳过 10 项数据库专属检查；MariaDB 1575 项 / 30918 条断言全部通过，包含真实 Redis；面板 5 项资源契约通过。
+- [管理端全站 CI](https://github.com/P0me1oo/YZboard-Dash/actions/runs/41693360725)为 13 项失败、365 项通过；失败场景与已发布 0.85.3 完全一致，无新增，本次相关 23 项全部通过。Tag 的同一来源重复检查已取消，保留完整分支结果，未声称全站通过。
+- 发布复用未再修改的源码及既有构建结果，未重复本地构建或相关页面检查。未部署生产服务器，未发布 Docker 镜像，无数据库迁移、Agent 或核心更新；详细校验值见[发布记录](docs/release-2.0.4.md)。
 
 ## 2.0.4 PROXY 前置兼容与域名前缀（2026-11-04，开发验证）
 

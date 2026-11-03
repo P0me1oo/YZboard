@@ -13,34 +13,16 @@ use Illuminate\Validation\ValidationException;
 
 class LoadBalancerService
 {
-    public const GATEWAY_PROTOCOL = 'balancer';
-
     public static function agentCompatible(ServerMachine $machine): bool
     {
         $version = ltrim((string) data_get($machine->agent_runtime, 'version', ''), 'v');
         return preg_match('/\A\d+\.\d+\.\d+(?:[-+].*)?\z/', $version) && version_compare($version, '2.25.0', '>=');
     }
 
-    public static function offlineThreshold(): int
-    {
-        return max(30, min(86400, (int) admin_setting('load_balance_offline_threshold', 180)));
-    }
-
     public static function heartbeat(Server $node): ?int
     {
-        // 必须读取本实例的心跳，不能继承父级节点的在线状态。
         $value = Cache::get(CacheKey::get('SERVER_' . strtoupper($node->type) . '_LAST_CHECK_AT', $node->id));
-        if ($value === null && $node->balancer_role === 'member') {
-            $value = BalancerMember::where('runtime_node_id', $node->id)->value('last_report_at');
-        }
         return is_numeric($value) ? (int) $value : null;
-    }
-
-    public static function online(Server $node): bool
-    {
-        $last = self::heartbeat($node);
-        return $node->enabled !== false && $last !== null && now()->timestamp - $last < self::offlineThreshold()
-            && !MachineTrafficService::nodeBlocked($node);
     }
 
     public static function publicPort(Server $node): ?int
@@ -86,9 +68,6 @@ class LoadBalancerService
 
     public static function memberCompatibility(BalancerPool $pool, Server $node): array
     {
-        // 已有池专用入口继续可用；重新保存 DNS 池时才切换为原节点。
-        $node = clone $node;
-        if ($node->balancer_pool_id === $pool->id && $node->balancer_role === 'member') $node->balancer_role = null;
         return self::dnsCompatibility($node, self::dnsReference($pool));
     }
 
@@ -96,246 +75,100 @@ class LoadBalancerService
     {
         $node = $member->runtimeNode;
         if (!$node) return false;
-        if ($pool->mode !== 'dns') return self::online($node);
         return $node->available_status !== Server::STATUS_OFFLINE
             && $node->enabled !== false && $node->machine?->is_active === true && !MachineTrafficService::nodeBlocked($node);
     }
 
     public function save(array $data): BalancerPool
     {
-        if (!empty($data['id'])) {
-            return Cache::lock('balancer:dns:' . $data['id'], 120)->block(2, fn () => $this->persist($data));
-        }
+        if (($data['mode'] ?? 'dns') !== 'dns') $this->invalid('mode', '前置池仅支持 DNS 用户分配');
+        if (!empty($data['id'])) return Cache::lock('balancer:dns:' . $data['id'], 120)->block(2, fn () => $this->persist($data));
         return $this->persist($data);
     }
 
     private function persist(array $data): BalancerPool
     {
         return DB::transaction(function () use ($data) {
-            $ddns = $data['ddns'] ?? null;
-            unset($data['ddns']);
             $pool = isset($data['id']) ? BalancerPool::query()->lockForUpdate()->findOrFail($data['id']) : new BalancerPool();
-            $dnsMode = ($data['mode'] ?? ($pool->exists ? $pool->mode : (isset($data['gateway_machine_id']) ? 'legacy' : 'dns'))) === 'dns';
-            $data['mode'] = $dnsMode ? 'dns' : 'legacy';
-            if ($pool->exists && $pool->mode === 'dns' && !$dnsMode) $this->invalid('mode', 'DNS 调度池不能改回旧转发模式');
-            $personalDdns = $ddns['enabled'] ?? ($pool->exists && DdnsService::current('pool', $pool->id)?->enabled);
-            if (!$dnsMode && $personalDdns && !array_key_exists('gateway_address', $data)) {
-                $this->invalid('gateway_address', '开启 DDNS 时请明确填写统一入口连接 IP');
-            }
+            if ($pool->exists && $pool->mode !== 'dns') $this->invalid('mode', '请先在旧版本转换该池');
+            $data['mode'] = 'dns';
+            $data['personal_domain_enabled'] = true;
             $starting = (bool) $data['enabled'];
             $members = collect($data['members']);
-            $sources = Server::query()->whereIn('id', $members->pluck('node_id'))->lockForUpdate()->get()->keyBy('id');
-            $storedMembers = $pool->exists ? $pool->members()->with('runtimeNode')->get()->keyBy('source_node_id') : collect();
-            // 原节点参数发生变化后仍允许关闭池；单纯停用不转换已有池专用实例。
-            $statusOnly = $pool->exists && $dnsMode && !$starting
-                && $members->map(fn ($m) => [(int) $m['node_id'], (int) $m['priority']])->values()->all()
-                    === $storedMembers->map(fn ($m) => [(int) $m->source_node_id, (int) $m->priority])->values()->all();
-            foreach (collect($data)->except(['id', 'members', 'enabled']) as $key => $value) {
-                if ($pool->{$key} != $value) $statusOnly = false;
+            if ($members->isEmpty() || $members->pluck('node_id')->unique()->count() !== $members->count()) $this->invalid('members', '请选择不重复的前置节点');
+            foreach ($members as $member) {
+                if (($member['weight'] ?? 1) < 1 || ($member['weight'] ?? 1) > 1000) $this->invalid('members', '成员权重范围为 1–1000');
             }
+            $sources = Server::with('machine')->whereIn('id', $members->pluck('node_id'))->lockForUpdate()->get()->keyBy('id');
+            $stored = $pool->exists ? $pool->members()->get()->keyBy('source_node_id') : collect();
+            // 参数已不兼容时仍允许只停用；不以停用操作修改节点或密钥。
+            $statusOnly = $pool->exists && !$starting
+                && $members->map(fn ($m) => [(int) $m['node_id'], (int) $m['priority'], (int) ($m['weight'] ?? 1)])->values()->all()
+                    === $stored->map(fn ($m) => [(int) $m->source_node_id, (int) $m->priority, (int) $m->weight])->values()->all();
+            foreach (collect($data)->except(['id', 'members', 'enabled']) as $key => $value) if ($pool->{$key} != $value) $statusOnly = false;
             if ($statusOnly) {
                 $pool->update(['enabled' => false]);
                 DB::afterCommit(fn () => $this->notify($pool));
                 return $pool->fresh(['members.sourceNode', 'members.runtimeNode']);
             }
-            // 已有成员使用池专用入口的快照，编辑原直连节点不会悄悄改变池的服务器或密钥。
-            foreach ($dnsMode ? [] : $storedMembers as $member) {
-                if (!$member->runtimeNode || !$sources->has($member->source_node_id)) continue;
-                $source = clone $member->runtimeNode;
-                $source->id = $member->source_node_id;
-                $source->balancer_role = null;
-                $source->balancer_pool_id = null;
-                $sources->put($member->source_node_id, $source);
-            }
             $first = $sources->get((int) $members->first()['node_id']);
-            if (!$first || $first->type !== 'vless' || !ServerRelayService::isSupportedEntry($first) || $first->balancer_role !== null) {
-                $this->invalid('members', '第一版请选择 VLESS Reality + TCP 前置');
-            }
-            if ($first->type === 'vless' && ((int) data_get($first->protocol_settings, 'tls') !== 2
-                || !in_array(strtolower((string) data_get($first->protocol_settings, 'network', 'tcp')), ['', 'tcp', 'raw'], true))) {
-                $this->invalid('members', '本版 VLESS 前置池支持 Reality + TCP；其他传输继续使用独立节点');
-            }
-            if ($pool->exists && $pool->protocol !== $first->type) $this->invalid('members', '修改协议请新建前置池，避免影响已有订阅');
+            if (!$first) $this->invalid('members', '请选择已有的前置节点');
             foreach ($members as $member) {
                 $source = $sources->get((int) $member['node_id']);
-                if ($dnsMode && $source) {
-                    $reasons = self::dnsCompatibility($source, $first);
-                    if ($reasons) $this->invalid('members', $source->name . '：' . implode('；', $reasons));
-                }
-                if (!$source || !$source->machine_id || !$source->machine || (!$dnsMode && $starting && !$source->machine->is_active) || $source->type !== $first->type
-                    || !ServerRelayService::isSupportedEntry($source) || $source->balancer_role !== null) {
-                    $this->invalid('members', '成员必须是同协议、已绑定启用服务器的独立前置');
-                }
-                if ($starting && !self::agentCompatible($source->machine)) $this->invalid('members', '参与前置池的服务器需要先运行 Node v2.25.0 或更新版本');
-                $error = ServerRelayService::validateEntrySettings($first->type, $first->protocol_settings, $first->host, $source->kernel_type);
-                if ($error !== null) $this->invalid('members', $error);
+                if (!$source) $this->invalid('members', '前置节点不存在');
+                $reasons = self::dnsCompatibility($source, $first);
+                if ($reasons) $this->invalid('members', $source->name . '：' . implode('；', $reasons));
+                if ($starting && !self::agentCompatible($source->machine)) $this->invalid('members', '前置需要先运行 Agent v2.25.0 或更新版本');
             }
-            if ($sources->pluck('machine_id')->unique()->count() !== $sources->count()) {
-                $this->invalid('members', '同一个池每台服务器只能选择一个模板节点');
-            }
+            if ($sources->pluck('machine_id')->unique()->count() !== $sources->count()) $this->invalid('members', '每台服务器只能选择一个前置节点');
             $hosts = $sources->map(fn ($source) => strtolower(rtrim(trim($source->host, '[] '), '.')));
-            if ($hosts->unique()->count() !== $hosts->count() || $hosts->contains(strtolower(rtrim($data['domain'], '.')))) {
-                $this->invalid('members', '成员地址必须分别直达各自服务器，不能使用共同的入口域名');
-            }
-            if ($dnsMode) {
-                $policy = array_replace(FrontPoolScheduler::DEFAULTS, $data['scheduling_config'] ?? $pool->scheduling_config ?? []);
-                if (!in_array($policy['strategy'], ['priority', 'latency'], true)) $this->invalid('scheduling_config', '请选择有效的前置选择方式');
-                if ($policy['strategy'] === 'latency') {
-                    $target = Server::find($policy['latency_node_id']);
-                    if (!$pool->exists || !$target || (int) $target->relay_pool_id !== (int) $pool->id || !SchedulingProbeService::target($target)) $this->invalid('scheduling_config.latency_node_id', '请选择绑定该池、使用 TCP 内部链路的落地作为测速目标');
-                    if ($starting && $sources->contains(fn ($source) => !LandingPoolService::compatibleAgent($source))) $this->invalid('members', '自动择优需要前置服务器运行 Agent v2.30.0 或更新版本');
-                }
-                $data['scheduling_config'] = $policy;
-                $preset = \App\Models\BalancerDnsPreset::query()->whereKey($data['dns_preset_id'] ?? 0)->lockForUpdate()->first();
-                if (!$preset || $preset->provider !== 'powerdns') $this->invalid('dns_preset_id', 'DNS 调度请选择 PowerDNS 域名配置');
-                if ($data['domain'] !== $preset->domain && !str_ends_with($data['domain'], '.' . $preset->domain)) $this->invalid('domain', '池域名必须属于所选 PowerDNS 区域');
-                if (($data['personal_domain_enabled'] ?? $pool->personal_domain_enabled) && count(explode('.', $data['domain'])) !== 3) $this->invalid('domain', '用户四级域名需要三级池域名，例如 pool.example.com');
-                if ($pool->exists && $pool->mode !== 'dns') {
-                    if ($pool->enabled || \App\Models\BalancerDnsRecord::where('pool_id', $pool->id)->exists()
-                        || \App\Models\DdnsBinding::where('owner_type', 'pool')->where('owner_id', $pool->id)->exists()) $this->invalid('mode', '转换前请停用旧池、同步清理池 DNS，并清理旧个人 DDNS 绑定');
-                }
-                if (\App\Models\DdnsBinding::where('domain', $data['domain'])->exists()) $this->invalid('domain', '该域名已被节点 DDNS 使用');
-                $port = self::publicPort($first);
-                if ($port === null) $this->invalid('members', '首个前置节点没有有效的公网连接端口');
-                // 旧字段保留以兼容数据库与旧客户端，DNS 模式从不创建转发实例。
-                $data['gateway_machine_id'] = 0;
-                $data['gateway_address'] = '';
-                $data['gateway_source_ips'] = [];
-                $data['gateway_port'] = $port;
-                $gatewayPort = $port;
-            } else {
-                if (!empty($data['dns_preset_id']) && \App\Models\BalancerDnsPreset::find($data['dns_preset_id'])?->provider === 'powerdns') {
-                    $this->invalid('dns_preset_id', '旧转发池的基础解析保留 Cloudflare；使用 PowerDNS 请先转换为 DNS 调度');
-                }
-                $machine = ServerMachine::query()->whereKey($data['gateway_machine_id'])->when($starting, fn ($query) => $query->where('is_active', true))->first();
-                if (!$machine) $this->invalid('gateway_machine_id', '请选择已启用的调度入口服务器');
-                if ($starting && !self::agentCompatible($machine)) $this->invalid('gateway_machine_id', '调度入口服务器需要先运行 Node v2.25.0 或更新版本');
-                if ($machine->traffic_mode === 'proxy' && $machine->traffic_limit > 0) {
-                    $this->invalid('gateway_machine_id', '调度入口的流量限额请使用网卡计量模式，避免将转发量误作用户用量');
-                }
-                // 新配置直接读取机器上报与首个节点；已有池编辑、启停不改变当前连接地址。
-                if (!array_key_exists('gateway_address', $data)) {
-                    if ($pool->exists && (int) $pool->gateway_machine_id === (int) $machine->id) {
-                        $data['gateway_address'] = $pool->gateway_address;
-                    } else {
-                        $addresses = $this->machineAddresses($machine);
-                        if ($addresses === []) $this->invalid('gateway_machine_id', '所选服务器尚未上报公网 IP，请先确认节点程序正常上报');
-                        $data['gateway_address'] = $addresses[0];
-                        if (empty($data['gateway_source_ips'])) $data['gateway_source_ips'] = $addresses;
-                    }
-                }
-                if (!array_key_exists('gateway_port', $data)) {
-                    $preferred = $pool->exists ? (int) $pool->gateway_port : (int) $first->port;
-                    if ($preferred < 1 || $preferred > 65535) $this->invalid('members', '首个前置节点没有有效的连接端口');
-                    $data['gateway_port'] = $this->gatewayPort((int) $machine->id, $preferred, $pool->gateway_node_id);
-                }
-                $gatewayPort = (int) $data['gateway_port'];
-                if (!empty($data['dns_preset_id'])) \App\Models\BalancerDnsPreset::query()->whereKey($data['dns_preset_id'])->lockForUpdate()->firstOrFail();
-                $occupied = Server::query()->where('machine_id', $machine->id)->where('server_port', $gatewayPort)
-                    ->when($pool->gateway_node_id, fn ($query) => $query->where('id', '!=', $pool->gateway_node_id))->exists();
-                if ($occupied) $this->invalid('gateway_port', '调度入口端口已被其他节点使用');
-            }
-            if ($pool->exists && ($pool->domain !== strtolower($data['domain']) || $pool->dns_preset_id != ($data['dns_preset_id'] ?? null)) && ($pool->gateway_node_id || $dnsMode)) {
-                // 旧域名的托管记录必须先明确移除，避免改名后遗留入口。
-                if (\App\Models\BalancerDnsRecord::where('pool_id', $pool->id)->exists() || \App\Models\PowerDnsRecord::where('owner_type', 'pool')->where('owner_id', $pool->id)->exists()) {
-                    $this->invalid('domain', '修改域名前请先停用池并完成 DNS 同步');
-                }
-            }
+            if ($hosts->unique()->count() !== $hosts->count() || $hosts->contains(strtolower(rtrim($data['domain'], '.')))) $this->invalid('members', '成员地址必须分别直达各自服务器');
+            $policy = array_replace(FrontPoolScheduler::DEFAULTS, $data['scheduling_config'] ?? $pool->scheduling_config ?? []);
+            if (!in_array($policy['strategy'], ['priority', 'latency', 'latency_balanced', 'cycle'], true)) $this->invalid('scheduling_config', '请选择有效的前置选择方式');
+            if (in_array($policy['strategy'], ['latency', 'latency_balanced'], true)) {
+                $target = Server::find($policy['latency_node_id']);
+                if (!$pool->exists || !$target || (int) $target->relay_pool_id !== (int) $pool->id || !SchedulingProbeService::target($target)) $this->invalid('scheduling_config.latency_node_id', '请选择绑定该池、使用 TCP 内部链路的落地作为测速目标');
+                if ($starting && $sources->contains(fn ($source) => !LandingPoolService::compatibleAgent($source))) $this->invalid('members', '延迟选择需要前置运行 Agent v2.30.0 或更新版本');
+            } else $policy['latency_node_id'] = null;
+            $data['scheduling_config'] = $policy;
+            $preset = \App\Models\BalancerDnsPreset::whereKey($data['dns_preset_id'] ?? 0)->lockForUpdate()->first();
+            if (!$preset || $preset->provider !== 'powerdns') $this->invalid('dns_preset_id', '请选择 PowerDNS 域名配置');
+            if ($data['domain'] !== $preset->domain && !str_ends_with($data['domain'], '.' . $preset->domain)) $this->invalid('domain', '池域名必须属于所选 PowerDNS 区域');
+            // 32 位用户标签及最长成员标签都要满足完整域名长度限制。
+            if (strlen($data['domain']) > 218) $this->invalid('domain', '池域名过长，无法生成用户独立域名');
+            if (\App\Models\DdnsBinding::where('domain', $data['domain'])->exists()) $this->invalid('domain', '该域名已被节点 DDNS 使用');
+            if ($pool->exists && ($pool->domain !== $data['domain'] || $pool->dns_preset_id != $data['dns_preset_id'])
+                && \App\Models\PowerDnsRecord::where('owner_type', 'pool')->where('owner_id', $pool->id)->exists()) $this->invalid('domain', '修改域名前请先停用池并同步清理解析');
             $pool->fill(collect($data)->except(['id', 'members'])->all());
-            $pool->domain = strtolower(rtrim($pool->domain, '.'));
             $pool->protocol = $first->type;
-            if (!$pool->exists || $dnsMode) {
-                $pool->template_node_id = $first->id;
-                $pool->template_config = collect($first->toArray())->only(['type', 'kernel_type', 'rate', 'group_ids', 'protocol_settings', 'route_ids', 'source_policy', 'rate_time_enable', 'rate_time_ranges'])->all();
-            }
-            if ($dnsMode) $pool->backend_port = $gatewayPort;
-            else $pool->backend_port ??= $this->allocatePort($sources->pluck('machine_id')->all(), $gatewayPort);
-            if (!$dnsMode && $gatewayPort === (int) $pool->backend_port && $sources->contains('machine_id', $machine->id)) {
-                $this->invalid('gateway_port', '同一服务器上的调度入口端口不能与池成员端口相同');
-            }
-            if (!$dnsMode && Server::whereIn('machine_id', $sources->pluck('machine_id'))->where('server_port', $pool->backend_port)
-                ->where(fn ($query) => $query->whereNull('balancer_pool_id')->orWhere('balancer_pool_id', '!=', $pool->id ?? 0))->exists()) {
-                $this->invalid('members', '新成员的池入口端口已被其他节点使用');
-            }
+            $pool->template_node_id = $first->id;
+            $pool->template_config = collect($first->toArray())->only(['type', 'kernel_type', 'rate', 'group_ids', 'protocol_settings', 'route_ids', 'source_policy', 'rate_time_enable', 'rate_time_ranges'])->all();
+            // 沿用数据库中的公网端口字段；不再创建转发入口或专用监听。
+            $pool->gateway_port = self::publicPort($first);
+            $pool->backend_port = $pool->gateway_port;
+            $pool->gateway_machine_id = 0;
+            $pool->gateway_address = '';
+            $pool->gateway_source_ips = [];
             $pool->save();
-
-            $oldMembers = $storedMembers;
-            $removedMachines = [];
-            foreach ($members->values() as $position => $memberData) {
-                $source = $sources[(int) $memberData['node_id']];
-                $member = $oldMembers->pull($source->id) ?? new BalancerMember(['pool_id' => $pool->id, 'source_node_id' => $source->id]);
-                $runtime = $member->runtime_node_id ? Server::find($member->runtime_node_id) : null;
-                if ($dnsMode) {
-                    if ($runtime && $runtime->id !== $source->id && $runtime->balancer_pool_id === $pool->id && $runtime->balancer_role === 'member') {
-                        $removedMachines[] = $runtime->machine_id;
-                        $runtime->delete();
-                    }
-                    $member->runtime_node_id = $source->id;
-                    $member->priority = (int) $memberData['priority'];
-                    $member->position = $position;
-                    $member->healthy_addresses = [];
-                    $member->checked_at = null;
-                    if (!$member->dns_addresses) {
-                        $member->dns_addresses = DnsPoolService::addresses($source);
-                        if (!$member->dns_addresses) $this->invalid('members', $source->name . '：需要有效的连接 IP 或近期公网地址上报');
-                    }
-                    $member->save();
-                    continue;
-                }
-                $runtime ??= new Server();
-                // 池专用入口复制模板，不更改已有直连节点；证书来源仍取该服务器自己的设置。
-                $runtime->fill($pool->template_config);
-                // 池专用入口只接受已绑定落地的权限，不继承原直连节点的直接出网权限。
-                $runtime->group_ids = [];
-                $runtime->cert_config = $source->cert_config;
-                $runtime->machine_id = $source->machine_id;
-                $runtime->name = $pool->name . ' / ' . $source->name;
-                $runtime->host = $source->host;
-                $runtime->port = (string) $pool->backend_port;
-                $runtime->server_port = (int) $pool->backend_port;
-                $runtime->enabled = $pool->enabled;
-                $runtime->show = false;
-                $runtime->parent_id = null;
-                $runtime->relay_entry_id = null;
-                $runtime->balancer_pool_id = $pool->id;
-                $runtime->balancer_role = 'member';
-                $runtime->auto_firewall = $source->auto_firewall;
-                $runtime->save();
-                $member->runtime_node_id = $runtime->id;
-                $member->priority = (int) $memberData['priority'];
+            foreach ($members->values() as $position => $values) {
+                $source = $sources[(int) $values['node_id']];
+                $member = $stored->pull($source->id) ?? new BalancerMember(['pool_id' => $pool->id, 'source_node_id' => $source->id]);
+                $member->runtime_node_id = $source->id;
+                $member->priority = (int) $values['priority'];
+                $member->weight = (int) ($values['weight'] ?? 1);
                 $member->position = $position;
+                $member->dns_label ??= bin2hex(random_bytes(12));
+                $member->dns_addresses = $member->dns_addresses ?: DnsPoolService::addresses($source);
+                if (!$member->dns_addresses) $this->invalid('members', $source->name . '：需要有效公网连接地址');
                 $member->save();
             }
-            foreach ($oldMembers as $member) {
-                $runtime = $member->runtimeNode;
-                if ($runtime && $runtime->balancer_pool_id === $pool->id && $runtime->balancer_role === 'member') {
-                    $removedMachines[] = $runtime->machine_id;
-                    $runtime->delete();
-                }
+            foreach ($stored as $member) {
+                $id = (int) $member->source_node_id;
                 $member->delete();
-                if ($runtime && $runtime->id === $member->source_node_id) DB::afterCommit(fn () => NodeSyncService::notifyFullSync($runtime->id));
+                DB::afterCommit(fn () => NodeSyncService::notifyFullSync($id));
             }
-            foreach (array_unique(array_filter($removedMachines)) as $machineId) DB::afterCommit(fn () => NodeSyncService::notifyMachineNodesChanged((int) $machineId));
-            if (!$dnsMode) {
-                $gateway = $pool->gateway_node_id ? Server::find($pool->gateway_node_id) : null;
-                $gateway ??= new Server();
-                $gateway->fill(['type' => self::GATEWAY_PROTOCOL, 'kernel_type' => 'xray', 'name' => $pool->name . ' / 调度入口',
-                    'host' => $pool->gateway_address, 'port' => (string) $pool->gateway_port, 'server_port' => $pool->gateway_port,
-                    'machine_id' => $pool->gateway_machine_id, 'enabled' => $pool->enabled, 'show' => false, 'rate' => 1,
-                    'balancer_pool_id' => $pool->id, 'balancer_role' => 'gateway', 'protocol_settings' => [], 'group_ids' => []]);
-                $gateway->save();
-                $pool->gateway_node_id = $gateway->id;
-                $pool->save();
-                app(DdnsService::class)->configure('pool', $pool, $ddns);
-            } elseif ($pool->gateway_node_id) {
-                $oldGateway = Server::find($pool->gateway_node_id);
-                $oldMachine = $oldGateway?->machine_id;
-                $oldGateway?->delete();
-                $pool->update(['gateway_node_id' => null]);
-                if ($oldMachine) DB::afterCommit(fn () => NodeSyncService::notifyMachineNodesChanged((int) $oldMachine));
-            }
-            if ($dnsMode && $starting && ($pool->scheduling_config['strategy'] ?? 'priority') === 'latency'
-                && $sources->contains(fn ($source) => count(SchedulingProbeService::targets($source, false)) > 256)) $this->invalid('members', '前置的探测目标超过 256 个，请减少关联的测速和主备线路');
+            if ($starting && in_array($policy['strategy'], ['latency', 'latency_balanced'], true)
+                && $sources->contains(fn ($source) => count(SchedulingProbeService::targets($source, false)) > 256)) $this->invalid('members', '前置探测目标超过 256 个');
             DB::afterCommit(fn () => $this->notify($pool));
             return $pool->fresh(['members.sourceNode', 'members.runtimeNode']);
         }, 3);
@@ -347,7 +180,7 @@ class LoadBalancerService
         if (!$pool || !$pool->enabled) return null;
         $entry = $pool->members->pluck('runtimeNode')->filter(fn ($node) => $node && $node->enabled !== false
             && !MachineTrafficService::nodeBlocked($node)
-            && ($pool->mode !== 'dns' || self::memberCompatibility($pool, $node) === []))->first();
+            && self::memberCompatibility($pool, $node) === [])->first();
         if (!$entry) return null;
         $entry = clone $entry;
         $entry->host = $pool->domain;
@@ -356,53 +189,12 @@ class LoadBalancerService
         return $entry;
     }
 
-    public static function gatewayConfig(Server $node): array
-    {
-        $pool = BalancerPool::with(['members.runtimeNode.machine'])->findOrFail($node->balancer_pool_id);
-        $targets = $pool->members->filter(fn ($member) => $member->runtimeNode)->map(function ($member) use ($pool) {
-            $host = trim($member->runtimeNode->host, '[]');
-            return ['id' => (int) $member->runtime_node_id, 'address' => (str_contains($host, ':') ? '[' . $host . ']' : $host) . ':' . $pool->backend_port,
-                'priority' => (int) $member->priority, 'online' => self::online($member->runtimeNode) && $member->runtimeNode->machine?->is_active === true];
-        })->values()->all();
-        return ['protocol' => self::GATEWAY_PROTOCOL, 'kernel_type' => 'xray', 'listen_ip' => str_contains($pool->gateway_address, ':') ? '::' : '0.0.0.0',
-            'server_port' => (int) $pool->gateway_port, 'network' => 'tcp',
-            'auto_firewall' => (bool) $node->auto_firewall,
-            'balancer' => ['network' => 'tcp', 'targets' => $targets, 'max_sessions' => 16384]];
-    }
-
     public function notify(BalancerPool $pool): void
     {
-        $nodes = Server::where('balancer_pool_id', $pool->id)
-            ->orWhereIn('id', $pool->members()->pluck('runtime_node_id'))->get();
+        $nodes = Server::whereIn('id', $pool->members()->pluck('runtime_node_id'))->get();
         foreach ($nodes->pluck('machine_id')->filter()->unique() as $machineId) NodeSyncService::notifyMachineNodesChanged((int) $machineId);
         foreach ($nodes as $node) NodeSyncService::notifyFullSync($node->id);
         foreach (Server::where('relay_pool_id', $pool->id)->pluck('id') as $id) NodeSyncService::notifyConfigUpdated((int) $id);
-    }
-
-    private function allocatePort(array $machines, int $gatewayPort): int
-    {
-        $used = Server::whereIn('machine_id', $machines)->pluck('server_port')->map(fn ($v) => (int) $v)->flip();
-        for ($port = 20000; $port <= 65535; $port++) if ($port !== $gatewayPort && !$used->has($port)) return $port;
-        $this->invalid('members', '没有可供全部成员使用的池入口端口');
-    }
-
-    private function machineAddresses(ServerMachine $machine): array
-    {
-        $runtime = MachineAgentService::runtimeView($machine->agent_runtime) ?? [];
-        $addresses = array_key_exists('public_ipv4', $runtime) || array_key_exists('public_ipv6', $runtime)
-            ? [$runtime['public_ipv4'] ?? null, $runtime['public_ipv6'] ?? null] : [$runtime['public_ip'] ?? null];
-        return array_values(array_unique(array_filter($addresses, fn ($address) => is_string($address)
-            && filter_var($address, FILTER_VALIDATE_IP) && !in_array($address, ['0.0.0.0', '::'], true))));
-    }
-
-    private function gatewayPort(int $machineId, int $preferred, ?int $gatewayNodeId): int
-    {
-        $used = Server::where('machine_id', $machineId)
-            ->when($gatewayNodeId, fn ($query) => $query->where('id', '!=', $gatewayNodeId))
-            ->pluck('server_port')->map(fn ($value) => (int) $value)->flip();
-        if (!$used->has($preferred)) return $preferred;
-        for ($port = 20000; $port <= 65535; $port++) if (!$used->has($port)) return $port;
-        $this->invalid('gateway_machine_id', '所选服务器没有可用的入口端口');
     }
 
     private function invalid(string $field, string $message): never

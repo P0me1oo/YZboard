@@ -10,7 +10,7 @@ class BalancerPool extends Model
 {
     protected $table = 'v2_balancer_pool';
     protected $guarded = ['id'];
-    protected $hidden = ['template_config'];
+    protected $hidden = ['template_config', 'gateway_machine_id', 'gateway_node_id', 'gateway_address', 'gateway_source_ips', 'backend_port'];
     protected $casts = ['enabled' => 'boolean', 'gateway_source_ips' => 'array', 'template_config' => 'encrypted:array', 'dns_synced_at' => 'datetime',
         'ddns_enabled' => 'boolean', 'personal_domain_enabled' => 'boolean', 'follow_user_status' => 'boolean', 'dns_ttl' => 'integer',
         'scheduling_config' => 'array', 'scheduling_state' => 'array'];
@@ -25,8 +25,4 @@ class BalancerPool extends Model
         return $this->belongsTo(BalancerDnsPreset::class, 'dns_preset_id');
     }
 
-    public function gateway(): BelongsTo
-    {
-        return $this->belongsTo(Server::class, 'gateway_node_id');
-    }
 }

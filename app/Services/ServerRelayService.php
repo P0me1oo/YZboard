@@ -224,7 +224,7 @@ class ServerRelayService
     {
         if (!$child->relay_pool_id) return true;
         $pool = \App\Models\BalancerPool::find($child->relay_pool_id);
-        return $pool && $pool->enabled && ($pool->mode !== 'dns' || LoadBalancerService::memberCompatibility($pool, $entry) === []);
+        return $pool && $pool->enabled && LoadBalancerService::memberCompatibility($pool, $entry) === [];
     }
 
     public static function hasRelayChildren(Server $entry): bool

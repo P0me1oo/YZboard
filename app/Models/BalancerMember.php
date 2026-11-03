@@ -10,7 +10,7 @@ class BalancerMember extends Model
     protected $table = 'v2_balancer_member';
     protected $guarded = ['id'];
     public $timestamps = false;
-    protected $casts = ['priority' => 'integer', 'position' => 'integer', 'last_report_at' => 'integer',
+    protected $casts = ['priority' => 'integer', 'weight' => 'integer', 'position' => 'integer', 'last_report_at' => 'integer',
         'dns_addresses' => 'array', 'healthy_addresses' => 'array', 'checked_at' => 'datetime', 'scheduling_state' => 'array'];
 
     public function sourceNode(): BelongsTo

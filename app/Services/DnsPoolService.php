@@ -42,19 +42,40 @@ class DnsPoolService
         if (!$pool->dnsPreset || $pool->dnsPreset->provider !== 'powerdns') throw new \RuntimeException('缺少 PowerDNS 配置');
         [$addresses, $state] = app(FrontPoolScheduler::class)->select($pool);
         $desired = [];
+        $names = [];
+        foreach ($state['candidates'] as $candidate) {
+            $member = $pool->members->firstWhere('id', $candidate['member_id']);
+            if (!$member->dns_label) $member->update(['dns_label' => bin2hex(random_bytes(12))]);
+            $name = 'entry-' . $member->dns_label . '.' . $pool->domain;
+            $names[$member->id] = $name;
+            foreach (['A', 'AAAA'] as $type) {
+                $ips = array_values(array_filter($candidate['addresses'], fn ($ip) => (str_contains($ip, ':') ? 'AAAA' : 'A') === $type));
+                if ($ips) $desired[] = ['name' => $name, 'type' => $type, 'contents' => $ips];
+            }
+        }
+        // 池域名保留候选地址，供尚未更新订阅的客户端过渡；新订阅使用个人域名。
         foreach (['A', 'AAAA'] as $type) {
             $values = array_values(array_unique(array_filter($addresses, fn ($ip) => (str_contains($ip, ':') ? 'AAAA' : 'A') === $type)));
             if ($values) $desired[] = ['name' => $pool->domain, 'type' => $type, 'contents' => $values];
         }
-        if ($pool->enabled && $pool->personal_domain_enabled) {
+        $assignments = [];
+        if ($pool->enabled) {
             $aliases = PoolDnsAlias::where('pool_id', $pool->id)->get()->keyBy('user_id');
             foreach ($this->users($pool) as $user) {
                 $alias = $aliases->get($user->id) ?? PoolDnsAlias::create(['pool_id' => $pool->id, 'user_id' => $user->id, 'label' => bin2hex(random_bytes(16))]);
-                // 全部前置不可用时连同个人解析撤销；身份标签保留供恢复时复用。
-                if ($addresses) $desired[] = ['name' => $alias->label . '.' . $pool->domain, 'type' => 'CNAME', 'contents' => [$pool->domain . '.']];
+                $aliases->put($user->id, $alias);
+                $memberId = FrontendAssignment::choose($alias->label, $state['candidates']);
+                $assignments[$alias->id] = $memberId;
+                if ($memberId !== null) $desired[] = ['name' => $alias->label . '.' . $pool->domain, 'type' => 'CNAME', 'contents' => [$names[$memberId] . '.']];
             }
         }
         app(PowerDnsService::class)->reconcile($pool->dnsPreset, 'pool', $pool->id, $desired, $pool->dns_ttl);
+        // 只有外部写入已确认后才保存分配；失败时保留上次结果，标签始终不变。
+        $aliases ??= PoolDnsAlias::where('pool_id', $pool->id)->get()->keyBy('user_id');
+        foreach ($aliases as $alias) {
+            $memberId = $assignments[$alias->id] ?? null;
+            if ($alias->member_id !== $memberId) $alias->update(['member_id' => $memberId]);
+        }
         $previous = $pool->scheduling_state['snapshot'] ?? [];
         SchedulingEvents::record('front', $pool->id, $pool->name, 'selection_changed', $previous, $state['snapshot']);
         $pool->update(['scheduling_state' => $state]);
@@ -62,7 +83,6 @@ class DnsPoolService
 
     public function project(BalancerPool $pool, User|array $user): string
     {
-        if (!$pool->personal_domain_enabled) return $pool->domain;
         $userId = (int) (is_array($user) ? ($user['id'] ?? 0) : $user->id);
         $alias = PoolDnsAlias::where('pool_id', $pool->id)->where('user_id', $userId)->first();
         $current = User::find($userId);
@@ -71,9 +91,12 @@ class DnsPoolService
             throw new HttpResponseException(response('当前用户没有该节点的使用权限', 403, ['Cache-Control' => 'private, no-store']));
         }
         $name = $alias ? $alias->label . '.' . $pool->domain : null;
-        $ready = $name && PowerDnsRecord::where('owner_type', 'pool')->where('owner_id', $pool->id)
-            ->where('name', $name)->where('type', 'CNAME')->where('confirmed', true)->exists()
-            && PowerDnsRecord::where('owner_type', 'pool')->where('owner_id', $pool->id)->where('name', $pool->domain)
+        $member = $alias?->member_id ? $pool->members()->find($alias->member_id) : null;
+        $target = $member?->dns_label ? 'entry-' . $member->dns_label . '.' . $pool->domain : null;
+        $record = $name ? PowerDnsRecord::where('owner_type', 'pool')->where('owner_id', $pool->id)
+            ->where('name', $name)->where('type', 'CNAME')->where('confirmed', true)->first() : null;
+        $ready = $pool->enabled && $target && $record && $record->contents === [$target . '.']
+            && PowerDnsRecord::where('owner_type', 'pool')->where('owner_id', $pool->id)->where('name', $target)
                 ->whereIn('type', ['A', 'AAAA'])->where('confirmed', true)->exists();
         if (!$ready) throw new HttpResponseException(response('节点域名正在准备，请稍后更新订阅', 503,
             ['Cache-Control' => 'private, no-store', 'Retry-After' => '30']));

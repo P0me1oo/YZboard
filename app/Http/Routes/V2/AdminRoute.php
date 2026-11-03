@@ -61,7 +61,6 @@ class AdminRoute
                 $router->get('/fetch', [$controller, 'fetch']);
                 $router->post('/save', [$controller, 'save']);
                 $router->post('/delete', [$controller, 'delete']);
-                $router->post('/settings', [$controller, 'settings']);
                 $router->post('/preset/save', [$controller, 'savePreset']);
                 $router->post('/preset/delete', [$controller, 'deletePreset']);
                 $router->post('/dns/sync', [$controller, 'syncDns']);

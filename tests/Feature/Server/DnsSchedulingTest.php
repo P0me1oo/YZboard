@@ -104,7 +104,7 @@ class DnsSchedulingTest extends TestCase
         $pool = $this->pool();
         $this->assertSame('dns', $pool->mode);
         $this->assertFalse($pool->ddns_enabled);
-        $this->assertFalse($pool->personal_domain_enabled);
+        $this->assertTrue($pool->personal_domain_enabled);
         $this->assertFalse($pool->follow_user_status);
         $this->assertNull($pool->gateway_node_id);
         $this->assertSame(0, Server::whereNotNull('balancer_role')->count());
@@ -330,7 +330,7 @@ class DnsSchedulingTest extends TestCase
         $this->assertTrue($this->sync($pool));
         $this->assertSame(['192.0.2.99'], $this->addresses());
         $this->assertSame('2001:db8::10', $this->remote['pool.example.com.|AAAA']['records'][0]['content']);
-        $this->assertFalse($pool->fresh()->personal_domain_enabled);
+        $this->assertTrue($pool->fresh()->personal_domain_enabled);
         $this->assertFalse($pool->fresh()->follow_user_status);
         $pool->update(['ddns_enabled' => false]);
         $pool->members[0]->sourceNode->machine->update(['agent_runtime' => ['version' => 'v2.25.0', 'public_ipv4' => '192.0.2.10']]);
@@ -348,7 +348,7 @@ class DnsSchedulingTest extends TestCase
         $this->assertTrue($this->sync($pool));
         $name = $project();
         $this->assertSame(4, count(explode('.', $name)));
-        $this->assertSame('pool.example.com.', $this->remote[$name . '.|CNAME']['records'][0]['content']);
+        $this->assertStringStartsWith('entry-', $this->remote[$name . '.|CNAME']['records'][0]['content']);
         $user->update(['banned' => true]);
         $this->assertTrue($this->sync($pool));
         $this->assertArrayHasKey($name . '.|CNAME', $this->remote);
@@ -358,14 +358,7 @@ class DnsSchedulingTest extends TestCase
         $user->update(['banned' => false]);
         $this->assertTrue($this->sync($pool));
         $this->assertSame($name, $project());
-        $pool->update(['personal_domain_enabled' => false]);
-        $this->assertTrue($this->sync($pool));
-        $this->assertSame($pool->domain, $project());
-        $this->assertArrayNotHasKey($name . '.|CNAME', $this->remote);
-        $this->assertSame(1, PoolDnsAlias::count());
-        $pool->update(['personal_domain_enabled' => true]);
-        $this->assertTrue($this->sync($pool));
-        $this->assertSame($name, $project());
+        $this->assertSame($name, app(\App\Services\DnsPoolService::class)->project($pool->fresh(), $user));
     }
 
     public function test_apex_ns_survives_and_lost_response_is_reconciled_without_duplicates(): void
@@ -377,7 +370,7 @@ class DnsSchedulingTest extends TestCase
         $this->assertFalse($this->sync($pool));
         $this->assertFalse(PowerDnsRecord::first()->confirmed);
         $this->assertTrue($this->sync($pool));
-        $this->assertSame(1, PowerDnsRecord::count());
+        $this->assertSame(2, PowerDnsRecord::count());
         $this->assertSame($ns, $this->remote['pool.example.com.|NS']);
         $pool->update(['enabled' => false]);
         $this->assertTrue($this->sync($pool));
@@ -392,7 +385,7 @@ class DnsSchedulingTest extends TestCase
         $this->remote['pool.example.com.|A']['comments'] = [['content' => 'foreign owner']];
         $before = $this->remote;
         $this->assertFalse($this->sync($pool));
-        $this->assertFalse(PowerDnsRecord::first()->confirmed);
+        $this->assertFalse(PowerDnsRecord::where('name', $pool->domain)->first()->confirmed);
         $pool->update(['enabled' => false]);
         $this->assertFalse($this->sync($pool));
         $this->assertSame($before, $this->remote);
@@ -437,26 +430,6 @@ class DnsSchedulingTest extends TestCase
         $this->assertSame(120, $this->remote[$name . '.|CNAME']['ttl']);
     }
 
-    public function test_legacy_pool_conversion_requires_cleanup_then_removes_gateway(): void
-    {
-        $source = $this->node('192.0.2.10');
-        $pool = app(LoadBalancerService::class)->save(['name' => '旧池', 'domain' => 'pool.example.com', 'enabled' => true,
-            'gateway_machine_id' => $source->machine_id, 'gateway_address' => '192.0.2.20', 'gateway_port' => 8443,
-            'members' => [['node_id' => $source->id, 'priority' => 1]]]);
-        $gatewayId = $pool->gateway_node_id;
-        $payload = ['id' => $pool->id, 'name' => $pool->name, 'domain' => $pool->domain, 'enabled' => false, 'mode' => 'dns',
-            'dns_preset_id' => $this->preset()->id, 'members' => [['node_id' => $source->id, 'priority' => 1]]];
-        try { app(LoadBalancerService::class)->save($payload); $this->fail('启用中的旧池不应直接转换'); }
-        catch (ValidationException $e) { $this->assertArrayHasKey('mode', $e->errors()); }
-        $pool->update(['enabled' => false]);
-        $converted = app(LoadBalancerService::class)->save($payload);
-        $this->assertNull(Server::find($gatewayId));
-        $this->assertNull($converted->gateway_node_id);
-        $this->assertSame(443, $converted->gateway_port);
-        $this->assertSame($source->id, $converted->members[0]->runtime_node_id);
-        $this->assertNull(Server::find($pool->members[0]->runtime_node_id));
-        $this->assertNotNull($source->fresh());
-    }
 
     public function test_powerdns_preset_validation_hides_credentials_and_rejects_redirect_url_components(): void
     {
@@ -470,5 +443,88 @@ class DnsSchedulingTest extends TestCase
         $this->assertSame($data['api_token'], $preset->fresh()->api_token);
         $this->expectException(ValidationException::class);
         $controller->savePreset(Request::create('/', 'POST', [...$data, 'api_url' => 'https://dns-api.example.test/?token=example']));
+    }
+
+    private function usersForPool(BalancerPool $pool): array
+    {
+        $route = $this->node('192.0.2.30');
+        $route->update(['relay_pool_id' => $pool->id]);
+        $users = [];
+        for ($i = 0; $i < 40; $i++) {
+            $user = User::create(['email' => 'assignment-' . $i . '@example.test', 'password' => Str::random(24),
+                'uuid' => Str::uuid()->toString(), 'token' => Str::random(32), 'group_id' => 1, 'banned' => false,
+                'expired_at' => time() + 3600, 'transfer_enable' => 1024, 'u' => 0, 'd' => 0]);
+            PoolDnsAlias::create(['pool_id' => $pool->id, 'user_id' => $user->id, 'label' => substr(hash('sha256', 'user-test-' . $i), 0, 32)]);
+            $users[] = $user;
+        }
+        return $users;
+    }
+
+    public function test_personal_dns_uses_member_addresses_and_only_failed_member_users_move(): void
+    {
+        $pool = $this->pool(); $pool->members[1]->update(['priority' => 1]);
+        $users = $this->usersForPool($pool);
+        $this->assertTrue($this->sync($pool));
+        $before = PoolDnsAlias::where('pool_id', $pool->id)->pluck('member_id', 'label')->all();
+        $this->assertCount(2, array_unique($before));
+        foreach ($users as $user) {
+            $name = app(\App\Services\DnsPoolService::class)->project($pool->fresh(), $user);
+            $target = $this->remote[$name . '.|CNAME']['records'][0]['content'];
+            $this->assertStringStartsWith('entry-', $target);
+            $this->assertArrayHasKey($target . '|A', $this->remote);
+            $this->assertCount(1, $this->remote[$target . '|A']['records']);
+        }
+        $pool->members[0]->runtimeNode->update(['enabled' => false]);
+        $this->assertTrue($this->sync($pool));
+        $after = PoolDnsAlias::where('pool_id', $pool->id)->pluck('member_id', 'label')->all();
+        foreach ($before as $label => $id) $this->assertSame($pool->members[1]->id, $after[$label]);
+        $pool->members[0]->runtimeNode->update(['enabled' => true]);
+        $this->assertTrue($this->sync($pool));
+        $this->assertSame($before, PoolDnsAlias::where('pool_id', $pool->id)->pluck('member_id', 'label')->all());
+        $view = (new LoadBalancerController())->fetch()->getData(true)['data']['pools'][0];
+        $this->assertSame(40, array_sum(array_column($view['members'], 'assigned_users')));
+        $this->assertArrayNotHasKey('gateway_machine_id', $view);
+    }
+
+    public function test_assignment_changes_are_only_saved_after_confirmed_dns_write(): void
+    {
+        $pool = $this->pool(); $pool->members[1]->update(['priority' => 1]);
+        $users = $this->usersForPool($pool);
+        $this->assertTrue($this->sync($pool));
+        $before = PoolDnsAlias::where('pool_id', $pool->id)->pluck('member_id', 'label')->all();
+        $pool->members[0]->runtimeNode->update(['enabled' => false]);
+        $this->loseResponse = true;
+        $this->assertFalse($this->sync($pool));
+        $this->assertSame($before, PoolDnsAlias::where('pool_id', $pool->id)->pluck('member_id', 'label')->all());
+        $this->assertTrue($this->sync($pool));
+        $this->assertTrue($this->sync($pool));
+        $this->assertSame(40, PoolDnsAlias::where('pool_id', $pool->id)->where('member_id', $pool->members[1]->id)->count());
+        $this->assertSame(42, PowerDnsRecord::where('owner_type', 'pool')->count());
+        foreach ($users as $user) $this->assertNotEmpty(app(\App\Services\DnsPoolService::class)->project($pool->fresh(), $user));
+        $pool->update(['enabled' => false]);
+        $this->assertTrue($this->sync($pool));
+        $this->assertSame(0, PowerDnsRecord::where('owner_type', 'pool')->count());
+        $this->assertSame(0, PoolDnsAlias::where('pool_id', $pool->id)->whereNotNull('member_id')->count());
+        $this->assertSame(40, PoolDnsAlias::where('pool_id', $pool->id)->count());
+    }
+
+    public function test_old_transfer_api_is_rejected_and_migration_preserves_unconverted_data(): void
+    {
+        $pool = $this->pool();
+        $controller = new LoadBalancerController();
+        $payload = ['id' => $pool->id, 'name' => $pool->name, 'domain' => $pool->domain, 'enabled' => true,
+            'dns_preset_id' => $pool->dns_preset_id, 'members' => [['node_id' => $pool->members[0]->source_node_id, 'priority' => 1]]];
+        foreach ([['mode' => 'legacy'], ['gateway_machine_id' => $pool->members[0]->sourceNode->machine_id], ['members' => [['node_id' => $pool->members[0]->source_node_id, 'priority' => 1, 'weight' => 0]]]] as $extra) {
+            try { $controller->save(Request::create('/', 'POST', [...$payload, ...$extra]), app(LoadBalancerService::class)); $this->fail('无效配置应被拒绝'); }
+            catch (ValidationException) { $this->assertSame(2, $pool->members()->count()); }
+        }
+        \Illuminate\Support\Facades\DB::table('v2_balancer_pool')->where('id', $pool->id)->update(['mode' => 'legacy']);
+        $before = $pool->fresh()->getAttributes();
+        $migration = require database_path('migrations/2026_11_03_000001_assign_frontends_to_users.php');
+        try { $migration->up(); $this->fail('旧池未转换时不能继续升级'); }
+        catch (\RuntimeException $error) { $this->assertStringContainsString('旧版本', $error->getMessage()); }
+        $this->assertSame($before, $pool->fresh()->getAttributes());
+        $this->assertSame(2, Server::count());
+        $this->assertSame(2, $pool->members()->count());
     }
 }

@@ -1,6 +1,6 @@
 # 节点域名与 DDNS
 
-系统设置集中维护 DNS 预设、记录用量和旧解析清理。新增配置默认使用 PowerDNS，也保留 Cloudflare 以兼容已有节点和旧转发池。前置 DNS 池的四级域名、故障剔除和 NS 委托见[前置 DNS 调度](load-balancer.md)。
+系统设置集中维护 DNS 预设、记录用量和旧解析清理。新增配置默认使用 PowerDNS，也保留 Cloudflare 供普通节点使用。前置池的用户分配、故障剔除和 NS 委托见[前置负载分配](load-balancer.md)。
 
 ## 独立开关
 

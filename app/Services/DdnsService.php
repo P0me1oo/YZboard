@@ -51,6 +51,7 @@ class DdnsService
     /** 绑定单独保存，节点复制不会继承域名或远端记录编号。 */
     public function configure(string $type, Server|BalancerPool $owner, ?array $data): void
     {
+        if ($type === 'pool') $this->invalid('owner_type', '前置池域名请在前置池中配置');
         if ($data === null) return;
         $current = self::current($type, $owner->id);
         $personal = (bool) ($data['personal_enabled'] ?? $current?->personal_enabled ?? false);
@@ -120,7 +121,7 @@ class DdnsService
         if (!self::installed()) return $servers;
         foreach ($servers as &$server) {
             [$type, $id] = self::endpoint($server);
-            if ($type === 'pool' && ($pool = BalancerPool::find($id))?->mode === 'dns') {
+            if ($type === 'pool' && ($pool = BalancerPool::find($id))) {
                 $server['host'] = app(DnsPoolService::class)->project($pool, $user);
                 continue;
             }

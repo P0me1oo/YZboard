@@ -28,7 +28,7 @@ class FrontPoolScheduler
             if ($reason === 'healthy') $all = array_merge($all, $addresses);
         }
         $probes = $config['health_enabled'] && $all ? $this->probe->check($all, $pool->gateway_port) : [];
-        $eligible = []; $snapshot = []; $target = $config['strategy'] === 'latency' ? Server::find($config['latency_node_id']) : null;
+        $eligible = []; $snapshot = []; $target = in_array($config['strategy'], ['latency', 'latency_balanced'], true) ? Server::find($config['latency_node_id']) : null;
         foreach ($members as $id => $item) {
             $member = $item['member']; $node = $item['node']; $state = $member->scheduling_state ?? []; $ports = [];
             $addresses = [];
@@ -48,25 +48,28 @@ class FrontPoolScheduler
             $reason = $item['reason'];
             if ($reason === 'healthy' && !$addresses) $reason = 'port_failed';
             $latency = $node && $target ? SchedulingProbeService::result($node, $target) : null;
-            if ($reason === 'healthy' && $config['strategy'] === 'latency') {
+            if ($reason === 'healthy' && in_array($config['strategy'], ['latency', 'latency_balanced'], true)) {
                 if (!LandingPoolService::compatibleAgent($node)) $reason = 'agent_required';
                 elseif (!$latency) $reason = 'probe_pending';
                 elseif (!$latency['healthy']) $reason = 'latency_failed';
             }
-            $ratio = null;
+            $ratio = null; $resetAt = null;
             if ($node?->machine && $node->machine->traffic_limit > 0) {
                 $traffic = MachineTrafficService::view($node->machine);
+                $resetAt = (int) $traffic['period_end'];
                 $ratio = max(0, ($traffic['limit'] - $traffic['used']) / $traffic['limit'] * 100);
             }
             $low = $config['quota_enabled'] && $ratio !== null && $ratio < ($config['quota_percent'] + (($state['quota_low'] ?? false) ? 5 : 0));
             $state = ['ports' => $ports, 'reason' => $reason, 'quota_low' => $low,
-                'remaining_percent' => $ratio === null ? null : round($ratio, 1), 'latency_ms' => $latency && $latency['healthy'] ? $latency['rtt_ms'] : null];
+                'remaining_percent' => $ratio === null ? null : round($ratio, 1), 'reset_at' => $resetAt,
+                'reset_timezone' => config('app.timezone'), 'latency_group' => $state['latency_group'] ?? null,
+                'latency_ms' => $latency && $latency['healthy'] ? $latency['rtt_ms'] : null];
             $member->scheduling_state = $state;
             $member->healthy_addresses = in_array($reason, ['healthy', 'probe_pending'], true) ? $addresses : [];
             $member->checked_at = now(); $member->save();
-            $snapshot[$id] = ['node_id' => $member->source_node_id, 'name' => $node?->name ?? '', 'reason' => $reason, 'quota_low' => $low];
+            $snapshot[$id] = ['node_id' => $member->source_node_id, 'name' => $node?->name ?? '', 'reason' => $reason, 'quota_low' => $low, 'weight' => (int) ($member->weight ?: 1)];
             // 测速尚未就绪时暂保留可达入口，所有测速失效时只沿用端口健康成员，不回落失效端口。
-            if (in_array($reason, ['healthy', 'probe_pending'], true)) $eligible[$id] = [...$item, 'addresses' => $addresses, 'low' => $low, 'ratio' => $ratio ?? 101, 'latency' => $latency];
+            if (in_array($reason, ['healthy', 'probe_pending'], true)) $eligible[$id] = [...$item, 'addresses' => $addresses, 'low' => $low, 'ratio' => $ratio ?? 101, 'reset_at' => $resetAt, 'latency' => $latency];
         }
         if ($config['quota_enabled'] && $eligible) {
             $enough = array_filter($eligible, fn ($item) => !$item['low']);
@@ -79,6 +82,36 @@ class FrontPoolScheduler
         if ($eligible) {
             $priority = min(array_map(fn ($item) => $item['member']->priority, $eligible));
             $eligible = array_filter($eligible, fn ($item) => $item['member']->priority === $priority);
+        }
+        if ($config['strategy'] === 'cycle' && $eligible) {
+            // 同优先级先消耗最近重置且尚有可用配额的成员；无限流量仅作兜底。
+            $metered = array_filter($eligible, fn ($item) => $item['reset_at'] !== null);
+            if ($metered) {
+                $next = min(array_column($metered, 'reset_at'));
+                $eligible = array_filter($metered, fn ($item) => $item['reset_at'] === $next);
+            }
+        }
+        if ($config['strategy'] === 'latency_balanced') {
+            $measured = array_filter($eligible, fn ($item) => $item['latency'] && $item['latency']['healthy']);
+            if ($measured) {
+                $best = min(array_map(fn ($item) => $item['latency']['rtt_ms'], $measured));
+                $eligible = [];
+                foreach ($measured as $id => $item) {
+                    $member = $item['member']; $memberState = $member->scheduling_state;
+                    $wanted = $item['latency']['rtt_ms'] <= $best + max(10, $best * 0.15);
+                    $group = $memberState['latency_group'] ?? ['included' => $wanted, 'pending' => $wanted, 'samples' => 0, 'sample_at' => null];
+                    if ($group['pending'] !== $wanted) $group = [...$group, 'pending' => $wanted, 'samples' => 0, 'sample_at' => null];
+                    if ($group['sample_at'] !== $item['latency']['checked_at']) { $group['samples'] = min(2, $group['samples'] + 1); $group['sample_at'] = $item['latency']['checked_at']; }
+                    if ($group['samples'] >= 2) $group['included'] = $wanted;
+                    $member->update(['scheduling_state' => [...$memberState, 'latency_group' => $group]]);
+                    if ($group['included']) $eligible[$id] = $item;
+                }
+                // 新的最佳成员尚在确认窗口时保留至少一台实测可用入口。
+                if (!$eligible) {
+                    uasort($measured, fn ($a, $b) => $a['latency']['rtt_ms'] <=> $b['latency']['rtt_ms']);
+                    $id = array_key_first($measured); $eligible[$id] = $measured[$id];
+                }
+            }
         }
         $state = $pool->scheduling_state ?? [];
         if ($config['strategy'] === 'latency') {
@@ -100,9 +133,14 @@ class FrontPoolScheduler
                 $state['winner'] = $best; $eligible = [$best => $measured[$best]];
             } else { $state['winner'] = null; $state['pending'] = null; $state['samples'] = 0; }
         } else $state = [];
-        $addresses = [];
-        foreach ($eligible as $id => $item) { $addresses = array_merge($addresses, $item['addresses']); $snapshot[$id]['selected'] = true; }
+        $addresses = []; $candidates = [];
+        foreach ($eligible as $id => $item) {
+            $addresses = array_merge($addresses, $item['addresses']); $snapshot[$id]['selected'] = true;
+            $candidates[] = ['member_id' => (int) $id, 'node_id' => (int) $item['member']->source_node_id,
+                'weight' => (int) ($item['member']->weight ?: 1), 'addresses' => $item['addresses']];
+        }
         $addresses = array_values(array_unique($addresses)); sort($addresses);
+        $state['candidates'] = $candidates;
         $state['snapshot'] = ['addresses' => $addresses, 'members' => array_values($snapshot)];
         $state['checked_at'] = now()->timestamp;
         return [$addresses, $state];

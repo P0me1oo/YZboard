@@ -250,21 +250,17 @@ class DdnsTest extends TestCase
         $this->assertSame(0, DdnsRecord::where('type', 'CNAME')->count());
     }
 
-    public function test_pool_alias_uses_manual_gateway_address_without_changing_members(): void
+    public function test_pool_dns_is_not_configured_through_ordinary_node_ddns(): void
     {
         $template = $this->node();
-        $pool = BalancerPool::create(['name' => 'DDNS 测试池', 'domain' => 'original.example.com', 'gateway_machine_id' => 1,
-            'gateway_address' => '192.0.2.90', 'gateway_port' => 8443, 'backend_port' => 20000, 'protocol' => 'vless',
+        $pool = BalancerPool::create(['name' => 'DDNS 测试池', 'domain' => 'original.example.com', 'gateway_machine_id' => 0,
+            'gateway_address' => '', 'gateway_port' => 443, 'backend_port' => 443, 'protocol' => 'vless',
             'template_node_id' => $template->id, 'template_config' => $template->toArray(), 'enabled' => true]);
-        $route = $this->node('192.0.2.70', ['relay_pool_id' => $pool->id]);
-        $user = $this->user(); $this->configure($pool, 'pool01'); $this->assertTrue($this->sync());
-        $host = $this->projected($route, $user)['host'];
-        $this->assertStringEndsWith('.pool01.ddns.example.com', $host);
-        $this->assertSame('192.0.2.90', DdnsRecord::where('type', 'A')->value('content'));
-        $pool->update(['gateway_address' => '2001:db8::90']); $this->assertTrue($this->sync());
-        $this->assertSame('2001:db8::90', DdnsRecord::where('type', 'AAAA')->value('content'));
-        $this->assertSame($host, $this->projected($route, $user)['host']);
-        $this->assertSame('192.0.2.70', $route->fresh()->host);
+        $before = $pool->fresh()->getAttributes();
+        try { $this->configure($pool, 'pool01'); $this->fail('前置池不能通过旧 DDNS 入口配置'); }
+        catch (ValidationException $error) { $this->assertArrayHasKey('ddns.owner_type', $error->errors()); }
+        $this->assertSame($before, $pool->fresh()->getAttributes());
+        $this->assertSame(0, DdnsRecord::count());
     }
 
     public function test_prefix_uniqueness_and_tls_validation_do_not_affect_existing_binding(): void
@@ -343,13 +339,13 @@ class DdnsTest extends TestCase
         $this->assertSame($count, count(Http::recorded()));
     }
 
-    public function test_pool_ddns_requires_explicit_ip_even_when_called_without_controller(): void
+    public function test_removed_transfer_mode_is_rejected_even_without_controller(): void
     {
         try {
             app(\App\Services\LoadBalancerService::class)->save(['name' => '测试池', 'mode' => 'legacy', 'ddns' => ['enabled' => true]]);
             $this->fail('不能自动改用机器上报地址');
         } catch (ValidationException $error) {
-            $this->assertArrayHasKey('gateway_address', $error->errors());
+            $this->assertArrayHasKey('mode', $error->errors());
         }
     }
 

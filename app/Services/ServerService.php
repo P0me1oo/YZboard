@@ -179,7 +179,6 @@ class ServerService
      */
     public static function getAvailableUsers(Server $node, ?int $userId = null)
     {
-        if ($node->balancer_role === 'gateway') return collect();
         if (MachineTrafficService::nodeBlocked($node)) {
             return collect();
         }
@@ -646,7 +645,6 @@ class ServerService
 
     public static function buildNodeConfig(Server $node): array
     {
-        if ($node->balancer_role === 'gateway') return LoadBalancerService::gatewayConfig($node);
         $nodeType = $node->type;
         $protocolSettings = $node->protocol_settings;
         $serverPort = $node->server_port;
@@ -842,15 +840,6 @@ class ServerService
             $response['device_ip_exclude'] = $deviceIpExclude;
         }
 
-        if ($node->balancer_role === 'member') {
-            $pool = \App\Models\BalancerPool::findOrFail($node->balancer_pool_id);
-            if ($pool->mode !== 'dns') {
-                $response['balancer_receiver'] = ['trusted_addresses' => $pool->gateway_source_ips ?: [$pool->gateway_address]];
-                $response['accept_proxy_protocol'] = true;
-            } else {
-                $response['accept_proxy_protocol'] = false;
-            }
-        }
         return $response;
     }
 

@@ -63,6 +63,43 @@ class SchedulingTest extends TestCase
         return $node;
     }
 
+    public function test_cycle_prefers_the_nearest_reset_and_uses_unlimited_members_only_as_fallback(): void
+    {
+        [$pool, $a, $b] = $this->pool();
+        $pool->update(['scheduling_config' => ['strategy' => 'cycle']]);
+        $a->machine->update(['traffic_reset_day' => 1, 'traffic_limit' => 1000, 'traffic_state' => ['initialized' => true, 'reported_at' => now()->timestamp, 'tx' => 100]]);
+        $b->machine->update(['traffic_reset_day' => 15, 'traffic_limit' => 1000, 'traffic_state' => ['initialized' => true, 'reported_at' => now()->timestamp, 'tx' => 100]]);
+        $aEnd = \App\Services\MachineTrafficService::view($a->machine->fresh())['period_end'];
+        $bEnd = \App\Services\MachineTrafficService::view($b->machine->fresh())['period_end'];
+        $early = $aEnd < $bEnd ? $a : $b;
+        $late = $aEnd < $bEnd ? $b : $a;
+        $select = fn () => app(FrontPoolScheduler::class)->select($pool->fresh(['members.runtimeNode.machine', 'members.sourceNode.machine']))[0];
+        $this->assertSame([$early->host], $select());
+        $early->machine->update(['traffic_state' => ['initialized' => true, 'reported_at' => now()->timestamp, 'tx' => 1000]]);
+        $this->assertSame([$late->host], $select());
+        $early->machine->update(['traffic_limit' => 0]);
+        $this->assertSame([$late->host], $select());
+        $late->update(['enabled' => false]);
+        $this->assertSame([$early->host], $select());
+    }
+
+    public function test_balanced_latency_keeps_close_members_and_excludes_slow_or_failed_paths(): void
+    {
+        [$pool, $a, $b] = $this->pool();
+        $target = $this->landing($a, '192.0.2.3'); $target->update(['relay_entry_id' => null, 'relay_pool_id' => $pool->id]);
+        $pool->update(['scheduling_config' => ['strategy' => 'latency_balanced', 'latency_node_id' => $target->id]]);
+        $this->sample($a, $target, true, 50); $this->sample($b, $target, true, 55);
+        $select = fn () => app(FrontPoolScheduler::class)->select($pool->fresh(['members.runtimeNode.machine', 'members.sourceNode.machine']))[0];
+        $this->assertCount(2, $select());
+        $this->travel(15)->seconds(); $this->sample($b, $target, true, 200);
+        $this->assertCount(2, $select());
+        $this->assertCount(2, $select());
+        $this->travel(15)->seconds(); $this->sample($b, $target, true, 200);
+        $this->assertSame([$a->host], $select());
+        $this->travel(15)->seconds(); $this->sample($b, $target, false);
+        $this->assertSame([$a->host], $select());
+    }
+
     private function sample(Server $entry, Server $target, bool $healthy, int $rtt = 20, ?int $checked = null): void
     {
         $row = SchedulingProbeService::target($target);

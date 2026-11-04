@@ -16,7 +16,7 @@ return new class extends Migration {
     public function down(): void
     {
         if (DB::table('v2_server_machine')->where('agent_log_disabled', true)->exists()) {
-            throw new RuntimeException('已有机器永久停用运行日志，不能回滚此设置');
+            throw new RuntimeException('已有机器开启隐私保护，不能回滚此设置');
         }
         Schema::table('v2_server_machine', fn (Blueprint $table) => $table->dropColumn('agent_log_disabled'));
     }

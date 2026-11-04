@@ -13,7 +13,8 @@ class AgentPrivacy
     {
         $machine ??= $node?->machine_id ? ServerMachine::find($node->machine_id) : null;
         $result = ['version' => 1, 'enabled' => AgentLogPolicy::disabled($machine), 'keys' => []];
-        if (!$result['enabled'] || !$includeKeys) {
+        // 关闭后仍允许已认证的机器领取原密钥，完成解密及冷启动恢复。
+        if (!$machine || !$includeKeys) {
             return $result;
         }
 

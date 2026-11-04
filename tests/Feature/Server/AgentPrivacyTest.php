@@ -41,16 +41,18 @@ class AgentPrivacyTest extends TestCase
         $this->postJson('/api/v2/server/machine/privacy', ['machine_id' => $other->id, 'token' => $machine->token])->assertForbidden();
     }
 
-    public function test_disabled_protection_does_not_return_keys_and_inactive_machine_can_recover_its_files(): void
+    public function test_disabled_protection_and_inactive_machine_can_recover_original_keys(): void
     {
         $normal = $this->machine(false);
         $this->postJson('/api/v2/server/machine/privacy', ['machine_id' => $normal->id, 'token' => $normal->token])
-            ->assertOk()->assertJsonPath('data', ['version' => 1, 'enabled' => false, 'keys' => []]);
+            ->assertOk()->assertJsonPath('data.enabled', false)->assertJsonPath('data.keys', AgentPrivacy::view($normal)['keys']);
         $private = $this->machine();
         $keys = AgentPrivacy::view($private)['keys'];
-        $private->update(['is_active' => false]);
+        $private->update(['is_active' => false, 'agent_log_disabled' => false]);
         $this->postJson('/api/v2/server/machine/privacy', ['machine_id' => $private->id, 'token' => $private->token])
-            ->assertOk()->assertJsonPath('data.keys', $keys);
+            ->assertOk()->assertJsonPath('data.enabled', false)->assertJsonPath('data.keys', $keys);
+        $this->postJson('/api/v2/server/machine/privacy', ['machine_id' => $private->id, 'token' => $private->token, 'probe' => true])
+            ->assertOk()->assertJsonPath('data.enabled', false)->assertJsonPath('data.keys', []);
         $this->postJson('/api/v2/server/machine/privacy', [])->assertUnprocessable();
     }
 

@@ -12,7 +12,6 @@ use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class AgentLogPolicyTest extends TestCase
@@ -34,15 +33,18 @@ class AgentLogPolicyTest extends TestCase
             'is_active' => true, 'agent_log_disabled' => $disabled]);
     }
 
-    public function test_machine_save_is_one_way_and_stale_request_cannot_restore_logs(): void
+    public function test_machine_save_can_toggle_privacy_and_omitted_field_keeps_current_policy(): void
     {
         $id = $this->postJson('/_tests/log-policy/save', ['name' => '新机器', 'agent_log_disabled' => true])
             ->assertOk()->json('data.id');
         $machine = ServerMachine::findOrFail($id);
         $this->assertTrue($machine->agent_log_disabled);
-        $this->postJson('/_tests/log-policy/save', ['id' => $id, 'name' => '误改名称', 'agent_log_disabled' => false])->assertUnprocessable();
-        $this->assertSame('新机器', $machine->fresh()->name);
-        $this->assertTrue($machine->fresh()->agent_log_disabled);
+        foreach ([false, false, true, true, false] as $disabled) {
+            $this->postJson('/_tests/log-policy/save', ['id' => $id, 'name' => '新机器', 'agent_log_disabled' => $disabled])->assertOk();
+            $this->assertSame($disabled, $machine->fresh()->agent_log_disabled);
+            $this->postJson('/_tests/log-policy/save', ['id' => $id, 'name' => '正常编辑'])->assertOk();
+            $this->assertSame($disabled, $machine->fresh()->agent_log_disabled);
+        }
         foreach ([['agent_log_disabled' => true], []] as $extra) {
             $this->postJson('/_tests/log-policy/save', ['id' => $id, 'name' => '正常编辑'] + $extra)->assertOk();
             $this->assertTrue($machine->fresh()->agent_log_disabled);
@@ -54,19 +56,16 @@ class AgentLogPolicyTest extends TestCase
         $this->assertTrue($normal->fresh()->agent_log_disabled);
     }
 
-    public function test_model_and_migration_cannot_remove_an_enabled_lock(): void
+    public function test_model_can_toggle_privacy_but_migration_preserves_enabled_protection(): void
     {
         $machine = $this->machine(true);
-        try {
-            $machine->update(['agent_log_disabled' => false]);
-            $this->fail('模型不应恢复已停用的日志');
-        } catch (ValidationException) {
-            $this->assertTrue($machine->fresh()->agent_log_disabled);
-        }
+        $machine->update(['agent_log_disabled' => false]);
+        $this->assertFalse($machine->fresh()->agent_log_disabled);
+        $machine->update(['agent_log_disabled' => true]);
         $migration = require database_path('migrations/2026_10_27_000001_add_agent_log_disabled_to_machines.php');
         try {
             $migration->down();
-            $this->fail('迁移不应删除已启用的锁定');
+            $this->fail('迁移不应删除已启用的隐私保护');
         } catch (\RuntimeException $error) {
             $this->assertStringContainsString('不能回滚', $error->getMessage());
             $this->assertTrue(Schema::hasColumn('v2_server_machine', 'agent_log_disabled'));

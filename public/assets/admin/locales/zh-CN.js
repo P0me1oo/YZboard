@@ -3867,7 +3867,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
       "isActive": "启用服务器",
       "isActiveDescription": "禁用后 xboard-node 将不再使用此服务器。",
       "disableLogs": "隐私保护模式",
-      "disableLogsDescription": "加密程序保存的敏感数据，永久停用 Agent 和核心运行日志。保存后无法关闭。",
+      "disableLogsDescription": "开启时加密敏感数据并停用运行日志，关闭后恢复。",
       "cancel": "取消",
       "submit": "提交",
       "update": "更新"

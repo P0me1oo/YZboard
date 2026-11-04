@@ -3840,7 +3840,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "isActive": "Enable Server",
       "isActiveDescription": "Disabled servers will not be used by xboard-node.",
       "disableLogs": "Privacy protection mode",
-      "disableLogsDescription": "Encrypt sensitive data saved by the Agent and permanently disable Agent and core runtime logs. Cannot be turned off after saving.",
+      "disableLogsDescription": "Encrypt sensitive data and disable runtime logs while enabled. Turn off to restore them.",
       "cancel": "Cancel",
       "submit": "Submit",
       "update": "Update"

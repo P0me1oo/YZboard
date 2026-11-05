@@ -2759,6 +2759,22 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
       }
     },
     "toolbar": {
+      "unify_reality": {
+        "generate_short_failed": "生成 Short ID 失败，请重试",
+        "mode": "统一方式",
+        "node_mode": "统一成某个节点",
+        "manual_mode": "手动填写",
+        "source": "基准节点",
+        "menu": "统一 Reality 参数",
+        "description": "将所选 {{count}} 个节点的密钥对、短 ID、握手域名和握手端口统一。使用旧参数的客户端需要更新订阅。",
+        "server_name": "握手域名",
+        "server_port": "握手端口",
+        "cancel": "取消",
+        "confirm": "确认统一",
+        "pending": "正在统一",
+        "success": "已统一 {{count}} 个节点的 Reality 参数",
+        "failed": "统一 Reality 参数失败，请重试"
+      },
       "search": "搜索节点...",
       "country": "地区",
       "country_unknown": "未识别",

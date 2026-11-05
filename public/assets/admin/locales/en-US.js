@@ -2771,6 +2771,22 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       }
     },
     "toolbar": {
+      "unify_reality": {
+        "generate_short_failed": "Failed to generate a Short ID. Please retry.",
+        "mode": "Unification method",
+        "node_mode": "Use a selected node",
+        "manual_mode": "Enter manually",
+        "source": "Reference node",
+        "menu": "Unify Reality parameters",
+        "description": "Unify the key pair, short ID, handshake hostname and port for {{count}} selected nodes. Clients using the previous parameters must update their subscriptions.",
+        "server_name": "Handshake hostname",
+        "server_port": "Handshake port",
+        "cancel": "Cancel",
+        "confirm": "Confirm",
+        "pending": "Applying",
+        "success": "Unified Reality parameters for {{count}} nodes",
+        "failed": "Failed to unify Reality parameters. Please retry."
+      },
       "search": "Search nodes...",
       "country": "Region",
       "country_unknown": "Unrecognized",

@@ -620,6 +620,44 @@ class DnsSchedulingTest extends TestCase
         $this->assertSame(40, PoolDnsAlias::where('pool_id', $pool->id)->count());
     }
 
+    public function test_pending_pool_records_do_not_block_other_subscription_lines(): void
+    {
+        $pool = $this->pool(); $user = $this->usersForPool($pool)[0];
+        $direct = $this->node('192.0.2.50'); $direct->update(['name' => '正常直连']);
+        $route = Server::where('relay_pool_id', $pool->id)->firstOrFail(); $route->update(['name' => '池线路']);
+        $servers = array_values(array_filter(ServerService::getAvailableServers($user), fn ($s) => in_array($s['id'], [$direct->id, $route->id], true)));
+        $projected = app(DdnsService::class)->project($servers, $user);
+        $this->assertSame([$direct->id], array_column($projected, 'id'));
+        foreach (['mihomo', 'sing-box', 'v2ray'] as $format) {
+            $response = app(\App\Http\Controllers\V1\Client\ClientController::class)->doSubscribe(Request::create('/', 'GET', ['flag' => $format]), $user, $servers);
+            $this->assertSame(200, $response->getStatusCode());
+            $body = $response->getContent();
+            if ($format === 'mihomo') $names = array_column(\Symfony\Component\Yaml\Yaml::parse($body)['proxies'], 'name');
+            elseif ($format === 'sing-box') $names = array_column(json_decode($body, true)['outbounds'], 'tag');
+            else $names = array_map(fn ($uri) => urldecode(parse_url($uri, PHP_URL_FRAGMENT) ?? ''), explode("\n", trim(base64_decode($body))));
+            $this->assertContains('正常直连', $names);
+            $this->assertNotContains('池线路', $names);
+        }
+        $this->assertTrue($this->sync($pool));
+        $this->assertCount(2, app(DdnsService::class)->project($servers, $user));
+    }
+
+    public function test_all_pending_pool_lines_still_return_retryable_503_and_authorization_errors_remain_403(): void
+    {
+        $pool = $this->pool(); $user = $this->usersForPool($pool)[0];
+        $route = Server::where('relay_pool_id', $pool->id)->firstOrFail();
+        try { app(DdnsService::class)->project([$route->toArray()], $user); $this->fail('全部池线路未就绪应返回 503'); }
+        catch (\Illuminate\Http\Exceptions\HttpResponseException $error) {
+            $this->assertSame(503, $error->getResponse()->getStatusCode());
+            $this->assertSame('30', $error->getResponse()->headers->get('Retry-After'));
+        }
+        $this->assertSame([], app(DdnsService::class)->project([], $user));
+        $pool->update(['follow_user_status' => true]); $user->update(['banned' => true]);
+        $direct = $this->node('192.0.2.50');
+        try { app(DdnsService::class)->project([$direct->toArray(), $route->toArray()], $user); $this->fail('鉴权失败不能当作未就绪跳过'); }
+        catch (\Illuminate\Http\Exceptions\HttpResponseException $error) { $this->assertSame(403, $error->getResponse()->getStatusCode()); }
+    }
+
     public function test_old_transfer_api_is_rejected_and_migration_preserves_unconverted_data(): void
     {
         $pool = $this->pool();

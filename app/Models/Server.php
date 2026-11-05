@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Support\XhttpSettings;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Cache;
@@ -244,6 +245,7 @@ class Server extends Model
         'fields' => [
             'server_name' => ['type' => 'string', 'default' => null],
             'allow_insecure' => ['type' => 'boolean', 'default' => false],
+            'alpn' => ['type' => 'array', 'default' => []],
             ...self::ECH_CONFIGURATION,
         ]
     ];
@@ -434,6 +436,9 @@ class Server extends Model
         $settings = json_decode($value, true) ?? [];
         $configs = self::PROTOCOL_CONFIGURATIONS[$this->type] ?? [];
         $result = $this->castSettingsWithConfig($settings, $configs);
+        if (XhttpSettings::isXhttp($result['network'] ?? null) && is_array($result['network_settings'] ?? null)) {
+            try {$result['network_settings'] = XhttpSettings::normalize($result['network_settings']);} catch (\InvalidArgumentException) {}
+        }
         return $result;
     }
 
@@ -445,6 +450,9 @@ class Server extends Model
 
         $configs = self::PROTOCOL_CONFIGURATIONS[$this->type] ?? [];
         $castedSettings = $this->castSettingsWithConfig($value ?? [], $configs);
+        if (XhttpSettings::isXhttp($castedSettings['network'] ?? null) && is_array($castedSettings['network_settings'] ?? null)) {
+            try {$castedSettings['network_settings'] = XhttpSettings::normalize($castedSettings['network_settings']);} catch (\InvalidArgumentException) {}
+        }
 
         $this->attributes['protocol_settings'] = json_encode($castedSettings);
     }
@@ -486,6 +494,8 @@ class Server extends Model
     public static function supportsProxyProtocol(?string $type, array $settings): bool
     {
         $network = $settings['network'] ?? 'tcp';
+        if (XhttpSettings::isXhttp($network) && (int) ($settings['tls'] ?? 0) === 1
+            && data_get($settings, 'tls_settings.alpn') === ['h3']) return false;
         return in_array($type, ['shadowsocks', 'vmess', 'vless', 'trojan', 'anytls', 'socks', 'http', 'naive'], true)
             && is_string($network)
             && !in_array(strtolower($network), ['kcp', 'mkcp', 'quic', 'hysteria', 'hysteria2'], true);

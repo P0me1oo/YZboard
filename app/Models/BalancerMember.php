@@ -22,4 +22,9 @@ class BalancerMember extends Model
     {
         return $this->belongsTo(Server::class, 'runtime_node_id');
     }
+
+    public function pool(): BelongsTo
+    {
+        return $this->belongsTo(BalancerPool::class, 'pool_id');
+    }
 }

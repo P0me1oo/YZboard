@@ -30,10 +30,17 @@ class FrontPoolScheduler
         $probes = $config['health_enabled'] && $all ? $this->probe->check($all, $pool->gateway_port) : [];
         $eligible = []; $snapshot = []; $target = in_array($config['strategy'], ['latency', 'latency_balanced'], true) ? Server::find($config['latency_node_id']) : null;
         foreach ($members as $id => $item) {
-            $member = $item['member']; $node = $item['node']; $state = $member->scheduling_state ?? []; $ports = [];
+            $member = $item['member']; $node = $item['node']; $state = $member->scheduling_state ?? [];
+            $interrupted = in_array($item['reason'], ['disabled', 'offline', 'incompatible', 'no_address'], true);
+            $recovering = in_array($state['reason'] ?? '', ['disabled', 'offline', 'incompatible', 'no_address'], true);
+            // 没有解析结果时保留既有地址的失败状态；配置得到新地址后移除不再使用的状态。
+            $ports = $config['health_enabled'] && $interrupted ? ($state['ports'] ?? []) : [];
+            if ($ports && $member->dns_addresses) $ports = array_intersect_key($ports, array_flip($member->dns_addresses));
+            foreach ($ports as &$portState) $portState = [...$portState, 'healthy' => false, 'good' => 0, 'bad' => 0];
+            unset($portState);
             $addresses = [];
             foreach ($item['addresses'] as $ip) {
-                $old = $state['ports'][$ip] ?? ['healthy' => true, 'good' => 0, 'bad' => 0];
+                $old = $state['ports'][$ip] ?? ['healthy' => !$recovering, 'good' => 0, 'bad' => 0];
                 if ($config['health_enabled']) {
                     $ok = $probes[$ip]['ok'] ?? false;
                     $old['good'] = $ok ? min(2, $old['good'] + 1) : 0;

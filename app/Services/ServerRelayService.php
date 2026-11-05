@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Server;
+use App\Support\XhttpSettings;
 use App\Models\Setting;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -413,6 +414,7 @@ class ServerRelayService
             $config['tls_settings'] = array_filter([
                 'server_name' => trim((string) data_get($settings, 'tls_settings.server_name')),
                 'fingerprint' => self::tlsFingerprint($settings),
+                'alpn' => data_get($settings, 'tls_settings.alpn', []),
             ], fn($value) => $value !== '');
         } elseif ($tls === 2) {
             $config['reality_settings'] = [
@@ -453,6 +455,7 @@ class ServerRelayService
     /** 只复制传输客户端实际需要的字段，避免任意 extra 配置带出服务端私密字段。 */
     private static function vlessClientNetworkSettings(string $network, array $settings): array
     {
+        if ($network === 'xhttp') return XhttpSettings::client($settings);
         $keys = match ($network) {
             'tcp' => ['header'],
             'ws' => ['path', 'host', 'headers', 'heartbeatPeriod'],

@@ -18,6 +18,8 @@ class ServerPortService
         $kernel = Server::effectiveKernelType($server->kernel_type);
         $network = strtolower(trim((string) ($settings['network'] ?? 'tcp')));
         $stream = in_array($network, ['kcp', 'mkcp', 'quic', 'hysteria'], true) ? ['udp'] : ['tcp'];
+        if (\App\Support\XhttpSettings::isXhttp($network) && (int) ($settings['tls'] ?? 0) === 1
+            && data_get($settings, 'tls_settings.alpn') === ['h3']) $stream = ['udp'];
 
         return match ($server->type) {
             Server::TYPE_HYSTERIA, Server::TYPE_TUIC, Server::TYPE_WIREGUARD => ['udp'],

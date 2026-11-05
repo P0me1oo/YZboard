@@ -56,7 +56,7 @@ final class MihomoXhttp
 
     private const DEFAULT_REUSE = [
         'max-concurrency' => '0',
-        'max-connections' => '6',
+        'max-connections' => '3',
         'c-max-reuse-times' => '0',
         'h-max-request-times' => '600-900',
         'h-max-reusable-secs' => '1800-3000',
@@ -110,16 +110,7 @@ final class MihomoXhttp
 
     private static function effectiveSettings(array $settings): array
     {
-        if (!isset($settings['extra'])) {
-            return $settings;
-        }
-        if (!is_array($settings['extra'])) {
-            throw new InvalidArgumentException('XHTTP extra 必须是对象');
-        }
-
-        // Xray 使用 extra 替换高级设置，只有外层的 path、host、mode 始终保留。
-        $basic = array_flip(['path', 'host', 'mode']);
-        return array_intersect_key($settings, $basic) + array_diff_key($settings['extra'], $basic);
+        return XhttpSettings::normalize($settings);
     }
 
     private static function transportOptions(array $settings): array

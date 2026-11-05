@@ -1,0 +1,222 @@
+{
+  "maintainer": "P0me1oo",
+  "prepared_at_utc": "2026-11-04T16:17:44.939771+00:00",
+  "scope": "Environment preparation only; application and production data migration remain pending.",
+  "target": {
+    "name": "Solid-US LA",
+    "uuid": "604540c9-316f-40de-9990-2e7a9547361c",
+    "hostname": "sa.sasas",
+    "ipv4": "172.81.59.192",
+    "ipv6": "2602:fcc0:7777:d034::1",
+    "os": "Debian 13",
+    "arch": "amd64",
+    "cpus": 4,
+    "application_path": "/root/yzboard",
+    "run_user": "www-data"
+  },
+  "production_source": {
+    "name": "Solid-US KC",
+    "uuid": "73c250bd-235a-462d-97e1-74a42406c7e9",
+    "ipv4": "167.253.64.231",
+    "version": "2.0.4",
+    "commit": "e5d7c95d4687df256dd66e1a155885f887ff4a50",
+    "access": "read-only"
+  },
+  "runtime": {
+    "php": "8.4.27",
+    "swoole": "6.2.4",
+    "php_redis": "6.3.0",
+    "mariadb": "12.3.3",
+    "redis": "8.10.3",
+    "nginx": "1.30.6",
+    "composer": "2.11.1"
+  },
+  "packages": {
+    "acl": "2.3.2-2+b1",
+    "certbot": "4.0.0-2+deb13u1",
+    "mariadb-client": "1:12.3.3+maria~deb13",
+    "mariadb-server": "1:12.3.3+maria~deb13",
+    "nginx": "1.30.6-1~trixie",
+    "php8.4-bcmath": "8.4.27-1+0~20261021.57+debian13~1.gbp7636b9",
+    "php8.4-cli": "8.4.27-1+0~20261021.57+debian13~1.gbp7636b9",
+    "php8.4-common": "8.4.27-1+0~20261021.57+debian13~1.gbp7636b9",
+    "php8.4-curl": "8.4.27-1+0~20261021.57+debian13~1.gbp7636b9",
+    "php8.4-igbinary": "3.2.16-6+0~20260709.60+debian13~1.gbp1eff65",
+    "php8.4-intl": "8.4.27-1+0~20261021.57+debian13~1.gbp7636b9",
+    "php8.4-mbstring": "8.4.27-1+0~20261021.57+debian13~1.gbp7636b9",
+    "php8.4-mysql": "8.4.27-1+0~20261021.57+debian13~1.gbp7636b9",
+    "php8.4-opcache": "8.4.27-1+0~20261021.57+debian13~1.gbp7636b9",
+    "php8.4-readline": "8.4.27-1+0~20261021.57+debian13~1.gbp7636b9",
+    "php8.4-redis": "6.3.0-2+0~20260711.69+debian13~1.gbpd148c3",
+    "php8.4-sqlite3": "8.4.27-1+0~20261021.57+debian13~1.gbp7636b9",
+    "php8.4-swoole": "6.2.4+yz1",
+    "php8.4-xml": "8.4.27-1+0~20261021.57+debian13~1.gbp7636b9",
+    "php8.4-zip": "8.4.27-1+0~20261021.57+debian13~1.gbp7636b9",
+    "redis-server": "6:8.10.3-1rl1~trixie1",
+    "redis-tools": "6:8.10.3-1rl1~trixie1",
+    "rsync": "3.5.0+ds1-0+deb13u1"
+  },
+  "swoole": {
+    "source_commit": "c7e514509451beafd4d70ce5b78943d51e76381c",
+    "module_sha256": "c9b93c36b0c3714e497887de5040f3acd4fa9a16f9794170f78b84381abd5076",
+    "module_source": "Read-only Lite MCP transfer of the already verified KC module; same platform and ABI.",
+    "repacked_deb_sha256": "7447c0964a54af6365233237f732d692560837ff4d30c609a17b3cd89561b75f",
+    "package_version": "6.2.4+yz1"
+  },
+  "composer_sha256": "6f1b891e1d4927d62740276c540fb490e47689e19e102c49e8da849794882f8c",
+  "services": {
+    "mariadb.service": {
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "UnitFileState": "enabled",
+      "ConditionResult": "yes"
+    },
+    "redis-server.service": {
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "UnitFileState": "enabled",
+      "ConditionResult": "yes"
+    },
+    "nginx.service": {
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "UnitFileState": "enabled",
+      "ConditionResult": "yes"
+    },
+    "yzboard-web.service": {
+      "NRestarts": "0",
+      "ActiveState": "inactive",
+      "UnitFileState": "disabled",
+      "ConditionResult": "no"
+    },
+    "yzboard-horizon.service": {
+      "NRestarts": "0",
+      "ActiveState": "inactive",
+      "UnitFileState": "disabled",
+      "ConditionResult": "no"
+    },
+    "yzboard-websocket.service": {
+      "NRestarts": "0",
+      "ActiveState": "inactive",
+      "UnitFileState": "disabled",
+      "ConditionResult": "no"
+    }
+  },
+  "database": {
+    "name": "xboard",
+    "user": "yzboard_app",
+    "tables": 0,
+    "hosts": [
+      "localhost",
+      "127.0.0.1"
+    ],
+    "bind": "127.0.0.1:3306",
+    "charset": "utf8mb4",
+    "collation": "utf8mb4_unicode_ci",
+    "buffer_pool": "1G",
+    "sql_mode": "STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
+  },
+  "credentials": {
+    "environment": "/etc/yzboard/connection.env",
+    "environment_permission": "root:www-data 0640",
+    "client": "/etc/yzboard/client.cnf",
+    "client_permission": "root:root 0600",
+    "values": "Generated locally; excluded from this record.",
+    "laravel_usage": "Must merge connection settings into migrated application .env; external file is not automatically loaded."
+  },
+  "redis": {
+    "bind": [
+      "127.0.0.1:6379",
+      "[::1]:6379"
+    ],
+    "protected_mode": true,
+    "appendonly": false,
+    "maxmemory": 0,
+    "maxmemory_policy": "noeviction",
+    "save": "900 1 300 10 60 10000",
+    "vm_overcommit_memory": 1
+  },
+  "nginx": {
+    "internal": "127.0.0.1:7001",
+    "http_upstream": "127.0.0.1:7002",
+    "websocket_upstream": "127.0.0.1:8076",
+    "public_http": "Default server returns 444; production vhosts and TLS await migration.",
+    "site_template": "/etc/nginx/sites-available/yzboard"
+  },
+  "startup_guard": {
+    "marker": "/etc/yzboard/production-ready",
+    "present": false,
+    "application_env_present": false,
+    "systemd_services": "disabled and condition skipped",
+    "cron": "guarded by marker; uses PHP 8.4"
+  },
+  "firewall": {
+    "new_rules": [
+      "80/tcp IPv4+IPv6",
+      "443/tcp IPv4+IPv6"
+    ],
+    "existing_management_port": "10721/tcp",
+    "database_and_backend_public_access": false
+  },
+  "verification": {
+    "fixed_release": "https://github.com/P0me1oo/YZboard/releases/tag/v2.0.4",
+    "archive_sha256": "9e6cce7a785d531b2b496796be080ef7fdb04542a2212b34c21062f4080baca4",
+    "composer_lock_sha256": "13f51448280db6f551f41d6998656239af62e4c63da20ebd31b75a99d0756e70",
+    "composer_install_no_dev": true,
+    "lock_unchanged": true,
+    "platform_requirements": true,
+    "laravel_package_discovery": true,
+    "laravel_version": "12.54.1",
+    "database_and_redis": {
+      "required_extensions": [
+        "swoole",
+        "pcntl",
+        "posix",
+        "bcmath",
+        "pdo_mysql",
+        "pdo_sqlite",
+        "sockets",
+        "zip",
+        "igbinary",
+        "redis",
+        "curl",
+        "mbstring",
+        "intl",
+        "dom",
+        "sodium",
+        "openssl"
+      ],
+      "php": "8.4.27",
+      "swoole": "6.2.4",
+      "redis_extension": "6.3.0",
+      "database_unicode": true,
+      "database_rollback": true,
+      "database_privilege_scope": true,
+      "database_tables": 0,
+      "redis_unicode": true,
+      "redis_cleanup": true
+    },
+    "proxy": {
+      "http_proxy_7001_to_7002": true,
+      "websocket_proxy_7001_to_8076_handshake": true,
+      "websocket_echo": true
+    },
+    "nginx_configuration": true,
+    "systemd_configuration": true,
+    "package_consistency": true,
+    "credential_permissions": true,
+    "full_application_regression": "Not repeated; runtime versions match the validated KC environment. This task checked target environment integration.",
+    "production_data": false,
+    "production_domain_tls": false,
+    "node_reconnect": false
+  },
+  "remaining": [
+    "Migrate application .env with original APP_KEY; merge target database connection values.",
+    "Migrate business database, Redis state, storage, plugins, themes, websites and certificates.",
+    "Validate production vhosts, application, node connections and queue state before switching DNS.",
+    "Create ready marker, enable and start panel services only during authorized migration."
+  ],
+  "temporary_artifacts": "Task-only probes, source, dependencies, cache, downloaded archives and transferred module cleaned. Installed runtime, package provenance and this record retained.",
+  "cleanup_completed_at_utc": "2026-11-04T16:18:37.361407+00:00"
+}
+

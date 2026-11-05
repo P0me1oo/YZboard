@@ -294,7 +294,7 @@ class MihomoSubscriptionTest extends TestCase
 
         data_set($node, 'protocol_settings.network_settings.xmux', []);
         $reuse = $this->proxies([$node])[0]['xhttp-opts']['reuse-settings'];
-        $this->assertSame('6', $reuse['max-connections']);
+        $this->assertSame('3', $reuse['max-connections']);
         $this->assertSame('600-900', $reuse['h-max-request-times']);
     }
 
@@ -306,13 +306,13 @@ class MihomoSubscriptionTest extends TestCase
         ]]);
         $options = $this->proxies([$node])[0]['xhttp-opts'];
         $this->assertSame('2', $options['reuse-settings']['max-connections']);
-        $this->assertSame('6', $options['download-settings']['reuse-settings']['max-connections']);
+        $this->assertSame('3', $options['download-settings']['reuse-settings']['max-connections']);
         $this->assertArrayNotHasKey('h-keep-alive-period', $options['download-settings']['reuse-settings']);
 
         unset($node['protocol_settings']['network_settings']['xmux']);
         data_set($node, 'protocol_settings.network_settings.downloadSettings.xhttpSettings.xmux', ['maxConnections' => 3]);
         $options = $this->proxies([$node])[0]['xhttp-opts'];
-        $this->assertSame('6', $options['reuse-settings']['max-connections']);
+        $this->assertSame('3', $options['reuse-settings']['max-connections']);
         $this->assertSame('3', $options['download-settings']['reuse-settings']['max-connections']);
         $this->assertCount(0, $this->proxies([$node], 'meta', '1.19.22'));
         $this->assertCount(1, $this->proxies([$node], 'meta', '1.19.23'));

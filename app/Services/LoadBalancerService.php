@@ -46,6 +46,17 @@ class LoadBalancerService
         if ($error !== null) $reasons[] = $error;
         if ($first) {
             if (self::publicPort($node) !== self::publicPort($first)) $reasons[] = '公网端口与首选节点不同';
+            $encrypted = (bool) data_get($node->protocol_settings, 'encryption.enabled', false);
+            if ($encrypted !== (bool) data_get($first->protocol_settings, 'encryption.enabled', false)) {
+                $reasons[] = 'VLESS Encryption 开关与首选节点不同';
+            } elseif ($encrypted) {
+                foreach (['encryption' => '客户端加密配置', 'decryption' => '服务端解密配置'] as $field => $label) {
+                    if (trim((string) data_get($node->protocol_settings, 'encryption.' . $field))
+                        !== trim((string) data_get($first->protocol_settings, 'encryption.' . $field))) {
+                        $reasons[] = 'VLESS Encryption ' . $label . '与首选节点不同';
+                    }
+                }
+            }
             foreach (['flow' => 'VLESS 流控', 'reality_settings.public_key' => 'Reality 公钥',
                 'reality_settings.short_id' => 'Reality 短 ID', 'reality_settings.server_name' => 'Reality 握手域名',
                 'reality_settings.server_port' => 'Reality 握手端口'] as $key => $label) {
@@ -55,6 +66,29 @@ class LoadBalancerService
                     $value = strtolower($value); $reference = strtolower($reference);
                 }
                 if ($value !== $reference) $reasons[] = $label . '与首选节点不同';
+            }
+        }
+        return array_values(array_unique($reasons));
+    }
+
+    /** 修改前置时反向检查已有落地，避免新增成员或更换内核让已保存线路失效。 */
+    public static function topologyCompatibility(Server $entry, ?BalancerPool $pool = null): array
+    {
+        $poolIds = $pool ? ($pool->exists ? [$pool->id] : [])
+            : BalancerMember::where('runtime_node_id', $entry->id)->pluck('pool_id')->all();
+        if (!$poolIds) return [];
+        $children = Server::whereIn('relay_pool_id', $poolIds)->get();
+        $reasons = [];
+        foreach ($children as $child) {
+            $error = ServerRelayService::validateTransitSettings($child->type, (array) $child->protocol_settings, $child->host, $entry->kernel_type);
+            if ($error !== null) $reasons[] = $child->name . '：' . $error;
+        }
+        foreach (\App\Models\LandingPool::with('node')->where('enabled', true)->whereIn('node_id', $children->pluck('id'))->get() as $landing) {
+            if (!LandingPoolService::compatibleAgent($entry)) $reasons[] = $landing->name . '：落地主备需要前置运行 Agent v2.30.0 或更新版本';
+            foreach (Server::whereIn('id', $landing->members)->get() as $member) {
+                if (!$landing->node || !LandingPoolService::compatible($landing->node, $member, $entry)) {
+                    $reasons[] = $landing->name . '：落地主备成员 ' . $member->name . ' 与该前置不兼容';
+                }
             }
         }
         return array_values(array_unique($reasons));
@@ -85,7 +119,29 @@ class LoadBalancerService
         return $this->persist($data);
     }
 
+    public function syncReality(int $poolId): BalancerPool
+    {
+        return Cache::lock('balancer:dns:' . $poolId, 120)->block(2, function () use ($poolId) {
+            $pool = BalancerPool::with('members')->findOrFail($poolId);
+            if (!PoolRealityService::enabled($pool)) $this->invalid('reality_sync_enabled', '请先在前置池开启自动统一 Reality 配置');
+            return $this->persist([...$pool->only(['name', 'domain', 'dns_preset_id', 'dns_ttl', 'enabled', 'follow_user_status', 'scheduling_config']),
+                'id' => $pool->id, 'reality_sync_enabled' => true, '_sync_reality' => true,
+                'members' => $pool->members->map(fn ($member) => ['node_id' => $member->source_node_id, 'priority' => $member->priority, 'weight' => $member->weight])->all()]);
+        });
+    }
+
     private function persist(array $data): BalancerPool
+    {
+        try {
+            return $this->persistTransaction($data);
+        } catch (\Illuminate\Database\QueryException $error) {
+            // 节点更新的 SQL 绑定包含私钥，不把原始异常写入日志或响应。
+            \Illuminate\Support\Facades\Log::error('前置池保存失败', ['pool_id' => (int) ($data['id'] ?? 0), 'sql_state' => (string) $error->getCode()]);
+            throw new \App\Exceptions\ApiException('前置池保存失败，请重试', 500);
+        }
+    }
+
+    private function persistTransaction(array $data): BalancerPool
     {
         return DB::transaction(function () use ($data) {
             $pool = isset($data['id']) ? BalancerPool::query()->lockForUpdate()->findOrFail($data['id']) : new BalancerPool();
@@ -98,15 +154,18 @@ class LoadBalancerService
             $members = collect($data['members']);
             if ($members->isEmpty() || $members->pluck('node_id')->unique()->count() !== $members->count()) $this->invalid('members', '请选择不重复的前置节点');
             foreach ($members as $member) {
-                if (($member['weight'] ?? 1) < 1 || ($member['weight'] ?? 1) > 1000) $this->invalid('members', '成员权重范围为 1–1000');
+                if (($member['weight'] ?? 1) < 1 || ($member['weight'] ?? 1) > 1000) $this->invalid('members', '前置节点权重范围为 1–1000');
             }
             $sources = Server::with('machine')->whereIn('id', $members->pluck('node_id'))->lockForUpdate()->get()->keyBy('id');
             $stored = $pool->exists ? $pool->members()->get()->keyBy('source_node_id') : collect();
+            $syncReality = (bool) ($data['reality_sync_enabled'] ?? PoolRealityService::enabled($pool));
             // 参数已不兼容时仍允许只停用；不以停用操作修改节点或密钥。
-            $statusOnly = $pool->exists && !$starting
+            $statusOnly = $pool->exists && !$starting && empty($data['_sync_reality'])
+                && $syncReality === PoolRealityService::enabled($pool)
+                && PoolRealityService::unchanged($pool, (array) ($data['reality_settings'] ?? []))
                 && $members->map(fn ($m) => [(int) $m['node_id'], (int) $m['priority'], (int) ($m['weight'] ?? 1)])->values()->all()
                     === $stored->map(fn ($m) => [(int) $m->source_node_id, (int) $m->priority, (int) $m->weight])->values()->all();
-            foreach (collect($data)->except(['id', 'members', 'enabled']) as $key => $value) {
+            foreach (collect($data)->except(['id', 'members', 'enabled', 'reality_sync_enabled', 'reality_settings', '_sync_reality']) as $key => $value) {
                 $current = $pool->{$key};
                 if ($key === 'scheduling_config') {
                     $current = array_replace(FrontPoolScheduler::DEFAULTS, $current ?? []);
@@ -121,16 +180,34 @@ class LoadBalancerService
             }
             $first = $sources->get((int) $members->first()['node_id']);
             if (!$first) $this->invalid('members', '请选择已有的前置节点');
+            $reality = $syncReality ? PoolRealityService::prepare($pool, $first, (array) ($data['reality_settings'] ?? [])) : null;
+            if ($reality !== null) {
+                foreach ($sources as $source) {
+                    // 只在内存中准备新配置；所有校验通过后再统一落库。
+                    PoolRealityService::apply($source, $reality);
+                }
+                $otherPools = BalancerMember::with(['pool' => fn ($query) => $query->lockForUpdate()])->whereIn('source_node_id', $sources->keys())
+                    ->where('pool_id', '!=', $pool->id ?? 0)->lockForUpdate()->get();
+                foreach ($otherPools as $member) {
+                    $source = $sources->get($member->source_node_id);
+                    $reference = (array) data_get($member->pool?->template_config, 'protocol_settings.reality_settings', []);
+                    foreach (PoolRealityService::FIELDS as $field) {
+                        $value = $reference[$field] ?? ($field === 'server_port' ? 443 : '');
+                        if (in_array($field, ['short_id', 'server_name'], true)) $value = strtolower(trim((string) $value));
+                        if ($value != $reality[$field]) $this->invalid('members', $source->name . '：另一个前置池使用不同的 Reality 配置，请先解除该节点的其他池引用');
+                    }
+                }
+            }
             foreach ($members as $member) {
                 $source = $sources->get((int) $member['node_id']);
                 if (!$source) $this->invalid('members', '前置节点不存在');
-                $reasons = self::dnsCompatibility($source, $first);
+                $reasons = [...self::dnsCompatibility($source, $first), ...self::topologyCompatibility($source, $pool)];
                 if ($reasons) $this->invalid('members', $source->name . '：' . implode('；', $reasons));
                 if ($starting && !self::agentCompatible($source->machine)) $this->invalid('members', '前置需要先运行 Agent v2.25.0 或更新版本');
             }
             if ($sources->pluck('machine_id')->unique()->count() !== $sources->count()) $this->invalid('members', '每台服务器只能选择一个前置节点');
             $hosts = $sources->map(fn ($source) => strtolower(rtrim(trim($source->host, '[] '), '.')));
-            if ($hosts->unique()->count() !== $hosts->count() || $hosts->contains(strtolower(rtrim($data['domain'], '.')))) $this->invalid('members', '成员地址必须分别直达各自服务器');
+            if ($hosts->unique()->count() !== $hosts->count() || $hosts->contains(strtolower(rtrim($data['domain'], '.')))) $this->invalid('members', '节点连接地址必须分别直达各自服务器');
             $policy = array_replace(FrontPoolScheduler::DEFAULTS, $data['scheduling_config'] ?? $pool->scheduling_config ?? []);
             if (!in_array($policy['strategy'], ['priority', 'latency', 'latency_balanced', 'cycle'], true)) $this->invalid('scheduling_config', '请选择有效的前置选择方式');
             if (in_array($policy['strategy'], ['latency', 'latency_balanced'], true)) {
@@ -147,10 +224,11 @@ class LoadBalancerService
             if (\App\Models\DdnsBinding::where('domain', $data['domain'])->exists()) $this->invalid('domain', '该域名已被节点 DDNS 使用');
             if ($pool->exists && ($pool->domain !== $data['domain'] || $pool->dns_preset_id != $data['dns_preset_id'])
                 && \App\Models\PowerDnsRecord::where('owner_type', 'pool')->where('owner_id', $pool->id)->exists()) $this->invalid('domain', '修改域名前请先停用池并同步清理解析');
-            $pool->fill(collect($data)->except(['id', 'members'])->all());
+            $pool->fill(collect($data)->except(['id', 'members', 'reality_sync_enabled', 'reality_settings', '_sync_reality'])->all());
             $pool->protocol = $first->type;
             $pool->template_node_id = $first->id;
-            $pool->template_config = collect($first->toArray())->only(['type', 'kernel_type', 'rate', 'group_ids', 'protocol_settings', 'route_ids', 'source_policy', 'rate_time_enable', 'rate_time_ranges'])->all();
+            $pool->template_config = [...collect($first->toArray())->only(['type', 'kernel_type', 'rate', 'group_ids', 'protocol_settings', 'route_ids', 'source_policy', 'rate_time_enable', 'rate_time_ranges'])->all(),
+                'reality_sync_enabled' => $syncReality];
             // 沿用数据库中的公网端口字段；不再创建转发入口或专用监听。
             $pool->gateway_port = self::publicPort($first);
             $pool->backend_port = $pool->gateway_port;
@@ -158,6 +236,7 @@ class LoadBalancerService
             $pool->gateway_address = '';
             $pool->gateway_source_ips = [];
             $pool->save();
+            if ($reality !== null) foreach ($sources as $source) if ($source->isDirty('protocol_settings')) $source->save();
             foreach ($members->values() as $position => $values) {
                 $source = $sources[(int) $values['node_id']];
                 $member = $stored->pull($source->id) ?? new BalancerMember(['pool_id' => $pool->id, 'source_node_id' => $source->id]);

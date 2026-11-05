@@ -87,7 +87,7 @@ VLESS、VMess、Trojan、HY1、HY2、TUIC 和 AnyTLS 使用统一的 ECH 转换�
 
 范围值统一输出为字符串，倒序范围按 Xray 语义交换上下界。普通开关的 `false`、连接池的 `0` 和保活间隔的 `-1` 会保留。`xPaddingBytes=0` 转为 `100-1000`，`scMaxEachPostBytes=0` 转为 `1000000`，`scMinPostsIntervalMs=0` 转为 `30`，避免把 Xray 的默认值标记交给 Mihomo 后发生拒绝或语义变化。
 
-启用填充混淆而没有填写具体字段时，补齐 Xray 默认的 `x_padding`、`X-Padding`、`queryInHeader` 和 `repeat-x`。通过 header 或 cookie 上传时，同样补齐默认的数据字段名与分块范围。显式空 XMUX 或全零 XMUX 使用 Xray 默认连接池：6 个连接、每连接 600–900 次请求、可复用 1800–3000 秒。
+启用填充混淆而没有填写具体字段时，补齐 Xray 默认的 `x_padding`、`X-Padding`、`queryInHeader` 和 `repeat-x`。通过 header 或 cookie 上传时，同样补齐默认的数据字段名与分块范围。显式空 XMUX 或全零 XMUX 使用 Xray 默认连接池：3 个连接、每连接 600–900 次请求、可复用 1800–3000 秒。
 
 `noSSEHeader`、`scMaxBufferedPosts`、`scStreamUpServerSecs` 等服务端选项不转成客户端字段。`headers` 中不能填写 `Host`；使用独立的 `host` 字段。
 

@@ -120,6 +120,31 @@ class SchedulingTest extends TestCase
         $this->assertSame(['192.0.2.2'], $select()); $this->assertCount(2, $select());
     }
 
+    public function test_port_recovery_keeps_confirmation_across_offline_and_disabled_states(): void
+    {
+        [$pool, $a] = $this->pool(); $pool->update(['scheduling_config' => ['health_enabled' => true]]);
+        $ok = false;
+        $this->mock(FrontPortProbe::class)->shouldReceive('check')->andReturnUsing(function () use (&$ok) {
+            return ['192.0.2.1' => ['ok' => $ok], '192.0.2.2' => ['ok' => true]];
+        });
+        $select = fn () => app(FrontPoolScheduler::class)->select($pool->fresh(['members.runtimeNode.machine', 'members.sourceNode.machine']))[0];
+        foreach (['node', 'pool', 'address', 'protocol'] as $interruption) {
+            $ok = false; $select(); $this->assertSame(['192.0.2.2'], $select());
+            $original = $a->fresh()->protocol_settings;
+            if ($interruption === 'node') $a->update(['enabled' => false]);
+            if ($interruption === 'pool') $pool->update(['enabled' => false]);
+            if ($interruption === 'address') $a->update(['host' => 'invalid/address']);
+            if ($interruption === 'protocol') $a->update(['protocol_settings' => [...$original, 'flow' => 'xtls-rprx-vision']]);
+            $select();
+            $a->update(['enabled' => true, 'host' => '192.0.2.1', 'protocol_settings' => $original]);
+            $pool->update(['enabled' => true]);
+            $this->assertSame($interruption === 'pool' ? [] : ['192.0.2.2'], $select(), $interruption . '：仍失败的端口不能重新入选');
+            $ok = true;
+            $this->assertSame(['192.0.2.2'], $select(), $interruption . '：一次成功不足以恢复');
+            $this->assertSame(['192.0.2.1', '192.0.2.2'], $select());
+        }
+    }
+
     public function test_latency_switch_requires_two_new_samples_and_a_material_improvement(): void
     {
         [$pool, $a, $b] = $this->pool(); $target = $this->landing($a, '192.0.2.3'); $target->update(['relay_entry_id' => null, 'relay_pool_id' => $pool->id]);

@@ -26,7 +26,8 @@
 | SOCKS / Xray，包括历史空内核值 | TCP 和 UDP |
 | SOCKS / sing-box | TCP；UDP 转发使用临时端口 |
 | VMess、VLESS、Trojan 使用 KCP、mKCP、QUIC 或 Hysteria 传输 | UDP |
-| VMess、VLESS、Trojan 使用 TCP、RAW、WebSocket、gRPC、HTTPUpgrade、XHTTP 等传输 | TCP |
+| VMess、VLESS、Trojan 使用 TCP、RAW、WebSocket、gRPC、HTTPUpgrade、XHTTP 的 HTTP/1.1、HTTP/2 等传输 | TCP |
+| VLESS XHTTP 使用 TLS 且 `tls_settings.alpn=["h3"]` | UDP |
 | AnyTLS、普通 HTTP | TCP |
 
 Xray 的 HTTP 入站开启 TLS 时，按实际生成的传输设置判断。Naive 的默认配置同时启用 HTTP/2 与 HTTP/3，因此预留 TCP 和 UDP；协议能否在所选内核中启动，仍受该内核已有能力和证书配置约束。

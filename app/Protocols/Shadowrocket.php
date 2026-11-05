@@ -4,6 +4,7 @@ namespace App\Protocols;
 
 use App\Utils\Helper;
 use App\Support\AbstractProtocol;
+use App\Support\XhttpSettings;
 use App\Models\Server;
 
 class Shadowrocket extends AbstractProtocol
@@ -151,6 +152,7 @@ class Shadowrocket extends AbstractProtocol
                     $config['peer'] = $host [0] ?? $server['host'];
                 }
                 break;
+            case 'splithttp':
             case 'xhttp':
                 $config['obfs'] = "xhttp";
                 if ($path = data_get($protocol_settings, 'network_settings.path')) {
@@ -162,6 +164,8 @@ class Shadowrocket extends AbstractProtocol
                 if ($mode = data_get($protocol_settings, 'network_settings.mode', 'auto')) {
                     $config['mode'] = $mode;
                 }
+                $config['type'] = 'xhttp';
+                $config['extra'] = XhttpSettings::extraJson((array) data_get($protocol_settings, 'network_settings', []));
                 break;
         }
         $query = http_build_query($config, '', '&', PHP_QUERY_RFC3986);
@@ -194,6 +198,7 @@ class Shadowrocket extends AbstractProtocol
         switch (data_get($protocol_settings, 'tls')) {
             case 1:
                 $config['tls'] = 1;
+                if ($alpn = data_get($protocol_settings, 'tls_settings.alpn')) $config['alpn'] = implode(',', $alpn);
                 $config['allowInsecure'] = (int) data_get($protocol_settings, 'tls_settings.allow_insecure');
                 if ($serverName = data_get($protocol_settings, 'tls_settings.server_name')) {
                     $config['peer'] = $serverName;
@@ -262,6 +267,7 @@ class Shadowrocket extends AbstractProtocol
                     $config['obfsParam'] = $host;
                 }
                 break;
+            case 'splithttp':
             case 'xhttp':
                 $config['obfs'] = "xhttp";
                 if ($path = data_get($protocol_settings, 'network_settings.path')) {
@@ -273,6 +279,8 @@ class Shadowrocket extends AbstractProtocol
                 if ($mode = data_get($protocol_settings, 'network_settings.mode', 'auto')) {
                     $config['mode'] = $mode;
                 }
+                $config['type'] = 'xhttp';
+                $config['extra'] = XhttpSettings::extraJson((array) data_get($protocol_settings, 'network_settings', []));
                 break;
         }
 
@@ -328,6 +336,7 @@ class Shadowrocket extends AbstractProtocol
                 if ($host = data_get($protocol_settings, 'network_settings.host', $server['host']))
                     $params['obfsParam'] = $host;
                 break;
+            case 'splithttp':
             case 'xhttp':
                 $params['obfs'] = 'xhttp';
                 if ($path = data_get($protocol_settings, 'network_settings.path'))

@@ -125,6 +125,8 @@ class ManageController extends Controller
             'protocol_settings.network' => 'nullable|string',
             'protocol_settings.transport' => 'nullable|string',
             'protocol_settings.tls' => 'nullable|integer',
+            'protocol_settings.tls_settings.alpn' => 'nullable|array',
+            'protocol_settings.tls_settings.alpn.*' => 'string|in:h2,http/1.1,h3',
         ]);
         $previous = isset($params['id']) ? Server::find($params['id']) : null;
         $server = $previous !== null ? clone $previous : new Server();
@@ -178,6 +180,12 @@ class ManageController extends Controller
             }
             if (array_key_exists('enabled', $params)) {
                 $server->setRunning((bool) $params['enabled']);
+            }
+
+            if ($server->isDirty(['kernel_type', 'machine_id'])) {
+                $server->unsetRelation('machine');
+                $reasons = \App\Services\LoadBalancerService::topologyCompatibility($server);
+                if ($reasons) throw ValidationException::withMessages(['kernel_type' => implode('；', $reasons)]);
             }
 
             if (!$server->save()) {

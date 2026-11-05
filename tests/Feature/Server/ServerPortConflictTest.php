@@ -111,6 +111,8 @@ class ServerPortConflictTest extends TestCase
             'VMess QUIC 与 TCP 共存' => ['vmess', ['tls' => 1, 'network' => 'quic'], 'singbox', 'tcp', true],
             'VMess WebSocket 占用 TCP' => ['vmess', ['tls' => 1, 'network' => 'ws'], 'singbox', 'tcp', false],
             'Trojan gRPC 与 UDP 共存' => ['trojan', ['tls' => 1, 'network' => 'grpc'], 'xray', 'udp', true],
+            'VLESS XHTTP H3 与 TCP 共存' => ['vless', ['tls' => 1, 'network' => 'xhttp', 'tls_settings' => ['alpn' => ['h3']]], 'xray', 'tcp', true],
+            'VLESS XHTTP H3 占用 UDP' => ['vless', ['tls' => 1, 'network' => 'xhttp', 'tls_settings' => ['alpn' => ['h3']]], 'xray', 'udp', false],
             'VLESS XHTTP 占用 TCP' => ['vless', ['tls' => 1, 'network' => 'xhttp'], 'xray', 'tcp', false],
             'AnyTLS 与 UDP 共存' => ['anytls', [], 'singbox', 'udp', true],
             'HTTP 与 UDP 共存' => ['http', ['tls' => 1], 'singbox', 'udp', true],

@@ -1,0 +1,147 @@
+{
+  "app_version": "2.0.3",
+  "source_commit": "1821ca78897eff6017a255dbd2767a12be2f12cb",
+  "data": {
+    "tables": 71,
+    "rows": 4683939,
+    "mismatches": {}
+  },
+  "regression": {
+    "sqlite": {
+      "tests": 1574,
+      "assertions": 30888,
+      "errors": 0,
+      "failures": 0,
+      "skipped": 10
+    },
+    "mariadb": {
+      "tests": 1574,
+      "assertions": 30898,
+      "errors": 0,
+      "failures": 0,
+      "skipped": 0
+    }
+  },
+  "syntax": {
+    "files": 649,
+    "failed": []
+  },
+  "recent_machines": 45,
+  "active_machines": 48,
+  "failed_jobs": 713,
+  "migration_batch": 80,
+  "services": {
+    "yzboard-web": [
+      "NRestarts=0",
+      "ActiveState=active"
+    ],
+    "yzboard-horizon": [
+      "NRestarts=0",
+      "ActiveState=active"
+    ],
+    "yzboard-websocket": [
+      "NRestarts=0",
+      "ActiveState=active"
+    ]
+  },
+  "target_started": "2026-11-03T18:08:53Z",
+  "migration_date": "2026-11-04",
+  "source_server": "DartNode-US",
+  "target_server": "Solid-US",
+  "target_directory": "/root/yzboard",
+  "target_ip": "167.253.64.231",
+  "first_freeze": "2026-11-03T17:20:22Z",
+  "first_attempt": "源库大历史表限时行数核对失败，自动恢复旧站；复用已完整导入的历史数据，随后增量同步并核对完整主键清单。",
+  "final_freeze": "2026-11-03T18:00:30Z",
+  "dns_cutover": "2026-11-03T18:11:21Z",
+  "dns_records": [
+    {
+      "name": "origin-api.yuzu-cloud.cyou",
+      "type": "A",
+      "content": "167.253.64.231",
+      "proxied": true,
+      "ttl": 1
+    },
+    {
+      "name": "origin-panel.yuzu-cloud.cyou",
+      "type": "A",
+      "content": "167.253.64.231",
+      "proxied": true,
+      "ttl": 1
+    },
+    {
+      "name": "origin-api.yuzu-cloud.bond",
+      "type": "A",
+      "content": "167.253.64.231",
+      "proxied": true,
+      "ttl": 1
+    },
+    {
+      "name": "origin-panel.yuzu-cloud.bond",
+      "type": "A",
+      "content": "167.253.64.231",
+      "proxied": true,
+      "ttl": 1
+    },
+    {
+      "name": "api.lolicon.bond",
+      "type": "A",
+      "content": "167.253.64.231",
+      "proxied": true,
+      "ttl": 1
+    },
+    {
+      "name": "panel.pomelo.wtf",
+      "type": "A",
+      "content": "167.253.64.231",
+      "proxied": true,
+      "ttl": 1
+    },
+    {
+      "name": "ws.pomelo.wtf",
+      "type": "A",
+      "content": "167.253.64.231",
+      "proxied": true,
+      "ttl": 1
+    }
+  ],
+  "health": {
+    "origin_admin": 200,
+    "origin_user_sites": 200,
+    "public_user_sites": 200,
+    "public_config_api": 200,
+    "legacy_forward": 200,
+    "websocket_connections": 45,
+    "public_admin_probe": 403,
+    "public_admin_probe_note": "Cloudflare 对机房来源的既有访问限制；源站检查为 200。"
+  },
+  "rollback_directory": "DartNode-US:/root/yzboard-backups/migration-solid-us-20261104",
+  "remaining": "无旧服务器转发或运行依赖；当前仅在 Solid-US 运行。",
+  "retirement": {
+    "date": "2026-11-04",
+    "old_forwarding_disabled": true,
+    "old_services_disabled": [
+      "yzboard-web",
+      "yzboard-horizon",
+      "yzboard-websocket",
+      "nginx",
+      "mariadb",
+      "redis-server",
+      "certbot.timer"
+    ],
+    "trusted_old_proxy_removed": true,
+    "new_server_cleanup_bytes": 280096727,
+    "removed": [
+      "migration real-IP override",
+      "inactive migration guard",
+      "unused Nginx samples",
+      "cached installed Swoole package",
+      "unused empty yzboard database",
+      "APT download cache"
+    ],
+    "independent_http_checks": "passed",
+    "recent_machines": 45,
+    "websocket_connections": 45,
+    "failed_jobs": 713
+  }
+}

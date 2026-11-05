@@ -20,6 +20,8 @@ class LoadBalancerController extends Controller
         $counts = \App\Models\PoolDnsAlias::whereNotNull('member_id')->selectRaw('member_id, count(*) as total')->groupBy('member_id')->pluck('total', 'member_id');
         $pools = BalancerPool::with(['members.sourceNode', 'members.runtimeNode.machine'])->orderBy('id')->get()->map(function ($pool) use ($counts) {
             $view = $pool->attributesToArray();
+            $view['reality_sync_enabled'] = \App\Services\PoolRealityService::enabled($pool);
+            $view['reality_settings'] = \App\Services\PoolRealityService::view($pool);
             $view['effective_rate'] = $pool->members->first()?->runtimeNode?->getCurrentRate();
             $view['members'] = $pool->members->map(fn ($member) => [
                 'node_id' => $member->source_node_id, 'name' => $member->sourceNode?->name, 'priority' => $member->priority, 'weight' => $member->weight, 'assigned_users' => (int) ($counts[$member->id] ?? 0),
@@ -105,6 +107,11 @@ class LoadBalancerController extends Controller
             'dns_preset_id' => 'required|integer|exists:v2_balancer_dns_preset,id',
             'mode' => 'required|in:dns', 'dns_ttl' => 'sometimes|integer|min:30|max:86400',
             'ddns_enabled' => 'sometimes|boolean', 'personal_domain_enabled' => 'sometimes|boolean', 'follow_user_status' => 'sometimes|boolean',
+            'reality_sync_enabled' => 'sometimes|boolean',
+            'reality_settings' => 'sometimes|nullable|array:private_key,public_key,short_id,server_name,server_port',
+            'reality_settings.private_key' => 'nullable|string|max:43', 'reality_settings.public_key' => 'nullable|string|max:43',
+            'reality_settings.short_id' => 'nullable|string|max:16', 'reality_settings.server_name' => 'nullable|string|max:253',
+            'reality_settings.server_port' => 'nullable|integer|min:1|max:65535',
             'scheduling_config' => 'sometimes|nullable|array:health_enabled,strategy,latency_node_id,quota_enabled,quota_percent',
             'scheduling_config.health_enabled' => 'sometimes|boolean', 'scheduling_config.strategy' => 'sometimes|in:priority,latency,latency_balanced,cycle',
             'scheduling_config.latency_node_id' => 'nullable|integer|exists:v2_server,id',
@@ -121,6 +128,13 @@ class LoadBalancerController extends Controller
         }
         $pool = $service->save($data);
         return $this->success(['id' => $pool->id]);
+    }
+
+    public function syncReality(Request $request, LoadBalancerService $service)
+    {
+        $data = $request->validate(['id' => 'required|integer|exists:v2_balancer_pool,id']);
+        $service->syncReality((int) $data['id']);
+        return $this->success(true);
     }
 
     public function syncDns(Request $request, BalancerDnsService $dns)

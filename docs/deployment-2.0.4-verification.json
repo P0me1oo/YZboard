@@ -1,0 +1,268 @@
+{
+  "server": "Solid-US",
+  "source": "e5d7c95d4687df256dd66e1a155885f887ff4a50",
+  "old_source": "1821ca78897eff6017a255dbd2767a12be2f12cb",
+  "admin_source": "7c7a924a3e341e3fe3e1c3d5dc06ad0b9e3af889",
+  "version": "2.0.4",
+  "before": {
+    "version": "2.0.3",
+    "migration_batch": 80,
+    "enabled_machines": 48,
+    "recent_machines": 45,
+    "failed_jobs": 713,
+    "front_pools": 0,
+    "theme": null
+  },
+  "dependencies_before": {
+    "nginx.service": {
+      "MainPID": "45098",
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "mariadb.service": {
+      "MainPID": "45105",
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "redis-server.service": {
+      "MainPID": "133947",
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    }
+  },
+  "services_before": {
+    "yzboard-web.service": {
+      "MainPID": "133991",
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "yzboard-horizon.service": {
+      "MainPID": "133992",
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "yzboard-websocket.service": {
+      "MainPID": "133993",
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    }
+  },
+  "switch_started_at": "2026-11-03T19:31:47.002142+00:00",
+  "switch_started_epoch": 1793734307.0021675,
+  "phase": "services_started",
+  "after": {
+    "version": "2.0.4",
+    "migration_batch": 80,
+    "enabled_machines": 48,
+    "recent_machines": 45,
+    "failed_jobs": 713,
+    "front_pools": 0
+  },
+  "verified_source_files": 952,
+  "env_preserved": true,
+  "dependencies_preserved": true,
+  "persistent_files_preserved": true,
+  "services_after": {
+    "yzboard-web.service": {
+      "MainPID": "147056",
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "yzboard-horizon.service": {
+      "MainPID": "147057",
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "yzboard-websocket.service": {
+      "MainPID": "147058",
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    }
+  },
+  "dependencies_after": {
+    "nginx.service": {
+      "MainPID": "45098",
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "mariadb.service": {
+      "MainPID": "45105",
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "redis-server.service": {
+      "MainPID": "133947",
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    }
+  },
+  "switch_finished_at": "2026-11-03T19:31:51.374106+00:00",
+  "switch_seconds": 4.37,
+  "changed_files": 15,
+  "status": "verified",
+  "verification": {
+    "checked_at": "2026-11-03T19:38:06.623576+00:00",
+    "state": {
+      "version": "2.0.4",
+      "display_version": "20261104-e5d7c95",
+      "migration_batch": 80,
+      "enabled_machines": 48,
+      "recent_machines": 45,
+      "failed_jobs": 713
+    },
+    "websocket_connections": 45,
+    "http": [
+      {
+        "label": "0_admin",
+        "status": 200,
+        "curl_code": 0,
+        "bytes": 1903
+      },
+      {
+        "label": "0_config",
+        "status": 200,
+        "curl_code": 0,
+        "bytes": 535
+      },
+      {
+        "label": "0_script",
+        "status": 200,
+        "curl_code": 0,
+        "bytes": 6861194,
+        "sha256": "636383f43714e9d492739a0bb04c33d2beb50136dc7ae14f8f9a181f337bf9ed"
+      },
+      {
+        "label": "1_admin",
+        "status": 200,
+        "curl_code": 0,
+        "bytes": 1903
+      },
+      {
+        "label": "1_config",
+        "status": 200,
+        "curl_code": 0,
+        "bytes": 535
+      },
+      {
+        "label": "1_script",
+        "status": 200,
+        "curl_code": 0,
+        "bytes": 6861194,
+        "sha256": "636383f43714e9d492739a0bb04c33d2beb50136dc7ae14f8f9a181f337bf9ed"
+      },
+      {
+        "label": "2_admin",
+        "status": 200,
+        "curl_code": 0,
+        "bytes": 1903
+      },
+      {
+        "label": "2_config",
+        "status": 200,
+        "curl_code": 0,
+        "bytes": 535
+      },
+      {
+        "label": "2_script",
+        "status": 200,
+        "curl_code": 0,
+        "bytes": 6861194,
+        "sha256": "636383f43714e9d492739a0bb04c33d2beb50136dc7ae14f8f9a181f337bf9ed"
+      },
+      {
+        "label": "3_admin",
+        "status": 200,
+        "curl_code": 0,
+        "bytes": 1903
+      },
+      {
+        "label": "3_config",
+        "status": 200,
+        "curl_code": 0,
+        "bytes": 535
+      },
+      {
+        "label": "3_script",
+        "status": 200,
+        "curl_code": 0,
+        "bytes": 6861194,
+        "sha256": "636383f43714e9d492739a0bb04c33d2beb50136dc7ae14f8f9a181f337bf9ed"
+      },
+      {
+        "label": "4_admin",
+        "status": 200,
+        "curl_code": 0,
+        "bytes": 1903
+      },
+      {
+        "label": "4_config",
+        "status": 200,
+        "curl_code": 0,
+        "bytes": 535
+      },
+      {
+        "label": "4_script",
+        "status": 200,
+        "curl_code": 0,
+        "bytes": 6861194,
+        "sha256": "636383f43714e9d492739a0bb04c33d2beb50136dc7ae14f8f9a181f337bf9ed"
+      },
+      {
+        "label": "origin_admin_https",
+        "status": 200,
+        "curl_code": 0,
+        "bytes": 1903
+      },
+      {
+        "label": "origin_config_https",
+        "status": 200,
+        "curl_code": 0,
+        "bytes": 535
+      },
+      {
+        "label": "origin_user_cyou",
+        "status": 200,
+        "curl_code": 0,
+        "bytes": 2435
+      },
+      {
+        "label": "origin_user_bond",
+        "status": 200,
+        "curl_code": 0,
+        "bytes": 2435
+      },
+      {
+        "label": "public_admin",
+        "status": 403,
+        "curl_code": 0,
+        "bytes": 4554
+      },
+      {
+        "label": "public_user_cyou",
+        "status": 200,
+        "curl_code": 0,
+        "bytes": 2435
+      },
+      {
+        "label": "public_user_bond",
+        "status": 200,
+        "curl_code": 0,
+        "bytes": 2435
+      }
+    ],
+    "journal_errors": 0,
+    "application_errors": 0
+  }
+}

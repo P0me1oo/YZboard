@@ -58,6 +58,7 @@ class AdminRoute
             });
             $router->group(['prefix' => 'server/load-balancer'], function ($router) {
                 $controller = \App\Http\Controllers\V2\Admin\Server\LoadBalancerController::class;
+                $router->post('/reality/sync', [$controller, 'syncReality']);
                 $router->get('/fetch', [$controller, 'fetch']);
                 $router->post('/save', [$controller, 'save']);
                 $router->post('/delete', [$controller, 'delete']);

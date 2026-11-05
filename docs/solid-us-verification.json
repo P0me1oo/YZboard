@@ -1,0 +1,57 @@
+{
+  "maintainer": "P0me1oo",
+  "verified_at": "2026-11-03T04:52:06.188870+00:00",
+  "node": {
+    "name": "Solid-US",
+    "uuid": "73c250bd-235a-462d-97e1-74a42406c7e9",
+    "ipv4": "167.253.64.231"
+  },
+  "source": {
+    "panel_version": "1.114.0",
+    "panel_commit": "d1c3b0162cfa8acc87e6c956b000ce32d6147108"
+  },
+  "versions": {
+    "php": "8.4.27",
+    "swoole": "6.2.4",
+    "mariadb": "12.3.3",
+    "redis": "8.10.3",
+    "phpredis": "6.3.0",
+    "nginx": "1.30.6",
+    "composer": "2.11.1"
+  },
+  "swoole_source_commit": "c7e514509451beafd4d70ce5b78943d51e76381c",
+  "swoole_package_sha256": "870863913523f6c78591a36de33302622ddfdc71e8e36ee06dc181828a5d7785",
+  "full_regression": {
+    "sqlite": {
+      "tests": 1577,
+      "assertions": 18460,
+      "errors": 0,
+      "failures": 0,
+      "skipped": 10,
+      "seconds": 165.044137
+    },
+    "mariadb": {
+      "tests": 1577,
+      "assertions": 18470,
+      "errors": 0,
+      "failures": 0,
+      "skipped": 0,
+      "seconds": 211.081024
+    }
+  },
+  "isolated_tests": {
+    "mariadb_port": 33368,
+    "mariadb_database": "yzboard_mariadb_test",
+    "only_full_group_by": true,
+    "redis_port": 16379
+  },
+  "runtime_probes": {
+    "php_extensions": "passed",
+    "mysql_account_and_utf8": "passed",
+    "redis_read_write": "passed",
+    "nginx_http_to_swoole": "passed",
+    "nginx_websocket_handshake_echo": "passed",
+    "systemd_units": "passed"
+  },
+  "scope": "Native environment prepared; production application, data, domains and certificates await migration."
+}

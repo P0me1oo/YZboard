@@ -1,0 +1,201 @@
+{
+  "maintainer": "P0me1oo",
+  "migration_date": "2026-11-05",
+  "completed_at_utc": "2026-11-04T17:29:14.595050+00:00",
+  "source": {
+    "name": "Solid-US KC",
+    "uuid": "73c250bd-235a-462d-97e1-74a42406c7e9",
+    "ipv4": "167.253.64.231",
+    "path": "/root/yzboard",
+    "state": "Retired; original application and database retained offline."
+  },
+  "target": {
+    "name": "Solid-US LA",
+    "uuid": "604540c9-316f-40de-9990-2e7a9547361c",
+    "ipv4": "172.81.59.192",
+    "ipv6": "2602:fcc0:7777:d034::1",
+    "path": "/root/yzboard",
+    "user": "www-data"
+  },
+  "version": "2.0.4",
+  "commit": "e5d7c95d4687df256dd66e1a155885f887ff4a50",
+  "composer_lock_sha256": "13f51448280db6f551f41d6998656239af62e4c63da20ebd31b75a99d0756e70",
+  "runtime": {
+    "php": "8.4.27",
+    "swoole": "6.2.4",
+    "mariadb": "12.3.3",
+    "redis": "8.10.3",
+    "nginx": "1.30.6",
+    "composer": "2.11.1"
+  },
+  "data": {
+    "tables": 71,
+    "rows": 4762908,
+    "mismatches": {}
+  },
+  "files": {
+    "files": 10250,
+    "changed_files": 2,
+    "deleted_files": 0,
+    "mismatches": [],
+    "original_app_key_preserved": true
+  },
+  "redis": {
+    "snapshot_sha256": "011bb1e7dd2d4a8f8ed08728f5a865c163e9173f130df15df75f4b815b5f3281",
+    "checksum_verified": true,
+    "both_databases_preserved": true,
+    "expired_keys": "Normal Redis TTL expiry during migration; snapshot restored without flushing queue or cache databases."
+  },
+  "transfer": {
+    "mode": "Temporary mutual-TLS HTTPS controlled through authorized Lite MCP commands on both nodes",
+    "source_port": 18745,
+    "restricted_source": "172.81.59.192",
+    "unauthenticated_access_rejected": true,
+    "temporary_channel_removed": true
+  },
+  "timeline": {
+    "freeze_started_utc": "2026-11-04T17:12:50Z",
+    "final_export_completed_utc": "2026-11-04T17:13:51Z",
+    "target_activated_utc": "2026-11-04T17:20:26Z",
+    "dns_completed_utc": "2026-11-04T17:21:20Z",
+    "freeze_to_dns_seconds": 510
+  },
+  "dns_records": [
+    {
+      "name": "origin-api.yuzu-cloud.cyou",
+      "type": "A",
+      "content": "172.81.59.192",
+      "proxied": true,
+      "ttl": 1
+    },
+    {
+      "name": "origin-panel.yuzu-cloud.cyou",
+      "type": "A",
+      "content": "172.81.59.192",
+      "proxied": true,
+      "ttl": 1
+    },
+    {
+      "name": "origin-api.yuzu-cloud.bond",
+      "type": "A",
+      "content": "172.81.59.192",
+      "proxied": true,
+      "ttl": 1
+    },
+    {
+      "name": "origin-panel.yuzu-cloud.bond",
+      "type": "A",
+      "content": "172.81.59.192",
+      "proxied": true,
+      "ttl": 1
+    },
+    {
+      "name": "api.lolicon.bond",
+      "type": "A",
+      "content": "172.81.59.192",
+      "proxied": true,
+      "ttl": 1
+    },
+    {
+      "name": "panel.pomelo.wtf",
+      "type": "A",
+      "content": "172.81.59.192",
+      "proxied": true,
+      "ttl": 1
+    },
+    {
+      "name": "ws.pomelo.wtf",
+      "type": "A",
+      "content": "172.81.59.192",
+      "proxied": true,
+      "ttl": 1
+    }
+  ],
+  "dns_properties_preserved": [
+    "proxy state",
+    "TTL",
+    "CNAME aliases",
+    "preferred entry configuration"
+  ],
+  "health": {
+    "version": "2.0.4",
+    "commit": "e5d7c95d4687df256dd66e1a155885f887ff4a50",
+    "migration_batch": 80,
+    "failed_jobs": 713,
+    "active_machines": 48,
+    "recent_machines": 45,
+    "encrypted_credentials_readable": true
+  },
+  "https": {
+    "origin_admin": 200,
+    "origin_user_sites": 200,
+    "origin_configuration_apis": 200,
+    "public_user_sites": 200,
+    "public_configuration_apis": 200,
+    "public_admin_probe": 403,
+    "public_admin_probe_note": "Existing Cloudflare restriction for datacenter probes; unchanged, origin returns 200."
+  },
+  "websocket_connections": 45,
+  "services": {
+    "yzboard-web.service": {
+      "NRestarts": "0",
+      "Id": "yzboard-web.service",
+      "ActiveState": "active",
+      "UnitFileState": "enabled"
+    },
+    "yzboard-horizon.service": {
+      "NRestarts": "0",
+      "Id": "yzboard-horizon.service",
+      "ActiveState": "active",
+      "UnitFileState": "enabled"
+    },
+    "yzboard-websocket.service": {
+      "NRestarts": "0",
+      "Id": "yzboard-websocket.service",
+      "ActiveState": "active",
+      "UnitFileState": "enabled"
+    },
+    "nginx.service": {
+      "NRestarts": "0",
+      "Id": "nginx.service",
+      "ActiveState": "active",
+      "UnitFileState": "enabled"
+    },
+    "mariadb.service": {
+      "NRestarts": "0",
+      "Id": "mariadb.service",
+      "ActiveState": "active",
+      "UnitFileState": "enabled"
+    },
+    "redis-server.service": {
+      "NRestarts": "0",
+      "Id": "redis-server.service",
+      "ActiveState": "active",
+      "UnitFileState": "enabled"
+    },
+    "certbot.timer": {
+      "Id": "certbot.timer",
+      "ActiveState": "active",
+      "UnitFileState": "enabled"
+    }
+  },
+  "migration_batch": 80,
+  "failed_jobs_before": 713,
+  "failed_jobs_after": 713,
+  "regression": "No new application or dependency version; target integration and full frozen data integrity were verified. Full application regression was not repeated.",
+  "migration_fixes": [
+    "Restored four source Composer-generated autoload files after regenerated manifests differed.",
+    "Restored source directory ownership and permissions after delta extraction changed parent-directory metadata; application startup and HTTPS were then verified."
+  ],
+  "rollback": {
+    "source_directory": "/root/yzboard",
+    "archive": "Solid-US KC:/root/yzboard-backups/migration-solid-us-la-20261105",
+    "source_database": "Offline frozen original xboard database; preserved.",
+    "exports": "Reused migration SQL/RDB exports; no additional full backup created.",
+    "requirements": "LA has new writes after activation. Stop writes and synchronize database and Redis changes before reactivating KC; do not directly start the frozen old database."
+  },
+  "temporary_cleanup": "Completed: task directories, transport certificates, transferred archives, staging copies and temporary scripts removed on both nodes; frozen source and migration exports retained.",
+  "credentials": "Original application key retained, target database credentials merged into production .env; secrets excluded from this record.",
+  "cleanup_completed_at_utc": "2026-11-04T17:30:56.985947+00:00"
+}
+

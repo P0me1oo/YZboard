@@ -119,10 +119,18 @@ class DdnsService
     public function project(array $servers, User|array $user): array
     {
         if (!self::installed()) return $servers;
-        foreach ($servers as &$server) {
+        $pendingPool = null;
+        foreach ($servers as $index => &$server) {
             [$type, $id] = self::endpoint($server);
             if ($type === 'pool' && ($pool = BalancerPool::find($id))) {
-                $server['host'] = app(DnsPoolService::class)->project($pool, $user);
+                try {
+                    $server['host'] = app(DnsPoolService::class)->project($pool, $user);
+                } catch (HttpResponseException $error) {
+                    // 仅隔离池解析未就绪；用户鉴权失败及其他错误仍按原路径返回。
+                    if ($error->getResponse()->getStatusCode() !== 503) throw $error;
+                    $pendingPool ??= $error;
+                    unset($servers[$index]);
+                }
                 continue;
             }
             $binding = self::current($type, $id);
@@ -152,7 +160,8 @@ class DdnsService
             $server['host'] = $binding->personal_enabled ? $alias->label . '.' . $binding->domain : $binding->domain;
         }
         unset($server);
-        return $servers;
+        if (!$servers && $pendingPool) throw $pendingPool;
+        return array_values($servers);
     }
 
     private function owner(DdnsBinding $binding): Server|BalancerPool|null

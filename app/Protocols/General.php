@@ -6,6 +6,7 @@ use App\Models\Server;
 use App\Utils\Helper;
 use Illuminate\Support\Arr;
 use App\Support\AbstractProtocol;
+use App\Support\XhttpSettings;
 
 class General extends AbstractProtocol
 {
@@ -146,6 +147,7 @@ class General extends AbstractProtocol
                     $config['path'] = $path;
                 $config['host'] = data_get($protocol_settings, 'network_settings.host', $server['host']);
                 break;
+            case 'splithttp':
             case 'xhttp':
                 $config['net'] = 'xhttp';
                 $config['type'] = 'xhttp';
@@ -154,8 +156,7 @@ class General extends AbstractProtocol
                 $config['host'] = data_get($protocol_settings, 'network_settings.host', $server['host']);
                 if ($mode = data_get($protocol_settings, 'network_settings.mode', 'auto'))
                     $config['mode'] = $mode;
-                if ($extra = data_get($protocol_settings, 'network_settings.extra'))
-                    $config['extra'] = is_array($extra) && !empty($extra) ? json_encode($extra) : null;
+                $config['extra'] = XhttpSettings::extraJson((array) data_get($protocol_settings, 'network_settings', []));
                 break;
             default:
                 break;
@@ -166,6 +167,10 @@ class General extends AbstractProtocol
     public static function buildVless($uuid, $server)
     {
         $protocol_settings = $server['protocol_settings'];
+        if (XhttpSettings::isXhttp($protocol_settings['network'] ?? null)) {
+            $protocol_settings['network'] = 'xhttp';
+            $server['protocol_settings']['network'] = 'xhttp';
+        }
         $host = $server['host']; //节点地址
         $port = $server['port']; //节点端口
         $name = $server['name']; //节点名称
@@ -184,6 +189,7 @@ class General extends AbstractProtocol
         switch (data_get($server, 'protocol_settings.tls')) {
             case 1:
                 $config['security'] = "tls";
+                if ($alpn = data_get($protocol_settings, 'tls_settings.alpn')) $config['alpn'] = implode(',', $alpn);
                 if ($fp = Helper::getTlsFingerprint(data_get($protocol_settings, 'utls'))) {
                     $config['fp'] = $fp;
                 }
@@ -239,14 +245,14 @@ class General extends AbstractProtocol
                     $config['path'] = $path;
                 $config['host'] = data_get($protocol_settings, 'network_settings.host', $server['host']);
                 break;
+            case 'splithttp':
             case 'xhttp':
                 if ($path = data_get($protocol_settings, 'network_settings.path'))
                     $config['path'] = $path;
                 $config['host'] = data_get($protocol_settings, 'network_settings.host', $server['host']);
                 if ($mode = data_get($protocol_settings, 'network_settings.mode', 'auto'))
                     $config['mode'] = $mode;
-                if ($extra = data_get($protocol_settings, 'network_settings.extra'))
-                    $config['extra'] = is_array($extra) && !empty($extra) ? json_encode($extra) : null;
+                $config['extra'] = XhttpSettings::extraJson((array) data_get($protocol_settings, 'network_settings', []));
                 break;
         }
 
@@ -313,6 +319,7 @@ class General extends AbstractProtocol
                     $array['path'] = $path;
                 $array['host'] = data_get($protocol_settings, 'network_settings.host', $server['host']);
                 break;
+            case 'splithttp':
             case 'xhttp':
                 $array['type'] = 'xhttp';
                 if ($path = data_get($protocol_settings, 'network_settings.path'))
@@ -320,8 +327,7 @@ class General extends AbstractProtocol
                 $array['host'] = data_get($protocol_settings, 'network_settings.host', $server['host']);
                 if ($mode = data_get($protocol_settings, 'network_settings.mode', 'auto'))
                     $array['mode'] = $mode;
-                if ($extra = data_get($protocol_settings, 'network_settings.extra'))
-                    $array['extra'] = is_array($extra) && !empty($extra) ? json_encode($extra) : null;
+                $array['extra'] = XhttpSettings::extraJson((array) data_get($protocol_settings, 'network_settings', []));
                 break;
             default:
                 break;

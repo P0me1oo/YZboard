@@ -506,6 +506,7 @@ class ClashMeta extends AbstractProtocol
         switch (data_get($protocol_settings, 'tls')) {
             case 1:
                 $array['tls'] = true;
+                if ($alpn = data_get($protocol_settings, 'tls_settings.alpn')) $array['alpn'] = $alpn;
                 $array['skip-cert-verify'] = (bool) data_get($protocol_settings, 'tls_settings.allow_insecure', false);
                 if ($serverName = data_get($protocol_settings, 'tls_settings.server_name')) {
                     $array['servername'] = $serverName;

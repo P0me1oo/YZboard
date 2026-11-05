@@ -7,6 +7,7 @@ use App\Models\Server;
 use App\Rules\RealityDestination;
 use App\Rules\SourcePolicyIp;
 use App\Utils\SourcePolicy;
+use App\Support\XhttpSettings;
 use App\Services\ServerRelayService;
 use App\Services\ServerRouteService;
 use Illuminate\Contracts\Validation\Validator;
@@ -16,6 +17,16 @@ class ServerSave extends FormRequest
 {
     protected function prepareForValidation(): void
     {
+        $settings = $this->input('protocol_settings');
+        if (is_array($settings) && XhttpSettings::isXhttp($settings['network'] ?? null)) {
+            try {
+                $settings['network'] = 'xhttp';
+                $settings['network_settings'] = XhttpSettings::normalize((array) ($settings['network_settings'] ?? []));
+                $this->merge(['protocol_settings' => $settings]);
+            } catch (\InvalidArgumentException) {
+                // 保留原输入，由校验器返回字段错误。
+            }
+        }
         if ($this->has('relay_pool_id') && !(int) $this->input('relay_pool_id')) $this->merge(['relay_pool_id' => null]);
         if (!$this->input('id') && !$this->has('auto_firewall')) {
             $this->merge(['auto_firewall' => true]);
@@ -245,6 +256,7 @@ class ServerSave extends FormRequest
             'vless' => array_merge(
                 $rules,
                 $this->buildTlsSettingsRules(),
+                ['tls_settings.alpn' => 'nullable|array', 'tls_settings.alpn.*' => 'string|in:h2,http/1.1,h3'],
                 self::REALITY_RULES,
                 self::MULTIPLEX_RULES,
                 self::UTLS_RULES,
@@ -335,6 +347,25 @@ class ServerSave extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator) {
+            $settings = $this->input('protocol_settings', []);
+            if ($validator->errors()->isEmpty() && is_array($settings)
+                && XhttpSettings::isXhttp($settings['network'] ?? null)) {
+                try {
+                    XhttpSettings::validate((array) ($settings['network_settings'] ?? []));
+                    if ($this->input('type') === Server::TYPE_VLESS
+                        && ($settings['flow'] ?? '') === 'xtls-rprx-vision'
+                        && !data_get($settings, 'encryption.enabled')) {
+                        $validator->errors()->add('protocol_settings.flow', 'XHTTP 使用 Vision 时必须启用 VLESS Encryption，否则请选择无流控');
+                    }
+                    $alpn = data_get($settings, 'tls_settings.alpn', []);
+                    if (is_array($alpn) && in_array('h3', $alpn, true)
+                        && ((int) ($settings['tls'] ?? 0) !== 1 || $alpn !== ['h3'])) {
+                        $validator->errors()->add('protocol_settings.tls_settings.alpn', 'XHTTP HTTP/3 必须启用 TLS，且 ALPN 只能为 h3');
+                    }
+                } catch (\InvalidArgumentException $error) {
+                    $validator->errors()->add('protocol_settings.network_settings', $error->getMessage());
+                }
+            }
             if ($validator->errors()->isEmpty()
                 && $this->input('type') === Server::TYPE_VLESS
                 && (int) $this->input('protocol_settings.tls') === 2
@@ -406,6 +437,13 @@ class ServerSave extends FormRequest
 
             if ($error !== null) {
                 $validator->errors()->add('relay_entry_id', $error);
+            }
+            if ($validator->errors()->isEmpty() && $existing) {
+                $entry = clone $existing;
+                $entry->fill($this->only(['type', 'host', 'kernel_type', 'machine_id', 'protocol_settings']));
+                $entry->unsetRelation('machine');
+                $reasons = $entry->isDirty(['kernel_type', 'machine_id']) ? \App\Services\LoadBalancerService::topologyCompatibility($entry) : [];
+                if ($reasons) $validator->errors()->add('kernel_type', implode('；', $reasons));
             }
         });
     }

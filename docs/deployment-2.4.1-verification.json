@@ -1,0 +1,71 @@
+{
+  "checked_at": "2026-11-05T22:27:25+00:00",
+  "server": "Solid-US LA",
+  "directory": "/root/yzboard",
+  "user": "www-data",
+  "version": "2.4.1",
+  "source": "199c5a4218dd03ba09070f18928648cd86f61639",
+  "dash_version": "0.89.1",
+  "dash_source": "bc93c6095b91227df706f0c5c3a2e1b4ef3692a9",
+  "previous": {
+    "version": "2.3.0",
+    "source": "0f75b799dbcfb757c1e023143f9123fb2a015cde"
+  },
+  "switch": {
+    "started_at": "2026-11-05T22:22:06Z",
+    "services_started_at": "2026-11-05T22:22:10Z"
+  },
+  "http": {
+    "admin": 200,
+    "home": 200,
+    "guest_config": 200,
+    "batch_reality_guest": 403
+  },
+  "verified_resources": 13,
+  "services": {
+    "yzboard-web.service": {
+      "NRestarts": "0",
+      "ActiveState": "active"
+    },
+    "yzboard-horizon.service": {
+      "NRestarts": "0",
+      "ActiveState": "active"
+    },
+    "yzboard-websocket.service": {
+      "NRestarts": "0",
+      "ActiveState": "active"
+    }
+  },
+  "horizon": "running",
+  "service_errors": 0,
+  "data": {
+    "environment_preserved": true,
+    "node_configuration_preserved": true,
+    "migration_count": 141,
+    "migration_batch": 80,
+    "failed_jobs": 713,
+    "failed_jobs_change": 0
+  },
+  "machines": {
+    "previous_reporting": 48,
+    "recovered_with_fresh_heartbeat": 48,
+    "currently_reporting": 48,
+    "websocket_connections": 48
+  },
+  "main_script": "assets/admin-P0pQzbct.js",
+  "main_script_sha256": "bb07e8cd3228ca46ad0b91c2b4d1154ca68e64e59b8ed89c92ff5847c3b1fab1",
+  "validation": {
+    "source_commit": "199c5a4218dd03ba09070f18928648cd86f61639",
+    "sqlite": {
+      "tests": 13,
+      "assertions": 87
+    },
+    "mariadb": {
+      "tests": 13,
+      "assertions": 87
+    },
+    "composer_lock_sha256": "13f51448280db6f551f41d6998656239af62e4c63da20ebd31b75a99d0756e70",
+    "platform_passed": true
+  },
+  "source_files": 996
+}

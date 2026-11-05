@@ -2,6 +2,8 @@
 
 ## 2.3.0 - 2026-11-06
 
+[已正式发布](https://github.com/P0me1oo/YZboard/releases/tag/v2.3.0)，Solid-US LA 已完成原生更新；来源、附件及验证见[发布记录](docs/release-2.3.0.md)。
+
 - 修复 VLESS XHTTP 外层高级参数和分流配置在通用、Shadowrocket 订阅与中转配置中的遗漏，按类型恢复空对象，迁移旧会话和连接池字段。
 - 管理端 0.88.0 提供普通与分流模板、模式和下载通道编辑；未启用 VLESS Encryption 时切换 XHTTP 清除默认 Vision，保存前检查冲突配置。
 - 配套 Agent v2.32.0 下发 XHTTP ALPN，原生 HTTP/3 按 UDP 检查端口及管理防火墙；两个核心固定依赖不变，无数据库迁移。用法见[VLESS XHTTP](docs/vless-xhttp.md)。

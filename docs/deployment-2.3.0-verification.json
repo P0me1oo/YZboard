@@ -1,0 +1,55 @@
+{
+  "checked_at": "2026-11-05T17:35:21Z",
+  "server": "Solid-US LA",
+  "directory": "/root/yzboard",
+  "user": "www-data",
+  "version": "2.3.0",
+  "source": "0f75b799dbcfb757c1e023143f9123fb2a015cde",
+  "previous": {
+    "version": "2.2.0",
+    "source": "84fa6c465c6391f5340a8d60262991d06120c923"
+  },
+  "runtime": {
+    "php": "8.4.27",
+    "mariadb": "12.3.3",
+    "redis": "8.10.3"
+  },
+  "switch": {
+    "stopped_at": "2026-11-05T17:33:30Z",
+    "services_checked_at": "2026-11-05T17:33:34Z"
+  },
+  "services": {
+    "web": "active",
+    "horizon": "active",
+    "websocket": "active",
+    "automatic_restarts": 0,
+    "new_errors": 0
+  },
+  "http": {
+    "admin": 200,
+    "home": 200,
+    "guest_config": 200,
+    "verified_scripts": 6
+  },
+  "machines": {
+    "enabled": 50,
+    "recently_reporting": 48,
+    "previous_online_recovered": 48,
+    "websocket_connections": 47,
+    "upgraded": false
+  },
+  "data": {
+    "environment_preserved": true,
+    "migration_batch": 80,
+    "migration_count": 141,
+    "failed_jobs": 713,
+    "failed_jobs_change": 0
+  },
+  "validation": {
+    "source_files_checked": 991,
+    "panel_run": 42066176878,
+    "dash_baseline_run": 42069528497,
+    "dash_supplement_run": 42075046371,
+    "agent_run": 42066161712
+  }
+}

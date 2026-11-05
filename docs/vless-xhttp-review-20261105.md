@@ -1,6 +1,6 @@
 # VLESS XHTTP 支持审查
 
-> 后续修复：面板 2.3.0、管理端 0.88.0、Agent v2.32.0 已在本地完成以下问题的配置适配，原问题描述保留为检查记录。当前用法见 [VLESS XHTTP](vless-xhttp.md)，验证状态见[兼容矩阵](../YZ_COMPATIBILITY.md)。尚未发布或部署。
+> 后续修复：面板 2.3.0、管理端 0.88.0、Agent v2.32.0 已完成以下问题的配置适配并正式发布，原问题描述保留为检查记录。当前用法见 [VLESS XHTTP](vless-xhttp.md)，验证状态见[兼容矩阵](../YZ_COMPATIBILITY.md)。面板与集成管理端已在 Solid-US LA 更新；Agent 节点保持原版本。
 
 检查日期：2026-11-05。项目维护者：`P0me1oo`。
 

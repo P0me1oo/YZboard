@@ -121,5 +121,129 @@
       "sha256": "a0e3cc56418fd2fe69682ec2b32fb51936cb4484ab1165d7303318cc7e2457f3"
     },
     "limits": "Local targeted tests and browser fixtures; no production deployment or real public-node validation."
+  },
+  "release": {
+    "status": "published",
+    "method": "manual",
+    "github_actions": "not_executed_due_to_billing_lock",
+    "local_validation_reused": true,
+    "production_updated": false,
+    "docker_published": false,
+    "projects": [
+      {
+        "repo": "P0me1oo/YZboard",
+        "tag": "v2.6.1",
+        "url": "https://github.com/P0me1oo/YZboard/releases/tag/v2.6.1",
+        "published_at": "2026-11-07T07:22:37Z",
+        "assets": [
+          {
+            "name": "release-manifest.json",
+            "size": 1745,
+            "digest": "sha256:6fff4492d492bfe6b09ad0da5693b4e7c0c4f314c931992ef0e6045178b70ea6"
+          },
+          {
+            "name": "SHA256SUMS",
+            "size": 175,
+            "digest": "sha256:9b5a1ca207eca0658a12acb58095e841c1f3c372c8bd6fc61c0525a1fef65bda"
+          },
+          {
+            "name": "yzboard-2.6.1.tar.gz",
+            "size": 69637051,
+            "digest": "sha256:bc48bd4fbc9a1a4d2ede7f01812f57da3942c34a9832501103905c8c5a774c2e"
+          }
+        ]
+      },
+      {
+        "repo": "P0me1oo/YZboard-Dash",
+        "tag": "v0.91.1",
+        "url": "https://github.com/P0me1oo/YZboard-Dash/releases/tag/v0.91.1",
+        "published_at": "2026-11-07T07:22:37Z",
+        "assets": [
+          {
+            "name": "release-manifest.json",
+            "size": 1745,
+            "digest": "sha256:6fff4492d492bfe6b09ad0da5693b4e7c0c4f314c931992ef0e6045178b70ea6"
+          },
+          {
+            "name": "SHA256SUMS",
+            "size": 181,
+            "digest": "sha256:b0ae87b50ebe71b9228900fd09d7a13cd5a65e5ef06f236d8fc19948eb68cc02"
+          },
+          {
+            "name": "yzboard-dash-0.91.1.tar.gz",
+            "size": 4104497,
+            "digest": "sha256:93228e911123e59ada52c9ea944ff0a745b5f9cb5067893a91bc7485498d75b6"
+          }
+        ]
+      },
+      {
+        "repo": "P0me1oo/YZ-Agent",
+        "tag": "v2.33.1",
+        "url": "https://github.com/P0me1oo/YZ-Agent/releases/tag/v2.33.1",
+        "published_at": "2026-11-07T07:22:37Z",
+        "assets": [
+          {
+            "name": "install.sh",
+            "size": 65427,
+            "digest": "sha256:5a2131fee6ff3c83fba37c180e0a71c2180209e2fcc39cb2bdbab43725a9c23d"
+          },
+          {
+            "name": "SHA256SUMS",
+            "size": 997,
+            "digest": "sha256:05c7a1b7e028a8c5f491faaea5c3049ff021fe0384cd3a1ff36e96ef1aa6f0a9"
+          },
+          {
+            "name": "xbctl-linux-amd64",
+            "size": 33108128,
+            "digest": "sha256:9d4f5fd109409f4d242bc4f592ec2950edaa66b52c09c401a99876b6f76583ea"
+          },
+          {
+            "name": "xbctl-linux-amd64.buildinfo.txt",
+            "size": 4879,
+            "digest": "sha256:00ceeaf23845d14fbd534dc01ce82ef019e6619cf2b4c852a7c2791b3ec586a1"
+          },
+          {
+            "name": "xbctl-linux-arm64",
+            "size": 30867616,
+            "digest": "sha256:bb85f8b9b15bda7dc7cde3fe9a034e4a2f977f3ee7e44c53db91789626e11095"
+          },
+          {
+            "name": "xbctl-linux-arm64.buildinfo.txt",
+            "size": 4881,
+            "digest": "sha256:794a32bac2f76b395a393e873727dcd4171f04e8da2831603c63d2d93a420371"
+          },
+          {
+            "name": "xboard-node-linux-amd64",
+            "size": 78864544,
+            "digest": "sha256:6d7cc53f262fd24d0c0b0db538774574e82470696a7250fa798010de9473aa7d"
+          },
+          {
+            "name": "xboard-node-linux-arm64",
+            "size": 72876192,
+            "digest": "sha256:8e1c3ffc0b4e724a088d82b11690448541c68216d6dc533d55c80d58718582cd"
+          },
+          {
+            "name": "yz-agent-linux-amd64",
+            "size": 78864544,
+            "digest": "sha256:6d7cc53f262fd24d0c0b0db538774574e82470696a7250fa798010de9473aa7d"
+          },
+          {
+            "name": "yz-agent-linux-amd64.buildinfo.txt",
+            "size": 18446,
+            "digest": "sha256:177b82a0676f6392d9bf39c3c690cead0b2cb7407758ec77c97275aa6b1b34ac"
+          },
+          {
+            "name": "yz-agent-linux-arm64",
+            "size": 72876192,
+            "digest": "sha256:8e1c3ffc0b4e724a088d82b11690448541c68216d6dc533d55c80d58718582cd"
+          },
+          {
+            "name": "yz-agent-linux-arm64.buildinfo.txt",
+            "size": 18448,
+            "digest": "sha256:17e20f6d73679b11279b84c34ba40ddea7a380ff84e50e9cdbbc033a4127fd73"
+          }
+        ]
+      }
+    ]
   }
 }

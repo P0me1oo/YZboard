@@ -72,6 +72,7 @@ class User extends Authenticatable
     protected $dateFormat = 'U';
     protected $guarded = ['id'];
     protected $casts = [
+ 'auto_speed_limit' => 'array',
         'created_at' => 'timestamp',
         'updated_at' => 'timestamp',
         'banned' => 'boolean',

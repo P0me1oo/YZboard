@@ -40,7 +40,16 @@ class NodeReportService
         array $relayTraffic,
         array $relayUserTraffic = []
     ): ?NodeReportBatch {
-        $traffic = $this->normalizeTraffic($traffic);
+        // 已接收批次按原快照重试；撤权或宽限到期不能令确认丢失后的重传永远失败。
+        $reportId = trim((string) $reportId);
+        if ($reportId !== '') {
+            $existing = NodeReportBatch::where('server_id', $node->id)->where('report_key', hash('sha256', $reportId))->first();
+            if ($existing) {
+                if ($existing->status === NodeReportBatch::STATUS_FAILED) DB::afterCommit(fn () => ProcessNodeReportBatch::dispatch((int) $existing->id));
+                return $existing;
+            }
+        }
+        $traffic = TrafficPayload::normalize($traffic);
         $rawTraffic = $traffic;
         $serverSnapshot = ['id' => (int) $node->id, 'rate' => $node->getEffectiveRate(), 'type' => $node->type];
         $protocol = $node->type;
@@ -56,13 +65,18 @@ class NodeReportService
                 'rate' => (float) ($serverSnapshot['rate'] ?? 1),
                 'type' => (string) ($serverSnapshot['type'] ?? $protocol),
             ];
-            $traffic = $this->normalizeTraffic((array) $traffic);
+            $traffic = TrafficPayload::normalize((array) $traffic);
         }
+        TrafficPayload::validateRate($traffic, $serverSnapshot['rate']);
 
         $relayTraffic = ServerService::normalizeRelayTraffic($node, $relayTraffic);
         $relayUserTraffic = ServerService::normalizeRelayUserTraffic($node, $relayUserTraffic);
+        app(NodeTrafficAuthorization::class)->assertAllowed($node, array_unique([
+            ...array_keys($rawTraffic), ...array_keys($traffic), ...array_keys($relayUserTraffic),
+        ]));
         $relayRates = app(RelayTrafficBilling::class)->snapshotRates($node, $relayUserTraffic);
         if ($relayRates !== []) {
+            TrafficPayload::validateRate($traffic, max($serverSnapshot['rate'], ...array_values($relayRates)));
             $serverSnapshot['relay_rates'] = $relayRates;
         }
         if ($traffic === [] && $rawTraffic === [] && $relayTraffic === [] && $relayUserTraffic === []) {
@@ -114,28 +128,4 @@ class NodeReportService
         }, 5);
     }
 
-    /**
-     * @return array<int, array{0: int, 1: int}>
-     */
-    private function normalizeTraffic(array $traffic): array
-    {
-        $normalized = [];
-        foreach ($traffic as $userId => $value) {
-            if (!is_numeric($userId) || !is_array($value) || count($value) !== 2) {
-                continue;
-            }
-            if (!isset($value[0], $value[1]) || !is_numeric($value[0]) || !is_numeric($value[1])) {
-                continue;
-            }
-
-            $u = max(0, (int) $value[0]);
-            $d = max(0, (int) $value[1]);
-            if ($u === 0 && $d === 0) {
-                continue;
-            }
-            $normalized[(int) $userId] = [$u, $d];
-        }
-
-        return $normalized;
-    }
 }

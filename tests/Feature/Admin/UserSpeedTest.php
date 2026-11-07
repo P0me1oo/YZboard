@@ -66,6 +66,7 @@ class UserSpeedTest extends TestCase
         $this->report($second, ['user_speeds' => [$user->id => [30, 40]]]);
         $this->report($extra, ['user_speeds' => [$user->id => [5, 10]]]);
         $this->assertSame([
+            'temporary_speed_limits' => [],
             'upload_speed' => 135, 'download_speed' => 250,
             'speed_partial' => false, 'speed_updated_at' => $oldest,
         ], $this->speed($user));
@@ -129,6 +130,15 @@ class UserSpeedTest extends TestCase
         $this->assertSame(2048, $frame['users'][$user->id]['download_speed']);
         $this->assertArrayNotHasKey('upload_speed', $user->fresh()->getAttributes());
         $this->assertSame([], $snapshots->snapshot($snapshots->validate([]))['users']);
+    }
+
+    public function test_temporary_limits_only_show_fresh_unexpired_node_reports(): void
+    {
+        $user=$this->user();$node=$this->node();
+        Cache::put('node:operations:'.$node->id,['received_at'=>time(),'auto_speed'=>[$user->id=>['limit_mbps'=>12,'expires_at'=>time()+600]]],300);
+        $this->assertSame(12,$this->speed($user)['temporary_speed_limits'][0]['limit_mbps']);
+        Cache::put('node:operations:'.$node->id,['received_at'=>time()-100,'auto_speed'=>[$user->id=>['limit_mbps'=>12,'expires_at'=>time()+600]]],300);
+        $this->assertSame([],$this->speed($user)['temporary_speed_limits']);
     }
 
     public function test_cache_failure_is_unknown(): void

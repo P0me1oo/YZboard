@@ -16,7 +16,7 @@ class UserObserver
   public function updated(User $user): void
   {
     // 在提交前保存旧权限组，提交后模型的原始属性已变成新值。
-    $syncFields = ['group_id', 'group_ids', 'uuid', 'speed_limit', 'device_limit', 'conn_limit', 'conn_rate_limit', 'banned', 'expired_at', 'transfer_enable', 'u', 'd', 'plan_id'];
+    $syncFields = ['group_id', 'group_ids', 'uuid', 'speed_limit', 'auto_speed_limit', 'device_limit', 'conn_limit', 'conn_rate_limit', 'banned', 'expired_at', 'transfer_enable', 'u', 'd', 'plan_id'];
     $needsSync = $user->wasChanged($syncFields);
     $oldGroups = $user->wasChanged(['group_id', 'group_ids'])
       ? (new User(['group_id' => $user->getOriginal('group_id'), 'group_ids' => $user->getOriginal('group_ids')]))->effectiveGroupIds()

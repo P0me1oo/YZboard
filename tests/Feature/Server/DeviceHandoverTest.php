@@ -26,11 +26,7 @@ class DeviceHandoverTest extends TestCase
     {
         parent::setUp();
         Cache::flush();
-        $this->mock(Setting::class, function ($mock): void {
-            $mock->shouldReceive('get')->andReturnUsing(fn ($key, $default = null) => [
-                'server_token' => 'device-handover-test-only', 'server_ws_enable' => 0,
-            ][$key] ?? $default);
-        });
+        admin_setting(['server_token' => 'device-handover-test-only', 'server_ws_enable' => 0]);
         $this->mock(DeviceStateService::class, fn ($mock) => $mock->shouldReceive('getDeviceSources')->andReturn([]));
         $this->node = Server::create([
             'name' => '设备换网测试', 'type' => Server::TYPE_VMESS, 'host' => '127.0.0.1',
@@ -152,6 +148,7 @@ class DeviceHandoverTest extends TestCase
         $connection = \Mockery::mock(TcpConnection::class);
         $connection->realtime = true;
         $connection->nodeId = (int) $this->node->id;
+        \App\Services\NodeConnectionAuth::bind($connection, 'device-handover-test-only');
         $connection->shouldReceive('send')->andReturnUsing(function ($data) use (&$frames) {
             $frames[] = json_decode($data, true);
             return true;
@@ -198,6 +195,7 @@ class DeviceHandoverTest extends TestCase
         $connection = \Mockery::mock(TcpConnection::class);
         $connection->realtime = true;
         $connection->nodeId = (int) $this->node->id;
+        \App\Services\NodeConnectionAuth::bind($connection, 'device-handover-test-only');
         $connection->shouldReceive('send')->andReturnUsing(function ($data) use (&$frames) {
             $frames[] = json_decode($data, true);
             return true;

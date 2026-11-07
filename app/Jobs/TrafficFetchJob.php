@@ -31,6 +31,9 @@ class TrafficFetchJob implements ShouldQueue
 
     public function handle(): void
     {
+        // 已排队的旧任务也不能把负流量写入账户。
+        $this->data = \App\Services\TrafficPayload::normalize($this->data);
+        \App\Services\TrafficPayload::validateRate($this->data, $this->server['rate']);
         $userIds = array_keys($this->data);
 
         foreach ($this->data as $uid => $v) {

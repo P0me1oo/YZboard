@@ -328,6 +328,7 @@ class UserController extends Controller
                 $params += [
                     'transfer_enable' => $plan->transfer_enable * 1073741824,
                     'speed_limit' => $plan->speed_limit,
+                    'auto_speed_limit' => $plan->auto_speed_limit,
                     'device_limit' => $plan->device_limit,
                     'conn_limit' => $plan->conn_limit,
                     'conn_rate_limit' => $plan->conn_rate_limit,

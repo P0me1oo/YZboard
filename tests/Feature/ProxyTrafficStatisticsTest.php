@@ -30,7 +30,7 @@ class ProxyTrafficStatisticsTest extends TestCase
         DB::table('v2_settings')->where('name', 'proxy_traffic_started_at')->update(['value' => (string) now()->startOfDay()->timestamp]);
         Bus::fake([ProcessNodeReportBatch::class]);
         $this->user = User::create(['email' => 'proxy-traffic@example.test', 'password' => Str::random(32),
-            'uuid' => (string) Str::uuid(), 'token' => Str::random(32), 'is_admin' => true]);
+            'uuid' => (string) Str::uuid(), 'token' => Str::random(32), 'is_admin' => true, 'group_id' => 1]);
         Sanctum::actingAs($this->user);
     }
 
@@ -42,7 +42,7 @@ class ProxyTrafficStatisticsTest extends TestCase
     private function node(string $name, ?ServerMachine $machine = null, ?Server $entry = null): Server
     {
         return Server::create(['name' => $name, 'type' => 'vless', 'host' => 'example.test', 'port' => 443,
-            'server_port' => 443, 'rate' => 3, 'group_ids' => [], 'enabled' => true,
+            'server_port' => 443, 'rate' => 3, 'group_ids' => [1], 'enabled' => true,
             'machine_id' => $machine?->id, 'relay_entry_id' => $entry?->id]);
     }
 

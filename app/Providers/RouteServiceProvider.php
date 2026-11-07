@@ -70,9 +70,13 @@ class RouteServiceProvider extends ServiceProvider
         // 控制器里已有的 60 秒间隔只按邮箱算，换个邮箱就能接着刷，
         // 这里的 IP 维度用来防止刷爆 SMTP 配额。
         RateLimiter::for('email-verify', function (Request $request) {
-            return Limit::perMinutes(60, 5)
-                ->by($this->credentialKey($request))
-                ->response($this->tooManyAttempts());
+            return [
+                Limit::perMinutes(60, 5)->by('mail-pair:' . $this->credentialKey($request))->response($this->tooManyAttempts()),
+                Limit::perMinutes(60, max(1, (int) config('security.email_verify.per_ip_hour', 30)))
+                    ->by('mail-source:' . $this->clientKey($request))->response($this->tooManyAttempts()),
+                Limit::perMinutes(60, max(1, (int) config('security.email_verify.per_hour', 1000)))
+                    ->by('mail-global')->response($this->tooManyAttempts()),
+            ];
         });
 
         // 免密登录入口：按 IP。链接里的凭据是 32 位十六进制随机串，穷举不现实，

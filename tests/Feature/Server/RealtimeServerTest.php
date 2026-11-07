@@ -106,6 +106,9 @@ class RealtimeServerTest extends TestCase
     public function test_deduplicated_traffic_does_not_modify_current_state(): void
     {
         Bus::fake();
+        User::forceCreate(['id' => 1, 'email' => 'deduplicated@example.invalid', 'password' => 'unused',
+            'uuid' => '11111111-1111-4111-8111-111111111111', 'token' => str_repeat('a', 32),
+            'group_id' => 1, 'transfer_enable' => 100000]);
         $session = $this->begin();
         $this->postJson('/api/v2/server/realtime/state', $this->auth() + [
             'epoch' => $session['epoch'], 'sequence' => 3, 'state' => ['connection_counts' => [1 => 7]],

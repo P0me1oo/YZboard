@@ -62,3 +62,9 @@ LA 接管后已经处理新写入。回退前必须停写并核对、同步这�
 
 机器可读记录：[migration-solid-us-la-20261105.json](migration-solid-us-la-20261105.json)。LA 同时保存在 `/etc/yzboard/migration-solid-us-la-20261105.json` 和 `/root/yzboard/storage/logs/migration-solid-us-la-20261105.json`；KC 归档中保存副本。
 
+## 迁移后 PowerDNS API 访问修复
+
+2026-11-06（北京时间）检查发现，Hytron-HK（`82.152.164.103`）的 TCP 443 防火墙和 Nginx API 白名单未包含 LA，导致面板请求 PowerDNS API 超时。已在两处加入 LA 的 `172.81.59.192`，保留既有访问规则；Nginx 配置检查通过后完成重载，PowerDNS 服务保持正常运行。
+
+从 LA 验证区域 API 返回 200，随后同步 Xtom 前置池。验证时，22 组托管 DNS 记录与 PowerDNS 实际记录一致，权威 DNS、Cloudflare 和 Google 公共解析器均正常解析 `xtom.52mjj.tech`。19 名用户全部完成分配，XTom¹ 10 人、XTom² 9 人，个人订阅域名全部就绪；美国-Bread｜三网优化¹ 保持启用并绑定该池。此次验证未包含客户端实际代理连接测试。
+

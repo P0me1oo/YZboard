@@ -2760,6 +2760,11 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     },
     "toolbar": {
       "unify_reality": {
+        "loading_pools": "正在读取关联前置池…",
+        "scope_failed": "读取关联前置池失败，请重试",
+        "reload_pools": "重新读取关联池",
+        "related_pools": "将同步关联前置池：",
+        "linked_success": "已统一 {{count}} 个节点，并同步 {{pools}} 个前置池",
         "generate_short_failed": "生成 Short ID 失败，请重试",
         "mode": "统一方式",
         "node_mode": "统一成某个节点",

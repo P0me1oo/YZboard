@@ -45,6 +45,7 @@ class PlanController extends Controller
     public function save(PlanSave $request)
     {
         $params = $request->validated();
+ if(array_key_exists('auto_speed_limit',$params))$params['auto_speed_limit']=\App\Services\AutoSpeedRule::normalize($params['auto_speed_limit'],(int)($params['speed_limit']??0));
         $params['group_ids'] = array_values(array_map('intval', $params['group_ids']));
         $params['group_id'] = $params['group_ids'][0] ?? null;
         
@@ -68,6 +69,7 @@ class PlanController extends Controller
                         'group_ids' => json_encode($params['group_ids']),
                         'transfer_enable' => $params['transfer_enable'] * 1073741824,
                         'speed_limit' => $params['speed_limit'] ?? null,
+ 'auto_speed_limit'=>isset($params['auto_speed_limit'])?json_encode($params['auto_speed_limit']):($request->exists('auto_speed_limit')?null:($plan->auto_speed_limit?json_encode($plan->auto_speed_limit):null)),
                         'device_limit' => $params['device_limit'] ?? null,
                         'conn_limit' => $params['conn_limit'] ?? null,
                         'conn_rate_limit' => $params['conn_rate_limit'] ?? null,

@@ -45,6 +45,7 @@ class PlanSave extends FormRequest
             'group_ids' => 'array',
             'group_ids.*' => 'required|integer|distinct' . ($this->legacyGroupInput ? '' : '|exists:v2_server_group,id'),
             'speed_limit' => 'integer|nullable|min:0',
+ 'auto_speed_limit'=>'nullable|array',
             'device_limit' => 'integer|nullable|min:0',
             'conn_limit' => 'integer|nullable|min:0',
             'conn_rate_limit' => 'integer|nullable|min:0',
@@ -60,6 +61,7 @@ class PlanSave extends FormRequest
     {
         $validator->after(function (Validator $validator) {
             $this->validatePrices($validator);
+ if($this->exists('auto_speed_limit')) {try {\App\Services\AutoSpeedRule::normalize($this->input('auto_speed_limit'), (int)$this->input('speed_limit'));} catch(\Illuminate\Validation\ValidationException $e){$validator->errors()->add('auto_speed_limit',$e->getMessage());}}
         });
     }
 

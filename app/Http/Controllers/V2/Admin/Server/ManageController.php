@@ -7,9 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ServerSave;
 use App\Models\Server;
 use App\Models\ServerGroup;
-use App\Models\BalancerMember;
-use App\Models\BalancerPool;
-use App\Services\PoolRealityService;
+use App\Services\NodeRealityService;
 use App\Services\ServerPortService;
 use App\Services\ServerRelayService;
 use App\Services\ServerService;
@@ -408,12 +406,28 @@ class ManageController extends Controller
         }
     }
 
-    /** 统一前置池需要一致的 Reality 参数；整批写入，不返回或记录密钥。 */
+    /** 读取本次勾选节点关联的池，供管理员确认模板同步范围。 */
+    public function batchRealityScope(Request $request)
+    {
+        $params = $request->validate(['ids' => 'required|array|min:2|max:500', 'ids.*' => 'required|integer|distinct|min:1']);
+        try {
+            return $this->success(app(NodeRealityService::class)->scope($params['ids']))->header('Cache-Control', 'no-store, private');
+        } catch (ValidationException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            Log::error('读取 Reality 关联池失败', ['exception' => get_class($e)]);
+            return $this->fail([500, '读取关联前置池失败，请重试']);
+        }
+    }
+
+    /** 只更新勾选节点，并联动其前置池模板；整批写入，不返回或记录密钥。 */
     public function batchReality(Request $request)
     {
         $params = $request->validate([
             'ids' => 'required|array|min:2|max:500',
             'ids.*' => 'required|integer|distinct|min:1',
+            'pool_ids' => 'sometimes|array|max:500',
+            'pool_ids.*' => 'required|integer|distinct|min:1',
             'mode' => 'required|in:node,manual',
             'source_id' => 'prohibited_unless:mode,node|required_if:mode,node|integer|min:1',
             'reality_settings' => 'prohibited_unless:mode,manual|required_if:mode,manual|array:private_key,public_key,short_id,server_name,server_port',
@@ -425,55 +439,7 @@ class ManageController extends Controller
         ]);
 
         try {
-            return DB::transaction(function () use ($params) {
-                $nodes = Server::whereIn('id', $params['ids'])->orderBy('id')->lockForUpdate()->get()->keyBy('id');
-                if ($nodes->count() !== count($params['ids'])) {
-                    throw ValidationException::withMessages(['ids' => '所选节点已发生变化，请刷新后重新选择']);
-                }
-                foreach ($nodes as $node) {
-                    if (!in_array($node->type, ['vless', 'trojan'], true) || (int) data_get($node->protocol_settings, 'tls') !== 2) {
-                        throw ValidationException::withMessages(['ids' => $node->name . '：请选择 VLESS 或 Trojan Reality 节点']);
-                    }
-                    if ($node->parent_id || $node->balancer_role !== null) {
-                        throw ValidationException::withMessages(['ids' => $node->name . '：请选择实际运行的独立节点']);
-                    }
-                }
-                if ($params['mode'] === 'node') {
-                    $source = $nodes->get((int) $params['source_id']);
-                    if (!$source) throw ValidationException::withMessages(['source_id' => '请选择本次勾选的节点作为基准']);
-                    $settings = PoolRealityService::prepare(new BalancerPool(), $source, []);
-                } else {
-                    $settings = PoolRealityService::prepare(new BalancerPool(), $nodes->first(), [
-                        ...$params['reality_settings'],
-                        'short_id' => $params['reality_settings']['short_id'] ?? '',
-                    ]);
-                }
-                // 在内存中准备完整批次；保留传输、独立回源、防盗用和节点其他参数。
-                foreach ($nodes as $node) {
-                    PoolRealityService::apply($node, $settings);
-                }
-                $members = BalancerMember::with(['pool' => fn ($query) => $query->lockForUpdate()])
-                    ->whereIn('source_node_id', $nodes->keys())->lockForUpdate()->get();
-                foreach ($members as $member) {
-                    $node = $nodes->get($member->source_node_id);
-                    $reference = (array) data_get($member->pool?->template_config, 'protocol_settings.reality_settings', []);
-                    foreach (PoolRealityService::FIELDS as $field) {
-                        $value = $reference[$field] ?? ($field === 'server_port' ? 443 : '');
-                        if (in_array($field, ['short_id', 'server_name'], true)) $value = strtolower(trim((string) $value));
-                        if ($value != $settings[$field]) {
-                            throw ValidationException::withMessages(['ids' => $node->name . '：前置池使用不同的 Reality 配置，请在前置池中统一或先移除该成员']);
-                        }
-                    }
-                }
-                $updated = 0;
-                foreach ($nodes as $node) {
-                    if ($node->isDirty()) {
-                        $node->save();
-                        $updated++;
-                    }
-                }
-                return $this->success(['count' => $nodes->count(), 'updated' => $updated]);
-            }, 3);
+            return $this->success(app(NodeRealityService::class)->apply($params));
         } catch (ValidationException $e) {
             throw $e;
         } catch (\Exception $e) {

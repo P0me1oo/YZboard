@@ -179,7 +179,25 @@ class ServerService
      */
     public static function getAvailableUsers(Server $node, ?int $userId = null)
     {
-        if (MachineTrafficService::nodeBlocked($node)) {
+        return self::usersForNode($node, $userId, false);
+    }
+
+    public static function getTrafficUsers(Server $node, array $ids)
+    {
+        return self::usersForNode($node, null, true, $ids);
+    }
+
+    /** 下发用户前持久化结算授权；不把普通设备查询变成数据库写入。 */
+    public static function getUsersForSync(Server $node)
+    {
+        $users = self::getAvailableUsers($node);
+        app(NodeTrafficAuthorization::class)->remember($node, $users);
+        return $users;
+    }
+
+    private static function usersForNode(Server $node, ?int $userId, bool $settlement, array $ids = [])
+    {
+        if (!$settlement && MachineTrafficService::nodeBlocked($node)) {
             return collect();
         }
         // 插件可能依赖完整名单；普通单用户准入直接查询一行，避免每次换网加载整节点用户。
@@ -198,24 +216,24 @@ class ServerService
         if (empty($groupIds)) {
             return collect();
         }
-        $fields = ['id', 'uuid', 'speed_limit', 'device_limit', 'conn_limit', 'conn_rate_limit'];
+        $fields = ['id', 'uuid', 'auto_speed_limit', 'speed_limit', 'device_limit', 'conn_limit', 'conn_rate_limit'];
         if ($node->type === Server::TYPE_WIREGUARD) {
             $fields[] = 'expired_at';
         }
         $users = User::toBase()
             ->when($userId !== null, fn ($query) => $query->where('id', $userId))
+            ->when($settlement && !isset(HookManager::getFilters()['server.users.get']), fn ($query) => $query->whereIn('id', $ids))
             ->where(function ($query) use ($groupIds) {
                 $query->whereIn('group_id', $groupIds);
                 foreach ($groupIds as $groupId) {
                     $query->orWhereJsonContains('group_ids', (int) $groupId);
                 }
             })
-            ->whereRaw('u + d < transfer_enable')
-            ->where(function ($query) {
-                $query->where('expired_at', '>=', time())
-                    ->orWhere('expired_at', NULL);
+            ->when(!$settlement, function ($query) {
+                $query->whereRaw('u + d < transfer_enable')->where(function ($query) {
+                    $query->where('expired_at', '>=', time())->orWhere('expired_at', NULL);
+                })->where('banned', 0);
             })
-            ->where('banned', 0)
             ->select($routeGroups === null ? $fields : [...$fields, 'group_id', 'group_ids'])
             ->orderBy('id')
             ->get();
@@ -233,13 +251,14 @@ class ServerService
                 return $user->relay_routes !== [];
             })->values();
         }
-        if ($node->type === Server::TYPE_WIREGUARD) {
+        if (!$settlement && $node->type === Server::TYPE_WIREGUARD) {
             foreach ($users as $user) {
                 $user->wireguard = WireGuardService::peer($node, $user);
                 unset($user->expired_at);
             }
         }
-        return HookManager::filter('server.users.get', $users, $node);
+        foreach ($users as $user) {if(is_string($user->auto_speed_limit??null))$user->auto_speed_limit=json_decode($user->auto_speed_limit,true);}
+ return HookManager::filter('server.users.get', $users, $node);
     }
 
     /** 入口认证接收各线路用户的并集，每个用户只获得与自身权限组相交的线路。 */
@@ -272,10 +291,7 @@ class ServerService
      */
     public static function processTraffic(Server $node, array $traffic): void
     {
-        $data = array_filter($traffic, fn($item) =>
-            is_array($item) && count($item) === 2
-            && is_numeric($item[0]) && is_numeric($item[1])
-        );
+        $data = TrafficPayload::normalize($traffic);
 
         if (empty($data)) {
             return;
@@ -456,7 +472,8 @@ class ServerService
      */
     public static function updateMetrics(Server $node, array $metrics): void
     {
-        if (isset($metrics['scheduling_probes'])) {
+        if (isset($metrics['operations']) && is_array($metrics['operations'])) app(NodeOperations::class)->accept($node, $metrics['operations']);
+ if (isset($metrics['scheduling_probes'])) {
             if (SchedulingProbeService::accept($node, $metrics['scheduling_probes']) && Cache::add('scheduling:refresh:' . $node->id, true, 10)) app(LandingPoolService::class)->syncForEntry($node);
         }
         $nodeType = strtoupper($node->type);
@@ -667,6 +684,8 @@ class ServerService
             'protocol' => $nodeType,
             // 节点内核独立于协议；历史节点的空值按默认 Xray 下发。
             'kernel_type' => Server::effectiveKernelType($node->kernel_type),
+ 'health_check'=>$node->health_check,
+ 'certificate_renew'=>$node->certificate_renew,
             // IPv6 连接地址需要双栈监听，防火墙跟随实际监听范围放行。
             'listen_ip' => filter_var(trim((string) $host, '[]'), FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) ? '::' : '0.0.0.0',
             'server_port' => (int) $serverPort,
@@ -963,8 +982,11 @@ class ServerService
                 continue;
             }
 
-            $u = (int) $value[0];
-            $d = (int) $value[1];
+            $u = TrafficPayload::integer($value[0], TrafficPayload::MAX_BYTES);
+            $d = TrafficPayload::integer($value[1], TrafficPayload::MAX_BYTES);
+            if ($u === null || $d === null || $u > TrafficPayload::MAX_BYTES - $d) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['relay_traffic' => '流量必须为范围内的非负整数']);
+            }
             if ($u <= 0 && $d <= 0) {
                 continue;
             }
@@ -994,6 +1016,16 @@ class ServerService
     public static function normalizeRelayUserTraffic(Server $entry, array $relayUserTraffic): array
     {
         $normalized = [];
+        $nodeIds = [];
+        foreach ($relayUserTraffic as $nodes) {
+            if (is_array($nodes)) foreach (array_keys($nodes) as $id) {
+                $id = TrafficPayload::integer($id, PHP_INT_MAX);
+                if ($id !== null && $id > 0) $nodeIds[$id] = true;
+            }
+        }
+        if ($nodeIds === []) return [];
+        // 相同落地被多个用户引用时，只读取和检查一次归属。
+        $children = ServerRelayService::childrenQuery($entry)->whereIn('id', array_keys($nodeIds))->get()->keyBy('id');
         foreach ($relayUserTraffic as $userKey => $nodes) {
             $userId = filter_var($userKey, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
             if ($userId === false || !is_array($nodes)) {
@@ -1012,14 +1044,17 @@ class ServerService
 
                 $nodeId = (int) $nodeId;
 
-                $u = max(0, (int) $value[0]);
-                $d = max(0, (int) $value[1]);
+                $u = TrafficPayload::integer($value[0], TrafficPayload::MAX_BYTES);
+                $d = TrafficPayload::integer($value[1], TrafficPayload::MAX_BYTES);
+                if ($u === null || $d === null || $u > TrafficPayload::MAX_BYTES - $d) {
+                    throw \Illuminate\Validation\ValidationException::withMessages(['relay_user_traffic' => '流量必须为范围内的非负整数']);
+                }
                 if ($u === 0 && $d === 0) {
                     continue;
                 }
 
-                $child = Server::find($nodeId);
-                if (!$child || !ServerRelayService::ownsChild($entry, $child)) {
+                $child = $children->get($nodeId);
+                if (!$child) {
                     continue;
                 }
 

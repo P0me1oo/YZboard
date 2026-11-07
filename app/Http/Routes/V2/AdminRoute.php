@@ -35,7 +35,13 @@ class AdminRoute
             'prefix' => admin_setting('secure_path', admin_setting('frontend_admin_path', hash('crc32b', config('app.key')))),
             'middleware' => ['admin', 'log', 'throttle:admin-api'],
         ], function ($router) {
-            $router->post('/realtime/ticket', [\App\Http\Controllers\V2\Admin\RealtimeController::class, 'ticket']);
+            $router->get('/statistics/reconciliation',[\App\Http\Controllers\V2\Admin\TrafficReconciliationController::class,'fetch']);
+ $router->get('/statistics/reconciliation/detail',[\App\Http\Controllers\V2\Admin\TrafficReconciliationController::class,'detail']);
+ $router->group(['prefix'=>'server/operations'],function($router){
+ $controller=\App\Http\Controllers\V2\Admin\Server\OperationsController::class;
+ $router->get('/fetch',[$controller,'fetch']);$router->get('/detail',[$controller,'detail']);$router->post('/health',[$controller,'health']);$router->post('/check',[$controller,'check']);$router->get('/certificates',[$controller,'certificates']);$router->post('/renew',[$controller,'renew']);$router->get('/topology',[$controller,'topology']);
+});
+$router->post('/realtime/ticket', [\App\Http\Controllers\V2\Admin\RealtimeController::class, 'ticket']);
             $router->get('/logs/settings', [\App\Http\Controllers\V2\Admin\LogController::class, 'settings']);
             $router->post('/logs/settings', [\App\Http\Controllers\V2\Admin\LogController::class, 'saveSettings']);
             $router->get('/logs/agent/nodes', [\App\Http\Controllers\V2\Admin\LogController::class, 'nodes']);
@@ -155,6 +161,7 @@ class AdminRoute
                 $router->post('/batchDelete', [ManageController::class, 'batchDelete']);
                 $router->post('/batchUpdate', [ManageController::class, 'batchUpdate']);
                 $router->post('/batchReality', [ManageController::class, 'batchReality']);
+                $router->get('/batchRealityScope', [ManageController::class, 'batchRealityScope']);
                 $router->post('/resetTraffic', [ManageController::class, 'resetTraffic']);
                 $router->post('/batchResetTraffic', [ManageController::class, 'batchResetTraffic']);
                 $router->get('/generateEchKey', [ManageController::class, 'generateEchKey']);

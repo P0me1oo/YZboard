@@ -12,7 +12,7 @@ final class NodeStateValidator
         $depths = [
             'alive' => 2, 'online' => 1, 'connection_counts' => 1,
             'relay_user_alive' => 3, 'relay_connection_counts' => 2,
-            'user_speeds' => 0, 'status' => 0, 'metrics' => 0,
+            'operations' => 0, 'user_speeds' => 0, 'status' => 0, 'metrics' => 0,
         ];
         $state = array_intersect_key($state, $depths);
         foreach ($state as $field => $value) {

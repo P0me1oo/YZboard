@@ -2708,6 +2708,11 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
     },
     "toolbar": {
       "unify_reality": {
+        "loading_pools": "Загрузка связанных пулов…",
+        "scope_failed": "Не удалось загрузить связанные пулы. Повторите попытку.",
+        "reload_pools": "Обновить список пулов",
+        "related_pools": "Пулы для синхронизации:",
+        "linked_success": "Параметры объединены для {{count}} узлов и {{pools}} пулов",
         "generate_short_failed": "Не удалось создать Short ID. Повторите попытку.",
         "mode": "Способ объединения",
         "node_mode": "Использовать выбранный узел",

@@ -28,7 +28,7 @@ class UniProxyController extends Controller
 
         ServerService::touchNode($node);
 
-        $response['users'] = ServerService::getAvailableUsers($node);
+        $response['users'] = ServerService::getUsersForSync($node);
 
         $eTag = sha1(json_encode($response));
         if (str_contains($request->header('If-None-Match', ''), $eTag)) {
@@ -47,6 +47,8 @@ class UniProxyController extends Controller
 
         $node = $this->getNodeInfo($request);
 
+        // 兼容把认证字段放在 JSON 顶层的旧节点。
+        unset($res['token'], $res['node_id'], $res['node_type'], $res['machine_id']);
         ServerService::processTraffic($node, $res);
 
         return $this->success(true);

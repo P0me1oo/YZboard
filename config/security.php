@@ -2,6 +2,12 @@
 
 return [
 
+    // 独立 IP 与全站额度，保留共享出口正常使用空间；两个发信入口共用预算。
+    'email_verify' => [
+        'per_ip_hour' => (int) env('EMAIL_VERIFY_PER_IP_HOUR', 30),
+        'per_hour' => (int) env('EMAIL_VERIFY_PER_HOUR', 1000),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | 浏览器安全响应头

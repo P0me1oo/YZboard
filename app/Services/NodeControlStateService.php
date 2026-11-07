@@ -16,7 +16,7 @@ class NodeControlStateService
             return [
                 'node_id' => (int) $node->id,
                 'config' => ServerService::buildNodeConfig($node),
-                'users' => ServerService::getAvailableUsers($node)->values()->toArray(),
+                'users' => ServerService::getUsersForSync($node)->values()->toArray(),
             ];
         });
     }

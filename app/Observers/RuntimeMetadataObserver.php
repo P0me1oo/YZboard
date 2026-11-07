@@ -4,6 +4,8 @@ namespace App\Observers;
 
 use App\Services\NodeRuntimeMetadata;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\ServerMachine;
+use App\Services\NodeSyncService;
 
 class RuntimeMetadataObserver
 {
@@ -14,10 +16,18 @@ class RuntimeMetadataObserver
         if ($model->wasRecentlyCreated || array_diff(array_keys($model->getChanges()), $runtimeFields) !== []) {
             NodeRuntimeMetadata::invalidate($model::class);
         }
+        if ($model instanceof ServerMachine && !$model->wasRecentlyCreated && $model->wasChanged(['token', 'is_active'])) {
+            $id = (int) $model->id;
+            $model->getConnection()->afterCommit(fn () => NodeSyncService::pushMachine($id, 'auth.revoke', []));
+        }
     }
 
     public function deleted(Model $model): void
     {
         NodeRuntimeMetadata::invalidate($model::class);
+        if ($model instanceof ServerMachine) {
+            $id = (int) $model->id;
+            $model->getConnection()->afterCommit(fn () => NodeSyncService::pushMachine($id, 'auth.revoke', []));
+        }
     }
 }

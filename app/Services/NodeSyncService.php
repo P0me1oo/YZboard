@@ -61,7 +61,7 @@ class NodeSyncService
         foreach (self::serversInGroups($groupIds) as $server) {
             if (!self::isNodeOnline($server->id)) continue;
             self::push($server->id, 'sync.users', [
-                'users' => ServerService::getAvailableUsers($server)->toArray(),
+                'users' => ServerService::getUsersForSync($server)->toArray(),
             ]);
         }
     }
@@ -85,11 +85,12 @@ class NodeSyncService
                 continue;
 
             if (ServerRelayService::hasRelayChildren($server) || $server->type === Server::TYPE_WIREGUARD) {
-                self::push($server->id, 'sync.users', ['users' => ServerService::getAvailableUsers($server)->toArray()]);
+                self::push($server->id, 'sync.users', ['users' => ServerService::getUsersForSync($server)->toArray()]);
                 continue;
             }
 
             if ($user->isAvailable()) {
+                app(NodeTrafficAuthorization::class)->remember($server, [$user]);
                 self::push($server->id, 'sync.user.delta', [
                     'action' => 'add',
                     'users' => [
@@ -97,6 +98,7 @@ class NodeSyncService
                             'id' => $user->id,
                             'uuid' => $user->uuid,
                             'speed_limit' => $user->speed_limit,
+ 'auto_speed_limit' => $user->auto_speed_limit,
                             'device_limit' => $user->device_limit,
                             'conn_limit' => $user->conn_limit,
                             'conn_rate_limit' => $user->conn_rate_limit,
@@ -133,7 +135,7 @@ class NodeSyncService
 
             // 旧组撤权可能只移除一条线路，不能误删该用户仍有权使用的其他线路。
             if (ServerRelayService::hasRelayChildren($server) || $server->type === Server::TYPE_WIREGUARD) {
-                self::push($server->id, 'sync.users', ['users' => ServerService::getAvailableUsers($server)->toArray()]);
+                self::push($server->id, 'sync.users', ['users' => ServerService::getUsersForSync($server)->toArray()]);
                 continue;
             }
 
@@ -177,7 +179,7 @@ class NodeSyncService
 
         self::push($nodeId, 'sync.config', ['config' => ServerService::buildNodeConfig($node)]);
 
-        $users = ServerService::getAvailableUsers($node)->toArray();
+        $users = ServerService::getUsersForSync($node)->toArray();
         self::push($nodeId, 'sync.users', ['users' => $users]);
     }
 

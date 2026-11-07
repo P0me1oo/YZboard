@@ -7,6 +7,7 @@ use App\Models\ServerMachine;
 use App\Services\DeviceStateService;
 use App\Services\DeviceSyncScheduler;
 use App\Services\NodeRegistry;
+use App\Services\NodeConnectionAuth;
 use App\Services\NodeRuntimeMetadata;
 use App\Services\ServerService;
 use App\Support\Setting;
@@ -102,6 +103,7 @@ class NodeWorker
         });
 
         Timer::add(self::PING_INTERVAL, function () {
+            $this->revalidateConnections();
             $seen = [];
 
             foreach (NodeRegistry::getConnectedNodeIds() as $nodeId) {
@@ -170,6 +172,23 @@ class NodeWorker
         }, [], false);
     }
 
+    /** Redis 撤销通知丢失时，空闲连接也在下次心跳前复核。 */
+    public function revalidateConnections(): void
+    {
+        $seen = [];
+        foreach (NodeRegistry::getConnectedNodeIds() as $id) {
+            $conn = NodeRegistry::get((int) $id);
+            if ($conn && !isset($seen[spl_object_id($conn)])) {
+                $seen[spl_object_id($conn)] = true;
+                NodeConnectionAuth::check($conn);
+            }
+        }
+        foreach (NodeRegistry::getConnectedMachineIds() as $id) {
+            $conn = NodeRegistry::getMachine((int) $id);
+            if ($conn && !isset($seen[spl_object_id($conn)])) NodeConnectionAuth::check($conn);
+        }
+    }
+
     public function onWebSocketConnect(TcpConnection $conn, $httpMessage): void
     {
         $queryString = '';
@@ -214,7 +233,7 @@ class NodeWorker
         $nodeId = (int) ($params['node_id'] ?? 0);
 
         $serverToken = admin_setting('server_token', '');
-        if ($token === '' || $serverToken === '' || !hash_equals($serverToken, $token)) {
+        if (!is_string($token) || $token === '' || $serverToken === '' || !hash_equals($serverToken, $token)) {
             $conn->close(json_encode([
                 'event' => 'error',
                 'data' => ['message' => 'invalid token'],
@@ -232,6 +251,7 @@ class NodeWorker
         }
 
         $conn->nodeId = $nodeId;
+        NodeConnectionAuth::bind($conn, $token);
         NodeRegistry::add($nodeId, $conn);
         Cache::put("node_ws_alive:{$nodeId}", true, 86400);
 
@@ -261,6 +281,8 @@ class NodeWorker
         $machineId = (int) ($params['machine_id'] ?? 0);
         $token = $params['token'] ?? '';
 
+        if (!is_string($token) || $token === '') { $conn->close(); return; }
+
         $machine = ServerMachine::where('id', $machineId)
             ->where('token', $token)
             ->first();
@@ -276,6 +298,8 @@ class NodeWorker
         $nodes = ServerService::getMachineNodes($machine);
 
         $machine->recordHeartbeat();
+        $conn->machineId = $machineId;
+        NodeConnectionAuth::bind($conn, $token);
         NodeRegistry::addMachine($machineId, $conn);
 
         // 把同一个连接注册到该机器下所有节点
@@ -329,6 +353,7 @@ class NodeWorker
         $body = $msg['data'] ?? [];
         if (!is_array($body)) return;
         $machineState = $event === 'machine.state' && !empty($conn->machineId) && !empty($conn->realtime);
+        if (!NodeConnectionAuth::check($conn)) return;
         $conn->lastMessageAt = time();
 
         if (!empty($conn->machineId)) {
@@ -345,6 +370,7 @@ class NodeWorker
             $nodeId = (int) ($conn->nodeId ?? 0);
         }
         if (!$machineState && (!$nodeId || NodeRegistry::get($nodeId) !== $conn || !isset($this->handlers[$event]))) return;
+        if (!$machineState && !NodeConnectionAuth::check($conn, $nodeId)) return;
         try {
             if ($machineState) {
                 $receipt = app(\App\Services\MachineStateService::class)->accept(app(NodeRuntimeMetadata::class)->machineOrFail((int) $conn->machineId), $body);
@@ -377,6 +403,7 @@ class NodeWorker
 
     public function onClose(TcpConnection $conn): void
     {
+        unset($conn->authorizeSend, $conn->authTokenHash);
         $this->admin?->close($conn);
         // 只移除通道登记。代理连接仍可能存在，设备状态由新快照或有效期管理。
         if (!empty($conn->machineId)) {
@@ -432,6 +459,10 @@ class NodeWorker
             // Machine-level events (e.g., sync.nodes)
             $machineId = $payload['machine_id'] ?? null;
             if ($machineId && $event) {
+                if ($event === 'auth.revoke') {
+                    if ($connection = NodeRegistry::getMachine((int) $machineId)) NodeConnectionAuth::check($connection);
+                    return;
+                }
                 // Update server-side registry when node membership changes
                 if ($event === 'sync.nodes') {
                     $nodeIds = array_map('intval', array_column($data['nodes'] ?? [], 'id'));

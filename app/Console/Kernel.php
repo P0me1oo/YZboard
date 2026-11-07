@@ -70,10 +70,12 @@ class Kernel extends ConsoleKernel
     {
         Cache::put(CacheKey::get('SCHEDULE_LAST_CHECK_AT', null), time());
         // v2board
+        $schedule->command('node-health:prune')->hourly()->withoutOverlapping();
         $schedule->command('xboard:statistics')->dailyAt('0:10')->onOneServer();
         // check
         $schedule->command('ddns:sync')->everyMinute()->onOneServer()->withoutOverlapping(10)->runInBackground();
         $schedule->command('balancer:sync')->everyMinute()->onOneServer()->withoutOverlapping(2);
+        $schedule->command('node:prune-traffic-grants')->everyMinute()->onOneServer()->withoutOverlapping(2);
         $schedule->command('check:order')->everyMinute()->onOneServer()->withoutOverlapping(5);
         $schedule->command('check:commission')->everyMinute()->onOneServer()->withoutOverlapping(5);
         $schedule->command('check:ticket')->everyMinute()->onOneServer()->withoutOverlapping(5);

@@ -398,6 +398,7 @@ class MachineTrafficTest extends TestCase
 
     public function test_proxy_counts_all_managed_nodes_raw_and_deduplicates_same_machine_relay_before_billing(): void
     {
+        $this->trafficUser();
         Bus::fake([ProcessNodeReportBatch::class]);
         $a = $this->machine(); $b = $this->machine();
         $entry = $this->node($a, ['rate' => 3]);
@@ -426,6 +427,7 @@ class MachineTrafficTest extends TestCase
 
     public function test_proxy_mode_switch_preserves_both_sources_and_rejects_old_source_reports(): void
     {
+        $this->trafficUser();
         Bus::fake([ProcessNodeReportBatch::class]);
         $m = $this->machine(); $node = $this->node($m);
         $this->configure($m, ['traffic_limit_gb' => 1]);
@@ -450,6 +452,7 @@ class MachineTrafficTest extends TestCase
 
     public function test_proxy_limit_recovery_and_monthly_reset_do_not_replay_old_reports(): void
     {
+        $this->trafficUser();
         Bus::fake([ProcessNodeReportBatch::class]);
         $m = $this->machine(); $on = $this->node($m);
         $off = $this->node($m, ['enabled' => false]);
@@ -473,6 +476,7 @@ class MachineTrafficTest extends TestCase
 
     public function test_proxy_receipt_failure_rolls_back_batch_and_counters_then_retries_once(): void
     {
+        $this->trafficUser();
         Bus::fake([ProcessNodeReportBatch::class]);
         $m = $this->machine(); $node = $this->node($m);
         $reports = app(NodeReportService::class);
@@ -495,6 +499,7 @@ class MachineTrafficTest extends TestCase
 
     public function test_proxy_protection_uses_raw_counters_before_billing_plugin_changes(): void
     {
+        $this->trafficUser();
         Bus::fake([ProcessNodeReportBatch::class]);
         $m = $this->machine(); $node = $this->node($m);
         $this->configure($m, ['traffic_limit_gb' => 1, 'traffic_mode' => 'proxy']);
@@ -506,5 +511,11 @@ class MachineTrafficTest extends TestCase
         $batch = app(NodeReportService::class)->accept($node, 'plugin-adjusted', [1 => [10, 20]], []);
         $this->assertSame([100, 200], $batch->traffic[1]);
         $this->assertSame(30, Traffic::view($m->fresh())['used']);
+    }
+
+    private function trafficUser(): void
+    {
+        User::forceCreate(['id' => 1, 'email' => 'machine-traffic@example.invalid', 'password' => 'test-only',
+            'uuid' => '11111111-1111-4111-8111-111111111111', 'token' => str_repeat('a', 32), 'group_id' => 1]);
     }
 }

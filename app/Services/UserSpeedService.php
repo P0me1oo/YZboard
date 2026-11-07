@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Server;
+use Illuminate\Support\Facades\Cache;
 
 /** 只读取最新运行快照，不写用户表或流量账本。单位为用户视角的字节/秒。 */
 class UserSpeedService
@@ -12,10 +13,12 @@ class UserSpeedService
         $nodes ??= Server::query()->where(function ($query) {
             $query->whereNull('relay_entry_id')->orWhere('relay_entry_id', 0);
         })->whereNull('relay_pool_id')->get(['id', 'group_ids', 'enabled']);
+        $operations = [];
         try {
             $runtime ??= app(RealtimeStateStore::class)->readMany(
                 collect($nodes)->map(fn ($node) => 'node:' . $node->id)->all()
             );
+            $operations = Cache::many(collect($nodes)->map(fn ($node) => 'node:operations:'.$node->id)->all());
         } catch (\Throwable) {
             $runtime = [];
         }
@@ -25,12 +28,20 @@ class UserSpeedService
             $upload = $download = 0;
             $known = $missing = false;
             $updatedAt = null;
+            $temporary = [];
             foreach ($nodes as $node) {
+                $op = $operations['node:operations:'.$node->id] ?? null;
+                $penalty = $op['auto_speed'][$user->id] ?? null;
+                if ($penalty && ($op['received_at'] ?? 0) >= time() - 90 && ($penalty['expires_at'] ?? 0) > time()) {
+                    $temporary[] = ['node_id' => (int)$node->id,'limit_mbps' => (int)$penalty['limit_mbps'],'expires_at' => (int)$penalty['expires_at']];
+                }
                 $state = $runtime['node:' . $node->id] ?? null;
                 $speeds = $state['data']['user_speeds'] ?? null;
                 $value = $speeds[$user->id] ?? [0, 0];
                 // 插件额外下发的用户和尚未结束的连接，以实际报告为准。
-                if (!$value[0] && !$value[1] && ($node->enabled === false || !array_intersect($groups, $node->group_ids ?? []))) continue;
+                if (!$value[0] && !$value[1] && ($node->enabled === false || !array_intersect($groups, $node->group_ids ?? []))) {
+                    continue;
+                }
                 if (!($state['fresh'] ?? false) || !is_array($speeds)) {
                     $missing = true;
                     continue;
@@ -42,7 +53,8 @@ class UserSpeedService
                 $updatedAt = $updatedAt === null ? $receivedAt : min($updatedAt, $receivedAt);
             }
             $result[$user->id] = [
-                'upload_speed' => $known ? $upload : null,
+                'temporary_speed_limits' => $temporary,
+ 'upload_speed' => $known ? $upload : null,
                 'download_speed' => $known ? $download : null,
                 'speed_partial' => $known && $missing,
                 'speed_updated_at' => $updatedAt,

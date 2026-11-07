@@ -143,6 +143,7 @@ class Server extends Model
     protected $hidden = ['auto_sort_pending'];
     protected $attributes = ['accept_proxy_protocol' => false, 'auto_firewall' => true];
     protected $casts = [
+ 'health_check' => 'array',
         'group_ids' => 'array',
         'route_ids' => 'array',
         'tags' => 'array',

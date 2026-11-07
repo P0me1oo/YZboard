@@ -130,7 +130,13 @@ class UserService
 
     public function trafficFetch(Server $server, string $protocol, array $data)
     {
+        $data = TrafficPayload::normalize($data);
+        $originalIds = array_keys($data);
+        $node = $server;
         [$server, $protocol, $data] = $this->prepareTraffic($server, $protocol, $data);
+        $data = TrafficPayload::normalize($data);
+        app(NodeTrafficAuthorization::class)->assertAllowed($node, array_unique([...$originalIds, ...array_keys($data)]));
+        TrafficPayload::validateRate($data, $server['rate']);
 
         $timestamp = strtotime(date('Y-m-d'));
         collect($data)->chunk(1000)->each(function ($chunk) use ($timestamp, $server, $protocol) {
@@ -233,6 +239,7 @@ class UserService
         $user->group_ids = $plan->effectiveGroupIds();
         $user->transfer_enable = $plan->transfer_enable * 1073741824;
         $user->speed_limit = $plan->speed_limit;
+ $user->auto_speed_limit = $plan->auto_speed_limit;
         $user->device_limit = $plan->device_limit;
         $user->conn_limit = $plan->conn_limit;
         $user->conn_rate_limit = $plan->conn_rate_limit;
@@ -257,6 +264,7 @@ class UserService
         $user->group_ids = $plan->effectiveGroupIds();
         $user->transfer_enable = $plan->transfer_enable * 1073741824;
         $user->speed_limit = $plan->speed_limit;
+ $user->auto_speed_limit = $plan->auto_speed_limit;
         $user->device_limit = $plan->device_limit;
         $user->conn_limit = $plan->conn_limit;
         $user->conn_rate_limit = $plan->conn_rate_limit;
@@ -302,6 +310,7 @@ class UserService
         $user->group_ids = $plan->effectiveGroupIds();
         $user->expired_at = time() + (admin_setting('try_out_hour', 1) * 3600);
         $user->speed_limit = $plan->speed_limit;
+ $user->auto_speed_limit = $plan->auto_speed_limit;
         $user->device_limit = $plan->device_limit;
         $user->conn_limit = $plan->conn_limit;
         $user->conn_rate_limit = $plan->conn_rate_limit;

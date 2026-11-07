@@ -1,8 +1,10 @@
 # hytron.xyz PowerDNS 部署记录
 
-维护者：P0me1oo。核对日期：2026-11-02（北京时间）。
+维护者：P0me1oo。初始部署核对：2026-11-02；最近状态核对：2026-11-06（北京时间）。
 
 ## 部署状态
+
+2026-11-06，服务器端已配置四个 NS：Hytron-HK 为 `ns1` 主权威，学长-HK¹ 为 `ns2`，Cloudnium-US 为 `ns3`，Aether-US 为 `ns4`。四台解析记录一致，`ns2` 只使用 IPv4，其余三台使用 IPv4/IPv6。两个域名的注册局均已确认四个 NS 和正确 IPv4 Glue，`ns2` 的德国旧登记已删除。10:04，所测 Cloudflare、Google、阿里和腾讯公共解析器均返回四个 NS、新 `ns2` 地址及正常业务解析；父域实际委派仍在等待发布。当前配置和登记说明见[四个 NS 部署记录](powerdns-four-nameservers-20261106.md)。德国 DNS 已停止，原数据和停用前快照见[辅助服务器迁移记录](powerdns-secondary-migration-cloudnium-us-20261106.md)。以下初始部署过程为历史记录。
 
 hytron.xyz 已加入现有 PowerDNS Authoritative 5.1.5 香港主权威和德国辅助权威。用户已确认没有需要保留的现有解析，并指定以下 NS 名称：
 
@@ -11,7 +13,9 @@ hytron.xyz 已加入现有 PowerDNS Authoritative 5.1.5 香港主权威和德国
 | 角色 | Lite 节点 | NS 名称 | IPv4 | IPv6 |
 | --- | --- | --- | --- | --- |
 | 主权威 | Hytron-HK | ns1.hytron.xyz | 82.152.164.103 | 2401:b60:1c:1::2 |
-| 辅助权威 | Bitsflow-DE Nue | ns2.hytron.xyz | 212.60.153.11 | 2602:fb54:1801:105::a |
+| 辅助权威 | 学长-HK¹ | ns2.hytron.xyz | 216.236.7.228 | 无公网 IPv6 |
+| 辅助权威 | Cloudnium-US | ns3.hytron.xyz | 192.255.175.211 | 2607:9d00:2000:39::294 |
+| 辅助权威 | Aether-US | ns4.hytron.xyz | 23.246.167.243 | 2602:faa8:502:c7::a |
 
 新区域保存 SOA、两条 NS 和两个 NS 主机的 A/AAAA，共 7 条记录。SOA 以 `ns1.hytron.xyz` 为主服务器，刷新、重试和负缓存均为 60 秒，过期为 7 天。香港通过 `SOA-EDIT-API=INCREASE` 维护序列号，德国复用现有 HMAC-SHA256 TSIG 认证进行同步。
 

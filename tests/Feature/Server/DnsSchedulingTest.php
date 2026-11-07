@@ -33,6 +33,8 @@ class DnsSchedulingTest extends TestCase
     private array $remote = [];
     private ?array $reality = null;
     private bool $loseResponse = false;
+    private bool $loseReplacementResponse = false;
+    private ?string $failedZone = null;
 
     protected function setUp(): void
     {
@@ -42,14 +44,22 @@ class DnsSchedulingTest extends TestCase
         Http::fake(function ($request) {
             $this->assertStringStartsWith('https://dns-api.example.test/api/v1/servers/localhost/zones/', $request->url());
             $this->assertNotEmpty($request->header('X-API-Key'));
-            if ($request->method() === 'GET') return Http::response(['name' => 'pool.example.com.', 'rrsets' => array_values($this->remote)]);
+            $zone = urldecode(basename($request->url()));
+            if ($zone === $this->failedZone) return Http::response([], 503);
+            if ($request->method() === 'GET') return Http::response(['name' => $zone, 'rrsets' => array_values(array_filter($this->remote,
+                fn ($record) => $record['name'] === $zone || str_ends_with($record['name'], '.' . $zone)))]);
             $this->assertSame('PATCH', $request->method());
+            $replacement = false;
             foreach ($request['rrsets'] as $rrset) {
+                $this->assertTrue($rrset['name'] === $zone || str_ends_with($rrset['name'], '.' . $zone));
                 $key = $rrset['name'] . '|' . $rrset['type'];
                 if ($rrset['changetype'] === 'DELETE') unset($this->remote[$key]);
-                else $this->remote[$key] = $rrset;
+                else { $this->remote[$key] = $rrset; $replacement = true; }
             }
-            if ($this->loseResponse) { $this->loseResponse = false; return Http::response([], 503); }
+            if ($this->loseResponse || ($this->loseReplacementResponse && $replacement)) {
+                $this->loseResponse = false; $this->loseReplacementResponse = false;
+                return Http::response([], 503);
+            }
             return Http::response('', 204);
         });
         $this->app->instance('App\\Services\\FrontendHealthChecker', new class {
@@ -92,6 +102,15 @@ class DnsSchedulingTest extends TestCase
     private function sync(BalancerPool $pool): bool
     {
         return app(BalancerDnsService::class)->sync($pool->fresh());
+    }
+
+    private function savePool(BalancerPool $pool, array $extra = []): BalancerPool
+    {
+        return app(LoadBalancerService::class)->save([
+            ...$pool->only(['id', 'name', 'domain', 'dns_preset_id', 'dns_ttl', 'enabled', 'follow_user_status', 'scheduling_config']),
+            'members' => $pool->members->map(fn ($member) => ['node_id' => $member->source_node_id, 'priority' => $member->priority, 'weight' => $member->weight])->all(),
+            ...$extra,
+        ]);
     }
 
     private function addresses(): array
@@ -694,6 +713,150 @@ class DnsSchedulingTest extends TestCase
             'members' => $pool->members->map(fn ($m) => ['node_id' => $m->source_node_id, 'priority' => $m->priority, 'weight' => 1])->all()]), app(LoadBalancerService::class));
         $this->assertFalse($pool->fresh()->enabled);
         $this->assertSame($settings, $node->fresh()->protocol_settings);
+    }
+
+    public function test_domain_save_replaces_owned_dns_immediately_and_keeps_pool_users_and_original_nodes(): void
+    {
+        $pool = $this->pool(); $users = $this->usersForPool($pool);
+        $this->assertTrue($this->sync($pool));
+        $aliases = PoolDnsAlias::where('pool_id', $pool->id)->get()->keyBy('user_id');
+        $nodes = $pool->members->map(fn ($member) => $member->sourceNode->getAttributes())->all();
+        $ns = ['name' => $pool->domain . '.', 'type' => 'NS', 'ttl' => 3600,
+            'records' => [['content' => 'ns.example.com.', 'disabled' => false]], 'comments' => []];
+        $this->remote[$pool->domain . '.|NS'] = $ns;
+        $response = (new LoadBalancerController())->save(Request::create('/', 'POST', [
+            ...$pool->only(['id', 'name', 'domain', 'dns_preset_id', 'dns_ttl', 'enabled']),
+            'domain' => 'new.pool.example.com',
+            'members' => $pool->members->map(fn ($member) => ['node_id' => $member->source_node_id, 'priority' => $member->priority, 'weight' => $member->weight])->all(),
+        ]), app(LoadBalancerService::class));
+        $this->assertSame($pool->id, $response->getData(true)['data']['id']);
+        $updated = $pool->fresh(['members.sourceNode', 'members.runtimeNode']);
+        $this->assertSame('new.pool.example.com', $updated->domain);
+        $this->assertTrue($updated->enabled);
+        $this->assertNull($updated->dns_error);
+        $this->assertSame($ns, $this->remote[$pool->domain . '.|NS']);
+        $this->assertArrayNotHasKey($pool->domain . '.|A', $this->remote);
+        $this->assertArrayHasKey($updated->domain . '.|A', $this->remote);
+        $this->assertSame($nodes, $updated->members->map(fn ($member) => $member->sourceNode->getAttributes())->all());
+        foreach ($aliases as $alias) {
+            $this->assertSame($alias->label, $alias->fresh()->label);
+            $this->assertArrayNotHasKey($alias->label . '.' . $pool->domain . '.|CNAME', $this->remote);
+            $this->assertArrayHasKey($alias->label . '.' . $updated->domain . '.|CNAME', $this->remote);
+        }
+        $this->assertSame($aliases[$users[0]->id]->label . '.' . $updated->domain, app(\App\Services\DnsPoolService::class)->project($updated, $users[0]));
+        $this->assertTrue(PowerDnsRecord::where('owner_type', 'pool')->where('owner_id', $pool->id)->get()
+            ->every(fn ($record) => $record->name === $updated->domain || str_ends_with($record->name, '.' . $updated->domain)));
+    }
+
+    public function test_dns_preset_save_cleans_using_old_zone_before_creating_records_in_new_zone(): void
+    {
+        $pool = $this->pool(); $this->assertTrue($this->sync($pool));
+        $preset = $this->preset();
+        $preset->update(['domain' => 'next.example.com', 'zone_id' => md5('next.example.com')]);
+        $updated = $this->savePool($pool, ['domain' => $preset->domain, 'dns_preset_id' => $preset->id]);
+        $this->assertSame($preset->id, $updated->dns_preset_id);
+        $this->assertNull($updated->dns_error);
+        $this->assertArrayNotHasKey($pool->domain . '.|A', $this->remote);
+        $this->assertArrayHasKey($preset->domain . '.|A', $this->remote);
+        $this->assertTrue(PowerDnsRecord::where('owner_type', 'pool')->where('owner_id', $pool->id)->get()
+            ->every(fn ($record) => $record->preset_id === $preset->id));
+    }
+
+    public function test_disabled_pool_domain_save_cleans_old_records_without_enabling_or_recreating_dns(): void
+    {
+        $pool = $this->pool(); $this->usersForPool($pool); $this->assertTrue($this->sync($pool));
+        $pool->update(['enabled' => false]);
+        $updated = $this->savePool($pool, ['domain' => 'new.pool.example.com']);
+        $this->assertFalse($updated->enabled);
+        $this->assertSame('new.pool.example.com', $updated->domain);
+        $this->assertSame([], $this->remote);
+        $this->assertSame(0, PowerDnsRecord::where('owner_type', 'pool')->where('owner_id', $pool->id)->count());
+        $this->assertSame(0, PoolDnsAlias::where('pool_id', $pool->id)->whereNotNull('member_id')->count());
+    }
+
+    public function test_domain_save_cleanup_failure_preserves_configuration_and_owned_records(): void
+    {
+        $pool = $this->pool(); $this->assertTrue($this->sync($pool));
+        $before = $pool->fresh()->getAttributes(); $remote = $this->remote;
+        $records = PowerDnsRecord::all()->map->getAttributes()->all();
+        $this->failedZone = $pool->domain . '.';
+        try { $this->savePool($pool, ['domain' => 'new.pool.example.com', 'name' => '新名称']); $this->fail('清理失败不能保存配置'); }
+        catch (ValidationException $error) {
+            $this->assertStringContainsString('旧解析清理失败，未保存修改', $error->errors()['domain'][0]);
+            $this->assertStringContainsString('PowerDNS API 请求失败', $error->errors()['domain'][0]);
+        }
+        $this->assertSame($before, $pool->fresh()->getAttributes());
+        $this->assertSame($remote, $this->remote);
+        $this->assertSame($records, PowerDnsRecord::all()->map->getAttributes()->all());
+    }
+
+    public function test_domain_save_retries_after_lost_cleanup_response_without_losing_record_ownership(): void
+    {
+        $pool = $this->pool(); $this->assertTrue($this->sync($pool));
+        $records = PowerDnsRecord::all()->map->getAttributes()->all();
+        $this->loseResponse = true;
+        try { $this->savePool($pool, ['domain' => 'new.pool.example.com']); $this->fail('清理未确认不能保存配置'); }
+        catch (ValidationException) {}
+        $this->assertSame($pool->domain, $pool->fresh()->domain);
+        $this->assertTrue($pool->fresh()->enabled);
+        $this->assertSame($records, PowerDnsRecord::all()->map->getAttributes()->all());
+        $this->assertSame([], $this->remote);
+        $updated = $this->savePool($pool->fresh(['members']), ['domain' => 'new.pool.example.com']);
+        $this->assertSame('new.pool.example.com', $updated->domain);
+        $this->assertNull($updated->dns_error);
+        $this->assertArrayHasKey($updated->domain . '.|A', $this->remote);
+    }
+
+    public function test_domain_save_does_not_delete_foreign_records_or_clear_dns_for_invalid_members(): void
+    {
+        $pool = $this->pool(); $this->assertTrue($this->sync($pool));
+        $before = $this->remote;
+        $this->failNextQueryMatching('/insert into .?v2_balancer_member/i');
+        $new = $this->node('192.0.2.12');
+        try { $this->savePool($pool, ['domain' => 'new.pool.example.com', 'members' => [['node_id' => $new->id, 'priority' => 1]]]); $this->fail('数据库写入失败不能清理旧 DNS'); }
+        catch (\App\Exceptions\ApiException) {}
+        $this->assertSame($before, $this->remote);
+        $this->assertSame($pool->domain, $pool->fresh()->domain);
+        try { $this->savePool($pool, ['domain' => 'new.pool.example.com', 'members' => [['node_id' => 0, 'priority' => 1]]]); $this->fail('无效成员不能清理旧 DNS'); }
+        catch (ValidationException $error) { $this->assertArrayHasKey('members', $error->errors()); }
+        $this->assertSame($before, $this->remote);
+        $this->remote[$pool->domain . '.|A']['comments'] = [['content' => 'foreign owner']];
+        $before = $this->remote;
+        try { $this->savePool($pool, ['domain' => 'new.pool.example.com']); $this->fail('不能删除归属冲突的记录'); }
+        catch (ValidationException $error) { $this->assertStringContainsString('归属发生变化', $error->errors()['domain'][0]); }
+        $this->assertSame($before, $this->remote);
+        $this->assertSame($pool->domain, $pool->fresh()->domain);
+        $this->assertNotNull(PowerDnsRecord::where('name', $pool->domain)->first());
+    }
+
+    public function test_new_dns_failure_keeps_saved_domain_and_pending_ownership_for_sync_retry(): void
+    {
+        $pool = $this->pool(); $this->assertTrue($this->sync($pool));
+        // 同一区域的新记录已写入但响应丢失，不能把数据库配置回滚到旧域名。
+        $this->loseReplacementResponse = true;
+        $updated = $this->savePool($pool, ['domain' => 'new.pool.example.com']);
+        $this->assertSame('new.pool.example.com', $updated->domain);
+        $this->assertTrue($updated->enabled);
+        $this->assertNotNull($updated->dns_error);
+        $records = PowerDnsRecord::where('owner_type', 'pool')->where('owner_id', $pool->id)->get();
+        $this->assertNotEmpty($records);
+        $this->assertTrue($records->every(fn ($record) => !$record->confirmed));
+        $markers = $records->pluck('marker', 'name')->all();
+        // 已有记录一致时无需 PATCH，正常同步会按原标记确认。
+        $this->assertTrue($this->sync($updated));
+        $this->assertNull($updated->fresh()->dns_error);
+        $this->assertSame($markers, PowerDnsRecord::where('owner_type', 'pool')->where('owner_id', $pool->id)->pluck('marker', 'name')->all());
+    }
+
+    public function test_unchanged_domain_save_does_not_request_dns_cleanup(): void
+    {
+        $pool = $this->pool(); $this->assertTrue($this->sync($pool));
+        $before = $this->remote;
+        $this->failedZone = $pool->domain . '.';
+        $updated = $this->savePool($pool, ['name' => '只改名称']);
+        $this->assertSame('只改名称', $updated->name);
+        $this->assertSame($before, $this->remote);
+        $this->assertNull($updated->dns_error);
     }
 
     public function test_delete_automatically_stops_and_cleans_dns_before_removing_only_pool_configuration(): void

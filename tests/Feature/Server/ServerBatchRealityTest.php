@@ -17,6 +17,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Route;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -34,6 +35,7 @@ class ServerBatchRealityTest extends TestCase
         Http::preventStrayRequests();
         Redis::shouldReceive('publish')->andReturn(1);
         Route::post('/_tests/batch-reality', [ManageController::class, 'batchReality']);
+        Route::get('/_tests/batch-reality-scope', [ManageController::class, 'batchRealityScope']);
     }
 
     private function settings(): array
@@ -55,9 +57,24 @@ class ServerBatchRealityTest extends TestCase
                 'reality_settings' => [...$this->settings(), 'dest' => '127.0.0.1:' . (8443 + $index), 'anti_abuse' => false]]])->refresh();
     }
 
-    private function payload(array $nodes, array $settings): array
+    private function payload(array $nodes, array $settings, array $poolIds = []): array
     {
-        return ['ids' => array_map(fn ($node) => $node->id, $nodes), 'mode' => 'manual', 'reality_settings' => $settings];
+        return ['ids' => array_map(fn ($node) => $node->id, $nodes), 'pool_ids' => $poolIds, 'mode' => 'manual', 'reality_settings' => $settings];
+    }
+
+    private function pool(array $nodes, array $settings, array $extra = []): BalancerPool
+    {
+        $first = $nodes[0];
+        $pool = BalancerPool::create(['name' => '测试池 ' . (BalancerPool::count() + 1), 'mode' => 'dns', 'protocol' => 'vless',
+            'domain' => 'pool' . (BalancerPool::count() + 1) . '.example.test', 'gateway_machine_id' => $first->machine_id,
+            'gateway_address' => $first->host, 'backend_port' => 24443, 'gateway_port' => 30443, 'template_node_id' => $first->id,
+            'template_config' => ['type' => 'vless', 'kernel_type' => 'xray', 'reality_sync_enabled' => true,
+                'rate' => 2, 'group_ids' => [1], 'protocol_settings' => ['tls' => 2, 'network' => 'tcp', 'flow' => 'xtls-rprx-vision',
+                    'reality_settings' => [...$settings, 'dest' => '127.0.0.1:8443', 'anti_abuse' => false]]],
+            'enabled' => true, ...$extra])->refresh();
+        foreach ($nodes as $position => $node) BalancerMember::create(['pool_id' => $pool->id, 'source_node_id' => $node->id,
+            'runtime_node_id' => $node->id, 'priority' => $position + 1, 'weight' => $position + 2, 'position' => $position]);
+        return $pool;
     }
 
     public function test_unifies_only_pool_reality_fields_and_is_idempotent(): void
@@ -116,22 +133,29 @@ class ServerBatchRealityTest extends TestCase
         }
     }
 
-    public function test_pool_template_conflicts_are_rejected_but_matching_settings_are_allowed(): void
+    public function test_selected_nodes_and_pool_template_are_updated_together_without_changing_other_fields(): void
     {
         $a = $this->node(1); $b = $this->node(2);
+        $pool = $this->pool([$a, $b], $this->settings());
+        $template = $pool->template_config;
+        $before = $pool->getAttributes();
+        $members = $pool->members()->get()->map->getAttributes()->all();
         $settings = $this->settings();
-        $pool = BalancerPool::create(['name' => '测试池', 'mode' => 'dns', 'protocol' => 'vless',
-            'domain' => 'pool.example.test', 'gateway_machine_id' => $a->machine_id, 'gateway_address' => '192.0.2.1',
-            'backend_port' => 24443, 'template_node_id' => $a->id,
-            'template_config' => ['type' => 'vless', 'kernel_type' => 'xray', 'reality_sync_enabled' => true, 'protocol_settings' => ['tls' => 2,
-                'network' => 'tcp', 'flow' => 'xtls-rprx-vision', 'reality_settings' => $settings]],
-            'gateway_port' => 30443, 'enabled' => true])->refresh();
-        BalancerMember::create(['pool_id' => $pool->id, 'source_node_id' => $a->id, 'runtime_node_id' => $a->id]);
-        $before = [$a->getAttributes(), $b->getAttributes(), $pool->getAttributes()];
-        $this->postJson('/_tests/batch-reality', $this->payload([$a, $b], $this->settings()))->assertUnprocessable()->assertJsonValidationErrors('ids');
-        $this->assertSame($before, [$a->fresh()->getAttributes(), $b->fresh()->getAttributes(), $pool->fresh()->getAttributes()]);
-        $this->postJson('/_tests/batch-reality', $this->payload([$a, $b], $settings))->assertOk();
+        $response = $this->postJson('/_tests/batch-reality', $this->payload([$a, $b], $settings, [$pool->id]))
+            ->assertOk()->assertJsonPath('data.count', 2)->assertJsonPath('data.pools_updated', 1);
+        $this->assertStringNotContainsString($settings['private_key'], $response->getContent());
+        $pool->refresh();
+        $template['protocol_settings']['reality_settings'] = array_replace($template['protocol_settings']['reality_settings'], $settings);
+        $this->assertSame($template, $pool->template_config);
+        $after = $pool->getAttributes();
+        foreach (['template_config', 'updated_at'] as $key) unset($before[$key], $after[$key]);
+        $this->assertSame($before, $after);
+        $this->assertSame($members, $pool->members()->get()->map->getAttributes()->all());
         $this->assertSame([], LoadBalancerService::memberCompatibility($pool, $a->fresh()));
+        $saved = [$a->fresh()->getAttributes(), $b->fresh()->getAttributes(), $pool->getAttributes()];
+        $this->postJson('/_tests/batch-reality', $this->payload([$a, $b], $settings, [$pool->id]))
+            ->assertOk()->assertJsonPath('data.updated', 0)->assertJsonPath('data.pools_updated', 0);
+        $this->assertSame($saved, [$a->fresh()->getAttributes(), $b->fresh()->getAttributes(), $pool->fresh()->getAttributes()]);
     }
 
     public function test_anti_abuse_conflict_never_leaves_partial_changes(): void
@@ -186,6 +210,8 @@ class ServerBatchRealityTest extends TestCase
         $settings = $this->settings();
         $payload = $this->payload([$a, $b], $settings);
         $this->postJson($url, $payload)->assertForbidden();
+        $scopeUrl = '/_tests/admin-access/reality-admin/server/manage/batchRealityScope?ids[]=' . $a->id . '&ids[]=' . $b->id;
+        $this->getJson($scopeUrl)->assertForbidden();
         $user = User::create(['email' => 'test-batch-reality@example.invalid', 'password' => password_hash('test-only', PASSWORD_DEFAULT),
             'uuid' => (string) \Illuminate\Support\Str::uuid(), 'token' => bin2hex(random_bytes(16)), 'is_admin' => false]);
         Sanctum::actingAs($user);
@@ -193,7 +219,160 @@ class ServerBatchRealityTest extends TestCase
         $user->update(['is_admin' => true]);
         Sanctum::actingAs($user->fresh());
         $this->postJson($url, $payload)->assertOk();
+        $this->getJson($scopeUrl)->assertOk()->assertHeader('Cache-Control', 'no-store, private')->assertJsonPath('data.pools', []);
         $audit = AdminAuditLog::firstOrFail();
         $this->assertEquals(['ids' => [$a->id, $b->id]], json_decode($audit->getRawOriginal('request_data'), true));
+    }
+
+    public function test_scope_lists_only_directly_related_pools_and_never_returns_keys(): void
+    {
+        $a = $this->node(1); $b = $this->node(2); $c = $this->node(3); $d = $this->node(4);
+        $settings = $this->settings();
+        $pool = $this->pool([$a, $c], $settings);
+        $this->pool([$c, $d], $this->settings());
+        $response = $this->getJson('/_tests/batch-reality-scope?ids[]=' . $a->id . '&ids[]=' . $b->id)
+            ->assertOk()->assertJsonPath('data.count', 2)->assertJsonPath('data.pools', [['id' => $pool->id, 'name' => $pool->name]]);
+        $this->assertStringNotContainsString($settings['private_key'], $response->getContent());
+        $this->assertStringNotContainsString('template_config', $response->getContent());
+    }
+
+    public function test_unselected_conflicting_member_is_named_and_the_entire_batch_remains_unchanged(): void
+    {
+        $a = $this->node(1); $b = $this->node(2); $c = $this->node(3);
+        $pool = $this->pool([$a, $b, $c], $this->settings());
+        $before = [$a->getAttributes(), $b->getAttributes(), $c->getAttributes(), $pool->getAttributes()];
+        $response = $this->postJson('/_tests/batch-reality', $this->payload([$a, $b], $this->settings(), [$pool->id]))
+            ->assertUnprocessable()->assertJsonValidationErrors('ids');
+        $message = $response->json('errors.ids.0');
+        $this->assertStringContainsString($pool->name, $message);
+        $this->assertStringContainsString($c->name, $message);
+        $this->assertStringContainsString('请补选', $message);
+        $this->assertSame($before, [$a->fresh()->getAttributes(), $b->fresh()->getAttributes(), $c->fresh()->getAttributes(), $pool->fresh()->getAttributes()]);
+    }
+
+    public function test_compatible_unselected_member_is_never_written_and_indirect_pool_is_untouched(): void
+    {
+        $a = $this->node(1); $b = $this->node(2); $c = $this->node(3); $d = $this->node(4);
+        $settings = array_intersect_key($c->protocol_settings['reality_settings'], array_flip(PoolRealityService::FIELDS));
+        $pool = $this->pool([$a, $b, $c], $this->settings());
+        $other = $this->pool([$c, $d], $settings);
+        $before = [$c->getAttributes(), $d->getAttributes(), $other->getAttributes()];
+        $this->postJson('/_tests/batch-reality', $this->payload([$a, $b], $settings, [$pool->id]))
+            ->assertOk()->assertJsonPath('data.updated', 2)->assertJsonPath('data.pools_updated', 1);
+        $this->assertSame($before, [$c->fresh()->getAttributes(), $d->fresh()->getAttributes(), $other->fresh()->getAttributes()]);
+        foreach (PoolRealityService::FIELDS as $key) $this->assertEquals($settings[$key], data_get($pool->fresh()->template_config, 'protocol_settings.reality_settings.' . $key));
+    }
+
+    public function test_shared_selected_node_updates_every_related_pool_once(): void
+    {
+        $a = $this->node(1); $b = $this->node(2); $c = $this->node(3);
+        $first = $this->pool([$a, $b], $this->settings());
+        $second = $this->pool([$a, $c], $this->settings());
+        $settings = $this->settings();
+        $this->postJson('/_tests/batch-reality', $this->payload([$a, $b, $c], $settings, [$second->id, $first->id]))
+            ->assertOk()->assertJsonPath('data.updated', 3)->assertJsonPath('data.pools_updated', 2);
+        foreach ([$first, $second] as $pool) foreach (PoolRealityService::FIELDS as $key) {
+            $this->assertEquals($settings[$key], data_get($pool->fresh()->template_config, 'protocol_settings.reality_settings.' . $key));
+        }
+    }
+
+    public function test_missing_selection_in_another_pool_blocks_all_pool_and_node_writes(): void
+    {
+        $a = $this->node(1); $b = $this->node(2); $c = $this->node(3);
+        $first = $this->pool([$a, $b], $this->settings());
+        $second = $this->pool([$a, $c], $this->settings());
+        $before = [$a->getAttributes(), $b->getAttributes(), $c->getAttributes(), $first->getAttributes(), $second->getAttributes()];
+        $this->postJson('/_tests/batch-reality', $this->payload([$a, $b], $this->settings(), [$first->id, $second->id]))
+            ->assertUnprocessable()->assertJsonValidationErrors('ids');
+        $this->assertSame($before, [$a->fresh()->getAttributes(), $b->fresh()->getAttributes(), $c->fresh()->getAttributes(), $first->fresh()->getAttributes(), $second->fresh()->getAttributes()]);
+    }
+
+    public function test_new_pool_reference_after_scope_read_requires_reconfirmation(): void
+    {
+        $a = $this->node(1); $b = $this->node(2);
+        $scope = $this->getJson('/_tests/batch-reality-scope?ids[]=' . $a->id . '&ids[]=' . $b->id)->assertOk()->json('data');
+        $pool = $this->pool([$a, $b], $this->settings());
+        $before = [$a->getAttributes(), $b->getAttributes(), $pool->getAttributes()];
+        $this->postJson('/_tests/batch-reality', $this->payload([$a, $b], $this->settings(), array_column($scope['pools'], 'id')))
+            ->assertUnprocessable()->assertJsonValidationErrors('pool_ids');
+        $this->assertSame($before, [$a->fresh()->getAttributes(), $b->fresh()->getAttributes(), $pool->fresh()->getAttributes()]);
+    }
+
+    public function test_reference_mode_links_templates_and_keeps_pool_status_and_sync_setting(): void
+    {
+        $a = $this->node(1); $b = $this->node(2);
+        $pool = $this->pool([$a, $b], $this->settings(), ['enabled' => false]);
+        $template = $pool->template_config; $template['reality_sync_enabled'] = false;
+        $pool->update(['template_config' => $template]);
+        $settings = $b->protocol_settings['reality_settings'];
+        $this->postJson('/_tests/batch-reality', ['ids' => [$a->id, $b->id], 'pool_ids' => [$pool->id], 'mode' => 'node', 'source_id' => $b->id])
+            ->assertOk()->assertJsonPath('data.pools_updated', 1);
+        $this->assertFalse($pool->fresh()->enabled);
+        $this->assertFalse(PoolRealityService::enabled($pool->fresh()));
+        foreach (PoolRealityService::FIELDS as $key) $this->assertEquals($settings[$key], data_get($pool->fresh()->template_config, 'protocol_settings.reality_settings.' . $key));
+    }
+
+    public function test_node_write_failure_also_rolls_back_previously_written_pool_template(): void
+    {
+        $a = $this->node(1); $b = $this->node(2);
+        $pool = $this->pool([$a, $b], $this->settings());
+        $before = [$a->getAttributes(), $b->getAttributes(), $pool->getAttributes()];
+        $this->failNextQueryMatching('/\Aupdate ["`]v2_server["`]/');
+        Log::shouldReceive('error')->once()->with('批量统一 Reality 失败', ['exception' => \Illuminate\Database\QueryException::class]);
+        $this->postJson('/_tests/batch-reality', $this->payload([$a, $b], $this->settings(), [$pool->id]))->assertStatus(500);
+        $this->assertSame($before, [$a->fresh()->getAttributes(), $b->fresh()->getAttributes(), $pool->fresh()->getAttributes()]);
+    }
+
+    public function test_second_pool_write_failure_rolls_back_the_first_pool(): void
+    {
+        $a = $this->node(1); $b = $this->node(2);
+        $first = $this->pool([$a, $b], $this->settings()); $second = $this->pool([$a, $b], $this->settings());
+        $before = [$a->getAttributes(), $b->getAttributes(), $first->getAttributes(), $second->getAttributes()];
+        $writes = 0;
+        $this->app['db']->connection()->beforeExecuting(function ($sql, $bindings, $connection) use (&$writes): void {
+            if (preg_match('/\Aupdate ["`]v2_balancer_pool["`]/', $sql) && ++$writes === 2) {
+                throw new \Illuminate\Database\QueryException($connection->getName(), $sql, $bindings, new \RuntimeException('测试写入失败'));
+            }
+        });
+        Log::shouldReceive('error')->once()->with('批量统一 Reality 失败', ['exception' => \Illuminate\Database\QueryException::class]);
+        $this->postJson('/_tests/batch-reality', $this->payload([$a, $b], $this->settings(), [$first->id, $second->id]))->assertStatus(500);
+        $this->assertSame($before, [$a->fresh()->getAttributes(), $b->fresh()->getAttributes(), $first->fresh()->getAttributes(), $second->fresh()->getAttributes()]);
+    }
+
+    public function test_numeric_short_ids_with_different_leading_zeroes_are_not_considered_identical(): void
+    {
+        $a = $this->node(1); $b = $this->node(2); $c = $this->node(3);
+        $settings = [...$this->settings(), 'short_id' => '11'];
+        $c->update(['protocol_settings' => [...$c->protocol_settings, 'reality_settings' => [...$settings, 'short_id' => '0011']]]);
+        $pool = $this->pool([$a, $b, $c], $settings);
+        $before = [$a->getAttributes(), $b->getAttributes(), $c->fresh()->getAttributes(), $pool->getAttributes()];
+        $this->postJson('/_tests/batch-reality', $this->payload([$a, $b], $settings, [$pool->id]))->assertUnprocessable()->assertJsonValidationErrors('ids');
+        $this->assertSame($before, [$a->fresh()->getAttributes(), $b->fresh()->getAttributes(), $c->fresh()->getAttributes(), $pool->fresh()->getAttributes()]);
+    }
+
+    public function test_unselected_low_id_is_not_confused_with_a_collection_position(): void
+    {
+        $unselected = $this->node(1); $a = $this->node(2); $b = $this->node(3);
+        $pool = $this->pool([$unselected, $a, $b], $this->settings());
+        $before = [$unselected->getAttributes(), $a->getAttributes(), $b->getAttributes(), $pool->getAttributes()];
+        $this->postJson('/_tests/batch-reality', $this->payload([$a, $b], $this->settings(), [$pool->id]))
+            ->assertUnprocessable()->assertJsonValidationErrors('ids');
+        $this->assertSame($before, [$unselected->fresh()->getAttributes(), $a->fresh()->getAttributes(), $b->fresh()->getAttributes(), $pool->fresh()->getAttributes()]);
+    }
+
+    public function test_pool_edit_lock_blocks_linked_save_and_allows_retry_after_release(): void
+    {
+        $a = $this->node(1); $b = $this->node(2);
+        $pool = $this->pool([$a, $b], $this->settings());
+        $settings = $this->settings();
+        $before = [$a->getAttributes(), $b->getAttributes(), $pool->getAttributes()];
+        $lock = Cache::lock('balancer:dns:' . $pool->id, 120);
+        $this->assertTrue($lock->get());
+        try {
+            $this->postJson('/_tests/batch-reality', $this->payload([$a, $b], $settings, [$pool->id]))
+                ->assertUnprocessable()->assertJsonValidationErrors('pool_ids');
+            $this->assertSame($before, [$a->fresh()->getAttributes(), $b->fresh()->getAttributes(), $pool->fresh()->getAttributes()]);
+        } finally { $lock->release(); }
+        $this->postJson('/_tests/batch-reality', $this->payload([$a, $b], $settings, [$pool->id]))->assertOk()->assertJsonPath('data.pools_updated', 1);
     }
 }

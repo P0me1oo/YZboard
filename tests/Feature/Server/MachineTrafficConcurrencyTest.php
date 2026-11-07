@@ -4,6 +4,7 @@ namespace Tests\Feature\Server;
 
 use App\Models\Server;
 use App\Models\ServerMachine;
+use App\Models\User;
 use App\Services\MachineTrafficService;
 use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Foundation\Testing\RefreshDatabaseState;
@@ -31,12 +32,14 @@ class MachineTrafficConcurrencyTest extends TestCase
     {
         config(['app.timezone' => 'Asia/Shanghai']);
         Redis::shouldReceive('publish')->andReturn(1);
+        $user = User::withoutEvents(fn () => User::forceCreate(['id' => 1, 'email' => 'concurrent-traffic@example.invalid',
+            'password' => 'test-only', 'uuid' => '11111111-1111-4111-8111-111111111111', 'token' => str_repeat('a', 32), 'group_id' => 1]));
         $machine = ServerMachine::create(['name' => '并发计量', 'token' => Str::random(32), 'is_active' => true]);
         $nodes = [];
         foreach (range(1, 2) as $index) {
             $nodes[] = Server::create(['name' => '并发节点 ' . $index, 'machine_id' => $machine->id,
                 'type' => 'vless', 'host' => '127.0.0.1', 'port' => 443, 'server_port' => 443,
-                'rate' => 5, 'enabled' => true, 'group_ids' => []]);
+                'rate' => 5, 'enabled' => true, 'group_ids' => [1]]);
         }
         MachineTrafficService::configure($machine, ['traffic_mode' => 'proxy', 'traffic_limit_gb' => 1]);
         $machine->saveQuietly();
@@ -77,6 +80,7 @@ class MachineTrafficConcurrencyTest extends TestCase
             \App\Models\NodeReportBatch::whereIn('server_id', $ids)->delete();
             Server::whereIn('id', $ids)->delete();
             ServerMachine::whereKey($machine->id)->delete();
+            User::whereKey($user->id)->delete();
         }
     }
 }

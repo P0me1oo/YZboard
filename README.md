@@ -45,6 +45,7 @@ docker compose up -d
 > 🚨 **Important:** This version involves significant changes. Please strictly follow the upgrade documentation and backup your database before upgrading. Note that upgrading and migration are different processes, do not confuse them.
 
 ### Development Guides
+- [节点检查、对账、证书与套餐临时限速](./docs/node-operations.md) - 本地 2.6.0 配套功能、接口与验证范围
 - [Plugin Development Guide](./docs/en/development/plugin-development-guide.md) - Complete guide for developing XBoard plugins
 - [插件上传限制与错误提示](./docs/plugin-upload.md) - 64 MiB 安装包、独立上传超时及网关错误排查
 - [Node User Sync Reconciliation](./docs/en/development/node-user-sync.md) - Explains periodic node user-list reconciliation for expired users

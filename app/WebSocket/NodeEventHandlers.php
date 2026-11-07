@@ -189,7 +189,7 @@ class NodeEventHandlers
         ]);
 
         // Push users
-        $users = ServerService::getAvailableUsers($node)->toArray();
+        $users = ServerService::getUsersForSync($node)->toArray();
         NodeRegistry::send($nodeId, 'sync.users', [
             'users' => $users,
         ]);

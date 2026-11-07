@@ -47,6 +47,11 @@ class NodeStateService
     /** 复用原报告处理次序，尤其是中转来源必须早于整个入口的设备快照。 */
     public static function apply(Server $node, array $state, ?int $receivedAt = null): void
     {
+        if (is_array($state['operations'] ?? null)) {
+            app(NodeOperations::class)->accept($node, $state['operations']);
+            // 兼容旧 Agent 同时携带顶层状态和指标副本；本次只投影一次。
+            unset($state['metrics']['operations']);
+        }
         ServerAutoSort::onReport($node);
         ServerService::touchNode($node, $receivedAt);
         if (is_array($state['relay_user_alive'] ?? null) && $state['relay_user_alive'] !== []) {

@@ -1,8 +1,10 @@
 # 52mjj.tech PowerDNS 部署记录
 
-维护者：P0me1oo。核对日期：2026-11-02（北京时间）。
+维护者：P0me1oo。初始部署核对：2026-11-02；最近状态核对：2026-11-06（北京时间）。
 
 ## 当前状态
+
+2026-11-06，服务器端已配置四个 NS：Hytron-HK 为 `ns1` 主权威，学长-HK¹ 为 `ns2`，Cloudnium-US 为 `ns3`，Aether-US 为 `ns4`。四台解析记录一致，区域检查通过。两个域名的注册局均已确认四个 NS，IPv4 Glue 正确，`ns2` 的德国旧登记已删除。10:04，所测 Cloudflare、Google、阿里和腾讯公共解析器均返回四个 NS、新 `ns2` 地址及正常业务解析；父域实际委派仍在等待发布。当前配置、验证和登记说明见[四个 NS 部署记录](powerdns-four-nameservers-20261106.md)。德国 DNS 已停止，原数据和停用前快照见[辅助服务器迁移记录](powerdns-secondary-migration-cloudnium-us-20261106.md)。以下初始部署过程为历史记录。
 
 两台服务器已通过 Lite MCP 部署官方 PowerDNS Authoritative 5.1.5，使用 SQLite 后端和 systemd 开机启动。两个域名共用 `ns1.hytron.xyz` 和 `ns2.hytron.xyz`。2026-11-02 04:41 已确认四台 `.tech` 父域服务器发布新 NS，DS 为空；Google、Cloudflare、阿里和腾讯 DNS 的 SOA 均来自 PowerDNS，52mjj.tech 的公网权威迁移已验证生效。
 
@@ -11,7 +13,9 @@
 | 角色 | Lite 节点 | NS 主机名 | IPv4 | IPv6 |
 | --- | --- | --- | --- | --- |
 | 主权威 | Hytron-HK | ns1.hytron.xyz | 82.152.164.103 | 2401:b60:1c:1::2 |
-| 辅助权威 | Bitsflow-DE Nue | ns2.hytron.xyz | 212.60.153.11 | 2602:fb54:1801:105::a |
+| 辅助权威 | 学长-HK¹ | ns2.hytron.xyz | 216.236.7.228 | 无公网 IPv6 |
+| 辅助权威 | Cloudnium-US | ns3.hytron.xyz | 192.255.175.211 | 2607:9d00:2000:39::294 |
+| 辅助权威 | Aether-US | ns4.hytron.xyz | 23.246.167.243 | 2602:faa8:502:c7::a |
 
 Hytron-HK 为 Debian 12、1 核、约 973 MiB 内存，完成部署后磁盘剩余约 3.1 GiB、可用内存约 708 MiB。德国服务器为 Debian 13、1 核、约 1.9 GiB 内存，部署前磁盘剩余约 17 GiB。每个 PowerDNS 进程当前约占 25 MiB。
 

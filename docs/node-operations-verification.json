@@ -1,0 +1,125 @@
+{
+  "date": "2026-11-07",
+  "author": "P0me1oo",
+  "versions": {
+    "panel": "2.6.0",
+    "dash": "0.91.0",
+    "agent": "2.33.0"
+  },
+  "status": "local-uncommitted-unreleased",
+  "checks": {
+    "php_sqlite": {
+      "tests": 1666,
+      "assertions": 32382,
+      "skipped": 10,
+      "failed": 0
+    },
+    "php_mariadb": {
+      "tests": 1666,
+      "assertions": 32388,
+      "skipped": 0,
+      "failed": 0
+    },
+    "final_php_sqlite_targeted": {
+      "tests": 14,
+      "assertions": 136,
+      "failed": 0
+    },
+    "final_php_mariadb_targeted": {
+      "tests": 14,
+      "assertions": 136,
+      "failed": 0
+    },
+    "agent_full_race": {
+      "packages": 40,
+      "passed": true,
+      "environment_conditional_tests": "Not all external firewall and client environments were provided."
+    },
+    "agent_final_service_race": true,
+    "frontend_unit": {
+      "tests": 151,
+      "passed": true
+    },
+    "frontend_operations_browser": {
+      "tests": 5,
+      "passed": true
+    },
+    "frontend_plan_groups_browser": {
+      "tests": 2,
+      "passed": true
+    },
+    "panel_assets": {
+      "tests": 5,
+      "passed": true
+    }
+  },
+  "artifacts": {
+    "amd64": {
+      "sha256": "b862abff361105e66c644c5b8c593bcb34afdcf904805931710141092d23d2e8",
+      "size": 113542435,
+      "published": false
+    },
+    "arm64": {
+      "sha256": "2ed9fce10bd6c949044e9fccfa4b73903c066bd95e89fffd8ab8796d4064118f",
+      "size": 106028641,
+      "published": false
+    }
+  },
+  "repositories": {
+    "YZboard": {
+      "head": "3b8104a4a1a947073eae566d9956601adb96cb66",
+      "modified": true
+    },
+    "YZboard-Dash": {
+      "head": "ca26cd735d7c74766bd8abeffaf51011396f485a",
+      "modified": true
+    },
+    "YZ-Agent": {
+      "head": "8622d86cc5c3e565de344f5c668ad86038cfb97e",
+      "modified": true
+    }
+  },
+  "followup_fixes": {
+    "date": "2026-11-07",
+    "versions": {
+      "panel": "2.6.1",
+      "dash": "0.91.1",
+      "agent": "2.33.1"
+    },
+    "status": "local-uncommitted-unreleased",
+    "checks": {
+      "php_sqlite": {
+        "tests": 70,
+        "assertions": 512,
+        "failed": 0
+      },
+      "php_mariadb": {
+        "version": "11.4.8",
+        "only_full_group_by": true,
+        "tests": 70,
+        "assertions": 512,
+        "failed": 0
+      },
+      "go_race_full_packages": [
+        "autospeed",
+        "healthcheck",
+        "limiter",
+        "service"
+      ],
+      "go_race_targeted_packages": [
+        "kernel/singbox",
+        "kernel/xray"
+      ],
+      "frontend_source_files": 3113,
+      "frontend_behavior_tests": 151,
+      "frontend_browser_tests": 7,
+      "panel_asset_tests": 5,
+      "integrated_files": 16
+    },
+    "asset": {
+      "file": "assets/admin-DgCtOZXu.js",
+      "sha256": "a0e3cc56418fd2fe69682ec2b32fb51936cb4484ab1165d7303318cc7e2457f3"
+    },
+    "limits": "Local targeted tests and browser fixtures; no production deployment or real public-node validation."
+  }
+}

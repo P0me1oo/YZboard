@@ -150,6 +150,7 @@ class OrderService
             };
 
             $this->setSpeedLimit($plan->speed_limit);
+ $this->user->auto_speed_limit = $plan->auto_speed_limit;
             $this->setDeviceLimit($plan->device_limit);
             $this->setConnLimit($plan->conn_limit, $plan->conn_rate_limit);
 

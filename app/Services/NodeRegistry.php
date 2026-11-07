@@ -77,6 +77,8 @@ class NodeRegistry
             return false;
         }
 
+        if (isset($conn->authorizeSend) && !($conn->authorizeSend)($nodeId)) return false;
+
         // Machine-mode connections multiplex multiple node IDs through the same
         // socket, so node-scoped events must carry node_id for the client mux.
         if (!empty($conn->machineNodeIds) && $event !== 'sync.nodes' && !array_key_exists('node_id', $data)) {
@@ -143,6 +145,8 @@ class NodeRegistry
         if (!$conn) {
             return false;
         }
+
+        if (isset($conn->authorizeSend) && !($conn->authorizeSend)()) return false;
 
         $payload = json_encode([
             'event' => $event,

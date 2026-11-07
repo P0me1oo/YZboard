@@ -115,8 +115,22 @@ class LoadBalancerService
     public function save(array $data): BalancerPool
     {
         if (($data['mode'] ?? 'dns') !== 'dns') $this->invalid('mode', '前置池仅支持 DNS 用户分配');
-        if (!empty($data['id'])) return Cache::lock('balancer:dns:' . $data['id'], 120)->block(2, fn () => $this->persist($data));
-        return $this->persist($data);
+        if (empty($data['id'])) return $this->persist($data);
+        [$pool, $dnsChanged] = Cache::lock('balancer:dns:' . $data['id'], 120)->block(2, function () use ($data) {
+            $previous = BalancerPool::findOrFail($data['id']);
+            $dnsChanged = $previous->domain !== $data['domain'] || $previous->dns_preset_id != $data['dns_preset_id'];
+            return [$this->persist($data), $dnsChanged];
+        });
+        if ($dnsChanged) {
+            // 新解析在配置提交后写入，保留待确认记录的归属；释放保存锁后再使用同步锁。
+            try {
+                app(BalancerDnsService::class)->sync($pool);
+            } catch (\Throwable) {
+                $pool->forceFill(['dns_error' => '配置已保存，DNS 同步未完成，请稍后重试'])->saveQuietly();
+            }
+            $pool->refresh()->load(['members.sourceNode', 'members.runtimeNode']);
+        }
+        return $pool;
     }
 
     public function syncReality(int $poolId): BalancerPool
@@ -222,8 +236,12 @@ class LoadBalancerService
             // 32 位用户标签及最长成员标签都要满足完整域名长度限制。
             if (strlen($data['domain']) > 218) $this->invalid('domain', '池域名过长，无法生成用户独立域名');
             if (\App\Models\DdnsBinding::where('domain', $data['domain'])->exists()) $this->invalid('domain', '该域名已被节点 DDNS 使用');
+            $cleanupPreset = null;
             if ($pool->exists && ($pool->domain !== $data['domain'] || $pool->dns_preset_id != $data['dns_preset_id'])
-                && \App\Models\PowerDnsRecord::where('owner_type', 'pool')->where('owner_id', $pool->id)->exists()) $this->invalid('domain', '修改域名前请先停用池并同步清理解析');
+                && \App\Models\PowerDnsRecord::where('owner_type', 'pool')->where('owner_id', $pool->id)->exists()) {
+                $cleanupPreset = \App\Models\BalancerDnsPreset::whereKey($pool->dns_preset_id)->lockForUpdate()->first();
+                if (!$cleanupPreset || $cleanupPreset->provider !== 'powerdns') $this->invalid('domain', '找不到旧 PowerDNS 配置，无法清理旧解析');
+            }
             $pool->fill(collect($data)->except(['id', 'members', 'reality_sync_enabled', 'reality_settings', '_sync_reality'])->all());
             $pool->protocol = $first->type;
             $pool->template_node_id = $first->id;
@@ -256,6 +274,15 @@ class LoadBalancerService
             }
             if ($starting && in_array($policy['strategy'], ['latency', 'latency_balanced'], true)
                 && $sources->contains(fn ($source) => count(SchedulingProbeService::targets($source, false)) > 256)) $this->invalid('members', '前置探测目标超过 256 个');
+            if ($cleanupPreset) {
+                // 全部校验和数据库写入通过后，用旧配置清理本池记录；失败回滚配置，保留原归属供重试。
+                try {
+                    app(PowerDnsService::class)->reconcile($cleanupPreset, 'pool', $pool->id, [], $pool->dns_ttl);
+                } catch (\Throwable $error) {
+                    $message = $error instanceof \App\Exceptions\DdnsSyncException ? $error->getMessage() : '请检查权限、网络和域名配置';
+                    $this->invalid('domain', '旧解析清理失败，未保存修改：' . $message);
+                }
+            }
             DB::afterCommit(fn () => $this->notify($pool));
             return $pool->fresh(['members.sourceNode', 'members.runtimeNode']);
         }, 3);

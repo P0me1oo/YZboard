@@ -82,6 +82,7 @@ class Plan extends Model
         'transfer_enable',
         'name',
         'speed_limit',
+ 'auto_speed_limit',
         'show',
         'sort',
         'renew',
@@ -97,6 +98,7 @@ class Plan extends Model
     ];
 
     protected $casts = [
+ 'auto_speed_limit' => 'array',
         'show' => 'boolean',
         'renew' => 'boolean',
         'created_at' => 'timestamp',

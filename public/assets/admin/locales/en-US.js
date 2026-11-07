@@ -2772,6 +2772,11 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     },
     "toolbar": {
       "unify_reality": {
+        "loading_pools": "Loading related front pools…",
+        "scope_failed": "Failed to load related pools. Please retry.",
+        "reload_pools": "Reload related pools",
+        "related_pools": "Related pools to update:",
+        "linked_success": "Unified {{count}} nodes and updated {{pools}} front pools",
         "generate_short_failed": "Failed to generate a Short ID. Please retry.",
         "mode": "Unification method",
         "node_mode": "Use a selected node",

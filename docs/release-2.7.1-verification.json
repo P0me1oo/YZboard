@@ -58,5 +58,33 @@
     "statistics-recheck.log": "d1c64ddf739c75dcd63ee93602789b5decf99ec94c172127952ed23efd8dabe9",
     "route-recheck.log": "40acfeb367dd8014575159b6f2c8723adb5ebd52b5821c22aaf2b498d7f01bd1",
     "reality-final.log": "12fb09e54e75991daa95b0633403df11ac8367a566537d72cf957874c00ba167"
+  },
+  "release": {
+    "checked_at": "2026-11-08T03:02:47.563955+00:00",
+    "projects": [
+      {
+        "repo": "P0me1oo/YZboard",
+        "version": "2.7.1",
+        "source": "2d922432c1cf4abbfb9a043279a99422a8919449",
+        "artifact": "yzboard-2.7.1.tar.gz",
+        "sha256": "a84359aabbb399eab9540925cc9e5cc182e377edce9aad3975963c0f153d4d87",
+        "size": 73959133
+      },
+      {
+        "repo": "P0me1oo/YZboard-Dash",
+        "version": "0.92.1",
+        "source": "ab43ce2506c6d84fa0a4d199b1412ee379eff6fa",
+        "artifact": "yzboard-dash-0.92.1.tar.gz",
+        "sha256": "5894d15bcec94a0f3cbb2e7c1b0bdac5f4dbfdb2e678a86e909ea11318a237e0",
+        "size": 4692001
+      }
+    ],
+    "downloaded_assets": 6,
+    "all_downloads_match": true,
+    "latest": true,
+    "draft": false,
+    "prerelease": false,
+    "production_deployed": false,
+    "docker_published": false
   }
 }

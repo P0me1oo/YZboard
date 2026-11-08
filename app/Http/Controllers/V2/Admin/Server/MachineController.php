@@ -36,12 +36,14 @@ class MachineController extends Controller
      */
     public function fetch(Request $request)
     {
+        $liteBindings = DB::table('v2_lite_machine')->pluck('uuid', 'machine_id');
         $machines = ServerMachine::withCount('servers')
             ->orderBy('id')
             ->get()
-            ->map(function (ServerMachine $machine) {
+            ->map(function (ServerMachine $machine) use ($liteBindings) {
                 return [
                     'id' => $machine->id,
+                    'lite_uuid' => $liteBindings[$machine->id] ?? null,
                     'name' => $machine->name,
                     'notes' => $machine->notes,
                     'is_active' => $machine->is_active,

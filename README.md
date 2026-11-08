@@ -2,6 +2,8 @@
 
 版本更新日志见 [CHANGELOG.md](CHANGELOG.md)。
 
+服务器监控的 Lite 接入与绑定方式见 [Lite 服务器监控接入](docs/lite-monitor.md)。
+
 <div align="center">
 
 [![Telegram](https://img.shields.io/badge/Telegram-Channel-blue)](https://t.me/XboardOfficial)

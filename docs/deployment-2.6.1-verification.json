@@ -1,0 +1,98 @@
+{
+  "checked_at": "2026-11-07T12:56:07.619111+00:00",
+  "server": "Solid-US LA",
+  "directory": "/root/yzboard",
+  "user": "www-data",
+  "version": "2.6.1",
+  "source": "56f6207d48a8ce9eecf509f4894a5ef6775595d0",
+  "dash_version": "0.91.1",
+  "dash_source": "a0aaab157c5182be598e49aef712015c67ec6c65",
+  "previous": {
+    "version": "2.4.1",
+    "source": "199c5a4218dd03ba09070f18928648cd86f61639"
+  },
+  "switch": {
+    "status": "services_started",
+    "source": "56f6207d48a8ce9eecf509f4894a5ef6775595d0",
+    "started_at": "2026-11-07T12:51:14.380900+00:00",
+    "step": "services_started",
+    "updated_at": "2026-11-07T12:51:20.825964+00:00",
+    "services_started_at": "2026-11-07T12:51:20.825945+00:00"
+  },
+  "first_attempt": {
+    "status": "rolled_back",
+    "source": "56f6207d48a8ce9eecf509f4894a5ef6775595d0",
+    "started_at": "2026-11-07T12:50:17.487537+00:00",
+    "step": "rolled_back",
+    "updated_at": "2026-11-07T12:50:22.321515+00:00",
+    "error": "[Errno 18] Invalid cross-device link: '/etc/yzboard/production-ready' -> '/tmp/yzboard-deploy-2.6.1-xVPAe0/production-ready'"
+  },
+  "http": {
+    "home": 200,
+    "admin": 200,
+    "guest_config": 200,
+    "operations_guest": 403,
+    "reconciliation_guest": 403,
+    "verified_resources": 12
+  },
+  "validation": {
+    "source": "56f6207d48a8ce9eecf509f4894a5ef6775595d0",
+    "php_lint_files": 56,
+    "pending_migrations": 2,
+    "platform_passed": true
+  },
+  "integrity": {
+    "source_files": 1032,
+    "persistent_preserved": {
+      "plugins": true,
+      "public/plugins": true,
+      "storage/theme": true,
+      "public/theme": true
+    },
+    "service_error_count": 0,
+    "error_classes": []
+  },
+  "services": {
+    "service_error_count": 0,
+    "websocket_connections": 48
+  },
+  "data": {
+    "env_preserved": true,
+    "node_configuration_preserved": false,
+    "failed_jobs_change": 0,
+    "previous_reporting": 51,
+    "recovered": 51,
+    "not_recovered_ids": [],
+    "new_migrations": [
+      "2026_11_07_000001_create_node_traffic_grants",
+      "2026_11_07_000002_add_node_operations"
+    ],
+    "traffic_grants": 1371,
+    "operations_rows": 5,
+    "reconciliation_rows": 1,
+    "node_config_comparison_note": "部署前后存在管理员节点复制/保存操作，整体摘要已变化，不能宣称全体配置逐字不变；部署本身未写入现有节点配置。",
+    "concurrent_admin_changes": {
+      "concurrent_admin_node_writes": 11,
+      "actions": {
+        "server_manage.copy": 2,
+        "server_manage.save": 7,
+        "server_manage.update": 2
+      },
+      "first_at": 1794055552,
+      "last_at": 1794055705
+    }
+  },
+  "migration_count": 143,
+  "migration_batch": 81,
+  "failed_jobs": 713,
+  "agent_updated": false,
+  "public_http": {
+    "origin_api_from_source_server": 200,
+    "panel_from_source_server": 403,
+    "panel_access_limitation": "Cloudflare returned 403 to the source-server request; origin panel and admin returned 200"
+  },
+  "rollback": "/root/yzboard-deployments/2.4.1/",
+  "package_sha256": "bc48bd4fbc9a1a4d2ede7f01812f57da3942c34a9832501103905c8c5a774c2e",
+  "composer_lock_sha256": "1050e1c00643b3a77b216635283974df6a98d2ef1fc3b96bba648c2bfc7dde7e",
+  "temporary_files_cleaned": true
+}

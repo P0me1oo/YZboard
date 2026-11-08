@@ -173,6 +173,13 @@ $router->post('/realtime/ticket', [\App\Http\Controllers\V2\Admin\RealtimeContro
                 'prefix' => 'server/machine'
             ], function ($router) {
                 $router->get('/fetch', [MachineController::class, 'fetch']);
+                $lite = \App\Http\Controllers\V2\Admin\Server\LiteController::class;
+                $router->get('/lite/config', [$lite, 'config']);
+                $router->post('/lite/config', [$lite, 'save']);
+                $router->get('/lite/inventory', [$lite, 'inventory']);
+                $router->get('/lite/snapshot', [$lite, 'snapshot']);
+                $router->post('/lite/bind', [$lite, 'bind']);
+                $router->get('/lite/history', [$lite, 'history']);
                 $router->post('/save', [MachineController::class, 'save']);
                 $router->post('/drop', [MachineController::class, 'drop']);
                 $router->post('/resetToken', [MachineController::class, 'resetToken']);

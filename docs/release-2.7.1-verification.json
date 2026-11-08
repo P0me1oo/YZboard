@@ -1,0 +1,62 @@
+{
+  "date": "2026-11-08",
+  "php": "8.4.27",
+  "sqlite": {
+    "tests": 1685,
+    "assertions": 32519,
+    "skipped": 10
+  },
+  "mariadb": {
+    "version": "11.8.6",
+    "sql_mode": "ONLY_FULL_GROUP_BY",
+    "tests": 1685,
+    "assertions": 32523,
+    "skipped": 0
+  },
+  "redis": "8.0.2",
+  "node": "24.22.1",
+  "source_files_checked": 3117,
+  "behavior_tests": 155,
+  "browser": {
+    "scenarios": 417,
+    "initial_passed": 409,
+    "initial_failed": 8,
+    "rechecked_passed": 8,
+    "reality_menu_repetitions": 3,
+    "single_full_run_passed": false
+  },
+  "dev_smoke": "passed",
+  "panel_asset_tests": 5,
+  "integrated_assets": 274,
+  "main_script": "assets/admin-BjExTWFq.js",
+  "main_script_sha256": "59c76d886e46eca3383af1f9b39a0142238a8b7528d5b3ed0f2e8f7197acbe35",
+  "real_lite_integration": false,
+  "production_deployment": false,
+  "github_actions": {
+    "panel": {
+      "repo": "P0me1oo/YZboard",
+      "source": "ec10e15b129106fc2663bc15960e69a7c7d2cbbb",
+      "run_id": 42439847065,
+      "reason": "GitHub account billing lock; no test steps started"
+    },
+    "dash": {
+      "repo": "P0me1oo/YZboard-Dash",
+      "source": "f76062cdfdad8ace47517a50ae9a4e273d98e194",
+      "run_id": 42439843002,
+      "conclusion": "startup_failure",
+      "jobs": 0
+    }
+  },
+  "logs": {
+    "sqlite-final.log": "c8376bec0bfe8472b634320f03b9296b54a878520446d51c29d043a2ae32796a",
+    "mariadb-final.log": "7e99909c68351c546700d1ed492ad583b1f9b138cba6bfe5560bfe0b40b947cb",
+    "browser.log": "980d42fe7985caf8dd9799ce3260a6190551d2651aa871af6cbace3f485a42b1",
+    "dev.log": "7ff5e8fc307c79b9d47cadf9e4577e9f739c8a28e8304857a4d8d60612400be8",
+    "comparison.log": "4773c89df667b96a895bfdc10a255072b2be9e2b97e528a7d12a1518a7192f32",
+    "proxy-traffic-recheck.log": "cd13c2629cdf76fbbd54931d0532150ee0233e5ef20916eb486cce3f555a5c83",
+    "heatmap-recheck.log": "fce1e077d1199ce2cf8bc16dd9ccfb198909fe34d0b2e16a5251190fdc64dd31",
+    "statistics-recheck.log": "d1c64ddf739c75dcd63ee93602789b5decf99ec94c172127952ed23efd8dabe9",
+    "route-recheck.log": "40acfeb367dd8014575159b6f2c8723adb5ebd52b5821c22aaf2b498d7f01bd1",
+    "reality-final.log": "12fb09e54e75991daa95b0633403df11ac8367a566537d72cf957874c00ba167"
+  }
+}

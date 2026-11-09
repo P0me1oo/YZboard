@@ -1,0 +1,188 @@
+{
+  "checked_at": "2026-11-09T00:47:27.611172+00:00",
+  "server": "Solid-US LA",
+  "directory": "/root/yzboard",
+  "before": {
+    "time": "2026-11-09T00:46:13+00:00",
+    "version": "2.11.2",
+    "queues": {
+      "default": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "order_handle": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "traffic_fetch": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "stat": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "user_alive_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "node_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_telegram": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email_mass": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      }
+    },
+    "failed_jobs": 713,
+    "migrations": 145,
+    "active_machines": 49,
+    "recent_processed_batches": 292,
+    "redis_ops_per_sec": 8396,
+    "local_nginx_https": {
+      "home": 200,
+      "admin": 200,
+      "guest_config": 200
+    }
+  },
+  "after": {
+    "time": "2026-11-09T00:47:27+00:00",
+    "version": "2.12.1",
+    "queues": {
+      "default": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "order_handle": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "traffic_fetch": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "stat": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "user_alive_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "node_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_telegram": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email_mass": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      }
+    },
+    "failed_jobs": 713,
+    "migrations": 146,
+    "active_machines": 49,
+    "recent_processed_batches": 270,
+    "redis_ops_per_sec": 6349,
+    "local_nginx_https": {
+      "home": 200,
+      "admin": 200,
+      "guest_config": 200
+    }
+  },
+  "switch": {
+    "started_at": "2026-11-09T00:46:13.547809+00:00",
+    "version": "2.12.1",
+    "previous_version": "2.11.2",
+    "source_commit": "445bfaf07b0e22ab686a6ba1b83dfc80dfd6970f",
+    "changed_files": 40,
+    "manifest_sha256": "7a16ecb2192cae3d9c5f1eec3c437ce18914bb0afd084dbdb2e18d9d638a35ad",
+    "services_started_at": "2026-11-09T00:46:18.154697+00:00",
+    "status": "services_started"
+  },
+  "services": {
+    "yzboard-web.service": {
+      "NRestarts": "0",
+      "WorkingDirectory": "/root/yzboard",
+      "User": "www-data",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "yzboard-horizon.service": {
+      "NRestarts": "0",
+      "WorkingDirectory": "/root/yzboard",
+      "User": "www-data",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "yzboard-websocket.service": {
+      "NRestarts": "0",
+      "WorkingDirectory": "/root/yzboard",
+      "User": "www-data",
+      "ActiveState": "active",
+      "SubState": "running"
+    }
+  },
+  "application_log_delta": {
+    "other_error:Illuminate\\\\Contracts\\\\Cache\\\\LockTimeoutException(code": 8,
+    "ws_request_errors": 23
+  },
+  "source": {
+    "commit": "445bfaf07b0e22ab686a6ba1b83dfc80dfd6970f",
+    "dash_commit": "1381497a7af7170f0c5f3522a9b87a07e394730a",
+    "checked_files": 1173,
+    "mismatches": [],
+    "manifest_sha256": "7a16ecb2192cae3d9c5f1eec3c437ce18914bb0afd084dbdb2e18d9d638a35ad"
+  },
+  "persistent_preserved": {
+    ".env": true,
+    "composer.lock": true
+  },
+  "ready": true,
+  "health": {
+    "nodes": 146,
+    "fresh": 135,
+    "checks_enabled": 0,
+    "nodes_stopped": 10,
+    "waiting": 10,
+    "upgrade_required": 1,
+    "lite_auto_bind_column": true,
+    "lite_auto_bind_migration": true,
+    "http_assets_checked": 11,
+    "http_asset_mismatches": []
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "date": "2026-11-09",
+  "projects": [
+    {
+      "repo": "P0me1oo/YZboard",
+      "version": "2.12.1",
+      "commit": "445bfaf07b0e22ab686a6ba1b83dfc80dfd6970f",
+      "artifact": "yzboard-2.12.1.tar.gz",
+      "sha256": "4197434afc8bfebcbc516169c3d2617b773b7cab981fa0dabb4b1c20258c6afe",
+      "size": 85236810
+    },
+    {
+      "repo": "P0me1oo/YZboard-Dash",
+      "version": "0.96.1",
+      "commit": "1381497a7af7170f0c5f3522a9b87a07e394730a",
+      "artifact": "yzboard-dash-0.96.1.tar.gz",
+      "sha256": "f13cdb81b6f9954afb58f6e61ff789bae0832032c0a5efba331e8d1296a27035",
+      "size": 4657230
+    }
+  ],
+  "panel": {
+    "php": "8.4.27",
+    "sqlite": {
+      "tests": 1740,
+      "assertions": 33061,
+      "skipped": 12
+    },
+    "mariadb": {
+      "version": "11.8.6",
+      "sql_mode": "ONLY_FULL_GROUP_BY",
+      "tests": 1740,
+      "assertions": 33080,
+      "skipped": 0
+    },
+    "redis": "8.0.2"
+  },
+  "dash": {
+    "node": "24.22.1",
+    "source_files_checked": 3120,
+    "behavior_tests": 157,
+    "build": "passed",
+    "assets": "passed",
+    "development": "passed",
+    "browser_scenarios": 434,
+    "browser_status": "all scenarios have passing results",
+    "browser_initial_passed": 432,
+    "browser_initial_failed": 2,
+    "browser_rechecked_scenarios": 2,
+    "recovery_repeats": 3,
+    "single_full_run_passed": false
+  },
+  "integrated_assets": 274,
+  "panel_asset_tests": 5,
+  "github_actions": {
+    "panel": {
+      "run_id": 42540967812,
+      "reason": "GitHub account billing lock; no test steps started"
+    },
+    "dash": {
+      "run_id": 42540961904,
+      "reason": "startup_failure; no jobs created"
+    }
+  },
+  "production_target": "Solid-US LA",
+  "production_deployment": true,
+  "docker_image_published": false,
+  "agent_updated": false,
+  "logs": {
+    "php-sqlite-full.log": "1100575e4d83336d7beb44f3f0beb3ca86be0fcd7974eed450aba6dc3c89159f",
+    "php-maria-full.log": "72400706a3e9bac33ba5485eca8e81b90e6c49f26ae6195c8f359b64dc7b3160",
+    "dash-unit.log": "6386343ed24cd66defe5db8ed72fc109ef35120d514cbc0863720e36a2944896",
+    "dash-dev.log": "efa288e93ff6c0530fe5471c10824e7c4a4c397b9a4e5202bf8ccb086c4229ca",
+    "comparison-recheck.log": "07709d47eb6d72628e33e48184a4690c5bb2b8fd79d77573b2fc60c54bde7c60",
+    "recovery-recheck.log": "abb4b3407d1b74917d108298f1cd79fa93ce78cbab6ea693eeb6e4d7e4f21040",
+    "browser-full.log": "38669a11b45b3cb282d4827b62f732e5ffeabadd8dbff4c3c9a4065ec26db1a2"
+  },
+  "release_status": "published after local validation",
+  "release_download_verified": true,
+  "release_latest": true,
+  "tags_match_commits": true,
+  "production_version": "2.12.1",
+  "production_record": "deployment-2.12.1-verification.json"
+}

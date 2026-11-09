@@ -1,0 +1,106 @@
+{
+  "checked_at": "2026-11-08T13:40:39.696607+00:00",
+  "server": "Solid-US LA",
+  "directory": "/root/yzboard",
+  "user": "www-data",
+  "version": "2.11.0",
+  "dash_version": "0.95.0",
+  "previous_version": "2.10.1",
+  "source": {
+    "base_commit": "56f6207d48a8ce9eecf509f4894a5ef6775595d0",
+    "workspace_head": "7d3eb4168a5721803770800921d1b9395f44dc68",
+    "workspace_modified": true,
+    "manifest_sha256": "c961aebf9a5b7e6835012a934eefd0d8fb7f6fc3019191606c7ff54100ff69a2",
+    "archive_sha256": "4ec9681e3bbdeacacc9caa6bbecabb60e2b7849baeff606b5a57d8dfeb8863e2"
+  },
+  "switch": {
+    "version": "2.11.0",
+    "previous_version": "2.10.1",
+    "workspace_head": "7d3eb4168a5721803770800921d1b9395f44dc68",
+    "workspace_modified": true,
+    "manifest_sha256": "c961aebf9a5b7e6835012a934eefd0d8fb7f6fc3019191606c7ff54100ff69a2",
+    "started_at": "2026-11-08T13:39:38.910600+00:00",
+    "step": "services_started",
+    "updated_at": "2026-11-08T13:39:41.300853+00:00"
+  },
+  "services": {
+    "yzboard-web.service": {
+      "NRestarts": "0",
+      "WorkingDirectory": "/root/yzboard",
+      "User": "www-data",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "yzboard-horizon.service": {
+      "NRestarts": "0",
+      "WorkingDirectory": "/root/yzboard",
+      "User": "www-data",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "yzboard-websocket.service": {
+      "NRestarts": "0",
+      "WorkingDirectory": "/root/yzboard",
+      "User": "www-data",
+      "ActiveState": "active",
+      "SubState": "running"
+    }
+  },
+  "http": {
+    "home": 200,
+    "admin": 200,
+    "guest_config": 200,
+    "block_users_guest": 403,
+    "verified_changed_resources": 6
+  },
+  "local_nginx_https": {
+    "home": 200,
+    "admin": 200,
+    "guest_config": 200
+  },
+  "validation": {
+    "source_files": 1152,
+    "changed_files": 17,
+    "php_lint_files": 2,
+    "platform_passed": true,
+    "baseline_code_matches": true
+  },
+  "integrity": {
+    "source_files": 1152,
+    "persistent_preserved": {
+      ".env": true,
+      "plugins": true,
+      "public/plugins": true,
+      "storage/theme": true,
+      "public/theme": true
+    },
+    "service_error_count": 0
+  },
+  "application_query": {
+    "view": "users",
+    "query_has_snapshot": true,
+    "user_groups": 0,
+    "retention_days": 7,
+    "general_log_settings_excludes_block": true,
+    "old_navigation_absent": true,
+    "new_entry_present": true
+  },
+  "data": {
+    "php": "8.4.27",
+    "db_version": "12.3.3-MariaDB-deb13",
+    "migrations_before": 145,
+    "migrations_after": 145,
+    "failed_jobs": 713,
+    "failed_jobs_change": 0,
+    "previous_reporting": 49,
+    "recovered": 49,
+    "not_recovered_ids": [],
+    "agent_versions": {
+      "v2.35.0": 48,
+      "v2.10.1": 1,
+      "v2.32.0": 1
+    }
+  },
+  "horizon": "running",
+  "agent_updated": false
+}

@@ -47,8 +47,10 @@ class ServerController extends Controller
         }
 
         return response()->json([
+            'host_monitoring' => \App\Services\HostMonitoring::enabled($request->attributes->get('machine_info'), $node),
             'log_policy' => \App\Services\AgentLogPolicy::view($request->attributes->get('machine_info'), $node),
             'access_log' => ['version' => 2, 'retention_days' => \App\Services\LogSettings::days('access')],
+            'block_log' => ['version' => 1, 'retention_days' => \App\Services\RouteBlockLog::days()],
             'agent_log' => ['version' => 1, 'retention_days' => \App\Services\LogSettings::days('agent'), 'events' => ['xray.crash']],
             'websocket' => $websocket,
             'settings' => [
@@ -76,6 +78,10 @@ class ServerController extends Controller
     {
         $node = $request->attributes->get('node_info');
 
+        if ($request->has('ip_connection_counts')) {
+            \App\Services\NodeStateValidator::validate(['ip_connection_counts' => $request->input('ip_connection_counts')]);
+        }
+
         if ($request->boolean('realtime')) {
             $receipt = app(NodeReportService::class)->acceptRealtime($node, $request->all());
             return response()->json(['data' => true, 'receipt' => $receipt]);
@@ -102,6 +108,7 @@ class ServerController extends Controller
         $hasRelayCounts = is_array($relayCounts)
             && ServerService::processRelayConnectionCounts($node, $relayCounts);
         $counts = $request->input('connection_counts');
+        app(\App\Services\UserIpConnectionService::class)->replace($node, $request->input('ip_connection_counts'));
         if (is_array($counts)) {
             app(\App\Services\UserConnectionService::class)->replace($node, $counts);
         }

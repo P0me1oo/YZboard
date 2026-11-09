@@ -28,6 +28,8 @@ class FrontPoolScheduler
             if ($reason === 'healthy') $all = array_merge($all, $addresses);
         }
         $probes = $config['health_enabled'] && $all ? $this->probe->check($all, $pool->gateway_port) : [];
+        $lite = app(LiteMonitor::class)->schedulingSnapshot($pool->members
+            ->map(fn ($member) => $member->runtimeNode?->machine_id)->filter()->unique()->values()->all());
         $eligible = []; $snapshot = []; $target = in_array($config['strategy'], ['latency', 'latency_balanced'], true) ? Server::find($config['latency_node_id']) : null;
         foreach ($members as $id => $item) {
             $member = $item['member']; $node = $item['node']; $state = $member->scheduling_state ?? [];
@@ -60,23 +62,25 @@ class FrontPoolScheduler
                 elseif (!$latency) $reason = 'probe_pending';
                 elseif (!$latency['healthy']) $reason = 'latency_failed';
             }
-            $ratio = null; $resetAt = null;
-            if ($node?->machine && $node->machine->traffic_limit > 0) {
-                $traffic = MachineTrafficService::view($node->machine);
-                $resetAt = (int) $traffic['period_end'];
-                $ratio = max(0, ($traffic['limit'] - $traffic['used']) / $traffic['limit'] * 100);
-            }
-            $low = $config['quota_enabled'] && $ratio !== null && $ratio < ($config['quota_percent'] + (($state['quota_low'] ?? false) ? 5 : 0));
-            $state = ['ports' => $ports, 'reason' => $reason, 'quota_low' => $low,
-                'remaining_percent' => $ratio === null ? null : round($ratio, 1), 'reset_at' => $resetAt,
-                'reset_timezone' => config('app.timezone'), 'latency_group' => $state['latency_group'] ?? null,
+            $traffic = $node?->machine ? SchedulingTraffic::view($node->machine, $lite[$node->machine_id] ?? null)
+                : ['remaining_percent' => null, 'reset_at' => null, 'traffic_status' => 'unavailable', 'traffic_source' => null];
+            $ratio = $traffic['remaining_percent']; $resetAt = $traffic['reset_at'];
+            $wasLow = ($state['traffic_source'] ?? 'local') === $traffic['traffic_source'] && ($state['quota_low'] ?? false);
+            $low = $config['quota_enabled'] && ($ratio !== null
+                ? $ratio < ($config['quota_percent'] + ($wasLow ? 5 : 0))
+                : ($traffic['traffic_status'] === 'unavailable' && $wasLow));
+            $state = [...$traffic, 'ports' => $ports, 'reason' => $reason, 'quota_low' => $low,
+                'remaining_percent' => $ratio === null ? null : round($ratio, 1),
+                'latency_group' => $state['latency_group'] ?? null,
                 'latency_ms' => $latency && $latency['healthy'] ? $latency['rtt_ms'] : null];
             $member->scheduling_state = $state;
             $member->healthy_addresses = in_array($reason, ['healthy', 'probe_pending'], true) ? $addresses : [];
             $member->checked_at = now(); $member->save();
             $snapshot[$id] = ['node_id' => $member->source_node_id, 'name' => $node?->name ?? '', 'reason' => $reason, 'quota_low' => $low, 'weight' => (int) ($member->weight ?: 1)];
             // 测速尚未就绪时暂保留可达入口，所有测速失效时只沿用端口健康成员，不回落失效端口。
-            if (in_array($reason, ['healthy', 'probe_pending'], true)) $eligible[$id] = [...$item, 'addresses' => $addresses, 'low' => $low, 'ratio' => $ratio ?? 101, 'reset_at' => $resetAt, 'latency' => $latency];
+            if (in_array($reason, ['healthy', 'probe_pending'], true)) $eligible[$id] = [...$item, 'addresses' => $addresses, 'low' => $low,
+                'ratio' => $ratio ?? ($traffic['traffic_status'] === 'unlimited' ? 101 : -1),
+                'reset_at' => $resetAt, 'latency' => $latency];
         }
         if ($config['quota_enabled'] && $eligible) {
             $enough = array_filter($eligible, fn ($item) => !$item['low']);
@@ -86,13 +90,17 @@ class FrontPoolScheduler
                 $eligible = array_filter($eligible, fn ($item) => $item['ratio'] === $best);
             }
         }
+        if ($config['strategy'] === 'cycle' && $eligible) {
+            $usable = array_filter($eligible, fn ($item) => $item['ratio'] != 0);
+            if ($usable) $eligible = $usable;
+        }
         if ($eligible) {
             $priority = min(array_map(fn ($item) => $item['member']->priority, $eligible));
             $eligible = array_filter($eligible, fn ($item) => $item['member']->priority === $priority);
         }
         if ($config['strategy'] === 'cycle' && $eligible) {
             // 同优先级先消耗最近重置且尚有可用配额的成员；无限流量仅作兜底。
-            $metered = array_filter($eligible, fn ($item) => $item['reset_at'] !== null);
+            $metered = array_filter($eligible, fn ($item) => $item['reset_at'] !== null && $item['ratio'] > 0);
             if ($metered) {
                 $next = min(array_column($metered, 'reset_at'));
                 $eligible = array_filter($metered, fn ($item) => $item['reset_at'] === $next);

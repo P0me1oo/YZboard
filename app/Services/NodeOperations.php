@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Server;
+use App\Models\ServerMachine;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -60,32 +61,50 @@ final class NodeOperations
     }
     public function view(Server $node): array
     {
-        $data = Cache::get('node:operations:'.($node->parent_id ?: $node->id));
-        return $this->present($node, $data);
+        return $this->views([$node])[(int) $node->id];
     }
 
     /** 列表一次读取一批缓存，共享节点只读取一次父节点状态。 */
     public function views(iterable $nodes): array
     {
         $nodes = collect($nodes);
+        $owners = $nodes->keyBy('id');
+        $missingParents = $nodes->pluck('parent_id')->filter()->unique()->diff($owners->keys());
+        if ($missingParents->isNotEmpty()) {
+            $owners = $owners->union(Server::whereIn('id', $missingParents)
+                ->get(['id', 'enabled', 'machine_id', 'health_check'])->keyBy('id'));
+        }
+        $machineIds = $owners->pluck('machine_id')->filter()->unique();
+        $machines = $machineIds->isEmpty() ? collect() : ServerMachine::whereIn('id', $machineIds)
+            ->get(['id', 'agent_runtime'])->keyBy('id');
         $keys = $nodes->map(fn ($node) => 'node:operations:'.($node->parent_id ?: $node->id))->unique();
         $states = [];
         foreach ($keys->chunk(500) as $chunk) {
             $states += Cache::many($chunk->values()->all());
         }
-        return $nodes->mapWithKeys(fn ($node) => [(int) $node->id => $this->present(
-            $node, $states['node:operations:'.($node->parent_id ?: $node->id)] ?? null
-        )])->all();
+        return $nodes->mapWithKeys(function ($node) use ($owners, $machines, $states) {
+            $owner = $owners->get($node->parent_id ?: $node->id) ?? $node;
+            return [(int) $node->id => $this->present($node, $owner,
+                $states['node:operations:'.$owner->id] ?? null,
+                $machines->get($owner->machine_id)?->agent_runtime ?? [])];
+        })->all();
     }
 
-    private function present(Server $node, mixed $data): array
+    private function present(Server $node, Server $owner, mixed $data, array $agent): array
     {
         $fresh = is_array($data) && ($data['received_at'] ?? 0) >= now()->timestamp - 90;
-        return ['supported' => is_array($data),'fresh' => $fresh,'enabled' => (bool)($node->health_check['enabled'] ?? false),'health_config' => $node->health_check,'state' => $data];
+        $version = ltrim((string) ($agent['version'] ?? ''), 'v');
+        $upgradeRequired = !is_array($data) && ($agent['reported_at'] ?? 0) >= now()->timestamp - 90
+            && preg_match('/\A\d+\.\d+\.\d+(?:[-+].*)?\z/', $version)
+            && version_compare($version, '2.33.0', '<');
+        return ['supported' => is_array($data), 'upgrade_required' => (bool) $upgradeRequired,
+            'node_enabled' => $node->enabled !== false && $owner->enabled !== false,
+            'fresh' => $fresh, 'enabled' => (bool) ($owner->health_check['enabled'] ?? false),
+            'health_config' => $owner->health_check, 'state' => $data];
     }
     public function detail(Server $node): array
     {
-        $rows = DB::table('v2_node_health_sample')->where('server_id', $node->id)->where('checked_at', '>=', now()->timestamp - 86400)->orderBy('checked_at')->limit(2880)->get(['checked_at','status','latency_ms']);
+        $rows = DB::table('v2_node_health_sample')->where('server_id', $node->parent_id ?: $node->id)->where('checked_at', '>=', now()->timestamp - 86400)->orderBy('checked_at')->limit(2880)->get(['checked_at','status','latency_ms']);
         $count = $rows->whereIn('status', ['ok','failed'])->count();
         return $this->view($node) + ['node_id' => (int)$node->id,'name' => $node->name,'history' => $rows,'availability' => $count ? round(100 * $rows->where('status', 'ok')->count() / $count, 2) : null,'samples' => $count];
     }

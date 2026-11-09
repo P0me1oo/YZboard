@@ -424,6 +424,11 @@ class ServerService
         $nodeType = strtoupper($node->type);
         $nodeId = $node->id;
 
+        if (!HostMonitoring::enabled(node: $node) || (!isset($status['cpu']) && !isset($status['mem']))) {
+            Cache::forget(CacheKey::get("SERVER_{$nodeType}_LOAD_STATUS", $nodeId));
+            return;
+        }
+
         $statusData = [
             'cpu' => (float) ($status['cpu'] ?? 0),
             'mem' => [
@@ -499,6 +504,8 @@ class ServerService
             'updated_at' => now()->timestamp,
             'kernel_status' => (bool) ($metrics['kernel_status'] ?? false),
         ];
+
+        if (!HostMonitoring::enabled(node: $node)) unset($metricsData['cpu_per_core'], $metricsData['load']);
 
         Cache::put(
             CacheKey::get('SERVER_' . $nodeType . '_METRICS', $nodeId),

@@ -30,6 +30,7 @@ class ServerMachine extends Model
     protected $attributes = ['agent_log_disabled' => false];
 
     protected $casts = [
+        'lite_auto_bind' => 'boolean',
         'is_active' => 'boolean',
         'agent_log_disabled' => 'boolean',
         'proxy_u' => 'integer',

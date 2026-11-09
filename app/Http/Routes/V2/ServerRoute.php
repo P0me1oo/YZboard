@@ -20,6 +20,7 @@ class ServerRoute
             $route->post('report', [ServerController::class, 'report']);
             $route->post('privacy', [ServerController::class, 'privacy']);
             $route->post('access-log', [\App\Http\Controllers\V2\Server\AccessLogController::class, 'report']);
+            $route->post('block-log', [\App\Http\Controllers\V2\Server\RouteBlockLogController::class, 'report']);
             $route->post('agent-log', [\App\Http\Controllers\V2\Server\AgentLogController::class, 'report']);
             $route->post('realtime/begin', [\App\Http\Controllers\V2\Server\RealtimeController::class, 'begin']);
             $route->post('realtime/state', [\App\Http\Controllers\V2\Server\RealtimeController::class, 'state']);

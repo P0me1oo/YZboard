@@ -51,6 +51,11 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     "cleanupConfirm": "清理后，使用这些旧域名的客户端将无法连接。确定清理？"
   },
   "balancer": {
+    "trafficLite": "Lite 流量",
+    "trafficLocal": "本地流量",
+    "trafficUnavailable": "数据暂不可用",
+    "trafficUnlimited": "不限流量",
+    "trafficRemaining": "剩余 {{percent}}%",
     "quotaLow": "剩余流量不足",
     "scheduling": "自动调度",
     "healthCheck": "检测前置端口",
@@ -192,6 +197,22 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     "resetDate": "流量重置日"
   },
   "logs": {
+    "blockUsers": "按用户查看",
+    "blockCount": "拦截次数",
+    "lastBlocked": "最近拦截",
+    "blockDetails": "查看明细",
+    "backToUsers": "返回用户列表",
+    "actions": "操作",
+
+    "blockRetention": "保存天数",
+    "block": "路由拦截",
+    "rule": "命中规则",
+    "ruleFilter": "规则名称或编号",
+    "target": "目标域名 / IP",
+    "port": "目标端口",
+    "network": "网络类型",
+    "unknownUser": "无法识别",
+
     "settings": {
       "title": "日志设置",
       "description": "设置各类日志是否在面板记录，以及保存天数。",
@@ -3630,6 +3651,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     }
   },
   "route": {
+    "tabs": {"rules": "路由规则", "blocks": "拦截记录"},
     "title": "路由管理",
     "description": "管理所有路由组，包括添加、删除、编辑等操作。",
     "columns": {
@@ -3780,8 +3802,13 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
   },
   "machine": {
     "lite": {
+      "binding_pending": "待匹配，每分钟重试",
+      "binding_conflict": "IP 匹配冲突，请手动绑定",
+      "binding_matched": "已匹配，等待自动绑定",
+      "binding_paused": "已暂停自动绑定",
+      "resumeAuto": "恢复自动绑定",
       "connect": "接入 Lite",
-      "description": "按公网 IP 匹配服务器，读取 Lite 的监控与流量信息。",
+      "description": "启用后每分钟按公网 IP 自动绑定，冲突可手动选择。",
       "url": "Lite 站点地址",
       "key": "站点 API 密钥",
       "keepKey": "留空保留已保存的密钥",

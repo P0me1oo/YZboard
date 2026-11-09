@@ -20,10 +20,12 @@ class NodeStateService
             'state' => 'present|array',
         ])->validate();
         $state = NodeStateValidator::validate($message['state']);
+        $enabled = HostMonitoring::enabled(node: $node);
+        if (!$enabled) $state = HostMonitoring::withoutHostState($state);
         $source = 'node:' . $node->id;
         $receipt = $this->store->accept($source, $validated['epoch'], (int) $validated['sequence'], $state);
         $this->projectLatest($node);
-        return $receipt + ['telemetry' => app(TelemetryDemand::class)->forSource($source)];
+        return $receipt + ['host_monitoring' => $enabled, 'telemetry' => app(TelemetryDemand::class)->forSource($source)];
     }
 
     /** 只投影最新快照；迟到请求和投影重试不能重新应用已经过时的内容。 */
@@ -61,6 +63,7 @@ class NodeStateService
         $hasRelayCounts = is_array($relayCounts)
             && ServerService::processRelayConnectionCounts($node, $relayCounts);
         $counts = $state['connection_counts'] ?? null;
+        app(UserIpConnectionService::class)->replace($node, $state['ip_connection_counts'] ?? null);
         if (is_array($counts)) {
             app(UserConnectionService::class)->replace($node, $counts);
             if (!$hasRelayCounts) {

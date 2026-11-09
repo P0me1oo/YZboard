@@ -107,6 +107,163 @@ class SchedulingTest extends TestCase
             'rtt_ms' => $rtt, 'checked_at' => $checked ?? now()->timestamp]]);
     }
 
+    private array $liteNodes = [];
+    private array $liteStates = [];
+    private bool $liteFailed = false;
+
+    private function lite(Server ...$nodes): void
+    {
+        \App\Models\LiteConnection::create(['id' => 1, 'url' => 'https://lite.example.test', 'api_key' => Str::random(32), 'enabled' => true]);
+        foreach ($nodes as $index => $node) {
+            $uuid = (string) Str::uuid();
+            \Illuminate\Support\Facades\DB::table('v2_lite_machine')->insert(['machine_id' => $node->machine_id, 'uuid' => $uuid]);
+            $this->liteNodes[$node->id] = ['uuid' => $uuid, 'traffic_limit' => 500, 'effective_traffic_limit' => 1000,
+                'traffic_limit_type' => 'sum', 'effective_traffic_type' => 'max', 'traffic_reset_day' => 31,
+                'traffic_reset_time' => '15:30:00', 'traffic_reset_timezone' => 'America/Los_Angeles',
+                'traffic_reset_at' => now()->addDays($index + 1)->toIso8601String()];
+            $this->liteStates[$uuid] = ['online' => true, 'time' => now()->toIso8601String(), 'net_total_up' => 100, 'net_total_down' => 200];
+        }
+        $this->mock(\App\Services\LiteClient::class)->shouldReceive('read')->andReturnUsing(function ($connection, $method) {
+            if ($this->liteFailed) throw new \App\Exceptions\ApiException('Lite 读取失败', 502);
+            return match ($method) {
+                'admin:listClients' => array_values($this->liteNodes),
+                'common:getNodes' => collect($this->liteNodes)->keyBy('uuid')->all(),
+                'common:getNodesLatestStatus' => $this->liteStates,
+            };
+        });
+    }
+
+    private function freshLite(Server ...$nodes): void
+    {
+        Cache::flush();
+        foreach ($nodes as $node) $this->heartbeat($node);
+    }
+
+    public function test_lite_quota_and_timezone_are_used_by_all_four_strategies_without_mutating_protection(): void
+    {
+        [$pool, $a, $b] = $this->pool();
+        $target = $this->landing($a, '192.0.2.3');
+        $target->update(['relay_entry_id' => null, 'relay_pool_id' => $pool->id]);
+        $this->lite($a, $b);
+        $this->liteStates[$this->liteNodes[$a->id]['uuid']]['net_total_down'] = 950;
+        $before = $a->machine->fresh()->getAttributes();
+        foreach (['priority', 'latency', 'latency_balanced', 'cycle'] as $strategy) {
+            $pool->update(['scheduling_config' => ['strategy' => $strategy, 'latency_node_id' => $target->id, 'quota_enabled' => true, 'quota_percent' => 10]]);
+            $this->sample($a, $target, true, 10); $this->sample($b, $target, true, 50);
+            [$addresses] = app(FrontPoolScheduler::class)->select($pool->fresh(['members.runtimeNode.machine', 'members.sourceNode.machine']));
+            $this->assertSame([$b->host], $addresses, $strategy);
+            $state = $pool->members()->where('source_node_id', $a->id)->first()->scheduling_state;
+            $this->assertSame(5, $state['remaining_percent']);
+            $this->assertSame(1000, $state['traffic_limit']);
+            $this->assertSame(950, $state['traffic_used']);
+            $this->assertSame('lite', $state['traffic_source']);
+            $this->assertSame('America/Los_Angeles', $state['reset_timezone']);
+            $this->assertSame(strtotime($this->liteNodes[$a->id]['traffic_reset_at']), $state['reset_at']);
+        }
+        $this->assertSame($before, $a->machine->fresh()->getAttributes());
+        $pool->update(['enabled' => false]);
+        [$addresses] = app(FrontPoolScheduler::class)->select($pool->fresh(['members.runtimeNode.machine', 'members.sourceNode.machine']));
+        $this->assertSame([], $addresses);
+        $this->assertSame('lite', $pool->members()->where('source_node_id', $a->id)->first()->scheduling_state['traffic_source']);
+    }
+
+    public function test_lite_cycle_uses_absolute_reset_time_and_exhaustion_falls_back_across_priorities(): void
+    {
+        [$pool, $a, $b] = $this->pool();
+        $this->lite($a, $b);
+        $pool->update(['scheduling_config' => ['strategy' => 'cycle']]);
+        $this->liteNodes[$a->id]['traffic_reset_at'] = now()->addDays(2)->setTimezone('Asia/Tokyo')->toIso8601String();
+        $this->liteNodes[$b->id]['traffic_reset_at'] = now()->addDay()->setTimezone('America/Los_Angeles')->toIso8601String();
+        $select = fn () => app(FrontPoolScheduler::class)->select($pool->fresh(['members.runtimeNode.machine', 'members.sourceNode.machine']))[0];
+        $this->assertSame([$b->host], $select());
+        $pool->members()->where('source_node_id', $a->id)->update(['priority' => 2]);
+        $this->liteStates[$this->liteNodes[$b->id]['uuid']]['net_total_down'] = 1100;
+        $this->freshLite($a, $b);
+        $this->assertSame([$a->host], $select());
+        $this->liteNodes[$a->id]['effective_traffic_limit'] = 0;
+        $this->freshLite($a, $b);
+        $this->assertSame([$a->host], $select());
+        $a->update(['enabled' => false]);
+        $this->assertSame([$b->host], $select(), '没有其他健康入口时保留可用入口');
+    }
+
+    public function test_lite_quota_hysteresis_recovers_after_five_points_and_all_low_retains_the_best(): void
+    {
+        [$pool, $a, $b] = $this->pool(); $this->lite($a, $b);
+        $pool->update(['scheduling_config' => ['quota_enabled' => true, 'quota_percent' => 10]]);
+        $aUuid = $this->liteNodes[$a->id]['uuid']; $bUuid = $this->liteNodes[$b->id]['uuid'];
+        $select = fn () => app(FrontPoolScheduler::class)->select($pool->fresh(['members.runtimeNode.machine', 'members.sourceNode.machine']))[0];
+        $this->liteStates[$aUuid]['net_total_down'] = 950;
+        $this->assertSame([$b->host], $select());
+        $this->liteStates[$aUuid]['net_total_down'] = 880; $this->freshLite($a, $b);
+        $this->assertSame([$b->host], $select());
+        $this->liteStates[$aUuid]['net_total_down'] = 850; $this->freshLite($a, $b);
+        $this->assertSame([$a->host, $b->host], $select());
+        $this->liteStates[$aUuid]['net_total_down'] = 950; $this->liteStates[$bUuid]['net_total_down'] = 970;
+        $this->freshLite($a, $b);
+        $this->assertSame([$a->host], $select());
+    }
+
+    public function test_lite_failure_stale_and_missing_data_do_not_become_unlimited_or_break_port_failover(): void
+    {
+        [$pool, $a, $b] = $this->pool(); $this->lite($a, $b);
+        $pool->update(['scheduling_config' => ['strategy' => 'cycle', 'quota_enabled' => true, 'health_enabled' => true]]);
+        $this->mock(FrontPortProbe::class)->shouldReceive('check')->andReturn([
+            $a->host => ['ok' => false], $b->host => ['ok' => true],
+        ]);
+        $select = fn () => app(FrontPoolScheduler::class)->select($pool->fresh(['members.runtimeNode.machine', 'members.sourceNode.machine']))[0];
+        $this->liteFailed = true;
+        $select(); $this->assertSame([$b->host], $select());
+        $state = $pool->members()->where('source_node_id', $b->id)->first()->scheduling_state;
+        $this->assertSame('unavailable', $state['traffic_status']);
+        $this->assertNull($state['remaining_percent']); $this->assertNull($state['reset_at']);
+        $this->liteFailed = false;
+        $uuid = $this->liteNodes[$b->id]['uuid'];
+        foreach ([['time' => now()->subMinutes(5)->toIso8601String()], ['online' => false], ['net_total_down' => null]] as $invalid) {
+            $original = $this->liteStates[$uuid]; $this->liteStates[$uuid] = [...$original, ...$invalid];
+            $this->freshLite($a, $b); $this->assertSame([$b->host], $select());
+            $this->assertSame('unavailable', $pool->members()->where('source_node_id', $b->id)->first()->scheduling_state['traffic_status']);
+            $this->liteStates[$uuid] = $original;
+        }
+        unset($this->liteNodes[$b->id]); $this->freshLite($a, $b);
+        $this->assertSame([$b->host], $select());
+        $b->update(['enabled' => false]);
+        $this->assertSame([], $select(), 'Lite 故障不能恢复失败端口或停用节点');
+    }
+
+    public function test_lite_does_not_override_local_protection_and_disabling_lite_restores_local_quota(): void
+    {
+        [$pool, $a, $b] = $this->pool(); $this->lite($a);
+        $pool->update(['scheduling_config' => ['quota_enabled' => true, 'quota_percent' => 10]]);
+        $a->machine->update(['traffic_limit' => 1000, 'traffic_mode' => 'outbound', 'traffic_state' =>
+            ['initialized' => true, 'error' => null, 'reported_at' => now()->timestamp, 'tx' => 950]]);
+        $select = fn () => app(FrontPoolScheduler::class)->select($pool->fresh(['members.runtimeNode.machine', 'members.sourceNode.machine']))[0];
+        $this->assertSame([$a->host, $b->host], $select());
+        \App\Models\LiteConnection::whereKey(1)->update(['enabled' => false]);
+        $this->assertSame([$b->host], $select());
+        $this->assertSame('local', $pool->members()->where('source_node_id', $a->id)->first()->scheduling_state['traffic_source']);
+        \App\Models\LiteConnection::whereKey(1)->update(['enabled' => true]);
+        $a->machine->update(['traffic_state' => ['initialized' => true, 'error' => null, 'reported_at' => now()->timestamp, 'tx' => 1000]]);
+        $this->assertSame([$b->host], $select());
+    }
+
+    public function test_lite_cycle_boundary_refreshes_quota_and_usage_without_waiting_for_cache_expiry(): void
+    {
+        [$pool, $a, $b] = $this->pool(); $this->lite($a, $b);
+        $pool->update(['scheduling_config' => ['strategy' => 'cycle']]);
+        $this->liteNodes[$a->id]['traffic_reset_at'] = now()->addSecond()->toIso8601String();
+        $select = fn () => app(FrontPoolScheduler::class)->select($pool->fresh(['members.runtimeNode.machine', 'members.sourceNode.machine']))[0];
+        $this->assertSame([$a->host], $select());
+        $this->travel(2)->seconds();
+        $this->liteNodes[$a->id]['traffic_reset_at'] = now()->addMonth()->toIso8601String();
+        $this->liteNodes[$a->id]['effective_traffic_limit'] = 500;
+        $this->liteStates[$this->liteNodes[$a->id]['uuid']]['net_total_down'] = 10;
+        $this->assertSame([$b->host], $select());
+        $state = $pool->members()->where('source_node_id', $a->id)->first()->scheduling_state;
+        $this->assertSame(500, $state['traffic_limit']);
+        $this->assertSame(100, $state['traffic_used']);
+    }
+
     public function test_port_failures_and_recovery_are_confirmed_per_address(): void
     {
         [$pool] = $this->pool(); $pool->update(['scheduling_config' => ['health_enabled' => true]]);

@@ -43,6 +43,9 @@ class AdminRoute
 });
 $router->post('/realtime/ticket', [\App\Http\Controllers\V2\Admin\RealtimeController::class, 'ticket']);
             $router->get('/logs/settings', [\App\Http\Controllers\V2\Admin\LogController::class, 'settings']);
+            $router->get('/logs/block', [\App\Http\Controllers\V2\Admin\LogController::class, 'blocks']);
+            $router->get('/logs/block/settings', [\App\Http\Controllers\V2\Admin\LogController::class, 'blockSettings']);
+            $router->post('/logs/block/settings', [\App\Http\Controllers\V2\Admin\LogController::class, 'saveBlockSettings']);
             $router->post('/logs/settings', [\App\Http\Controllers\V2\Admin\LogController::class, 'saveSettings']);
             $router->get('/logs/agent/nodes', [\App\Http\Controllers\V2\Admin\LogController::class, 'nodes']);
             $router->get('/logs/{category}', [\App\Http\Controllers\V2\Admin\LogController::class, 'fetch'])->where('category', 'system|agent|user');

@@ -29,7 +29,7 @@ class PruneManagementLogs extends Command
         try {
             $pending = DB::table('v2_settings')->where('name', self::PENDING_SETTING)->first();
             if ($this->option('resume') && $pending === null) return self::SUCCESS;
-            $cursor = (int) ($pending->value ?? 0) % 5;
+            $cursor = (int) ($pending->value ?? 0) % 6;
             // 删除前登记待办；缓存重建、进程退出或某批失败都不会丢失续跑位置。
             $this->saveCursor($cursor);
             return $this->prune($cursor);
@@ -47,10 +47,10 @@ class PruneManagementLogs extends Command
         $batches = max(1, min(1000, (int) $this->option('batches')));
         $seconds = max(1, min(300, (int) $this->option('max-seconds')));
         $started = hrtime(true);
-        $remaining = array_fill_keys(range(0, 4), true);
+        $remaining = array_fill_keys(range(0, 5), true);
         $deleted = $files = 0;
         for ($round = 0; $round < $batches; $round++) {
-            while (!isset($remaining[$cursor])) $cursor = ($cursor + 1) % 5;
+            while (!isset($remaining[$cursor])) $cursor = ($cursor + 1) % 6;
             // 续跑和各批次读取当前保留期限，延长期限后不沿用旧的删除边界。
             $settings = LogSettings::all();
             if ($cursor === 4) {
@@ -63,14 +63,16 @@ class PruneManagementLogs extends Command
                     ['v2_user_event_log', 'occurred_at', 'user'],
                     ['v2_admin_audit_log', 'created_at', 'audit'],
                     ['v2_node_limit_receipt', 'accepted_at', 'user'],
+                    null, // 位置 4 沿用系统文件，保留旧待办游标的含义。
+                    ['v2_route_block_log', 'occurred_at', 'block'],
                 ][$cursor];
-                $days = $settings[$module]['retention_days'];
+                $days = $module === 'block' ? \App\Services\RouteBlockLog::days() : $settings[$module]['retention_days'];
                 if ($cursor === 3) $days = max(UserEventLog::RETENTION_DAYS, $days);
                 $count = $this->deleteBatch($table, $column, now()->timestamp - $days * 86400, $size);
                 $deleted += $count;
                 if ($count < $size) unset($remaining[$cursor]);
             }
-            $cursor = ($cursor + 1) % 5;
+            $cursor = ($cursor + 1) % 6;
             if ($remaining === []) {
                 DB::table('v2_settings')->where('name', self::PENDING_SETTING)->delete();
                 break;

@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\DB;
 use App\Models\Server;
+use App\Models\ServerMachine;
 use App\Models\User;
 use App\Models\Plan;
 use App\Models\NodeReportBatch;
@@ -29,12 +30,14 @@ class NodeOperationsTest extends TestCase
         parent::setUp();
         Cache::flush();
         Queue::fake();
-        Redis::shouldReceive('publish')->andReturn(1);
+        Redis::shouldReceive('publish')->byDefault()->andReturn(1);
         Route::middleware('admin')->group(function () {
             Route::get('/_ops/detail', [OperationsController::class,'detail']);
             Route::get('/_ops/certificates', [OperationsController::class,'certificates']);
             Route::get('/_ops/topology', [OperationsController::class,'topology']);
             Route::post('/_ops/health', [OperationsController::class,'health']);
+            Route::post('/_ops/check', [OperationsController::class,'check']);
+            Route::post('/_ops/save', [\App\Http\Controllers\V2\Admin\Server\ManageController::class,'save']);
             Route::post('/_ops/renew', [OperationsController::class,'renew']);
             Route::post('/_ops/plan', [PlanController::class,'save']);
             Route::post('/_ops/user', [UserController::class,'update']);
@@ -62,6 +65,123 @@ class NodeOperationsTest extends TestCase
         $this->postJson('/_ops/health', ['node_id' => $n->id,'enabled' => true,'url' => 'https://example.com/?token=secret','interval' => 60])->assertUnprocessable();
         $this->postJson('/_ops/health', ['node_id' => $n->id,'enabled' => true,'url' => 'https://example.com/','interval' => 60])->assertOk();
     }
+    public function test_health_save_requests_a_new_probe_and_disable_does_not(): void
+    {
+        $node = $this->node();
+        $this->admin();
+        $payload = ['node_id' => $node->id] + $node->health_check;
+        $this->postJson('/_ops/health', $payload)->assertOk();
+        $first = $node->fresh()->health_check['request'];
+        $this->assertMatchesRegularExpression('/\A[a-f0-9]{32}\z/', $first);
+        $this->postJson('/_ops/health', $payload)->assertOk();
+        $second = $node->fresh()->health_check['request'];
+        $this->assertNotSame($first, $second);
+        $this->assertSame($second, ServerService::buildNodeConfig($node->fresh())['health_check']['request']);
+        $this->postJson('/_ops/health', array_replace($payload, ['url' => 'http://invalid.example']))->assertUnprocessable();
+        $this->assertSame($second, $node->fresh()->health_check['request']);
+        $this->postJson('/_ops/health', array_replace($payload, ['enabled' => false]))->assertOk();
+        $this->assertArrayNotHasKey('request', $node->fresh()->health_check);
+        $this->postJson('/_ops/health', $payload)->assertOk();
+        $this->assertNotSame($second, $node->fresh()->health_check['request']);
+    }
+
+    public function test_node_save_rechecks_enabled_health_even_when_configuration_is_unchanged(): void
+    {
+        $node = $this->node();
+        $this->admin();
+        $payload = ['id' => $node->id, 'name' => $node->name, 'type' => 'vmess',
+            'host' => '127.0.0.1', 'port' => 24443, 'server_port' => 24443,
+            'protocol_settings' => ['tls' => 0, 'network' => 'tcp'], 'rate' => 1, 'group_ids' => [1]];
+        $this->postJson('/_ops/save', $payload)->assertOk();
+        $first = $node->fresh()->health_check['request'];
+        $this->postJson('/_ops/save', $payload)->assertOk();
+        $second = $node->fresh()->health_check['request'];
+        $this->assertNotSame($first, $second);
+        $this->postJson('/_ops/save', array_replace($payload, ['server_port' => 0]))->assertUnprocessable();
+        $this->assertSame($second, $node->fresh()->health_check['request']);
+        $this->failNextQueryMatching('/update .*v2_server/i');
+        $this->postJson('/_ops/save', $payload)->assertStatus(500);
+        $this->assertSame($second, $node->fresh()->health_check['request']);
+        $this->postJson('/_ops/save', $payload)->assertOk();
+        $this->assertNotSame($second, $node->fresh()->health_check['request']);
+        $node->update(['health_check' => ['enabled' => false, 'url' => 'https://example.com/', 'interval' => 60]]);
+        $this->postJson('/_ops/save', $payload)->assertOk();
+        $this->assertArrayNotHasKey('request', $node->fresh()->health_check);
+    }
+
+    public function test_missing_state_requires_confirmed_recent_old_agent_before_suggesting_upgrade(): void
+    {
+        $node = $this->node();
+        $ops = app(NodeOperations::class);
+        $this->assertFalse($ops->view($node)['upgrade_required']);
+        $machine = ServerMachine::create(['name' => 'ops-machine', 'token' => bin2hex(random_bytes(24)), 'is_active' => true]);
+        $node->update(['machine_id' => $machine->id]);
+        foreach (['v2.32.0' => true, '2.33.0' => false, 'v2.36.0' => false, 'dev' => false, '' => false] as $version => $expected) {
+            $machine->forceFill(['agent_runtime' => ['version' => $version, 'reported_at' => now()->timestamp]])->saveQuietly();
+            $this->assertSame($expected, $ops->view($node)['upgrade_required'], $version);
+        }
+        $machine->forceFill(['agent_runtime' => ['version' => 'v2.32.0', 'reported_at' => now()->subMinutes(5)->timestamp]])->saveQuietly();
+        $this->assertFalse($ops->view($node)['upgrade_required']);
+        $ops->accept($node, $this->state());
+        $machine->forceFill(['agent_runtime' => ['version' => 'v2.32.0', 'reported_at' => now()->timestamp]])->saveQuietly();
+        $this->assertFalse($ops->view($node)['upgrade_required']);
+        $node->update(['enabled' => false]);
+        $this->assertFalse($ops->view($node)['node_enabled']);
+    }
+
+    public function test_shared_node_uses_parent_settings_and_rechecks_the_parent(): void
+    {
+        $parent = $this->node();
+        $child = $this->node();
+        $child->update(['parent_id' => $parent->id, 'health_check' => null]);
+        $ops = app(NodeOperations::class);
+        $ops->accept($parent, $this->state());
+        $view = $ops->view($child);
+        $this->assertTrue($view['enabled']);
+        $this->assertSame($parent->health_check, $view['health_config']);
+        $this->assertSame(1, $ops->detail($child)['samples']);
+        $this->admin();
+        $this->postJson('/_ops/check', ['node_id' => $child->id])->assertOk();
+        $this->assertNotEmpty($parent->fresh()->health_check['request']);
+        $this->assertNull($child->fresh()->health_check);
+        $parent->update(['enabled' => false]);
+        $this->assertFalse($ops->view($child)['node_enabled']);
+        $this->postJson('/_ops/check', ['node_id' => $child->id])->assertUnprocessable();
+    }
+
+    public function test_health_requests_are_pushed_once_and_stopped_or_failed_nodes_cannot_probe(): void
+    {
+        $node = $this->node();
+        $this->admin();
+        Cache::put('node_ws_alive:'.$node->id, true, 90);
+        $pushes = [];
+        Redis::shouldReceive('publish')->andReturnUsing(function ($channel, $message) use (&$pushes) {
+            $pushes[] = json_decode($message, true);
+            return 1;
+        });
+        // RefreshDatabase 保留外层事务，用内层提交执行保存后的配置通知。
+        DB::transaction(fn () => $this->postJson('/_ops/health', ['node_id' => $node->id] + $node->health_check)->assertOk());
+        $this->assertCount(1, $pushes);
+        $this->assertSame('sync.config', $pushes[0]['event']);
+        $this->assertSame($node->fresh()->health_check['request'], $pushes[0]['data']['config']['health_check']['request']);
+        $ops = app(NodeOperations::class);
+        $state = $this->state();
+        foreach (['stopped', 'failed'] as $runtime) {
+            $state['runtime'] = $runtime;
+            $state['sequence']++;
+            $ops->accept($node, $state);
+            $this->postJson('/_ops/check', ['node_id' => $node->id])->assertUnprocessable();
+        }
+        $state['runtime'] = 'running';
+        $state['sequence']++;
+        $ops->accept($node, $state);
+        DB::transaction(fn () => $this->postJson('/_ops/check', ['node_id' => $node->id])->assertOk());
+        $request = $node->fresh()->health_check['request'];
+        $this->postJson('/_ops/check', ['node_id' => $node->id])->assertOk();
+        $this->assertSame($request, $node->fresh()->health_check['request']);
+        $this->assertCount(2, $pushes);
+    }
+
     public function test_stale_duplicate_and_malformed_reports_do_not_replace_current(): void
     {
         $n = $this->node();

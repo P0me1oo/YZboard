@@ -76,8 +76,10 @@ class RealtimeSnapshotService
             $speeds = app(UserSpeedService::class)->forUsers($users, $sources, $nodes);
             $devices = app(DeviceStateService::class);
             $legacyDevices = get_class($devices) === DeviceStateService::class
-                ? $devices->readUsersDevices($users->pluck('id')->all(), $runtime, true)
+                ? $devices->readUsersSourceIPs($users->pluck('id')->all(), $runtime, true)
                 : $users->mapWithKeys(fn ($user) => [$user->id => $devices->getDeviceIPs((int) $user->id, true)])->all();
+            $ipConnections = $subscription['devices'] === [] ? [] : app(UserIpConnectionService::class)->forUsers(
+                $users->whereIn('id', $subscription['devices']), $legacyDevices, $sources, $nodes);
             foreach ($users as $user) {
                 $groups = $user->effectiveGroupIds();
                 $known = false;
@@ -101,7 +103,8 @@ class RealtimeSnapshotService
                     }
                 }
                 foreach ($legacyDevices[$user->id] ?? [] as $ip) {
-                    $currentIPs[$ip] = true;
+                    $key = DeviceIpExclusion::countKey((string) $ip);
+                    if ($key !== null) $currentIPs[$key] = true;
                 }
                 $ips = array_keys($currentIPs);
                 sort($ips);
@@ -117,7 +120,8 @@ class RealtimeSnapshotService
                     ];
                 }
                 if (in_array((int) $user->id, $subscription['devices'], true)) {
-                    $result['devices'][$user->id] = ['known' => $known, 'partial' => $missing, 'ips' => $ips];
+                    $result['devices'][$user->id] = ['known' => $known, 'partial' => $missing, 'ips' => $ips,
+                        'connections' => $ipConnections[$user->id] ?? []];
                 }
             }
         }
@@ -180,7 +184,7 @@ class RealtimeSnapshotService
 
     private function loadView(?array $status, ?int $updatedAt): ?array
     {
-        if (!$status) return null;
+        if (!$status || (!isset($status['cpu']) && !isset($status['mem']))) return null;
         // 磁盘和交换区是可选采样，保持原管理页面所需的对象结构。
         $result = ['cpu' => (float) ($status['cpu'] ?? 0), 'updated_at' => $updatedAt];
         foreach (['mem', 'disk', 'swap'] as $type) {

@@ -238,6 +238,18 @@ class DeviceStateService
         return $this->filterDeviceIPs($records, $states, time(), $legacyOnly);
     }
 
+    /** 详情使用完整来源地址，保持设备名额的 IPv6 /64 合并规则。 */
+    public function getSourceIPs(int $userId, bool $legacyOnly = false): array
+    {
+        if (get_class($this) !== self::class
+            && (new \ReflectionMethod($this, 'getDeviceIPs'))->getDeclaringClass()->getName() !== self::class) {
+            return $this->getDeviceIPs($userId, $legacyOnly);
+        }
+        $records = Redis::hgetall(self::PREFIX . $userId);
+        $states = app(RealtimeStateStore::class)->readMany($this->deviceSources([$records]));
+        return $this->filterDeviceIPs($records, $states, time(), $legacyOnly, true);
+    }
+
     /** 来源对应的在线节点，供换网协调器识别仍使用旧设备协议的节点。 */
     public function getDeviceSources(int $userId): array
     {
@@ -268,7 +280,7 @@ class DeviceStateService
         return array_keys($sources);
     }
 
-    private function filterDeviceIPs(array $records, array $states, int $now, bool $legacyOnly = false): array
+    private function filterDeviceIPs(array $records, array $states, int $now, bool $legacyOnly = false, bool $fullAddresses = false): array
     {
         $ips = [];
         foreach ($records as $field => $timestamp) {
@@ -281,7 +293,7 @@ class DeviceStateService
             }
             $public = DeviceIpExclusion::countKey(substr($field, strpos($field, ':') + 1));
             if ($public !== null) {
-                $ips[$public] = true;
+                $ips[$fullAddresses ? PublicDeviceIp::normalize(substr($field, strpos($field, ':') + 1)) : $public] = true;
             }
         }
         $result = array_keys($ips);
@@ -320,6 +332,16 @@ class DeviceStateService
     /** 展示和同步在本次处理内共享状态；扩展读取方法仍按原入口执行。 */
     public function readUsersDevices(array $userIds, ?RealtimeReadContext $runtime = null, bool $legacyOnly = false): array
     {
+        return $this->readUsersDeviceAddresses($userIds, $runtime, $legacyOnly, false);
+    }
+
+    public function readUsersSourceIPs(array $userIds, ?RealtimeReadContext $runtime = null, bool $legacyOnly = false): array
+    {
+        return $this->readUsersDeviceAddresses($userIds, $runtime, $legacyOnly, true);
+    }
+
+    private function readUsersDeviceAddresses(array $userIds, ?RealtimeReadContext $runtime, bool $legacyOnly, bool $fullAddresses): array
+    {
         // 保留扩展服务对单用户读取的定制，不能用批量路径绕过插件覆盖的方法。
         if (get_class($this) !== self::class
             && (new \ReflectionMethod($this, 'getDeviceIPs'))->getDeclaringClass()->getName() !== self::class) {
@@ -332,11 +354,11 @@ class DeviceStateService
         }
         $userIds = array_values(array_unique(array_map('intval', $userIds)));
         if ($userIds === []) return [];
-        if (get_class($this) === self::class && $runtime === null && !$legacyOnly) {
+        if (get_class($this) === self::class && $runtime === null && !$legacyOnly && !$fullAddresses) {
             $snapshot = $this->readSnapshotDevices($userIds);
             if ($snapshot !== null) return $snapshot;
         }
-        if (count($userIds) === 1 && $runtime === null && !$legacyOnly) {
+        if (count($userIds) === 1 && $runtime === null && !$legacyOnly && !$fullAddresses) {
             $ips = $this->getDeviceIPs($userIds[0]);
             return $ips === [] ? [] : [$userIds[0] => $ips];
         }
@@ -364,7 +386,7 @@ class DeviceStateService
         $now = time();
         $result = [];
         foreach ($records as $userId => $userRecords) {
-            $ips = $this->filterDeviceIPs($userRecords, $states, $now, $legacyOnly);
+            $ips = $this->filterDeviceIPs($userRecords, $states, $now, $legacyOnly, $fullAddresses);
             if ($ips !== []) {
                 $result[$userId] = $ips;
             }

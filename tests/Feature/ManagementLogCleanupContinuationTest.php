@@ -136,7 +136,7 @@ class ManagementLogCleanupContinuationTest extends TestCase
             return 0;
         }));
         $this->artisan('management-log:prune --resume --max-seconds=1')->assertSuccessful();
-        $this->assertSame('0', $this->pending());
+        $this->assertSame('5', $this->pending());
         $this->app->forgetInstance(SystemLogPruner::class);
         $this->artisan('management-log:prune --resume')->assertSuccessful();
         $this->assertNull($this->pending());

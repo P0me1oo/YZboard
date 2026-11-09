@@ -61,6 +61,7 @@ class ServerObserver
             'accept_proxy_protocol',
             'auto_firewall',
             'cert_config',
+            'health_check',
         ]) || ($server->wasChanged('kernel_type') && !$server->machine_id)) {
             NodeSyncService::notifyConfigUpdated($server->id);
         }

@@ -15,7 +15,7 @@ final class TrafficReconciliation
         $filter = $r->validate(['only_issues' => 'sometimes|boolean']);
         $query = Server::query()->when($r->filled('search'), fn ($q) => $q->where('name', 'like', '%'.$r->input('search').'%'));
         // 异常筛选和全页摘要需要所有匹配节点，但只读取展示所需字段和一批状态缓存。
-        $nodes = (clone $query)->orderBy('id')->get(['id', 'name', 'type', 'machine_id', 'parent_id', 'health_check', 'relay_entry_id', 'relay_pool_id']);
+        $nodes = (clone $query)->orderBy('id')->get(['id', 'name', 'type', 'machine_id', 'parent_id', 'enabled', 'health_check', 'relay_entry_id', 'relay_pool_id']);
         $batches = NodeReportBatch::query()->whereIn('server_id', (clone $query)->select('id'))
             ->where('status', '!=', NodeReportBatch::STATUS_PROCESSED)->selectRaw('server_id,status,COUNT(*) as count,MIN(created_at) as oldest')->groupBy('server_id', 'status')->get()->groupBy('server_id');
         $views = app(NodeOperations::class)->views($nodes);

@@ -1,0 +1,195 @@
+{
+  "checked_at": "2026-11-08T18:33:38.921589+00:00",
+  "server": "Solid-US LA",
+  "directory": "/root/yzboard",
+  "before": {
+    "time": "2026-11-08T18:30:51+00:00",
+    "version": "2.11.1",
+    "queues": {
+      "default": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "order_handle": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "traffic_fetch": {
+        "ready": 287523,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "stat": {
+        "ready": 1134,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "user_alive_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "node_sync": {
+        "ready": 18,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_telegram": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 110
+      },
+      "send_email": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email_mass": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      }
+    },
+    "failed_jobs": 713,
+    "migrations": 145,
+    "active_machines": 48,
+    "recent_processed_batches": 0,
+    "redis_ops_per_sec": 6576
+  },
+  "after": {
+    "time": "2026-11-08T18:33:38+00:00",
+    "version": "2.11.2",
+    "queues": {
+      "default": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "order_handle": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "traffic_fetch": {
+        "ready": 268329,
+        "reserved": 2,
+        "delayed": 0
+      },
+      "stat": {
+        "ready": 1136,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "user_alive_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "node_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_telegram": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email_mass": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      }
+    },
+    "failed_jobs": 713,
+    "migrations": 145,
+    "active_machines": 48,
+    "recent_processed_batches": 8109,
+    "redis_ops_per_sec": 11136
+  },
+  "switch": {
+    "started_at": "2026-11-08T18:30:51.344230+00:00",
+    "version": "2.11.2",
+    "previous_version": "2.11.1",
+    "manifest_sha256": "0703e43a5b0b629cae0530ba92d483103fee382f23906182cee17bba68f3bfe6",
+    "archive_sha256": "f23c01ce7d910d6ad18758241512a0f002f3989a5dfb7195f741bc1bae979a52",
+    "services_started_at": "2026-11-08T18:30:54.538963+00:00",
+    "status": "services_started"
+  },
+  "services": {
+    "yzboard-web.service": {
+      "NRestarts": "0",
+      "WorkingDirectory": "/root/yzboard",
+      "User": "www-data",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "yzboard-horizon.service": {
+      "NRestarts": "0",
+      "WorkingDirectory": "/root/yzboard",
+      "User": "www-data",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "yzboard-websocket.service": {
+      "NRestarts": "0",
+      "WorkingDirectory": "/root/yzboard",
+      "User": "www-data",
+      "ActiveState": "active",
+      "SubState": "running"
+    }
+  },
+  "queue_workers": [
+    {
+      "pid": 1210794,
+      "parent_pid": 1210779,
+      "elapsed_seconds": 162
+    },
+    {
+      "pid": 1211226,
+      "parent_pid": 1210778,
+      "elapsed_seconds": 12
+    },
+    {
+      "pid": 1211231,
+      "parent_pid": 1210778,
+      "elapsed_seconds": 11
+    }
+  ],
+  "application_log_delta": {
+    "existing_ws_request_errors": 152,
+    "other_error:Illuminate\\\\Contracts\\\\Cache\\\\LockTimeoutException(code": 2
+  },
+  "queue_option_errors": 0,
+  "source": {
+    "checked_files": 1155,
+    "mismatches": [],
+    "manifest_sha256": "0703e43a5b0b629cae0530ba92d483103fee382f23906182cee17bba68f3bfe6"
+  },
+  "persistent_preserved": {
+    ".env": true,
+    "composer.lock": true
+  },
+  "local_nginx_https": {
+    "home": 200,
+    "admin": 200,
+    "guest_config": 200
+  },
+  "validation": {
+    "php_version": "8.4.27",
+    "compatibility_tests": 4,
+    "compatibility_assertions": 18,
+    "related_tests": 15,
+    "related_assertions": 93,
+    "real_redis_job": true,
+    "php_lint_files": 3,
+    "platform_checks": true
+  }
+}

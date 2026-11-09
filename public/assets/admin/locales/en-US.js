@@ -51,6 +51,11 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     "cleanupConfirm": "Clients using these old domains will lose access after cleanup. Continue?"
   },
   "balancer": {
+    "trafficLite": "Lite traffic",
+    "trafficLocal": "Local traffic",
+    "trafficUnavailable": "Data unavailable",
+    "trafficUnlimited": "Unlimited traffic",
+    "trafficRemaining": "{{percent}}% remaining",
     "quotaLow": "Remaining quota is low",
     "scheduling": "Automatic scheduling",
     "healthCheck": "Check frontend ports",
@@ -192,6 +197,22 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     "resetDate": "Quota reset"
   },
   "logs": {
+    "blockUsers": "By user",
+    "blockCount": "Blocked requests",
+    "lastBlocked": "Last blocked",
+    "blockDetails": "View details",
+    "backToUsers": "Back to users",
+    "actions": "Actions",
+
+    "blockRetention": "Retention",
+    "block": "Routing blocks",
+    "rule": "Matched rule",
+    "ruleFilter": "Rule name or ID",
+    "target": "Destination domain / IP",
+    "port": "Destination port",
+    "network": "Network",
+    "unknownUser": "Unknown user",
+
     "settings": {
       "title": "Log settings",
       "description": "Choose which logs the panel records and how many days to keep them.",
@@ -3601,6 +3622,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     }
   },
   "route": {
+    "tabs": {"rules": "Routing rules", "blocks": "Blocked requests"},
     "title": "Route Management",
     "description": "Manage all route groups, including adding, deleting, and editing operations.",
     "columns": {
@@ -3751,8 +3773,13 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
   },
   "machine": {
     "lite": {
+      "binding_pending": "Waiting for a match; retries every minute",
+      "binding_conflict": "IP match conflict; bind manually",
+      "binding_matched": "Matched; waiting for automatic binding",
+      "binding_paused": "Automatic binding paused",
+      "resumeAuto": "Resume automatic binding",
       "connect": "Connect Lite",
-      "description": "Match servers by public IP and read monitoring and traffic from Lite.",
+      "description": "Automatically match public IPs every minute when enabled. Resolve conflicts manually.",
       "url": "Lite site URL",
       "key": "Site API key",
       "keepKey": "Leave blank to keep the saved key",

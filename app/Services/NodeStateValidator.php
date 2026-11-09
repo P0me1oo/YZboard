@@ -12,13 +12,21 @@ final class NodeStateValidator
         $depths = [
             'alive' => 2, 'online' => 1, 'connection_counts' => 1,
             'relay_user_alive' => 3, 'relay_connection_counts' => 2,
-            'operations' => 0, 'user_speeds' => 0, 'status' => 0, 'metrics' => 0,
+            'operations' => 0, 'user_speeds' => 0, 'ip_connection_counts' => 0, 'status' => 0, 'metrics' => 0,
         ];
         $state = array_intersect_key($state, $depths);
         foreach ($state as $field => $value) {
             if (!is_array($value)) self::fail($field);
             if ($depths[$field] > 0) {
                 self::walk($value, $depths[$field], $field, in_array($field, ['alive', 'relay_user_alive'], true));
+            }
+        }
+        foreach ($state['ip_connection_counts'] ?? [] as $userId => $counts) {
+            if (filter_var($userId, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) === false
+                || !is_array($counts)) self::fail('ip_connection_counts');
+            foreach ($counts as $ip => $count) {
+                if (filter_var($ip, FILTER_VALIDATE_IP) === false || !is_int($count)
+                    || $count < 0 || $count > 2147483647) self::fail('ip_connection_counts');
             }
         }
         foreach ($state['user_speeds'] ?? [] as $userId => $speeds) {

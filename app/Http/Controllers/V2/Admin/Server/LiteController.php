@@ -27,8 +27,8 @@ class LiteController extends Controller
     public function bind(Request $request)
     {
         return $this->success($this->monitor->bind($request->validate([
-            'action' => 'required|in:auto,bind,unbind,import',
-            'machine_id' => 'required_if:action,bind,unbind|integer|exists:v2_server_machine,id',
+            'action' => 'required|in:auto,bind,unbind,import,resume',
+            'machine_id' => 'required_if:action,bind,unbind,resume|integer|exists:v2_server_machine,id',
             'uuid' => 'required_if:action,bind|uuid',
             'uuids' => 'required_if:action,import|array|min:1|max:200', 'uuids.*' => 'required|uuid|distinct',
         ])));

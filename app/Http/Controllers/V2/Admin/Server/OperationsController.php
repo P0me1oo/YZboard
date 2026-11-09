@@ -24,7 +24,7 @@ class OperationsController extends Controller
     {
         $p = $r->validate(['ids' => 'sometimes|array|max:500','ids.*' => 'integer|min:1']);
         $nodes = Server::query()->when(isset($p['ids']), fn ($q) => $q->whereIn('id', $p['ids']))
-            ->limit(500)->get(['id', 'parent_id', 'health_check']);
+            ->limit(500)->get(['id', 'parent_id', 'machine_id', 'enabled', 'health_check']);
         $views = $service->views($nodes);
         return $this->success($nodes->map(fn ($n) => ['id' => (int)$n->id] + $views[$n->id]));
     }
@@ -45,15 +45,23 @@ class OperationsController extends Controller
         if ($node->parent_id) {
             throw ValidationException::withMessages(['node_id' => '共享节点请在其主节点设置检查。']);
         }
+        // 复用 Agent 已支持的请求编号；重复保存也重新检查，关闭时不下发探测。
+        if ($p['enabled']) $p['request'] = bin2hex(random_bytes(16));
         $node->health_check = $p;
         $node->save();
-        NodeSyncService::notifyFullSync($node->id);
         return $this->success(true);
     }
     public function check(Request $r, NodeOperations $service)
     {
         $node = $this->node($r);
-        $this->requireAgent($node, $service);
+        if ($node->enabled === false) {
+            throw ValidationException::withMessages(['node_id' => '请先启动节点。']);
+        }
+        if ($node->parent_id) $node = Server::findOrFail($node->parent_id);
+        $view = $this->requireAgent($node, $service);
+        if ($node->enabled === false || $view['state']['runtime'] !== 'running') {
+            throw ValidationException::withMessages(['node_id' => '请先启动节点并确认配置应用成功。']);
+        }
         if (!($node->health_check['enabled'] ?? false)) {
             throw ValidationException::withMessages(['node_id' => '请先启用链路检查。']);
         }
@@ -62,14 +70,13 @@ class OperationsController extends Controller
         }
         $node->health_check = array_merge($node->health_check, ['request' => bin2hex(random_bytes(16))]);
         $node->save();
-        NodeSyncService::notifyFullSync($node->id);
         return $this->success(true);
     }
     public function certificates(Request $r, NodeOperations $service)
     {
         $rows = [];
         $nodes = Server::whereNull('parent_id')->orWhere('parent_id', 0)
-            ->get(['id', 'parent_id', 'health_check', 'name', 'cert_config', 'certificate_renew']);
+            ->get(['id', 'parent_id', 'machine_id', 'enabled', 'health_check', 'name', 'cert_config', 'certificate_renew']);
         $views = $service->views($nodes);
         foreach ($nodes as $node) {
             $view = $views[$node->id];
@@ -98,12 +105,13 @@ class OperationsController extends Controller
         NodeSyncService::notifyFullSync($node->id);
         return $this->success(['request' => $node->certificate_renew]);
     }
-    private function requireAgent(Server $node, NodeOperations $service): void
+    private function requireAgent(Server $node, NodeOperations $service): array
     {
         $view = $service->view($node);
         if (!$view['supported'] || !$view['fresh']) {
             throw ValidationException::withMessages(['node_id' => '节点未连接或 Agent 尚不支持此功能。']);
         }
+        return $view;
     }
     public function topology(Request $r, NodeOperations $service)
     {

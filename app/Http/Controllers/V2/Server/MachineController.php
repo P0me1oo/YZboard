@@ -115,6 +115,7 @@ class MachineController extends Controller
         }
         $scan = ($report['reality_scan_supported'] ?? false) ? \App\Services\RealityScanService::exchange($machine, $report) : null;
         return response()->json(['command' => $command, 'reality_scan' => $scan,
+            'host_monitoring' => \App\Services\HostMonitoring::enabled($machine),
             'log_policy' => \App\Services\AgentLogPolicy::view($machine)]);
     }
 
@@ -144,6 +145,7 @@ class MachineController extends Controller
 
         return response()->json([
             'nodes' => $nodes,
+            'host_monitoring' => \App\Services\HostMonitoring::enabled($machine),
             'log_policy' => \App\Services\AgentLogPolicy::view($machine),
             'traffic' => \App\Services\MachineTrafficService::view($machine),
             'base_config' => [
@@ -172,6 +174,11 @@ class MachineController extends Controller
 
         $machine = $this->authenticateMachine($request);
         $recordedAt = now()->timestamp;
+
+        // 旧 Agent 仍可能发送负载；保留认证心跳，但不更新负载或历史。
+        if (!\App\Services\HostMonitoring::enabled($machine)) {
+            return response()->json(['data' => true]);
+        }
 
         $loadStatus = [
             'cpu' => (float) $request->input('cpu'),

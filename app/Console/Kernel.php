@@ -75,6 +75,7 @@ class Kernel extends ConsoleKernel
         // check
         $schedule->command('ddns:sync')->everyMinute()->onOneServer()->withoutOverlapping(10)->runInBackground();
         $schedule->command('balancer:sync')->everyMinute()->onOneServer()->withoutOverlapping(2);
+        $schedule->command('lite:bind-machines')->everyMinute()->onOneServer()->withoutOverlapping(2)->runInBackground();
         $schedule->command('node:prune-traffic-grants')->everyMinute()->onOneServer()->withoutOverlapping(2);
         $schedule->command('check:order')->everyMinute()->onOneServer()->withoutOverlapping(5);
         $schedule->command('check:commission')->everyMinute()->onOneServer()->withoutOverlapping(5);

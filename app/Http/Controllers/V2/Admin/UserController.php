@@ -280,17 +280,18 @@ class UserController extends Controller
         return $this->success($user);
     }
 
-    /** 返回当前实际计数的公网来源 IP，位置优先外部查询、失败回退本地。 */
+    /** 返回完整公网来源 IP、连接数与位置；设备名额另按原规则计算。 */
     public function devices(Request $request, DeviceStateService $devices, DeviceIpLocationService $locations): JsonResponse
     {
         $data = $request->validate(['id' => 'required|integer|min:1']);
-        if (!User::query()->whereKey($data['id'])->exists()) {
+        $user = User::query()->find($data['id']);
+        if (!$user) {
             return response()->json(['message' => '用户不存在'], 404);
         }
-        $result = [];
-        foreach ($locations->lookupMany($devices->getDeviceIPs((int) $data['id'])) as $ip => $location) {
-            $result[] = ['ip' => $ip] + $location;
-        }
+        $rows = app(\App\Services\UserIpConnectionService::class)->forUsers([$user],
+            [$user->id => $devices->getSourceIPs((int) $user->id, true)])[$user->id];
+        $lookup = $locations->lookupMany(array_column($rows, 'ip'));
+        $result = array_map(fn ($row) => $row + ($lookup[$row['ip']] ?? []), $rows);
         return response()->json(['data' => $result]);
     }
 

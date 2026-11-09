@@ -51,6 +51,11 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
     "cleanupConfirm": "После удаления старые домены перестанут работать. Продолжить?"
   },
   "balancer": {
+    "trafficLite": "Трафик Lite",
+    "trafficLocal": "Локальный трафик",
+    "trafficUnavailable": "Данные недоступны",
+    "trafficUnlimited": "Безлимитный трафик",
+    "trafficRemaining": "Осталось {{percent}}%",
     "quotaLow": "Мало оставшегося трафика",
     "scheduling": "Автоматический выбор",
     "healthCheck": "Проверять порты входных узлов",
@@ -192,6 +197,22 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
     "resetDate": "Сброс лимита"
   },
   "logs": {
+    "blockUsers": "По пользователям",
+    "blockCount": "Блокировок",
+    "lastBlocked": "Последняя блокировка",
+    "blockDetails": "Подробнее",
+    "backToUsers": "К пользователям",
+    "actions": "Действия",
+
+    "blockRetention": "Срок хранения",
+    "block": "Блокировки маршрутов",
+    "rule": "Правило",
+    "ruleFilter": "Название или ID правила",
+    "target": "Домен / IP назначения",
+    "port": "Порт назначения",
+    "network": "Сеть",
+    "unknownUser": "Неизвестный пользователь",
+
     "settings": {
       "title": "Настройки журналов",
       "description": "Выберите журналы для записи в панели и срок их хранения.",
@@ -3516,6 +3537,7 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
     }
   },
   "route": {
+    "tabs": {"rules": "Правила маршрутов", "blocks": "Блокировки"},
     "title": "Управление маршрутами",
     "description": "Управление группами маршрутов, включая добавление, удаление и редактирование.",
     "columns": {
@@ -3666,8 +3688,13 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
   },
   "machine": {
     "lite": {
+      "binding_pending": "Ожидание совпадения; повтор каждую минуту",
+      "binding_conflict": "Конфликт IP; привяжите вручную",
+      "binding_matched": "Совпадение найдено; ожидание привязки",
+      "binding_paused": "Автопривязка приостановлена",
+      "resumeAuto": "Возобновить автопривязку",
       "connect": "Подключить Lite",
-      "description": "Сопоставление по публичному IP, мониторинг и трафик из Lite.",
+      "description": "После включения публичные IP сопоставляются каждую минуту. Конфликты разрешаются вручную.",
       "url": "Адрес Lite",
       "key": "API-ключ сайта",
       "keepKey": "Оставьте пустым, чтобы сохранить ключ",

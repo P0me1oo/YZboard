@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Exceptions\ApiException;
 use App\Models\LiteConnection;
 use App\Models\ServerMachine;
+use Illuminate\Database\ConcurrencyErrorDetector;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -83,6 +85,15 @@ class LiteMonitor
     public function nodes(?LiteConnection $connection = null): array
     {
         $connection ??= $this->active();
+        // 周期边界不能继续使用上一周期的额外额度和用量缓存。
+        foreach (Cache::get($this->cacheKey($connection, 'nodes'), []) as $node) {
+            $resetAt = self::timestamp($node['traffic_reset_at'] ?? null);
+            if ($resetAt !== null && $resetAt <= now()->timestamp) {
+                Cache::forget($this->cacheKey($connection, 'nodes'));
+                Cache::forget($this->cacheKey($connection, 'status'));
+                break;
+            }
+        }
         return $this->cached($connection, 'nodes', 60, function () use ($connection) {
             $records = $this->client->read($connection, 'admin:listClients');
             $display = $this->client->read($connection, 'common:getNodes');
@@ -132,9 +143,12 @@ class LiteMonitor
     }
 
     /** 只有两边都唯一的公网地址交集才能自动绑定；冲突留给管理员选择。 */
-    public function candidates(array $nodes): array
+    public function candidates(array $nodes, bool $lockMachines = false): array
     {
-        $machines = ServerMachine::all(['id', 'name', 'agent_runtime']);
+        $query = ServerMachine::query()->orderBy('id');
+        // 绑定事务先锁机器，再建立读取快照，避免心跳更新使外键检查报 1020。
+        if ($lockMachines) $query->sharedLock();
+        $machines = $query->get(['id', 'name', 'agent_runtime', 'lite_auto_bind']);
         $bound = DB::table('v2_lite_machine')->pluck('uuid', 'machine_id')->all();
         $matches = [];
         $uses = [];
@@ -153,11 +167,13 @@ class LiteMonitor
         }
         $automatic = [];
         foreach ($matches as $id => $uuids) {
-            if (!isset($bound[$id]) && count($uuids) === 1 && count($uses[$uuids[0]]) === 1
+            if ($machines->firstWhere('id', $id)->lite_auto_bind && !isset($bound[$id]) && count($uuids) === 1 && count($uses[$uuids[0]]) === 1
                 && !in_array($uuids[0], $bound, true)) $automatic[$id] = $uuids[0];
         }
         return ['automatic' => $automatic, 'candidates' => $matches, 'bindings' => $bound,
-            'machines' => $machines->map(fn ($machine) => ['id' => $machine->id, 'name' => $machine->name])->all()];
+            'machines' => $machines->map(fn ($machine) => ['id' => $machine->id, 'name' => $machine->name,
+                'binding_status' => isset($bound[$machine->id]) ? 'bound' : (!$machine->lite_auto_bind ? 'paused'
+                    : (isset($automatic[$machine->id]) ? 'matched' : (isset($matches[$machine->id]) ? 'conflict' : 'pending')))])->all()];
     }
 
     public function inventory(): array
@@ -168,43 +184,58 @@ class LiteMonitor
 
     public function bind(array $input): array
     {
-        $connection = $input['action'] === 'unbind' ? $this->connection() : $this->active();
-        $nodes = $input['action'] === 'unbind' ? [] : $this->nodes($connection);
-        return DB::transaction(function () use ($connection, $nodes, $input) {
-            $current = LiteConnection::whereKey(1)->lockForUpdate()->firstOrFail();
-            if (($input['action'] !== 'unbind' && !$current->enabled) || $current->url !== $connection->url || $current->api_key !== $connection->api_key) {
-                throw new ApiException('Lite 配置已变化，请重新读取。', 409);
-            }
-            $count = 0;
-            $ids = [];
-            if ($input['action'] === 'auto') {
-                foreach ($this->candidates($nodes)['automatic'] as $id => $uuid) {
-                    DB::table('v2_lite_machine')->insert(['machine_id' => $id, 'uuid' => $uuid]);
-                    $count++;
+        $local = in_array($input['action'], ['unbind', 'resume'], true);
+        $connection = $local ? $this->connection() : $this->active();
+        $nodes = $local ? [] : $this->nodes($connection);
+        try {
+            return DB::transaction(function () use ($connection, $nodes, $input, $local) {
+                $current = LiteConnection::whereKey(1)->lockForUpdate()->firstOrFail();
+                if ((!$local && !$current->enabled) || $current->url !== $connection->url || $current->api_key !== $connection->api_key) {
+                    throw new ApiException('Lite 配置已变化，请重新读取。', 409);
                 }
-            } elseif ($input['action'] === 'unbind') {
-                $count = DB::table('v2_lite_machine')->where('machine_id', $input['machine_id'])->delete();
-            } elseif ($input['action'] === 'bind') {
-                $uuid = $input['uuid'];
-                if (!isset($nodes[$uuid])) throw new ApiException('Lite 服务器已不存在，请重新读取。', 409);
-                if (DB::table('v2_lite_machine')->where('uuid', $uuid)->where('machine_id', '!=', $input['machine_id'])->exists()) {
-                    throw new ApiException('这台 Lite 服务器已经绑定，请先解除原绑定。', 409);
-                }
-                DB::table('v2_lite_machine')->updateOrInsert(['machine_id' => $input['machine_id']], ['uuid' => $uuid]);
-                $count = 1;
-            } else {
-                foreach ($input['uuids'] as $uuid) {
+                $count = 0;
+                $ids = [];
+                if ($input['action'] === 'auto') {
+                    foreach ($this->candidates($nodes, lockMachines: true)['automatic'] as $id => $uuid) {
+                        DB::table('v2_lite_machine')->insert(['machine_id' => $id, 'uuid' => $uuid]);
+                        $count++;
+                    }
+                } elseif ($local) {
+                    if (!ServerMachine::whereKey($input['machine_id'])->lockForUpdate()->first(['id'])) {
+                        throw new ApiException('目标服务器已不存在，请重新读取。', 409);
+                    }
+                    ServerMachine::whereKey($input['machine_id'])->update(['lite_auto_bind' => $input['action'] === 'resume']);
+                    $count = $input['action'] === 'unbind'
+                        ? DB::table('v2_lite_machine')->where('machine_id', $input['machine_id'])->delete() : 1;
+                } elseif ($input['action'] === 'bind') {
+                    $uuid = $input['uuid'];
                     if (!isset($nodes[$uuid])) throw new ApiException('Lite 服务器已不存在，请重新读取。', 409);
-                    if (DB::table('v2_lite_machine')->where('uuid', $uuid)->exists()) continue;
-                    $machine = ServerMachine::create(['name' => mb_substr($nodes[$uuid]['name'] ?: 'Lite server', 0, 255),
-                        'token' => ServerMachine::generateToken(), 'is_active' => true, 'traffic_limit' => 0, 'traffic_mode' => 'both']);
-                    DB::table('v2_lite_machine')->insert(['machine_id' => $machine->id, 'uuid' => $uuid]);
-                    $ids[] = $machine->id;
-                    $count++;
+                    if (!ServerMachine::whereKey($input['machine_id'])->lockForUpdate()->first(['id'])) {
+                        throw new ApiException('目标服务器已不存在，请重新读取。', 409);
+                    }
+                    if (DB::table('v2_lite_machine')->where('uuid', $uuid)->where('machine_id', '!=', $input['machine_id'])->exists()) {
+                        throw new ApiException('这台 Lite 服务器已经绑定，请先解除原绑定。', 409);
+                    }
+                    DB::table('v2_lite_machine')->updateOrInsert(['machine_id' => $input['machine_id']], ['uuid' => $uuid]);
+                    ServerMachine::whereKey($input['machine_id'])->update(['lite_auto_bind' => true]);
+                    $count = 1;
+                } else {
+                    foreach ($input['uuids'] as $uuid) {
+                        if (!isset($nodes[$uuid])) throw new ApiException('Lite 服务器已不存在，请重新读取。', 409);
+                        if (DB::table('v2_lite_machine')->where('uuid', $uuid)->exists()) continue;
+                        $machine = ServerMachine::create(['name' => mb_substr($nodes[$uuid]['name'] ?: 'Lite server', 0, 255),
+                            'token' => ServerMachine::generateToken(), 'is_active' => true, 'traffic_limit' => 0, 'traffic_mode' => 'both']);
+                        DB::table('v2_lite_machine')->insert(['machine_id' => $machine->id, 'uuid' => $uuid]);
+                        $ids[] = $machine->id;
+                        $count++;
+                    }
                 }
-            }
-            return ['count' => $count, 'created_ids' => $ids];
-        }, 3);
+                return ['count' => $count, 'created_ids' => $ids];
+            }, 3);
+        } catch (QueryException $error) {
+            if (!(new ConcurrencyErrorDetector())->causedByConcurrencyError($error)) throw $error;
+            throw new ApiException('Lite 绑定遇到并发更新，请稍后重试。', 503);
+        }
     }
 
     public function snapshot(): array
@@ -212,7 +243,38 @@ class LiteMonitor
         $connection = $this->connection();
         if (!$connection->enabled) return ['enabled' => false, 'machines' => (object) []];
         $bindings = DB::table('v2_lite_machine')->pluck('uuid', 'machine_id');
-        if ($bindings->isEmpty()) return ['enabled' => true, 'machines' => (object) []];
+        return $this->boundSnapshot($connection, $bindings->all());
+    }
+
+    /** 调度只读取池中已绑定的机器；失败保留绑定标记，不回退成本地额度。 */
+    public function schedulingSnapshot(array $machineIds): array
+    {
+        $connection = $this->connection();
+        if (!$connection->enabled || !$machineIds) return [];
+        $bindings = DB::table('v2_lite_machine')->whereIn('machine_id', $machineIds)->pluck('uuid', 'machine_id')->all();
+        if (!$bindings) return [];
+        $failed = $this->cacheKey($connection, 'scheduling_error');
+        if (Cache::has($failed)) return array_fill_keys(array_keys($bindings), ['error' => true]);
+        try {
+            return (array) $this->boundSnapshot($connection, $bindings)['machines'];
+        } catch (ApiException) {
+            Cache::put($failed, true, 10);
+            return array_fill_keys(array_keys($bindings), ['error' => true]);
+        }
+    }
+
+    /** 后台重试与手动操作共用同一套锁、唯一性检查和事务。 */
+    public function autoBind(): int
+    {
+        $connection = $this->connection();
+        if (!$connection->enabled || !$connection->api_key
+            || !ServerMachine::where('lite_auto_bind', true)->whereNotIn('id', DB::table('v2_lite_machine')->select('machine_id'))->exists()) return 0;
+        return $this->bind(['action' => 'auto'])['count'];
+    }
+
+    private function boundSnapshot(LiteConnection $connection, array $bindings): array
+    {
+        if (!$bindings) return ['enabled' => true, 'machines' => (object) []];
         $nodes = $this->nodes($connection);
         $statuses = $this->cached($connection, 'status', 10,
             fn () => $this->client->read($connection, 'common:getNodesLatestStatus', ['compact' => true]));
@@ -221,7 +283,7 @@ class LiteMonitor
             $node = $nodes[$uuid] ?? null;
             $state = is_array($statuses[$uuid] ?? null) ? $statuses[$uuid] : [];
             $time = self::timestamp($state['time'] ?? null);
-            $fresh = $time && $time >= time() - 180 && $time <= time() + 60;
+            $fresh = $time && $time >= now()->timestamp - 180 && $time <= now()->timestamp + 60;
             $online = is_bool($state['online'] ?? null) ? $state['online'] : null;
             $load = $fresh && $online === true ? self::load($state) : null;
             $traffic = null;

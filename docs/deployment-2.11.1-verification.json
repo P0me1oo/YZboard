@@ -1,0 +1,99 @@
+{
+  "checked_at": "2026-11-08T17:42:35.001066+00:00",
+  "server": "Solid-US LA",
+  "directory": "/root/yzboard",
+  "user": "www-data",
+  "version": "2.11.1",
+  "dash_version": "0.95.0",
+  "previous_version": "2.11.0",
+  "source": {
+    "base_commit": "56f6207d48a8ce9eecf509f4894a5ef6775595d0",
+    "workspace_head": "7d3eb4168a5721803770800921d1b9395f44dc68",
+    "workspace_modified": true,
+    "manifest_sha256": "d99af712242c47ac17c711a85f5ee19d4d45a3ed192435ae224c4644ddddbb05",
+    "archive_sha256": "a22ed0e8a3003f2f0b49f8d14979643101cc61bd29c22a22bb490e97b2235122"
+  },
+  "switch": {
+    "version": "2.11.1",
+    "previous_version": "2.11.0",
+    "workspace_head": "7d3eb4168a5721803770800921d1b9395f44dc68",
+    "workspace_modified": true,
+    "manifest_sha256": "d99af712242c47ac17c711a85f5ee19d4d45a3ed192435ae224c4644ddddbb05",
+    "started_at": "2026-11-08T17:41:30.346360+00:00",
+    "step": "services_started",
+    "updated_at": "2026-11-08T17:41:33.940777+00:00"
+  },
+  "services": {
+    "yzboard-web.service": {
+      "NRestarts": "0",
+      "WorkingDirectory": "/root/yzboard",
+      "User": "www-data",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "yzboard-horizon.service": {
+      "NRestarts": "0",
+      "WorkingDirectory": "/root/yzboard",
+      "User": "www-data",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "yzboard-websocket.service": {
+      "NRestarts": "0",
+      "WorkingDirectory": "/root/yzboard",
+      "User": "www-data",
+      "ActiveState": "active",
+      "SubState": "running"
+    }
+  },
+  "http": {
+    "home": 200,
+    "admin": 200,
+    "guest_config": 200,
+    "lite_config_guest": 403,
+    "lite_inventory_guest": 403,
+    "admin_asset_sha256_matches": true
+  },
+  "local_nginx_https": {
+    "home": 200,
+    "admin": 200,
+    "guest_config": 200
+  },
+  "validation": {
+    "source_files": 1153,
+    "changed_files": 6,
+    "php_lint_files": 3,
+    "platform_passed": true,
+    "baseline_code_matches": true
+  },
+  "persistent_preserved": {
+    ".env": true,
+    "plugins": true,
+    "public/plugins": true,
+    "storage/theme": true,
+    "public/theme": true
+  },
+  "migrations": 145,
+  "failed_jobs": 713,
+  "active_machines_before": 49,
+  "recovered_machine_heartbeats": 49,
+  "websocket_connections": 63,
+  "lite": {
+    "lite_enabled": true,
+    "lite_configured": true,
+    "lite_bindings": 0,
+    "lite_inventory_nodes": 68,
+    "lite_automatic_candidates": 46
+  },
+  "new_application_errors": 9,
+  "new_lite_errors": 0,
+  "service_error_log_empty": true,
+  "existing_queue_error": {
+    "message": "The \"stop-when-empty-for\" option does not exist.",
+    "present_before_deploy": true,
+    "first_seen_in_checked_logs": "2026-11-08 00:00:38",
+    "before_deploy_occurrences": 4632,
+    "after_deploy_occurrences": 9
+  },
+  "new_application_errors_note": "切换前基线采样后包含既有队列参数报错，不能表述为应用日志无错误。"
+}

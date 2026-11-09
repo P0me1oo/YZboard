@@ -81,13 +81,14 @@ class RealtimeServerTest extends TestCase
     {
         $session = $this->begin();
         app(NodeStateService::class)->accept($this->node, [
-            'epoch' => $session['epoch'], 'sequence' => 2, 'state' => ['connection_counts' => [1 => 7], 'user_speeds' => [1 => [100, 200]]],
+            'epoch' => $session['epoch'], 'sequence' => 2, 'state' => ['ip_connection_counts' => [1 => ['8.8.8.8' => 7]], 'connection_counts' => [1 => 7], 'user_speeds' => [1 => [100, 200]]],
         ]);
         $this->postJson('/api/v2/server/realtime/state', $this->auth() + [
-            'epoch' => $session['epoch'], 'sequence' => 1, 'state' => ['connection_counts' => [1 => 20], 'user_speeds' => [1 => [900, 900]]],
+            'epoch' => $session['epoch'], 'sequence' => 1, 'state' => ['ip_connection_counts' => [1 => ['8.8.8.8' => 20]], 'connection_counts' => [1 => 20], 'user_speeds' => [1 => [900, 900]]],
         ])->assertOk()->assertJsonPath('data.accepted', false);
         $this->assertSame([1 => 7], app(RealtimeStateStore::class)->read('node:' . $this->node->id)['data']['connection_counts']);
         $this->assertSame([1 => [100, 200]], app(RealtimeStateStore::class)->read('node:' . $this->node->id)['data']['user_speeds']);
+        $this->assertSame([1 => ['8.8.8.8' => 7]], app(RealtimeStateStore::class)->read('node:' . $this->node->id)['data']['ip_connection_counts']);
     }
 
     public function test_restart_rejects_previous_session_and_malformed_state_is_not_accepted(): void

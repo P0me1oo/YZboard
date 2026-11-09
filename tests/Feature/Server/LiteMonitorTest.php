@@ -83,6 +83,83 @@ class LiteMonitorTest extends TestCase
             'agent_runtime' => $runtime, 'traffic_limit' => 0]);
     }
 
+    public function test_scheduled_binding_retries_new_machines_and_preserves_manual_choices(): void
+    {
+        $monitor = $this->configure();
+        $machine = $this->machine();
+        $this->artisan('lite:bind-machines')->assertSuccessful();
+        $this->assertDatabaseCount('v2_lite_machine', 0);
+        $this->assertSame('pending', $monitor->inventory()['machines'][0]['binding_status']);
+        $machine->update(['agent_runtime' => ['public_ipv4' => '8.8.4.4']]);
+        $this->artisan('lite:bind-machines')->assertSuccessful();
+        $this->assertDatabaseHas('v2_lite_machine', ['machine_id' => $machine->id, 'uuid' => $this->uuid]);
+        $monitor->bind(['action' => 'unbind', 'machine_id' => $machine->id]);
+        $this->assertFalse($machine->fresh()->lite_auto_bind);
+        $this->artisan('lite:bind-machines')->assertSuccessful();
+        $this->assertDatabaseCount('v2_lite_machine', 0);
+        $this->assertSame('paused', $monitor->inventory()['machines'][0]['binding_status']);
+        $monitor->bind(['action' => 'resume', 'machine_id' => $machine->id]);
+        $this->artisan('lite:bind-machines')->assertSuccessful();
+        $this->assertDatabaseCount('v2_lite_machine', 1);
+        $machine->update(['agent_runtime' => ['public_ipv4' => '1.1.1.1']]);
+        $this->artisan('lite:bind-machines')->assertSuccessful();
+        $this->assertDatabaseHas('v2_lite_machine', ['machine_id' => $machine->id, 'uuid' => $this->uuid]);
+    }
+
+    public function test_background_conflicts_require_manual_binding_and_never_take_an_owned_uuid(): void
+    {
+        $monitor = $this->configure();
+        $one = $this->machine(['public_ip' => '8.8.4.4']);
+        $two = $this->machine(['public_ip' => '8.8.4.4']);
+        $this->artisan('lite:bind-machines')->assertSuccessful();
+        $this->assertSame(['conflict', 'conflict'], array_column($monitor->inventory()['machines'], 'binding_status'));
+        $this->assertDatabaseCount('v2_lite_machine', 0);
+        $monitor->bind(['action' => 'bind', 'machine_id' => $two->id, 'uuid' => $this->uuid]);
+        $this->artisan('lite:bind-machines')->assertSuccessful();
+        $this->assertSame(['conflict', 'bound'], array_column($monitor->inventory()['machines'], 'binding_status'));
+        $this->assertDatabaseMissing('v2_lite_machine', ['machine_id' => $one->id]);
+    }
+
+    public function test_background_binding_recovers_from_lite_errors_and_skips_disabled_connections(): void
+    {
+        $monitor = $this->configure();
+        $machine = $this->machine(['public_ip' => '8.8.4.4']);
+        $this->redirect = true;
+        $this->artisan('lite:bind-machines')->expectsOutput('Lite 自动绑定未完成，将在下一分钟重试。')->assertFailed();
+        $this->assertDatabaseCount('v2_lite_machine', 0);
+        $this->redirect = false;
+        $this->artisan('lite:bind-machines')->assertSuccessful();
+        $monitor->bind(['action' => 'unbind', 'machine_id' => $machine->id]);
+        $monitor->save(['url' => 'https://lite.example.test', 'enabled' => false]);
+        $monitor->bind(['action' => 'resume', 'machine_id' => $machine->id]);
+        $this->artisan('lite:bind-machines')->assertSuccessful();
+        $this->assertDatabaseCount('v2_lite_machine', 0);
+    }
+
+    public function test_new_lite_node_is_found_on_a_later_background_attempt(): void
+    {
+        $this->configure();
+        $machine = $this->machine(['public_ip' => '1.1.1.1']);
+        $this->artisan('lite:bind-machines')->assertSuccessful();
+        $this->assertDatabaseCount('v2_lite_machine', 0);
+        $uuid = (string) Str::uuid();
+        $this->nodes[] = $this->node($uuid, '1.1.1.1');
+        $this->travel(61)->seconds();
+        $this->artisan('lite:bind-machines')->assertSuccessful();
+        $this->assertDatabaseHas('v2_lite_machine', ['machine_id' => $machine->id, 'uuid' => $uuid]);
+    }
+
+    public function test_automatic_binding_has_an_independent_minute_schedule(): void
+    {
+        $events = app(\Illuminate\Console\Scheduling\Schedule::class)->events();
+        $event = collect($events)->first(fn ($event) => str_contains($event->command ?? '', 'lite:bind-machines'));
+        $this->assertNotNull($event);
+        $this->assertSame('* * * * *', $event->expression);
+        $this->assertTrue($event->onOneServer);
+        $this->assertTrue($event->withoutOverlapping);
+        $this->assertTrue($event->runInBackground);
+    }
+
     public function test_routes_require_admin_and_configuration_never_returns_plaintext_key(): void
     {
         $this->getJson('/_tests/lite/config')->assertForbidden();

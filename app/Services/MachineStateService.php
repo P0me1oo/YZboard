@@ -33,14 +33,15 @@ class MachineStateService
             'state.status.net.in_speed' => 'sometimes|numeric|min:0',
             'state.status.net.out_speed' => 'sometimes|numeric|min:0',
         ])->validate();
+        $enabled = HostMonitoring::enabled($machine);
         $state = [];
-        if (isset($validated['state']['status'])) {
+        if ($enabled && isset($validated['state']['status'])) {
             $state['status'] = array_intersect_key($validated['state']['status'], array_flip(['cpu', 'mem', 'swap', 'disk', 'net']));
         }
         $source = 'machine:' . $machine->id;
         $receipt = $this->store->accept($source, $validated['epoch'], (int) $validated['sequence'], $state);
         if ($state !== []) $this->persistLatest($machine);
-        return $receipt + ['telemetry' => app(TelemetryDemand::class)->forSource($source)];
+        return $receipt + ['host_monitoring' => $enabled, 'telemetry' => app(TelemetryDemand::class)->forSource($source)];
     }
 
     /** 当前显示直接读取缓存；历史曲线和机器表最多每分钟保存一次，避免每秒写数据库。 */
@@ -48,6 +49,7 @@ class MachineStateService
     {
         $key = 'realtime:machine:history:' . $machine->id;
         Cache::lock($key . ':lock', 20)->block(2, function () use ($machine, $key): void {
+            if (!HostMonitoring::enabled($machine)) return;
             if (Cache::has($key)) return;
             $snapshot = $this->store->read('machine:' . $machine->id);
             if (!$snapshot || !$snapshot['fresh'] || !isset($snapshot['data']['status'])) return;

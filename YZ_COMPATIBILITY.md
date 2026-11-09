@@ -1,5 +1,91 @@
 # YZboard 兼容矩阵
 
+## 2.12.1 链路检查状态与保存后重检（2026-11-09，本地未发布）
+
+配套管理端 0.96.1，复用 Agent 2.33.0 起支持的检查请求。关闭、等待状态与可确认的旧版本分别显示，保存已启用检查的节点配置或检查设置时重新检查；共享节点跟随主节点。
+
+SQLite 与 MariaDB 11.8.6 各 62 项、920 断言，健康状态 2 项行为、9 项浏览器、构建、274 份集成产物及 5 项面板资源检查通过。未修改 Agent 或部署服务器；范围与命令见[节点运行检查](docs/node-operations.md)。
+
+## 2.12.0 Lite 调度与后台绑定（2026-11-09，本地未发布）
+
+配套管理端 0.96.0；沿用 Agent v2.35.0 及以后已有的主机监控切换，代理协议和内核不变。新增 `v2_server_machine.lite_auto_bind` 默认开启的布尔列，不改写机器流量保护或已有绑定。独立每分钟任务按公网 IP 唯一匹配，冲突留待手动处理；解绑暂停，管理员可恢复。
+
+已绑定且启用 Lite 的前置调度读取其有效额度、校准周期用量、绝对重置时间及服务商时区，覆盖原有四种策略。未知数据保留为未知，健康故障转移、本地硬保护与原有阈值恢复窗口保持；周期耗尽使用其他健康入口，全部无剩余额度时保留健康兜底。见 [Lite 接入](docs/lite-monitor.md) 与 [负载分配](docs/load-balancer.md)。
+
+- PHP 8.4.27：SQLite 相关回归 133 项、2441 断言无失败，其中 2 项 MariaDB 行锁专项跳过；MariaDB 11.8.6 的相同 133 项、2455 断言全部通过，使用严格分组、`REPEATABLE-READ` 和 `innodb_snapshot_isolation=ON`。
+- 新迁移的已有数据保持、默认值与回退，以及绝对时间、夏令时和缺失值补充检查，在两种数据库各通过 3 项、16 断言。最终补充停用池仍保留 Lite 来源，四种策略的对应检查在两种数据库各通过 1 项、31 断言。
+- 管理端 3119 份源码检查、13 项相关行为测试、正式构建和资源检查通过；完整管理端 CSP 下 16 项浏览器检查通过，覆盖 1440/390 像素的 Lite 页面、流量状态与服务商重置时间，以及 1440/320 像素的原有策略和权重保存。首次浏览器启动缺少系统库和字体；在本次临时目录补齐运行依赖后，完整重跑上述 16 项通过。
+- 274 个管理端文件增量集成至面板，面板 5 项资源契约通过。测试使用本机临时数据库和模拟 Lite 响应，没有连接真实 Lite 或操作生产。源码和产物保留于两个正式项目目录，未提交、推送、发布或部署。
+
+## 2.11.2 队列工作命令兼容修复（2026-11-09，已部署，未发布）
+
+Laravel `12.71.0` 的队列工作命令开始读取 `stop-when-empty-for`，Horizon `5.33.1` 的独立命令签名尚未声明该参数。应用注册 Horizon 工作命令时只补齐缺失参数，默认值为 `0`，上游已经声明时保留其定义。依赖锁文件、队列调度配置、任务内容和前端保持，详见[队列兼容说明](docs/queue-worker-compatibility.md)。
+
+- PHP 8.4.27：新增兼容检查 4 项、18 条断言，流量授权及管理端实时状态相关回归 15 项、93 条断言全部通过。新增默认启动和显式参数检查在原代码下复现参数不存在；修复后真实 Redis 任务成功消费且只执行一次，常驻模式及空队列轮询通过。
+- 专用本机 Redis 使用随机测试前缀，无生产数据参与；三份 PHP 语法、Git 差异格式及生产平台依赖检查通过。没有修改数据库查询或任务结算逻辑，未扩大到全站完整回归或数据库矩阵。
+- Solid-US LA 从 2.11.1 切换后，三个服务正常，工作进程轮换后继续消费；观察近三分钟流量待处理从 287,523 降至 268,329，失败任务保持 713，缺失参数错误没有新增。来源、积压状态和日志中的其他问题见[部署记录](docs/deployment-2.11.2.md)。
+
+## 2.11.1 Lite 绑定并发修复（2026-11-09，已部署，未发布）
+
+已部署至 Solid-US LA，49 台机器恢复心跳，真实 Lite 读取 68 台服务器成功；配置及既有数据保留，没有代用户绑定。来源、核验与既有队列错误见[部署记录](docs/deployment-2.11.1.md)。以下保留开发验证。
+
+修复自动、手动绑定读取机器资料后被心跳更新，导致 MariaDB 快照隔离的外键检查返回 1020。自动匹配按编号锁定参与匹配的机器，手动绑定只锁目标；网络读取在事务外完成，提交或回滚后释放行锁。保留三次整笔事务尝试，冲突耗尽返回明确的 503 提示；批量绑定、导入完整回滚，改绑失败保留原绑定，已删除目标返回 409。无需迁移，管理端保持 0.95.0，Agent 无需更新，见[说明](docs/lite-monitor.md)。
+
+- 使用 PHP 8.4.27、锁定依赖和本机临时 MariaDB 12.3.3，与生产相同的 `REPEATABLE-READ`、`innodb_snapshot_isolation=ON`；双连接复现原 1020，新增的自动及手动心跳并发用例在原代码下均失败，修复后通过。并发检查验证绑定前心跳等待行锁，提交后可继续更新。
+- 命令：`php vendor/bin/phpunit --do-not-cache-result --filter 'LiteBindingConcurrencyTest|LiteMonitorTest|LiteHostMonitoringTest|MachineAgentTest|MachineHeartbeatTest'`；MariaDB 增加 `--bootstrap tests/bootstrap-mariadb.php`，使用专用测试库及临时端口。
+- SQLite 45 项通过、385 条断言，2 项实际行锁检查按数据库条件跳过；MariaDB 47 项全部通过、401 条断言。覆盖冲突重试、重试耗尽、批量部分写入回滚、导入机器回滚与去重、手动改绑保留、目标删除、异常脱敏、非并发故障保留，以及原监控策略、机器操作与心跳。
+- 三份变化 PHP 文件语法、Git 差异格式检查通过。测试使用模拟 Lite 响应及独立数据库，没有连接真实 Lite API 或 Redis 发布通道；未修改管理端产物，未扩大到全站回归。源码、版本及文档留在当前工作区，未提交、推送、发布或部署；本次临时数据库、运行库和验证文件已清理。
+
+## 2.11.0 路由页按用户查看拦截记录（2026-11-08，已部署，未发布）
+
+Solid-US LA 已从 2.10.1 更新至本版，三个服务及 49 台机器心跳正常，无新增迁移，Agent 未升级。见[部署记录](docs/deployment-2.11.0.md)，以下保留开发验证。
+
+配套管理端 `0.95.0`。拦截记录移入“路由管理 → 拦截记录”，默认按用户显示次数与最近时间，展开精确用户明细并保留筛选、分页与查询快照；旧入口自动跳转，日志菜单移除。默认记录、保存期限与节点协议不变，无新增数据库迁移，Agent 程序不变。
+
+- PHP `8.4.27`：`php vendor/bin/phpunit --filter 'RouteBlockLogTest|LogSettingsTest|ManagementLogCleanupContinuationTest' --do-not-cache-result`，SQLite 与 MariaDB `11.8.6`（严格分组）各 26 项、280 条断言通过。覆盖聚合前筛选、分页、未知用户、已删除用户、精确用户明细、快照排除新上报、权限、默认记录与清理。
+- Node `24.22.1`：3118 份源码检查、构建及资源检查通过。路由管理、拦截记录、原日志管理共 18 项浏览器场景分项通过；首轮发现标签翻译加到节点字段分组，修正资源位置后复验拦截页，保存状态断言改为精确匹配以区分同时出现的查询状态。最终相关失败项通过，桌面和 390/320 像素汇总及明细截图已查看。
+- 274 份管理端资源已集成且逐字节匹配，面板 5 项资源契约通过。主脚本 `assets/admin-CvpFJDYG.js`，SHA-256 `e36fc287bf94371a4027237bef7729c8c00c8da4699e6d99aedb4fb4358744f2`。未执行全站完整回归、发布或升级 Agent。
+
+## 2.10.1 路由拦截默认记录（2026-11-08，已部署，未发布）
+
+Solid-US LA 已从 2.9.0 更新为 2.10.1，日志表迁移完成，三个服务正常，49 台机器恢复心跳。用户明确仅部署面板，Agent 未升级；来源、切换过程和公网检查限制见[部署记录](docs/deployment-2.10.1.md)。以下保留开发阶段验证。
+
+配套管理端 `0.94.1`、Agent `v2.36.0`。路由拦截从通用日志设置移除，默认记录且忽略开发阶段遗留的开关与恢复时间；保存天数在拦截页面内设置，独立存储，默认 7 天、范围 1–365 天。机器隐私保护继续优先。无新增迁移，Agent 程序未改变，使用方式见[说明](docs/route-block-logs.md)。
+
+- PHP `8.4.27`：`php vendor/bin/phpunit --filter 'RouteBlockLogTest|LogSettingsTest|ManagementLogCleanupContinuationTest' --do-not-cache-result`，SQLite、MariaDB `11.8.6`（严格分组模式）各 24 项、233 条断言通过；MariaDB 使用项目专用测试库引导。覆盖默认记录、旧开关无效、原五类设置、管理员权限、参数边界、期限修改、查询和清理、隐私策略及重试去重。
+- Node `24.22.1`：源码检查（3118 份）、正式构建和资源检查通过；`block-logs.spec.mjs`、`log-settings.spec.mjs` 共 12 项浏览器检查通过，覆盖桌面、390/320 像素、中英俄文、读取/保存失败重试、防重复提交，以及修改其他日志不影响拦截记录。已查看桌面和手机截图。
+- 274 份产物增量集成且逐字节匹配，面板 5 项资源契约通过。主脚本 `assets/admin-C9cLjcWp.js`，SHA-256 `d4f22cbcc3a1ac40f47ea660ee6c8ee2e62561c16a5716213245028499497bb1`。本次仅复验受影响路径，复用上一版节点与双核心检查；未执行全站回归、生产联调、提交、发布或部署。临时数据库、运行库和验证文件在交付前清理。
+
+## 2.10.0 路由拦截记录（2026-11-08，本地未发布）
+
+配套管理端 `0.94.0`、Agent `v2.36.0`。新增拦截记录上报、管理员查询、独立开关与保存期限、分批清理和数据表；使用方式及中转用户、核心重建边界见[说明](docs/route-block-logs.md)。原有 2.8.0/2.9.0 工作区改动保留。
+
+- PHP `8.4.27`：`php vendor/bin/phpunit --filter 'RouteBlockLogTest|ProxyAccessLogTest|LogSettingsTest|LogManagementTest|ManagementLogCleanupContinuationTest' --do-not-cache-result`，SQLite 48 项中 47 项通过、465 条断言，1 项 MariaDB 专用检查按条件跳过；MariaDB `11.8.6` 严格分组模式增加 `--bootstrap tests/bootstrap-mariadb.php`，48 项、477 条断言全部通过。
+- 覆盖节点/机器身份隔离、管理员权限、非法目标和字段拒绝、同批次去重、写入失败重试、规则删除、未知落地用户、筛选分页、关闭与恢复、隐私模式、保留期和清理续跑；新数据库迁移在两种数据库执行成功。测试使用一次性本机数据库及独立框架缓存。
+- 管理端源码、构建和资源检查通过，16 项相关浏览器场景分项通过；最终布局调整后复验拦截页全部 5 项通过。覆盖 1440/390/320 像素、中英俄文、组合筛选、空结果、错误重试和独立设置，并查看桌面与手机截图。274 份产物已增量集成且逐字节匹配，面板 5 项资源契约通过；主脚本 `assets/admin-Cr5uZWAH.js`，SHA-256 `6e04b96a748df9eb550f01eeaecc50d08720bca9d944b0478717f18d4b52c00b`。
+- Agent 的两个核心、普通 WireGuard、中转归属、缓存恢复及兼容检查通过，详见[Agent 矩阵](../YZ-Agent/YZ_COMPATIBILITY.md)。没有执行全站完整回归、生产联调、提交、推送、发布或服务器更新。
+
+## 2.9.0 Lite 接管通用主机监控（2026-11-08，面板已部署，未发布）
+
+Solid-US LA 已从 2.6.1 更新至当前 2.9.0 源码快照，迁移成功，三个服务正常；原 49 台近期上报机器恢复心跳，失败队列无新增。Agent 未升级，Lite 接入尚未启用或绑定。部署来源、核验与回退记录见[部署记录](docs/deployment-2.9.0.md)。以下保留源码开发阶段的验证结果。
+
+配套 Agent v2.35.0，沿用管理端 0.93.0。Lite 已绑定且启用时，通过握手、机器发现、控制及实时回执下发 `host_monitoring=false`，停用或解绑恢复。面板对新旧 Agent 同时停止主机负载保存和新增历史，节点核心/代理业务及控制心跳继续；实时页面把仅含核心状态的对象显示为无主机负载。无需新增迁移或核心升级，见 [Lite 接入](docs/lite-monitor.md)。
+
+- PHP 8.4.27：内存 SQLite 与 MariaDB 11.8.6（`ONLY_FULL_GROUP_BY`）各 109 项、1091 条断言通过。使用项目锁定依赖、独立临时框架缓存、临时数据库及模拟 Lite/设备存储，未连接生产服务。
+- 命令：`php vendor/bin/phpunit --do-not-cache-result --filter 'LiteHostMonitoringTest|LiteMonitorTest|MachineAgentTest|MachineHeartbeatTest|MachineTrafficTest|MachineTelemetryTest|MachineHistoryCleanupTest|RealtimeServerTest|RealtimeAdminTest|RealtimeReadOptimizationTest|AgentLogPolicyTest|NodeOperationsTest|UserIpConnectionTest'`；MariaDB 增加 `--bootstrap tests/bootstrap-mariadb.php`，使用专用测试库。
+- 覆盖手动/自动绑定、导入、停用保留绑定、重新启用、解绑、未绑定机器隔离、机器与旧节点鉴权、旧 Agent 状态、空心跳、乱序/重复、HTTP/WebSocket 节点状态、流量批次去重结算、原 IP 连接快照和管理端无负载契约。首轮页面兼容检查发现部分旧样本只含 CPU，保留原补齐逻辑后两套相关回归通过。
+- Agent 相关 7 包竞态及 Linux amd64 构建通过，详见 [Agent 兼容矩阵](../YZ-Agent/YZ_COMPATIBILITY.md)。没有改动管理端源码和集成产物，未执行浏览器、全站完整回归或真实 Lite/节点联调；未提交、推送、发布或部署。面板先停止历史写入，配套升级 Agent 后才停止本机采集和发送。
+
+## 2.8.0 每个 IP 的连接数（2026-11-08，本地未发布）
+
+配套管理端 0.93.0、Agent v2.34.0。在线设备详情展示完整公网来源 IP 的活跃连接数，同一用户跨实际入口汇总，逻辑落地不重复计数；IPv6 详情不合并地址，设备名额仍按 /64 合并。新增 `ip_connection_counts` 快照，缺失、过期和部分数据按未知/下限处理。无需数据库迁移，核心固定依赖不变，使用方式见[用户管理](docs/user-management.md#每个-ip-的连接数)。
+
+- PHP 8.4.27 / 内存 SQLite：`UserIpConnectionTest|UserConnectionTest|RealtimeAdminTest|DeviceIpExcludeTest|RealtimeServerTest|UserSpeedTest|DeviceStateServiceTest|NodeStateValidatorTest` 相关路径 74 项、394 条断言通过；补充扩展设备服务兼容后，IP 专项 8 项、45 条断言通过。覆盖 HTTP 报告和详情、实时快照、乱序、缓存失效、重复替换、空快照、IPv6、排除名单及旧节点。
+- Node 24.22.1：3117 份源码检查、11 项相关行为测试、正式构建与资源检查通过；设备详情及实时通道的 13 个浏览器场景通过，覆盖 1440/390 像素和原有勾选、编辑、断线恢复。首轮发现实时接口不可用时误把正常 HTTP 数量显示为未知，修复后整组通过；截图关闭动画后单独复验两种宽度，已检查截图。
+- 274 份前端资源增量集成面板，保留旧资源并排除源码映射；面板 5 项资源契约通过。没有改动数据库写入、计费、设备准入、连接限制或两个核心仓库。
+- Agent 按正式构建标签通过 Xray、directwg、service、tracker、controlplane、panel 六个包及 sing-box 连接/设备/快照专项，Linux amd64 构建成功。详细范围见 [Agent 兼容矩阵](../YZ-Agent/YZ_COMPATIBILITY.md)。
+- 使用本机临时运行库与模拟接口；未执行 MariaDB、全站完整回归、竞态检测或生产节点联调，未提交、推送、发布或部署。实际显示需配套升级面板及 Agent，旧 Agent 的每 IP 数量显示未知。
+
 ## 2.7.1 Lite 服务器监控接入（2026-11-08，已发布，未部署）
 
 配套管理端 0.92.1，包含此前 2.7.0 / 0.92.0 未发布的 Lite 只读监控功能和本轮四项修复。新增连接与绑定表；YZ-Agent 与代理核心版本不变，Lite 流量不参与本地停服或用户扣费。使用方式见[Lite 接入](docs/lite-monitor.md)，验证与发布来源见[发布记录](docs/release-2.7.1.md)。

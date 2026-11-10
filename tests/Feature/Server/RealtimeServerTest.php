@@ -14,6 +14,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 use Workerman\Connection\TcpConnection;
 
@@ -102,6 +103,99 @@ class RealtimeServerTest extends TestCase
             'epoch' => $new['epoch'], 'sequence' => 1, 'state' => ['connection_counts' => [1 => -1]],
         ])->assertStatus(422);
         $this->assertSame(0, app(RealtimeStateStore::class)->read('node:' . $this->node->id)['sequence']);
+    }
+
+    private function runtimeState(): array
+    {
+        return [
+            'connection_counts' => [],
+            'operations' => [
+                'run' => str_repeat('c', 32), 'sequence' => 1, 'version' => 1,
+                'sampled_at' => now()->getTimestampMs(), 'runtime' => 'running',
+                'config_hash' => str_repeat('d', 64), 'pending_bytes' => 0,
+                'certificate' => [
+                    'domain' => '', 'issuer' => '', 'fingerprint' => '', 'mode' => '',
+                    'present' => false, 'applied' => false, 'renewal_error' => null,
+                ],
+                'error' => "  upstream unavailable\n",
+            ],
+        ];
+    }
+
+    private function websocketState(array $payload, bool $accepted): void
+    {
+        $connection = \Mockery::mock(TcpConnection::class);
+        $connection->realtime = true;
+        $connection->shouldReceive('send')->once()->withArgs(function ($data) use ($payload, $accepted): bool {
+            $message = json_decode($data, true);
+            return $message['event'] === 'state.ack'
+                && $message['data']['epoch'] === $payload['epoch']
+                && $message['data']['sequence'] === $payload['sequence']
+                && $message['data']['accepted'] === $accepted;
+        });
+        NodeEventHandlers::handleRuntimeState($connection, $this->node->id, $payload);
+    }
+
+    public function test_websocket_state_http_retry_preserves_strings_and_rejects_real_conflicts(): void
+    {
+        $payload = ['epoch' => $this->begin()['epoch'], 'sequence' => 1, 'state' => $this->runtimeState()];
+        $this->websocketState($payload, true);
+        $store = app(RealtimeStateStore::class);
+        $source = 'node:' . $this->node->id;
+        $before = $store->read($source);
+        $this->travel(1)->seconds();
+
+        $auth = array_replace($this->auth(), ['token' => '  realtime-test-only  ']);
+        $this->postJson('/api/v2/server/realtime/state', $auth + $payload)
+            ->assertOk()->assertJsonPath('data.accepted', false);
+        $this->assertSame($before, $store->read($source));
+
+        foreach ([null, 'changed-fingerprint'] as $fingerprint) {
+            $changed = $payload;
+            $changed['state']['operations']['certificate']['fingerprint'] = $fingerprint;
+            $this->postJson('/api/v2/server/realtime/state', $this->auth() + $changed)
+                ->assertStatus(409)->assertJsonPath('message', 'State sequence has different contents');
+            $this->assertSame($before, $store->read($source));
+        }
+
+        $payload['sequence'] = 2;
+        $payload['state']['operations']['certificate']['fingerprint'] = 'changed-fingerprint';
+        $this->postJson('/api/v2/server/realtime/state', $this->auth() + $payload)
+            ->assertOk()->assertJsonPath('data.accepted', true);
+        $this->assertSame($payload['state'], $store->read($source)['data']);
+    }
+
+    public function test_http_state_can_be_retried_over_websocket_without_changing_its_contents(): void
+    {
+        $payload = ['epoch' => $this->begin()['epoch'], 'sequence' => 1, 'state' => $this->runtimeState()];
+        $this->postJson('/api/v2/server/realtime/state', $this->auth() + $payload)
+            ->assertOk()->assertJsonPath('data.accepted', true);
+        $store = app(RealtimeStateStore::class);
+        $source = 'node:' . $this->node->id;
+        $before = $store->read($source);
+        $this->assertSame($payload['state'], $before['data']);
+        $this->travel(1)->seconds();
+        $this->websocketState($payload, false);
+        $this->assertSame($before, $store->read($source));
+    }
+
+    public function test_state_transport_preservation_keeps_authentication_validation_and_normal_input_cleaning(): void
+    {
+        $epoch = $this->begin()['epoch'];
+        $this->postJson('/api/v2/server/realtime/state', [
+            'token' => 'invalid', 'node_id' => $this->node->id,
+            'epoch' => $epoch, 'sequence' => 1, 'state' => $this->runtimeState(),
+        ])->assertStatus(422)->assertJsonValidationErrors('token');
+        foreach (['', null, ['connection_counts' => [1 => -1]]] as $state) {
+            $this->postJson('/api/v2/server/realtime/state', $this->auth() + [
+                'epoch' => $epoch, 'sequence' => 1, 'state' => $state,
+            ])->assertStatus(422);
+        }
+        $this->assertSame(0, app(RealtimeStateStore::class)->read('node:' . $this->node->id)['sequence']);
+
+        Route::post('/_test/normal-input', fn (\Illuminate\Http\Request $request) => $request->all());
+        $this->postJson('/_test/normal-input', ['state' => ['empty' => '', 'text' => ' value ']])
+            ->assertOk()->assertExactJson(['state' => ['empty' => null, 'text' => 'value']]);
     }
 
     public function test_deduplicated_traffic_does_not_modify_current_state(): void

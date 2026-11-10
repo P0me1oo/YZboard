@@ -31,7 +31,8 @@ class UserIpConnectionService
             $keys = $nodes->filter(fn ($node) => ($runtime['node:' . $node->id] ?? null) === null)
                 ->map(fn ($node) => $this->key((int) $node->id))->values()->all();
             $legacy = $keys === [] ? [] : Cache::many($keys);
-        } catch (\Throwable) {
+        } catch (\Throwable $exception) {
+            FailureLog::record('用户 IP 连接快照读取失败', $exception, [], 'warning');
             $runtime = $legacy = [];
         }
         $result = [];

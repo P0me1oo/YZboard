@@ -415,6 +415,7 @@ class GiftCardController extends Controller
                 'message' => $request->input('action') === 'disable' ? '已禁用' : '已启用',
             ]);
         } catch (\Exception $e) {
+            \App\Services\FailureLog::record('礼品卡状态更新失败', $e, ['id' => (int) $code->id]);
             return $this->fail([500, '操作失败']);
         }
     }

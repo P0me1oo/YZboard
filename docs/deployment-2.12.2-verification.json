@@ -1,0 +1,258 @@
+{
+  "checked_at": "2026-11-09T03:12:02.394622+00:00",
+  "server": "Solid-US LA",
+  "version": "2.12.2",
+  "directory": "/root/yzboard",
+  "base_commit": "445bfaf07b0e22ab686a6ba1b83dfc80dfd6970f",
+  "patch_committed": false,
+  "patch_sha256": "56c7d090fd08e29d2b9c01774a43e757b84dbc3849629cdd5b71ee78a03756ef",
+  "switch": {
+    "started_at": "2026-11-09T03:06:39.985899+00:00",
+    "previous_version": "2.12.1",
+    "version": "2.12.2",
+    "changed_files": [
+      "app/Http/Kernel.php",
+      "app/Http/Middleware/PreserveRealtimeState.php",
+      "tests/Feature/Server/RealtimeServerTest.php",
+      "tests/Feature/Server/MachineTelemetryTest.php",
+      "config/app.php",
+      "CHANGELOG.md",
+      "docs/realtime.md",
+      "vendor/composer/autoload_static.php",
+      "vendor/composer/autoload_classmap.php"
+    ],
+    "status": "services_started",
+    "services_started_at": "2026-11-09T03:06:44.390494+00:00",
+    "finished_at": "2026-11-09T03:06:44.390575+00:00"
+  },
+  "observation_seconds": 318,
+  "before": {
+    "time": "2026-11-09T03:06:39+00:00",
+    "version": "2.12.1",
+    "queues": {
+      "default": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "order_handle": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "traffic_fetch": {
+        "ready": 1,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "stat": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "user_alive_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "node_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_telegram": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email_mass": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      }
+    },
+    "failed_jobs": 713,
+    "migrations": 146,
+    "active_machines": 49,
+    "recent_processed_batches": 307,
+    "redis_ops_per_sec": 5774,
+    "local_nginx_https": {
+      "home": 200,
+      "admin": 200,
+      "guest_config": 200
+    }
+  },
+  "after": {
+    "time": "2026-11-09T03:12:01+00:00",
+    "version": "2.12.2",
+    "queues": {
+      "default": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "order_handle": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "traffic_fetch": {
+        "ready": 3,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "stat": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "user_alive_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "node_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_telegram": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email_mass": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      }
+    },
+    "failed_jobs": 713,
+    "migrations": 146,
+    "active_machines": 49,
+    "recent_processed_batches": 291,
+    "redis_ops_per_sec": 5628,
+    "local_nginx_https": {
+      "home": 200,
+      "admin": 200,
+      "guest_config": 200
+    }
+  },
+  "services": {
+    "yzboard-web.service": {
+      "MainPID": "1287437",
+      "NRestarts": "0",
+      "ExecMainStartTimestamp": "Mon 2026-11-09 11:06:44 +08",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "yzboard-websocket.service": {
+      "MainPID": "1287439",
+      "NRestarts": "0",
+      "ExecMainStartTimestamp": "Mon 2026-11-09 11:06:44 +08",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "yzboard-horizon.service": {
+      "MainPID": "1287438",
+      "NRestarts": "0",
+      "ExecMainStartTimestamp": "Mon 2026-11-09 11:06:44 +08",
+      "ActiveState": "active",
+      "SubState": "running"
+    }
+  },
+  "manifest_files": 1180,
+  "manifest_mismatches": [],
+  "persistent_files_unchanged": true,
+  "hkl_states": [
+    {
+      "source": "machine:47",
+      "sequence": 25322,
+      "age_seconds": 1.54,
+      "runtime": null
+    },
+    {
+      "source": "node:127",
+      "sequence": 22953,
+      "age_seconds": 1.54,
+      "runtime": "running"
+    },
+    {
+      "source": "node:131",
+      "sequence": 22911,
+      "age_seconds": 1.53,
+      "runtime": "running"
+    },
+    {
+      "source": "node:196",
+      "sequence": 22855,
+      "age_seconds": 1.54,
+      "runtime": "running"
+    },
+    {
+      "source": "node:446",
+      "sequence": 22902,
+      "age_seconds": 1.52,
+      "runtime": "running"
+    }
+  ],
+  "post_start_log_counts": [
+    [
+      "device.sync",
+      412,
+      "HKL",
+      1
+    ],
+    [
+      "device.sync",
+      412,
+      "other",
+      1
+    ]
+  ],
+  "hkl_agent": {
+    "checked_at": "2026-11-09T11:12:25.387048+08:00",
+    "since": "2026-11-09T11:06:45+08:00",
+    "observation_seconds": 340.4,
+    "runtime_state_409": 0,
+    "counts": {
+      "report_pushed": 68
+    },
+    "log_lines": 1191,
+    "service": {
+      "MainPID": "915140",
+      "NRestarts": "0",
+      "ExecMainStartTimestamp": "Sun 2026-11-08 14:18:27 CST",
+      "ActiveState": "active"
+    }
+  },
+  "hkl_before": {
+    "window_seconds": 300,
+    "runtime_state_409": 22,
+    "checked_at": "2026-11-09T11:04:50+08:00"
+  },
+  "http_observation": {
+    "started_at": "2026-11-09T11:07:42+08:00",
+    "duration_seconds": 18,
+    "nodes": [
+      127,
+      131,
+      196,
+      446
+    ],
+    "http_responses": {
+      "200": 4,
+      "409": 0
+    }
+  }
+}

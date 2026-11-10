@@ -1,0 +1,223 @@
+{
+  "checked_at": "2026-11-09T09:25:34.577697+00:00",
+  "server": "Solid-US LA",
+  "version": "2.12.4",
+  "dash_version": "0.96.2",
+  "directory": "/root/yzboard",
+  "patch_sha256": "5753cec228dd5596d574be8a25c615d034471efaf4611eae23a739d6e51ef812",
+  "base_commit": "445bfaf07b0e22ab686a6ba1b83dfc80dfd6970f",
+  "patch_committed": false,
+  "switch": {
+    "started_at": "2026-11-09T09:22:01.651030+00:00",
+    "previous_version": "2.12.3",
+    "version": "2.12.4",
+    "changed_files": [
+      "app/Services/PowerDnsClient.php",
+      "app/Services/PowerDnsService.php",
+      "app/Exceptions/PowerDnsRequestException.php",
+      "tests/Feature/Server/DnsSchedulingTest.php",
+      "tests/Unit/Services/PowerDnsClientTest.php",
+      "config/app.php",
+      "CHANGELOG.md",
+      "docs/powerdns-api-resilience.md",
+      "public/assets/admin/manifest.json",
+      "public/assets/admin/index.html",
+      "public/assets/admin/assets/admin-CEIbDnds.js",
+      "public/assets/admin/assets/index-Bg1eVxKW.js",
+      "vendor/composer/autoload_static.php",
+      "vendor/composer/autoload_classmap.php"
+    ],
+    "patch_sha256": "5753cec228dd5596d574be8a25c615d034471efaf4611eae23a739d6e51ef812",
+    "status": "services_started",
+    "services_started_at": "2026-11-09T09:22:06.126241+00:00",
+    "finished_at": "2026-11-09T09:22:06.126318+00:00"
+  },
+  "observation_seconds": 208.5,
+  "before": {
+    "time": "2026-11-09T09:22:01+00:00",
+    "version": "2.12.3",
+    "queues": {
+      "default": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "order_handle": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "traffic_fetch": {
+        "ready": 3,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "stat": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "user_alive_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "node_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_telegram": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email_mass": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      }
+    },
+    "failed_jobs": 713,
+    "migrations": 146,
+    "active_machines": 46,
+    "recent_processed_batches": 262,
+    "redis_ops_per_sec": 6652,
+    "local_nginx_https": {
+      "home": 200,
+      "admin": 200,
+      "guest_config": 200
+    }
+  },
+  "after": {
+    "time": "2026-11-09T09:25:32+00:00",
+    "version": "2.12.4",
+    "queues": {
+      "default": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "order_handle": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "traffic_fetch": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "stat": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "user_alive_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "node_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_telegram": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email_mass": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      }
+    },
+    "failed_jobs": 713,
+    "migrations": 146,
+    "active_machines": 46,
+    "recent_processed_batches": 237,
+    "redis_ops_per_sec": 5441,
+    "local_nginx_https": {
+      "home": 200,
+      "admin": 200,
+      "guest_config": 200
+    }
+  },
+  "services": {
+    "yzboard-web.service": {
+      "MainPID": "1353500",
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "yzboard-websocket.service": {
+      "MainPID": "1353502",
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "yzboard-horizon.service": {
+      "MainPID": "1353501",
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    }
+  },
+  "manifest_files": 1195,
+  "manifest_mismatches": [],
+  "persistent_files_unchanged": true,
+  "dns": {
+    "time": "2026-11-09T17:25:33+08:00",
+    "presets": [
+      {
+        "id": 3,
+        "domain": "52mjj.tech",
+        "ok": true,
+        "rrsets": 88,
+        "seconds": 0.63
+      },
+      {
+        "id": 4,
+        "domain": "hytron.xyz",
+        "ok": true,
+        "rrsets": 9,
+        "seconds": 0.454
+      }
+    ],
+    "pools": [
+      {
+        "id": 3,
+        "name": "SJC",
+        "domain": "sjc.52mjj.tech",
+        "dns_error": null,
+        "dns_synced_at": "2026-11-09T09:25:02.000000Z",
+        "enabled": true
+      },
+      {
+        "id": 4,
+        "name": "LAX",
+        "domain": "lax.52mjj.tech",
+        "dns_error": null,
+        "dns_synced_at": "2026-11-09T09:25:03.000000Z",
+        "enabled": true
+      }
+    ],
+    "timeout_seconds": 5,
+    "max_retries": 3
+  },
+  "post_switch_log_counts": {
+    "other_error:Illuminate\\\\Contracts\\\\Cache\\\\LockTimeoutException": 8
+  }
+}

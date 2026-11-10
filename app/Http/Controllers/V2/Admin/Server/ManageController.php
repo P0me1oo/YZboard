@@ -6,6 +6,7 @@ use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ServerSave;
 use App\Models\Server;
+use App\Services\NodeHealthConfig;
 use App\Models\ServerGroup;
 use App\Services\NodeRealityService;
 use App\Services\ServerPortService;
@@ -93,8 +94,8 @@ class ManageController extends Controller
                 }
                 unset($params['ddns']);
                 $server->fill($params);
-                if (!$server->parent_id && $server->enabled !== false && ($server->health_check['enabled'] ?? false)) {
-                    $server->health_check = array_merge($server->health_check, ['request' => bin2hex(random_bytes(16))]);
+                if (!$server->parent_id && $server->enabled !== false && NodeHealthConfig::effective($server)['enabled']) {
+                    $server->health_check = array_merge($server->health_check ?? [], ['request' => bin2hex(random_bytes(16))]);
                 }
                 if (!$server->exists) {
                     // 新建时显隐跟随开关；未传开关沿用数据库默认开启，显式空值保留独立部署设置。

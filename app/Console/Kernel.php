@@ -127,6 +127,7 @@ class Kernel extends ConsoleKernel
         try {
             app(PluginManager::class)->initializeEnabledPlugins();
         } catch (\Exception $e) {
+            \App\Services\FailureLog::record('插件初始化失败', $e);
         }
         require base_path('routes/console.php');
     }

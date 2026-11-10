@@ -16,7 +16,9 @@ class PowerDnsService
     {
         $key = hash('sha256', $preset->api_url . '/' . $preset->server_id . '/' . $preset->domain);
         Cache::lock('powerdns:zone:' . $key, 180)->block(2, function () use ($preset, $ownerType, $ownerId, $desired, $ttl) {
-            $remote = collect($this->client->request($preset, 'get')['rrsets'])->keyBy(fn ($r) => strtolower(rtrim($r['name'], '.')) . '|' . $r['type']);
+            // 读取、退避、写入和结果核对共用预算，避免重试耗尽 HTTP/队列时限或同步锁。
+            $deadline = microtime(true) + 25;
+            $remote = collect($this->client->request($preset, 'get', deadline: $deadline)['rrsets'])->keyBy(fn ($r) => strtolower(rtrim($r['name'], '.')) . '|' . $r['type']);
             $byName = $remote->groupBy(fn ($r) => strtolower(rtrim($r['name'], '.')), preserveKeys: true);
             $stored = PowerDnsRecord::where('owner_type', $ownerType)->where('owner_id', $ownerId)->get()
                 ->keyBy(fn ($r) => $r->name . '|' . $r->type);
@@ -88,7 +90,7 @@ class PowerDnsService
                     $record = $managed[rtrim($action['name'], '.') . '|' . $action['type']];
                     if ($record->confirmed) $record->update(['confirmed' => false]);
                 }
-                $this->client->request($preset, 'patch', ['rrsets' => $actions]);
+                $this->client->request($preset, 'patch', ['rrsets' => $actions], $remote->values()->all(), $deadline);
             }
             foreach ($stored as $key => $record) if (!isset($wanted[$key])) $record->delete();
             foreach ($wanted as $key => $value) {

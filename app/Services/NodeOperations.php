@@ -45,7 +45,8 @@ final class NodeOperations
             $data['error'] = LogSanitizer::text($data['error']);
         }
         $health = $data['health'] ?? null;
-        if ($health && ($health['checked_at'] > now()->timestamp + 30 || $health['checked_at'] < now()->timestamp - 86400 || !($node->health_check['enabled'] ?? false) || ($health['target'] ?? '') !== ($node->health_check['url'] ?? ''))) {
+        $healthConfig = NodeHealthConfig::effective($node);
+        if ($health && ($health['checked_at'] > now()->timestamp + 30 || $health['checked_at'] < now()->timestamp - 86400 || !$healthConfig['enabled'] || ($health['target'] ?? '') !== $healthConfig['url'])) {
             unset($data['health']);
             $health = null;
         }
@@ -92,6 +93,11 @@ final class NodeOperations
 
     private function present(Server $node, Server $owner, mixed $data, array $agent): array
     {
+        $healthConfig = NodeHealthConfig::effective($owner);
+        // 全局目标改变或关闭后，缓存中的旧结果不能继续冒充当前检查结果。
+        if (isset($data['health']) && (!$healthConfig['enabled'] || ($data['health']['target'] ?? '') !== $healthConfig['url'])) {
+            unset($data['health']);
+        }
         $fresh = is_array($data) && ($data['received_at'] ?? 0) >= now()->timestamp - 90;
         $version = ltrim((string) ($agent['version'] ?? ''), 'v');
         $upgradeRequired = !is_array($data) && ($agent['reported_at'] ?? 0) >= now()->timestamp - 90
@@ -99,8 +105,10 @@ final class NodeOperations
             && version_compare($version, '2.33.0', '<');
         return ['supported' => is_array($data), 'upgrade_required' => (bool) $upgradeRequired,
             'node_enabled' => $node->enabled !== false && $owner->enabled !== false,
-            'fresh' => $fresh, 'enabled' => (bool) ($owner->health_check['enabled'] ?? false),
-            'health_config' => $owner->health_check, 'state' => $data];
+            'fresh' => $fresh, 'enabled' => $healthConfig['enabled'],
+            'health_mode' => NodeHealthConfig::mode($owner),
+            'health_global_enabled' => NodeHealthConfig::global()['enabled'],
+            'health_config' => $healthConfig, 'state' => $data];
     }
     public function detail(Server $node): array
     {

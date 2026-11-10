@@ -1,0 +1,249 @@
+{
+  "checked_at": "2026-11-09T05:22:46.017881+00:00",
+  "server": "Solid-US LA",
+  "version": "2.12.3",
+  "directory": "/root/yzboard",
+  "base_commit": "445bfaf07b0e22ab686a6ba1b83dfc80dfd6970f",
+  "patch_committed": false,
+  "patch_sha256": "19666d120b08a072f260b374035e2e2df7817bc55b61e5659cd82c29cca89434",
+  "scope": "error logging only",
+  "dash_version": "0.96.1",
+  "switch": {
+    "started_at": "2026-11-09T05:20:16.154694+00:00",
+    "previous_version": "2.12.2",
+    "version": "2.12.3",
+    "changed_files": [
+      "app/Console/Kernel.php",
+      "app/Exceptions/Handler.php",
+      "app/Http/Controllers/V1/User/UserController.php",
+      "app/Http/Controllers/V2/Admin/CouponController.php",
+      "app/Http/Controllers/V2/Admin/DatabaseController.php",
+      "app/Http/Controllers/V2/Admin/GiftCardController.php",
+      "app/Http/Controllers/V2/Admin/NoticeController.php",
+      "app/Http/Controllers/V2/Admin/PaymentController.php",
+      "app/Http/Controllers/V2/Admin/PluginController.php",
+      "app/Http/Controllers/V2/Admin/TicketController.php",
+      "app/Http/Middleware/RequestLog.php",
+      "app/Logging/SystemLogHandler.php",
+      "app/Services/NodeConnectionAuth.php",
+      "app/Services/SubscriptionProtection.php",
+      "app/Services/TicketService.php",
+      "app/Services/UpdateService.php",
+      "app/Services/UserConnectionService.php",
+      "app/Services/UserIpConnectionService.php",
+      "app/Services/UserSpeedService.php",
+      "app/WebSocket/AdminRealtimeWorker.php",
+      "app/WebSocket/NodeWorker.php",
+      "app/Services/FailureLog.php",
+      "tests/Feature/FailureLoggingTest.php",
+      "tests/Unit/Services/SystemLogFailureTest.php",
+      "tests/Unit/Services/AdminRealtimeWorkerTest.php",
+      "docs/error-logging.md",
+      "docs/log-management.md",
+      "config/app.php",
+      "CHANGELOG.md",
+      "vendor/composer/autoload_static.php",
+      "vendor/composer/autoload_classmap.php"
+    ],
+    "patch_sha256": "19666d120b08a072f260b374035e2e2df7817bc55b61e5659cd82c29cca89434",
+    "status": "services_started",
+    "services_started_at": "2026-11-09T05:20:20.703602+00:00",
+    "finished_at": "2026-11-09T05:20:20.703682+00:00"
+  },
+  "observation_seconds": 145.3,
+  "before": {
+    "time": "2026-11-09T05:20:16+00:00",
+    "version": "2.12.2",
+    "queues": {
+      "default": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "order_handle": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "traffic_fetch": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "stat": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "user_alive_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "node_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_telegram": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email_mass": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      }
+    },
+    "failed_jobs": 713,
+    "migrations": 146,
+    "active_machines": 49,
+    "recent_processed_batches": 288,
+    "redis_ops_per_sec": 10124,
+    "local_nginx_https": {
+      "home": 200,
+      "admin": 200,
+      "guest_config": 200
+    }
+  },
+  "after": {
+    "time": "2026-11-09T05:22:45+00:00",
+    "version": "2.12.3",
+    "queues": {
+      "default": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "order_handle": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "traffic_fetch": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "stat": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "user_alive_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "node_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_telegram": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email_mass": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      }
+    },
+    "failed_jobs": 713,
+    "migrations": 146,
+    "active_machines": 49,
+    "recent_processed_batches": 289,
+    "redis_ops_per_sec": 5985,
+    "local_nginx_https": {
+      "home": 200,
+      "admin": 200,
+      "guest_config": 200
+    }
+  },
+  "services": {
+    "yzboard-web.service": {
+      "MainPID": "1306084",
+      "NRestarts": "0",
+      "ExecMainStartTimestamp": "Mon 2026-11-09 13:20:20 +08",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "yzboard-websocket.service": {
+      "MainPID": "1306086",
+      "NRestarts": "0",
+      "ExecMainStartTimestamp": "Mon 2026-11-09 13:20:20 +08",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "yzboard-horizon.service": {
+      "MainPID": "1306085",
+      "NRestarts": "0",
+      "ExecMainStartTimestamp": "Mon 2026-11-09 13:20:20 +08",
+      "ActiveState": "active",
+      "SubState": "running"
+    }
+  },
+  "manifest_files": 1187,
+  "manifest_mismatches": [],
+  "persistent_files_unchanged": true,
+  "sample_realtime_states": [
+    {
+      "source": "machine:47",
+      "sequence": 28532,
+      "age_seconds": 0.86,
+      "runtime": null
+    },
+    {
+      "source": "node:127",
+      "sequence": 25453,
+      "age_seconds": 0.87,
+      "runtime": "running"
+    },
+    {
+      "source": "node:131",
+      "sequence": 25423,
+      "age_seconds": 0.86,
+      "runtime": "running"
+    },
+    {
+      "source": "node:196",
+      "sequence": 25361,
+      "age_seconds": 0.86,
+      "runtime": "running"
+    },
+    {
+      "source": "node:446",
+      "sequence": 25426,
+      "age_seconds": 0.85,
+      "runtime": "running"
+    }
+  ],
+  "new_diagnostics": 1,
+  "post_start_log_counts": [
+    [
+      "panel_error",
+      0,
+      "Illuminate\\Contracts\\Cache\\LockTimeoutException",
+      3
+    ],
+    [
+      "device.sync",
+      412,
+      "Symfony\\Component\\HttpKernel\\Exception\\PreconditionFailedHttpException",
+      1
+    ]
+  ]
+}

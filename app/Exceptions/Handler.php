@@ -44,6 +44,13 @@ class Handler extends ExceptionHandler
      */
     public function report(Throwable $exception)
     {
+        // 参数校验和业务拒绝仍保持安静；显式服务端失败不能被 ApiException/HTTP 排除规则吞掉。
+        $code = $exception instanceof ApiException ? (int) substr((string) $exception->getCode(), 0, 3)
+            : ($this->isHttpException($exception) ? $exception->getStatusCode() : 0);
+        if ($code >= 500 && $code < 600) {
+            \App\Services\FailureLog::record('服务端请求处理失败', $exception, ['code' => $code]);
+            return;
+        }
         parent::report($exception);
     }
 

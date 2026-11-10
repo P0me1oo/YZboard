@@ -42,7 +42,7 @@ class RequestLog
                 'updated_at' => time(),
             ]);
         } catch (\Throwable $e) {
-            \Log::warning('管理员操作审计保存失败');
+            \App\Services\FailureLog::record('管理员操作审计保存失败', $e, [], 'warning');
         }
 
         return $response;

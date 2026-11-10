@@ -29,6 +29,7 @@ class NodeOperationsTest extends TestCase
     {
         parent::setUp();
         Cache::flush();
+        admin_setting([\App\Services\NodeHealthConfig::SETTING => ['enabled' => false, 'url' => 'https://example.com/', 'interval' => 60]]);
         Queue::fake();
         Redis::shouldReceive('publish')->byDefault()->andReturn(1);
         Route::middleware('admin')->group(function () {
@@ -61,15 +62,16 @@ class NodeOperationsTest extends TestCase
         $n = $this->node();
         $this->getJson('/_ops/detail?node_id='.$n->id)->assertForbidden();
         $this->admin();
-        $this->postJson('/_ops/health', ['node_id' => $n->id,'enabled' => true,'url' => 'http://example.com','interval' => 60])->assertUnprocessable();
-        $this->postJson('/_ops/health', ['node_id' => $n->id,'enabled' => true,'url' => 'https://example.com/?token=secret','interval' => 60])->assertUnprocessable();
-        $this->postJson('/_ops/health', ['node_id' => $n->id,'enabled' => true,'url' => 'https://example.com/','interval' => 60])->assertOk();
+        foreach (['invalid', '', null] as $mode) {
+            $this->postJson('/_ops/health', ['node_id' => $n->id, 'mode' => $mode])->assertUnprocessable();
+        }
+        $this->postJson('/_ops/health', ['node_id' => $n->id, 'mode' => 'on'])->assertOk();
     }
     public function test_health_save_requests_a_new_probe_and_disable_does_not(): void
     {
         $node = $this->node();
         $this->admin();
-        $payload = ['node_id' => $node->id] + $node->health_check;
+        $payload = ['node_id' => $node->id, 'mode' => 'on'];
         $this->postJson('/_ops/health', $payload)->assertOk();
         $first = $node->fresh()->health_check['request'];
         $this->assertMatchesRegularExpression('/\A[a-f0-9]{32}\z/', $first);
@@ -77,9 +79,9 @@ class NodeOperationsTest extends TestCase
         $second = $node->fresh()->health_check['request'];
         $this->assertNotSame($first, $second);
         $this->assertSame($second, ServerService::buildNodeConfig($node->fresh())['health_check']['request']);
-        $this->postJson('/_ops/health', array_replace($payload, ['url' => 'http://invalid.example']))->assertUnprocessable();
+        $this->postJson('/_ops/health', array_replace($payload, ['mode' => 'invalid']))->assertUnprocessable();
         $this->assertSame($second, $node->fresh()->health_check['request']);
-        $this->postJson('/_ops/health', array_replace($payload, ['enabled' => false]))->assertOk();
+        $this->postJson('/_ops/health', array_replace($payload, ['mode' => 'off']))->assertOk();
         $this->assertArrayNotHasKey('request', $node->fresh()->health_check);
         $this->postJson('/_ops/health', $payload)->assertOk();
         $this->assertNotSame($second, $node->fresh()->health_check['request']);
@@ -160,7 +162,7 @@ class NodeOperationsTest extends TestCase
             return 1;
         });
         // RefreshDatabase 保留外层事务，用内层提交执行保存后的配置通知。
-        DB::transaction(fn () => $this->postJson('/_ops/health', ['node_id' => $node->id] + $node->health_check)->assertOk());
+        DB::transaction(fn () => $this->postJson('/_ops/health', ['node_id' => $node->id, 'mode' => 'on'])->assertOk());
         $this->assertCount(1, $pushes);
         $this->assertSame('sync.config', $pushes[0]['event']);
         $this->assertSame($node->fresh()->health_check['request'], $pushes[0]['data']['config']['health_check']['request']);

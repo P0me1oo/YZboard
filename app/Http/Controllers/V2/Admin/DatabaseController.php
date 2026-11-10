@@ -35,8 +35,9 @@ class DatabaseController extends Controller
     {
         try {
             return $this->success($limiter->run($callback))->header('Cache-Control', 'no-store, private');
-        } catch (QueryException) {
+        } catch (QueryException $exception) {
             // 不向浏览器返回 SQL、连接信息或数据库路径。
+            \App\Services\FailureLog::record('数据库维护操作失败', $exception);
             abort(503, '数据库分析或清理失败，请稍后重试；清理失败的本轮操作已回滚。');
         }
     }

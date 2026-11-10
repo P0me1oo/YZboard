@@ -11,6 +11,30 @@ use Workerman\Connection\TcpConnection;
 
 class AdminRealtimeWorkerTest extends TestCase
 {
+    public function test_snapshot_failure_logs_reason_and_closes_connection_even_if_logger_fails(): void
+    {
+        (new \ReflectionProperty(\App\Services\FailureLog::class, 'last'))->setValue(null, []);
+        $snapshots = \Mockery::mock(RealtimeSnapshotService::class);
+        $snapshots->shouldReceive('snapshot')->once()->andThrow(new \RuntimeException('snapshot failed token=test-secret'));
+        \Illuminate\Support\Facades\Log::shouldReceive('log')->once()->withArgs(function ($level, $message, $context): bool {
+            $this->assertSame('warning', $level);
+            $this->assertStringContainsString('snapshot failed', $context['error']);
+            $this->assertStringNotContainsString('test-secret', $context['error']);
+            return true;
+        })->andThrow(new \RuntimeException('disk failed'));
+        $worker = new AdminRealtimeWorker($snapshots, \Mockery::mock(RealtimeTicketService::class));
+        $connection = \Mockery::mock(TcpConnection::class);
+        $connection->shouldReceive('close')->once()->withArgs(fn ($message) => json_decode($message, true)['event'] === 'state.error');
+        $property = new \ReflectionProperty($worker, 'connections');
+        $property->setValue($worker, [1 => [
+            'connection' => $connection, 'identity' => [], 'subscription' => [],
+            'subscription_id' => 'test', 'sequence' => 0, 'received_at' => microtime(true),
+            'checked_at' => microtime(true), 'ping_at' => microtime(true), 'captured_at' => 0, 'hash' => null,
+        ]]);
+        $worker->tick();
+        $this->assertSame([], $property->getValue($worker));
+    }
+
     public function test_capture_version_alone_does_not_resend_unchanged_display_content(): void
     {
         $snapshots = new RealtimeSnapshotService(new RealtimeStateStore());

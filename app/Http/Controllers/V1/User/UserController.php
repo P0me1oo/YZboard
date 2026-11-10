@@ -187,6 +187,7 @@ class UserController extends Controller
         try {
             $user->update($updateData);
         } catch (\Exception $e) {
+            \App\Services\FailureLog::record('用户资料保存失败', $e, ['user_id' => (int) $user->id]);
             return $this->fail([400, __('Save failed')]);
         }
 
@@ -200,10 +201,10 @@ class UserController extends Controller
             DB::transaction(function () use ($request, $amount) {
                 $user = User::lockForUpdate()->find($request->user()->id);
                 if (!$user) {
-                    throw new \Exception(__('The user does not exist'));
+                    throw new \App\Exceptions\ApiException(__('The user does not exist'));
                 }
                 if ($amount > $user->commission_balance) {
-                    throw new \Exception(__('Insufficient commission balance'));
+                    throw new \App\Exceptions\ApiException(__('Insufficient commission balance'));
                 }
                 $user->commission_balance -= $amount;
                 $user->balance += $amount;
@@ -212,6 +213,7 @@ class UserController extends Controller
                 }
             });
         } catch (\Exception $e) {
+            \App\Services\FailureLog::record('佣金转账失败', $e, ['user_id' => (int) $request->user()->id]);
             return $this->fail([400, $e->getMessage()]);
         }
         return $this->success(true);

@@ -61,7 +61,8 @@ class SubscriptionProtection
     {
         try {
             $settings = self::settings();
-        } catch (\Throwable) {
+        } catch (\Throwable $exception) {
+            FailureLog::record('订阅防护设置读取失败', $exception, [], 'warning');
             return $this->unavailable();
         }
         $rawToken = $request->input('token', $request->route('token'));
@@ -156,8 +157,9 @@ class SubscriptionProtection
                 return $user ?? $this->invalid();
             });
             return $result instanceof User ? $this->checkUser($result, $settings, $browser) : $result;
-        } catch (\Exception) {
+        } catch (\Exception $exception) {
             // 缓存不可用或同来源请求争用锁时拒绝本次下载，不静默关闭防护。
+            FailureLog::record('订阅防护依赖不可用', $exception, [], 'warning');
             return $this->unavailable();
         }
     }
@@ -188,7 +190,8 @@ class SubscriptionProtection
                     return null;
                 });
                 if ($denied) return $denied;
-            } catch (\Exception) {
+            } catch (\Exception $exception) {
+                FailureLog::record('订阅用户限频失败', $exception, ['user_id' => (int) $user->id], 'warning');
                 return $this->unavailable();
             }
         }

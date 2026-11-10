@@ -136,6 +136,7 @@ class TicketController extends Controller
         } catch (ModelNotFoundException $e) {
             return $this->fail([400202, '工单不存在']);
         } catch (\Exception $e) {
+            \App\Services\FailureLog::record('工单关闭失败', $e, ['ticket_id' => (int) $request->input('id')]);
             return $this->fail([500101, '关闭失败']);
         }
     }

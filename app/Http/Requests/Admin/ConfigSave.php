@@ -71,6 +71,10 @@ class ConfigSave extends FormRequest
         'server_pull_interval' => 'integer',
         'server_push_interval' => 'integer',
         'server_auto_sort_enable' => 'sometimes|boolean',
+        'node_health_check' => 'sometimes|array:enabled,url,interval|required_array_keys:enabled,url,interval',
+        'node_health_check.enabled' => 'required_with:node_health_check|boolean',
+        'node_health_check.url' => 'required_with:node_health_check|url:https|max:500',
+        'node_health_check.interval' => 'required_with:node_health_check|integer|min:30|max:3600',
         'device_limit_mode' => 'integer',
         'server_ws_enable' => 'boolean',
         'server_ws_url' => 'nullable|url',
@@ -185,6 +189,13 @@ class ConfigSave extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator) {
+            $url = $this->input('node_health_check.url');
+            if (is_string($url) && !$validator->errors()->has('node_health_check.url')) {
+                $parts = parse_url($url);
+                if (isset($parts['user']) || isset($parts['pass']) || isset($parts['query']) || isset($parts['fragment'])) {
+                    $validator->errors()->add('node_health_check.url', '请使用不带认证、查询参数或片段的 HTTPS 检查地址。');
+                }
+            }
             $targets = $this->input(RealityScanService::SETTING);
             if (is_string($targets) && trim($targets) !== '' && !$validator->errors()->has(RealityScanService::SETTING)) {
                 try {
@@ -230,6 +241,9 @@ class ConfigSave extends FormRequest
     {
         return [
             SubscriptionProtection::SETTING => '订阅防护',
+            'node_health_check.enabled' => '链路健康默认开关',
+            'node_health_check.url' => 'HTTPS 检查地址',
+            'node_health_check.interval' => '检查间隔（秒）',
             'subscribe_protection.block_browser' => '禁止浏览器访问订阅',
             'subscribe_protection.brute_force_enabled' => '订阅暴力探测防护',
             'subscribe_protection.brute_force_max_failures' => '最大失败次数',

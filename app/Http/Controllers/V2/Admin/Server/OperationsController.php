@@ -7,6 +7,7 @@ use App\Models\Server;
 use App\Models\BalancerPool;
 use App\Models\LandingPool;
 use App\Services\NodeOperations;
+use App\Services\NodeHealthConfig;
 use App\Services\NodeSyncService;
 use App\Services\RealtimeStateStore;
 use Illuminate\Http\Request;
@@ -35,19 +36,15 @@ class OperationsController extends Controller
     public function health(Request $r)
     {
         $node = $this->node($r);
-        $p = $r->validate(['enabled' => 'required|boolean','url' => 'required_if:enabled,true|nullable|url:https|max:500','interval' => 'required|integer|min:30|max:3600']);
-        if ($p['enabled']) {
-            $u = parse_url($p['url']);
-            if (isset($u['user']) || isset($u['pass']) || isset($u['fragment']) || isset($u['query'])) {
-                throw ValidationException::withMessages(['url' => '请使用不带认证、查询参数或片段的 HTTPS 检查地址。']);
-            }
-        }
+        $p = $r->validate(['mode' => 'required|in:inherit,on,off']);
         if ($node->parent_id) {
             throw ValidationException::withMessages(['node_id' => '共享节点请在其主节点设置检查。']);
         }
         // 复用 Agent 已支持的请求编号；重复保存也重新检查，关闭时不下发探测。
-        if ($p['enabled']) $p['request'] = bin2hex(random_bytes(16));
         $node->health_check = $p;
+        if (NodeHealthConfig::effective($node)['enabled']) {
+            $node->health_check = $p + ['request' => bin2hex(random_bytes(16))];
+        }
         $node->save();
         return $this->success(true);
     }
@@ -62,13 +59,13 @@ class OperationsController extends Controller
         if ($node->enabled === false || $view['state']['runtime'] !== 'running') {
             throw ValidationException::withMessages(['node_id' => '请先启动节点并确认配置应用成功。']);
         }
-        if (!($node->health_check['enabled'] ?? false)) {
+        if (!NodeHealthConfig::effective($node)['enabled']) {
             throw ValidationException::withMessages(['node_id' => '请先启用链路检查。']);
         }
         if (!Cache::add('node:health:request:'.$node->id, true, 15)) {
             return $this->success(true);
         }
-        $node->health_check = array_merge($node->health_check, ['request' => bin2hex(random_bytes(16))]);
+        $node->health_check = array_merge($node->health_check ?? [], ['request' => bin2hex(random_bytes(16))]);
         $node->save();
         return $this->success(true);
     }

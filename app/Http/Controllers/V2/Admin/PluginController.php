@@ -144,6 +144,7 @@ class PluginController extends Controller
                 'message' => '插件安装成功'
             ]);
         } catch (\Exception $e) {
+            \App\Services\FailureLog::record('插件安装失败', $e);
             return response()->json([
                 'message' => '插件安装失败：' . $e->getMessage()
             ], 400);
@@ -173,6 +174,7 @@ class PluginController extends Controller
                 'message' => '插件卸载成功'
             ]);
         } catch (\Exception $e) {
+            \App\Services\FailureLog::record('插件卸载失败', $e);
             return response()->json([
                 'message' => '插件卸载失败：' . $e->getMessage()
             ], 400);
@@ -193,6 +195,7 @@ class PluginController extends Controller
                 'message' => '插件升级成功'
             ]);
         } catch (\Exception $e) {
+            \App\Services\FailureLog::record('插件升级失败', $e);
             return response()->json([
                 'message' => '插件升级失败：' . $e->getMessage()
             ], 400);
@@ -214,6 +217,7 @@ class PluginController extends Controller
                 'message' => '插件启用成功'
             ]);
         } catch (\Exception $e) {
+            \App\Services\FailureLog::record('插件启用失败', $e);
             return response()->json([
                 'message' => '插件启用失败：' . $e->getMessage()
             ], 400);
@@ -251,6 +255,7 @@ class PluginController extends Controller
                 'data' => $config
             ]);
         } catch (\Exception $e) {
+            \App\Services\FailureLog::record('获取配置失败', $e);
             return response()->json([
                 'message' => '获取配置失败：' . $e->getMessage()
             ], 400);
@@ -277,6 +282,7 @@ class PluginController extends Controller
                 'message' => '配置更新成功'
             ]);
         } catch (\Exception $e) {
+            \App\Services\FailureLog::record('配置更新失败', $e);
             return response()->json([
                 'message' => '配置更新失败：' . $e->getMessage()
             ], 400);
@@ -308,6 +314,7 @@ class PluginController extends Controller
                 'message' => '插件上传成功'
             ]);
         } catch (\Exception $e) {
+            \App\Services\FailureLog::record('插件上传失败', $e);
             return response()->json([
                 'message' => '插件上传失败：' . $e->getMessage()
             ], 400);
@@ -338,6 +345,7 @@ class PluginController extends Controller
                 'message' => '插件删除成功'
             ]);
         } catch (\Exception $e) {
+            \App\Services\FailureLog::record('插件删除失败', $e);
             return response()->json([
                 'message' => '插件删除失败：' . $e->getMessage()
             ], 400);

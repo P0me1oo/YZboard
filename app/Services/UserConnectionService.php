@@ -51,7 +51,8 @@ class UserConnectionService
                     ? ['counts' => $state['data']['connection_counts'], 'updated_at' => intdiv($state['received_at'], 1000)]
                     : null;
             }
-        } catch (\Throwable) {
+        } catch (\Throwable $exception) {
+            FailureLog::record('用户连接快照读取失败', $exception, [], 'warning');
             $snapshots = [];
         }
         $result = [];

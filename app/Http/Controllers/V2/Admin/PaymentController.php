@@ -124,6 +124,7 @@ class PaymentController extends Controller
             }
             DB::commit();
         } catch (\Exception $e) {
+            \App\Services\FailureLog::record('支付方式排序失败', $e);
             DB::rollBack();
             return $this->fail([500, '保存失败']);
         }

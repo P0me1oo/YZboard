@@ -150,6 +150,7 @@ class CouponController extends Controller
             }
             DB::commit();
         } catch (\Exception $e) {
+            \App\Services\FailureLog::record('优惠券批量生成失败', $e);
             DB::rollBack();
             return $this->fail([500, '生成失败']);
         }

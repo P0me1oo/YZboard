@@ -59,4 +59,36 @@ class MachineTelemetryTest extends TestCase
             }
         }
     }
+
+    public function test_machine_http_and_websocket_retries_share_the_same_snapshot(): void
+    {
+        Cache::flush();
+        $machine = ServerMachine::create(['name' => '跨通道重试', 'token' => 'machine-retry-test-only', 'is_active' => true]);
+        $auth = ['machine_id' => $machine->id, 'token' => $machine->token];
+        $epoch = $this->postJson('/api/v2/server/machine/realtime/begin', $auth + ['run' => str_repeat('c', 32)])
+            ->assertOk()->json('data.epoch');
+        $store = app(RealtimeStateStore::class);
+        $service = app(MachineStateService::class);
+        $source = 'machine:' . $machine->id;
+        $payload = ['epoch' => $epoch, 'sequence' => 1, 'telemetry_mode' => 1,
+            'state' => ['status' => ['cpu' => 12, 'mem' => ['total' => 1024, 'used' => 256]]]];
+        $service->accept($machine, $payload);
+        $before = $store->read($source);
+        $this->travel(1)->seconds();
+        $this->postJson('/api/v2/server/machine/realtime/state', $auth + $payload)
+            ->assertOk()->assertJsonPath('data.accepted', false);
+        $this->assertSame($before, $store->read($source));
+        $this->assertSame(1, ServerMachineLoadHistory::count());
+
+        $payload['sequence'] = 2;
+        $payload['state'] = [];
+        $this->postJson('/api/v2/server/machine/realtime/state', $auth + $payload)
+            ->assertOk()->assertJsonPath('data.accepted', true);
+        $before = $store->read($source);
+        $this->travel(1)->seconds();
+        $this->assertFalse($service->accept($machine, $payload)['accepted']);
+        $this->assertSame($before, $store->read($source));
+        $this->assertSame([], $before['data']);
+        $this->assertSame(1, ServerMachineLoadHistory::count());
+    }
 }

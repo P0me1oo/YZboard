@@ -1525,6 +1525,17 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     }
   },
   "settings": {
+    "node_health": {
+      "title": "Link health",
+      "enabled": "Enable health checks by default",
+      "url": "HTTPS check URL",
+      "interval": "Check interval (seconds)",
+      "save": "Save global settings",
+      "saving": "Saving…",
+      "save_error": "Save failed. Please retry.",
+      "load_error": "Failed to load",
+      "retry": "Retry"
+    },
     "appearance": {"title":"Appearance","sidebar":"Sidebar","restore":"Show all","restore_order":"Reset order","sort_help":"Drag to reorder menus within their group. Use switches to show or hide them.","move":"Reorder {{name}}","saving":"Saving","retry":"Retry","load_error":"Failed to load appearance settings","save_error":"Could not save. Please retry.","loading":"Loading"},
     "title": "System Settings",
     "description": "Manage core system configurations, including site, security, subscription, invite commission, nodes, email, and notifications",

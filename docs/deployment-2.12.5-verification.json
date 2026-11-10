@@ -1,0 +1,273 @@
+{
+  "checked_at": "2026-11-10T00:15:57.054881+00:00",
+  "server": "Solid-US LA",
+  "version": "2.12.5",
+  "patch_sha256": "ce5386fa5f8a7629efb650156ecae18f52fe9ce215fe2ec84c5827b236f1a89f",
+  "original_switch": {
+    "started_at": "2026-11-10T00:07:52.518523+00:00",
+    "previous_version": "2.12.4",
+    "version": "2.12.5",
+    "changed_files": [
+      "app/WebSocket/NodeWorker.php",
+      "app/Listeners/DisconnectWorkerDatabases.php",
+      "config/octane.php",
+      "config/app.php",
+      "docs/runtime-log-repairs.md",
+      "CHANGELOG.md",
+      "tests/Feature/Server/NodeHandshakeTest.php",
+      "tests/Unit/Listeners/DisconnectWorkerDatabasesTest.php",
+      "vendor/composer/autoload_static.php",
+      "vendor/composer/autoload_classmap.php"
+    ],
+    "patch_sha256": "a161aa28f4f0dd1dbdb3ca338fe8194bed02c5fa1d7b44cf9dce023ca1cefab7",
+    "status": "services_started",
+    "services_started_at": "2026-11-10T00:07:55.917234+00:00",
+    "finished_at": "2026-11-10T00:07:55.917330+00:00"
+  },
+  "diagnostic_amendment": {
+    "started_at": "2026-11-10T00:13:06.895524+00:00",
+    "reason": "separate diagnostic rate limits by severity so a recovery notice cannot suppress a following failure",
+    "status": "services_started",
+    "services_started_at": "2026-11-10T00:13:09.272151+00:00",
+    "patch_sha256": "ce5386fa5f8a7629efb650156ecae18f52fe9ce215fe2ec84c5827b236f1a89f"
+  },
+  "observation_seconds": 168,
+  "manifest_files": 1201,
+  "manifest_mismatches": [],
+  "persistent_files_unchanged": true,
+  "services": {
+    "yzboard-web": {
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "yzboard-horizon": {
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "yzboard-websocket": {
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "nginx": {
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "mariadb": {
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "redis-server": {
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    }
+  },
+  "current_state": {
+    "time": "2026-11-10T00:15:50+00:00",
+    "version": "2.12.5",
+    "queues": {
+      "default": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "order_handle": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "traffic_fetch": {
+        "ready": 3,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "stat": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "user_alive_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "node_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_telegram": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email_mass": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      }
+    },
+    "failed_jobs": 713,
+    "migrations": 146,
+    "active_machines": 47,
+    "recent_processed_batches": 253,
+    "redis_ops_per_sec": 5614,
+    "local_nginx_https": {
+      "home": 200,
+      "admin": 200,
+      "guest_config": 200
+    }
+  },
+  "database_aborted_connections": 0,
+  "websocket_access_statuses": {
+    "101": 19,
+    "401": 2
+  },
+  "anonymous_handshake_probe": {
+    "status": "HTTP/1.1 401 Unauthorized",
+    "expected_reason": true,
+    "elapsed_seconds": 5.92
+  },
+  "nginx_permission_errors_since_reopen": 0,
+  "nginx_errors_since_final_start": 172,
+  "nginx_upstream_closed_since_final_start": 0,
+  "application_levels_excluding_subscription_plugin": {
+    "WARNING": 1
+  },
+  "application_groups": [
+    {
+      "message": "[WS] Node request failed",
+      "count": 1,
+      "last": "2026-11-10 08:15:30"
+    }
+  ],
+  "nginx_error_groups": [
+    {
+      "level": "error",
+      "message": "*N connect() failed (111: Connection refused) while connecting to upstream",
+      "count": 172,
+      "first": "2026-11-10 08:13:09",
+      "last": "2026-11-10 08:13:09",
+      "after_15_seconds": 0
+    }
+  ],
+  "remaining_ws_warnings": [
+    {
+      "time": "2026-11-10 08:15:30",
+      "node_id": 427,
+      "event": "device.admit",
+      "code": 412,
+      "error": "设备来源申请已结束",
+      "exception_class": "Symfony\\Component\\HttpKernel\\Exception\\PreconditionFailedHttpException"
+    }
+  ],
+  "before_state_summary": {
+    "time": "2026-11-10T00:07:52+00:00",
+    "active_machines": 47,
+    "failed_jobs": 713,
+    "migrations": 146
+  },
+  "final_queue_state": {
+    "time": "2026-11-10T00:17:24+00:00",
+    "version": "2.12.5",
+    "queues": {
+      "default": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "order_handle": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "traffic_fetch": {
+        "ready": 2,
+        "reserved": 1,
+        "delayed": 0
+      },
+      "stat": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "user_alive_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "node_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_telegram": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email_mass": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      }
+    },
+    "failed_jobs": 713,
+    "migrations": 146,
+    "active_machines": 47,
+    "recent_processed_batches": 251,
+    "redis_ops_per_sec": 6037,
+    "local_nginx_https": {
+      "home": 200,
+      "admin": 200,
+      "guest_config": 200
+    }
+  },
+  "source_validation": {
+    "main_workspace": {
+      "tests": 89,
+      "assertions": 1922
+    },
+    "production_snapshot": {
+      "tests": 77,
+      "assertions": 1839
+    },
+    "final_severity_rate_limit": {
+      "tests": 13,
+      "assertions": 85
+    },
+    "php_version": "8.4.27",
+    "database_unit_tests": "SQLite memory",
+    "production_read_only_database_disconnect_smoke": true,
+    "full_release_suite": false
+  },
+  "followup_observation": {
+    "checked_at": "2026-11-10T00:40:41.950387+00:00",
+    "since": "2026-11-10 08:13:25",
+    "version": "2.12.5",
+    "db_aborted_connections": 0,
+    "nginx_errors": {},
+    "active_machines": 47,
+    "failed_jobs": 713,
+    "http": {
+      "home": 200,
+      "admin": 200,
+      "guest_config": 200
+    }
+  }
+}

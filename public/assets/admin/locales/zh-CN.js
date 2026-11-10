@@ -1526,6 +1526,17 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     }
   },
   "settings": {
+    "node_health": {
+      "title": "链路健康",
+      "enabled": "默认开启链路检查",
+      "url": "HTTPS 检查地址",
+      "interval": "检查间隔（秒）",
+      "save": "保存全局设置",
+      "saving": "保存中…",
+      "save_error": "保存失败，请重试",
+      "load_error": "读取失败",
+      "retry": "重试"
+    },
     "appearance": {"title":"外观设置","sidebar":"侧边栏","restore":"全部显示","restore_order":"恢复默认顺序","sort_help":"拖动调整同级菜单顺序，开关控制显示。","move":"调整{{name}}顺序","saving":"保存中","retry":"重试","load_error":"外观设置读取失败","save_error":"保存失败，请重试","loading":"加载中"},
     "title": "系统设置",
     "description": "管理系统核心配置，包括站点、安全、订阅、邀请佣金、节点、邮件和通知等设置",

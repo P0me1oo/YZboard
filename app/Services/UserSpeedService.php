@@ -19,7 +19,8 @@ class UserSpeedService
                 collect($nodes)->map(fn ($node) => 'node:' . $node->id)->all()
             );
             $operations = Cache::many(collect($nodes)->map(fn ($node) => 'node:operations:'.$node->id)->all());
-        } catch (\Throwable) {
+        } catch (\Throwable $exception) {
+            FailureLog::record('用户速度快照读取失败', $exception, [], 'warning');
             $runtime = [];
         }
         $result = [];

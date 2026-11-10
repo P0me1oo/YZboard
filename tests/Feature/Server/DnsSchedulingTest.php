@@ -34,11 +34,13 @@ class DnsSchedulingTest extends TestCase
     private ?array $reality = null;
     private bool $loseResponse = false;
     private bool $loseReplacementResponse = false;
+    private int $unavailableReads = 0;
     private ?string $failedZone = null;
 
     protected function setUp(): void
     {
         parent::setUp();
+        \Illuminate\Support\Sleep::fake();
         Queue::fake();
         Http::preventStrayRequests();
         Http::fake(function ($request) {
@@ -46,6 +48,10 @@ class DnsSchedulingTest extends TestCase
             $this->assertNotEmpty($request->header('X-API-Key'));
             $zone = urldecode(basename($request->url()));
             if ($zone === $this->failedZone) return Http::response([], 503);
+            if ($request->method() === 'GET' && $this->unavailableReads > 0) {
+                $this->unavailableReads--;
+                return Http::response([], 503);
+            }
             if ($request->method() === 'GET') return Http::response(['name' => $zone, 'rrsets' => array_values(array_filter($this->remote,
                 fn ($record) => $record['name'] === $zone || str_ends_with($record['name'], '.' . $zone)))]);
             $this->assertSame('PATCH', $request->method());
@@ -58,6 +64,8 @@ class DnsSchedulingTest extends TestCase
             }
             if ($this->loseResponse || ($this->loseReplacementResponse && $replacement)) {
                 $this->loseResponse = false; $this->loseReplacementResponse = false;
+                // 连续核对也失败时仍必须保留未确认状态，不能因增加重试而弱化原保护。
+                $this->unavailableReads = 4;
                 return Http::response([], 503);
             }
             return Http::response('', 204);

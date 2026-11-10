@@ -323,6 +323,7 @@ class UpdateService
 
             return ['success' => true];
         } catch (\Exception $e) {
+            FailureLog::record('程序代码更新失败', $e);
             return [
                 'success' => false,
                 'message' => __('update.code_update_failed', ['error' => $e->getMessage()])

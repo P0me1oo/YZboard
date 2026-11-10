@@ -119,7 +119,7 @@ return [
         ],
 
         WorkerStopping::class => [
-            //
+            \App\Listeners\DisconnectWorkerDatabases::class,
         ],
     ],
 

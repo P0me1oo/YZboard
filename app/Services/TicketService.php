@@ -34,6 +34,7 @@ class TicketService
             DB::commit();
             return $ticketMessage;
         } catch (\Exception $e) {
+            FailureLog::record('工单回复事务失败', $e, ['ticket_id' => (int) $ticket->id, 'user_id' => (int) $userId]);
             DB::rollback();
             return false;
         }

@@ -132,8 +132,9 @@ class AdminRealtimeWorker
                     $connection->close();
                     unset($this->connections[$id]);
                 }
-            } catch (\Throwable) {
+            } catch (\Throwable $exception) {
                 // 读取失败不伪装成零值；关闭通道让浏览器回退到有错误状态的 HTTP。
+                \App\Services\FailureLog::record('[WS] Admin realtime snapshot failed', $exception, [], 'warning');
                 $connection->close(json_encode(['event' => 'state.error']));
                 unset($this->connections[$id]);
             }

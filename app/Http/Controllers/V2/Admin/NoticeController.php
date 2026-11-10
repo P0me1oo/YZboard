@@ -38,6 +38,7 @@ class NoticeController extends Controller
             try {
                 Notice::find($request->input('id'))->update($data);
             } catch (\Exception $e) {
+                \App\Services\FailureLog::record('公告修改失败', $e, ['notice_id' => (int) $request->input('id')], 'error');
                 return $this->fail([500, '保存失败']);
             }
         }

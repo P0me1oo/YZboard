@@ -151,9 +151,7 @@ class NodeWorker
                     } catch (\Throwable $exception) {
                         // 单个节点失败不丢弃同批其它节点，下一轮重试最新内容。
                         Redis::sadd('device:push_pending_nodes', $nodeId);
-                        Log::warning('[WS] 设备同步失败，等待重试', [
-                            'node_id' => $nodeId, 'exception' => get_class($exception),
-                        ]);
+                        \App\Services\FailureLog::record('[WS] 设备同步失败，等待重试', $exception, ['node_id' => $nodeId], 'warning');
                     }
                 }
             }
@@ -164,6 +162,10 @@ class NodeWorker
     {
         $conn->authTimer = Timer::add(self::AUTH_TIMEOUT, function () use ($conn) {
             if (empty($conn->nodeId) && empty($conn->machineNodeIds)) {
+                if (empty($conn->context->websocketHandshake)) {
+                    $this->rejectHandshake($conn, 408, 'handshake_timeout');
+                    return;
+                }
                 $conn->close(json_encode([
                     'event' => 'error',
                     'data' => ['message' => 'auth timeout'],
@@ -191,6 +193,19 @@ class NodeWorker
 
     public function onWebSocketConnect(TcpConnection $conn, $httpMessage): void
     {
+        if ($httpMessage instanceof \Workerman\Protocols\Http\Request) {
+            if (strtolower($httpMessage->header('upgrade', '')) !== 'websocket'
+                || $httpMessage->header('sec-websocket-version', '') !== '13') {
+                $this->rejectHandshake($conn, 426, 'websocket_upgrade_required');
+                return;
+            }
+            $connectionTokens = array_map('trim', explode(',', strtolower($httpMessage->header('connection', ''))));
+            $key = base64_decode($httpMessage->header('sec-websocket-key', ''), true);
+            if (!in_array('upgrade', $connectionTokens, true) || $key === false || strlen($key) !== 16) {
+                $this->rejectHandshake($conn, 400, 'invalid_websocket_handshake');
+                return;
+            }
+        }
         $queryString = '';
         if (is_string($httpMessage)) {
             $queryString = parse_url($httpMessage, PHP_URL_QUERY) ?? '';
@@ -211,16 +226,46 @@ class NodeWorker
 
         if (isset($conn->authTimer)) {
             Timer::del($conn->authTimer);
+            unset($conn->authTimer);
         }
 
-        // 认证和首次同步都使用最新的通讯密钥与节点配置设置。
-        self::refreshSettings();
+        // 缺失凭据直接返回 HTTP 拒绝，不访问设置或数据库。
+        if (!is_string($params['token'] ?? null) || $params['token'] === '') {
+            $this->rejectHandshake($conn, 401, 'missing_credentials');
+            return;
+        }
 
-        // 判断认证模式
-        if (!empty($params['machine_id'])) {
-            $this->authenticateMachine($conn, $params);
-        } else {
-            $this->authenticateNode($conn, $params);
+        try {
+            // 认证和首次同步都使用最新的通讯密钥与节点配置设置。
+            self::refreshSettings();
+            if (isset($params['machine_id'])) {
+                $this->authenticateMachine($conn, $params);
+            } else {
+                $this->authenticateNode($conn, $params);
+            }
+        } catch (\Throwable $exception) {
+            \App\Services\FailureLog::record('[WS] 握手处理失败', $exception);
+            $this->rejectHandshake($conn, 503, 'service_unavailable');
+        }
+    }
+
+    /** 握手尚未升级，必须发送原始 HTTP；WebSocket 编码会缓存正文并导致代理误报 502。 */
+    private function rejectHandshake(TcpConnection $conn, int $status, string $reason): void
+    {
+        if (isset($conn->authTimer)) {
+            Timer::del($conn->authTimer);
+            unset($conn->authTimer);
+        }
+        $headers = ['Connection' => 'close', 'Cache-Control' => 'no-store', 'Content-Type' => 'application/json'];
+        if ($status === 426) {
+            $headers += ['Upgrade' => 'websocket', 'Sec-WebSocket-Version' => '13'];
+        }
+        $response = new \Workerman\Protocols\Http\Response($status, $headers, json_encode(['error' => $reason]));
+        $conn->close((string) $response, true);
+        try {
+            Log::debug('[WS] 握手被拒绝', ['code' => $status, 'reason' => $reason]);
+        } catch (\Throwable) {
+            // 拒绝结果不依赖日志出口，不回显请求参数或凭据。
         }
     }
 
@@ -230,23 +275,21 @@ class NodeWorker
     private function authenticateNode(TcpConnection $conn, array $params): void
     {
         $token = $params['token'] ?? '';
-        $nodeId = (int) ($params['node_id'] ?? 0);
+        $nodeId = filter_var($params['node_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
 
         $serverToken = admin_setting('server_token', '');
         if (!is_string($token) || $token === '' || $serverToken === '' || !hash_equals($serverToken, $token)) {
-            $conn->close(json_encode([
-                'event' => 'error',
-                'data' => ['message' => 'invalid token'],
-            ]));
+            $this->rejectHandshake($conn, 401, 'invalid_credentials');
             return;
         }
 
+        if ($nodeId === false) {
+            $this->rejectHandshake($conn, 400, 'invalid_node_id');
+            return;
+        }
         $node = ServerService::getServer($nodeId, null);
-        if (!$node) {
-            $conn->close(json_encode([
-                'event' => 'error',
-                'data' => ['message' => 'node not found'],
-            ]));
+        if (!$node || !$node->enabled) {
+            $this->rejectHandshake($conn, 403, 'node_unavailable');
             return;
         }
 
@@ -278,20 +321,24 @@ class NodeWorker
      */
     private function authenticateMachine(TcpConnection $conn, array $params): void
     {
-        $machineId = (int) ($params['machine_id'] ?? 0);
+        $machineId = filter_var($params['machine_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
         $token = $params['token'] ?? '';
 
-        if (!is_string($token) || $token === '') { $conn->close(); return; }
+        if ($machineId === false) {
+            $this->rejectHandshake($conn, 400, 'invalid_machine_id');
+            return;
+        }
 
         $machine = ServerMachine::where('id', $machineId)
             ->where('token', $token)
             ->first();
 
-        if (!$machine || !$machine->is_active) {
-            $conn->close(json_encode([
-                'event' => 'error',
-                'data' => ['message' => 'invalid machine credentials'],
-            ]));
+        if (!$machine) {
+            $this->rejectHandshake($conn, 401, 'invalid_credentials');
+            return;
+        }
+        if (!$machine->is_active) {
+            $this->rejectHandshake($conn, 403, 'machine_disabled');
             return;
         }
 
@@ -344,7 +391,8 @@ class NodeWorker
         if (!empty($conn->adminPending) || !empty($conn->adminAuthenticated)) {
             try {
                 $this->admin?->handle($conn, $msg);
-            } catch (\Throwable) {
+            } catch (\Throwable $exception) {
+                \App\Services\FailureLog::record('[WS] Admin request failed', $exception, ['event' => $msg['event']]);
                 $conn->close(json_encode(['event' => 'state.error']));
             }
             return;
@@ -390,6 +438,9 @@ class NodeWorker
                 'device.begin', 'device.admit', 'device.sync' => $event . '.error',
                 default => 'error',
             };
+            $level = $event === 'device.sync' && $code === 412 && !empty($body['unchanged']) ? 'debug' : 'warning';
+            \App\Services\FailureLog::record('[WS] Node request failed', $exception,
+                ['node_id' => $nodeId, 'event' => $event, 'code' => $code], $level, includeExpected: true);
             $conn->send(json_encode(['event' => $errorEvent, 'data' => [
                 'node_id' => $nodeId,
                 'request_id' => $body['request_id'] ?? null,
@@ -397,7 +448,6 @@ class NodeWorker
                 'sequence' => $body['sequence'] ?? null,
                 'code' => $code,
             ]]));
-            Log::warning('[WS] Node request failed', ['node_id' => $nodeId, 'event' => $event, 'code' => $code]);
         }
     }
 

@@ -36,7 +36,8 @@ class NodeConnectionAuth
                 if (!$node || !$node->enabled || ($nodeId !== null && $nodeId !== (int) $node->id)) return self::reject($conn);
             }
             return true;
-        } catch (\Throwable) {
+        } catch (\Throwable $exception) {
+            FailureLog::record('[WS] Node authentication check failed', $exception, ['node_id' => (int) ($conn->nodeId ?? 0), 'machine_id' => (int) ($conn->machineId ?? 0)], 'warning');
             return self::reject($conn);
         }
     }

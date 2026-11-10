@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\V2\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Services\NodeHealthConfig;
 use App\Http\Requests\Admin\ConfigSave;
 use App\Models\SubscribeTemplate;
 use App\Services\DeviceIpExclusion;
@@ -157,6 +158,7 @@ class ConfigController extends Controller
                 'server_pull_interval' => admin_setting('server_pull_interval', 60),
                 'server_push_interval' => admin_setting('server_push_interval', 60),
                 'server_auto_sort_enable' => (bool) admin_setting('server_auto_sort_enable', false),
+                NodeHealthConfig::SETTING => NodeHealthConfig::global(),
                 'device_limit_mode' => (int) admin_setting('device_limit_mode', 0),
                 'server_ws_enable' => (bool) admin_setting('server_ws_enable', 1),
                 'server_ws_url' => admin_setting('server_ws_url', ''),
@@ -228,6 +230,12 @@ class ConfigController extends Controller
     public function save(ConfigSave $request)
     {
         $data = $request->validated();
+        $healthChanged = false;
+        if (array_key_exists(NodeHealthConfig::SETTING, $data)) {
+            $key = NodeHealthConfig::SETTING;
+            $data[$key] = NodeHealthConfig::normalize($data[$key]);
+            $healthChanged = $data[$key] !== NodeHealthConfig::global();
+        }
 
         if (array_key_exists(SubscriptionProtection::SETTING, $data)) {
             $data[SubscriptionProtection::SETTING] = SubscriptionProtection::normalize($data[SubscriptionProtection::SETTING]);
@@ -278,7 +286,7 @@ class ConfigController extends Controller
             admin_setting([$k => $v]);
         }
 
-        if ($deviceIpExcludeChanged) {
+        if ($deviceIpExcludeChanged || $healthChanged) {
             NodeSyncService::notifyAllConfigUpdated();
         }
 

@@ -39,6 +39,7 @@ class ServerRoute
         $router->group([
             'prefix' => 'server/machine',
         ], function ($route) {
+            $route->post('binding-status', [MachineController::class, 'bindingStatus']);
             $route->post('nodes', [MachineController::class, 'nodes']);
             $route->post('privacy', [MachineController::class, 'privacy']);
             $route->post('agent-log', [MachineController::class, 'agentLog']);

@@ -7,7 +7,6 @@ use App\Http\Controllers\Controller;
 use App\Models\Server;
 use App\Models\ServerMachine;
 use App\Models\ServerMachineLoadHistory;
-use App\Services\NodeSyncService;
 use App\Services\MachineTrafficService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
@@ -165,16 +164,7 @@ class MachineController extends Controller
             'id' => 'required|integer|exists:v2_server_machine,id',
         ]);
 
-        $machine = ServerMachine::find($params['id']);
-        $machineId = $machine->id;
-
-        // Detach nodes first (sets machine_id = null), then delete and notify
-        Server::where('machine_id', $machineId)->update(['machine_id' => null]);
-        \App\Services\NodeRuntimeMetadata::invalidate(Server::class);
-        $machine->delete();
-
-        // Notify with empty node list so WS process cleans up registry
-        NodeSyncService::notifyMachineNodesChanged($machineId);
+        \App\Services\MachineBindingService::delete((int) $params['id']);
 
         return $this->success(true);
     }

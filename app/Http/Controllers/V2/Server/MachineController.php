@@ -15,6 +15,18 @@ use Illuminate\Http\Request;
  */
 class MachineController extends Controller
 {
+    public function bindingStatus(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'machine_id' => 'required|integer|min:1',
+            'token' => 'required|string|max:256',
+            'nonce' => ['required', 'string', 'regex:/\A[a-f0-9]{64}\z/'],
+        ]);
+        return response()->json(['data' => \App\Services\MachineBindingService::status(
+            (int) $data['machine_id'], $data['token'], $data['nonce']
+        )])->header('Cache-Control', 'no-store')->header('Pragma', 'no-cache');
+    }
+
     public function traffic(Request $request): JsonResponse
     {
         $machine = $this->authenticateMachine($request, true);

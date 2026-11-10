@@ -1,0 +1,178 @@
+{
+  "panel_source": "09a72b9c3b401c2e54c93328a1c5b7a27c91e27c",
+  "dash_source": "24ece976141f0c18c906417196418ddef4b560e0",
+  "php": "8.4.27",
+  "node": "v24.22.1",
+  "databases": {
+    "sqlite": {
+      "tests": "1805",
+      "assertions": "33661",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "12",
+      "time": "104.569121"
+    },
+    "maria11": {
+      "tests": "1805",
+      "assertions": "33679",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "time": "132.268789"
+    },
+    "maria12": {
+      "tests": "1805",
+      "assertions": "33679",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "time": "133.611450"
+    }
+  },
+  "unit_tests": 159,
+  "source_files": 3121,
+  "admin_asset_tests": 5,
+  "integrated_assets": 274,
+  "development": "passed",
+  "database_versions": {
+    "maria11": "11.4.8",
+    "maria12": "12.3.3"
+  },
+  "artifacts": [
+    {
+      "name": "yzboard-2.15.0.tar.gz",
+      "bytes": 89228905,
+      "sha256": "999a1ac8fc0b95bebbbb478ac488e65fb91a4d05df75657af99a1d0f3f74d9ff"
+    },
+    {
+      "name": "yzboard-dash-0.97.1.tar.gz",
+      "bytes": 4667048,
+      "sha256": "c93536db41cd1ca8457004a6981f7f6b164ebdf49a9256bf8f81be5393e09f17"
+    }
+  ],
+  "workflow_failures": [
+    {
+      "repo": "YZboard",
+      "run": 42744679050,
+      "jobs": [
+        {
+          "name": "SQLite、MariaDB 11.4 与管理端资源",
+          "steps": 0,
+          "messages": [
+            "The job was not started because your account is locked due to a billing issue."
+          ]
+        }
+      ]
+    },
+    {
+      "repo": "YZboard-Dash",
+      "run": 42744678453,
+      "jobs": []
+    }
+  ],
+  "source_checks": {
+    "panel_clean": true,
+    "dash_clean": true
+  },
+  "browser": {
+    "dash-browser-final": {
+      "startTime": "2026-11-10T02:57:45.809Z",
+      "duration": 1337971.096,
+      "expected": 439,
+      "skipped": 0,
+      "unexpected": 2,
+      "flaky": 0
+    },
+    "dash-comparison": {
+      "startTime": "2026-11-10T03:03:48.399Z",
+      "duration": 28298.641,
+      "expected": 1,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "dash-relay-final": {
+      "startTime": "2026-11-10T03:22:14.686Z",
+      "duration": 33627.393,
+      "expected": 12,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "dash-health-fonts": {
+      "startTime": "2026-11-10T03:11:41.633Z",
+      "duration": 37958.105,
+      "expected": 5,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "all_unique_scenarios": 441,
+    "all_have_passing_results": true,
+    "single_full_run_passed": false,
+    "resolution": "Reference comparison now asserts added health settings; relay test waits for asynchronous validation message before changing next input. Only tests changed; 12 relay cases passed across 3 rounds."
+  },
+  "release": {
+    "YZboard": {
+      "version": "v2.15.0",
+      "id": 439909810,
+      "url": "https://github.com/P0me1oo/YZboard/releases/tag/v2.15.0",
+      "published_at": "2026-11-10T03:25:06Z",
+      "latest": true,
+      "private": false,
+      "assets": [
+        {
+          "name": "release-manifest.json",
+          "sha256": "c8b0f9dfe181febed9c20a7d5e82c3c1f46db0425eefe09e489210794bac8b1b",
+          "bytes": 3437,
+          "download_verified": true
+        },
+        {
+          "name": "SHA256SUMS",
+          "sha256": "80f1a996eae358433b7553bffa401c9511b35cb6cc69e7f98f09bf53044aa379",
+          "bytes": 176,
+          "download_verified": true
+        },
+        {
+          "name": "yzboard-2.15.0.tar.gz",
+          "sha256": "999a1ac8fc0b95bebbbb478ac488e65fb91a4d05df75657af99a1d0f3f74d9ff",
+          "bytes": 89228905,
+          "download_verified": true
+        }
+      ]
+    },
+    "YZboard-Dash": {
+      "version": "v0.97.1",
+      "id": 439909825,
+      "url": "https://github.com/P0me1oo/YZboard-Dash/releases/tag/v0.97.1",
+      "published_at": "2026-11-10T03:25:08Z",
+      "latest": true,
+      "private": true,
+      "assets": [
+        {
+          "name": "release-manifest.json",
+          "sha256": "010446b73598acfe52bc2d122b9080939118679b26a0de4472d3204380f3076a",
+          "bytes": 3441,
+          "download_verified": true
+        },
+        {
+          "name": "SHA256SUMS",
+          "sha256": "3962874cbbdcc5d42d77757c5b9e1deae1f0f8dfd6f2cc958528d0d479493d20",
+          "bytes": 181,
+          "download_verified": true
+        },
+        {
+          "name": "yzboard-dash-0.97.1.tar.gz",
+          "sha256": "c93536db41cd1ca8457004a6981f7f6b164ebdf49a9256bf8f81be5393e09f17",
+          "bytes": 4667048,
+          "download_verified": true
+        }
+      ]
+    },
+    "verified_at": "2026-11-10T03:25:52.029473+00:00"
+  },
+  "production_deployed": true,
+  "deployment_record": "deployment-2.15.0-verification.json",
+  "agent_updated": false,
+  "docker_published": false
+}

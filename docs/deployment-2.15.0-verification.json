@@ -1,0 +1,183 @@
+{
+  "checked_at": "2026-11-10T03:31:23.320324+00:00",
+  "source": "09a72b9c3b401c2e54c93328a1c5b7a27c91e27c",
+  "dash_source": "24ece976141f0c18c906417196418ddef4b560e0",
+  "file_count": 1014,
+  "mismatches": [],
+  "services": {
+    "yzboard-web.service": {
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "yzboard-horizon.service": {
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "yzboard-websocket.service": {
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "nginx.service": {
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "mariadb.service": {
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "redis-server.service": {
+      "NRestarts": "0",
+      "ActiveState": "active",
+      "SubState": "running"
+    }
+  },
+  "state": {
+    "time": "2026-11-10T03:31:12+00:00",
+    "version": "2.15.0",
+    "queues": {
+      "default": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "order_handle": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "traffic_fetch": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "stat": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "user_alive_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "node_sync": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_telegram": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email_mass": {
+        "ready": 0,
+        "reserved": 0,
+        "delayed": 0
+      }
+    },
+    "failed_jobs": 713,
+    "migrations": 147,
+    "active_machines": 46,
+    "recent_processed_batches": 268,
+    "redis_ops_per_sec": 7806,
+    "local_nginx_https": {
+      "home": 200,
+      "admin": 200,
+      "guest_config": 200
+    }
+  },
+  "assets": {
+    "version": "2.15.0",
+    "assets": {
+      "assets/index-Cy_IXsgJ.js": {
+        "status": 200,
+        "matches": true
+      },
+      "assets/index-CmSzTqZe.css": {
+        "status": 200,
+        "matches": true
+      },
+      "assets/admin-CaLdCOD1.js": {
+        "status": 200,
+        "matches": true
+      },
+      "assets/admin-BGZ7Q29m.css": {
+        "status": 200,
+        "matches": true
+      },
+      "locales/zh-CN.js": {
+        "status": 200,
+        "matches": true
+      },
+      "locales/en-US.js": {
+        "status": 200,
+        "matches": true
+      },
+      "locales/ru-RU.js": {
+        "status": 200,
+        "matches": true
+      }
+    },
+    "binding_rejection": 403,
+    "anonymous_websocket": 401
+  },
+  "switch": {
+    "version": "2.15.0",
+    "previous_version": "2.12.5",
+    "source": "09a72b9c3b401c2e54c93328a1c5b7a27c91e27c",
+    "dash_version": "0.97.1",
+    "started_at": "2026-11-10T03:27:35.216026+00:00",
+    "changed_files": [
+      "app/Http/Controllers/V2/Admin/ConfigController.php",
+      "app/Http/Controllers/V2/Admin/Server/MachineController.php",
+      "app/Http/Controllers/V2/Admin/Server/ManageController.php",
+      "app/Http/Controllers/V2/Admin/Server/OperationsController.php",
+      "app/Http/Controllers/V2/Server/MachineController.php",
+      "app/Http/Requests/Admin/ConfigSave.php",
+      "app/Http/Routes/V2/ServerRoute.php",
+      "app/Services/MachineBindingService.php",
+      "app/Services/NodeHealthConfig.php",
+      "app/Services/NodeOperations.php",
+      "app/Services/ServerService.php",
+      "config/app.php",
+      "database/migrations/2026_11_10_000001_create_machine_binding_deletions.php",
+      "public/assets/admin/assets/admin-Ba3ZoDVN.js",
+      "public/assets/admin/assets/admin-CaLdCOD1.js",
+      "public/assets/admin/assets/index-CVYA6SMA.js",
+      "public/assets/admin/assets/index-Cy_IXsgJ.js",
+      "public/assets/admin/index.html",
+      "public/assets/admin/locales/en-US.js",
+      "public/assets/admin/locales/ru-RU.js",
+      "public/assets/admin/locales/zh-CN.js",
+      "public/assets/admin/manifest.json",
+      "vendor/composer/autoload_static.php",
+      "vendor/composer/autoload_classmap.php"
+    ],
+    "status": "services_started",
+    "services_started_at": "2026-11-10T03:27:40.268592+00:00",
+    "persistent_unchanged": true,
+    "plugins_unchanged": true,
+    "migrations": 147,
+    "finished_at": "2026-11-10T03:27:40.268612+00:00"
+  },
+  "observation_seconds": 223,
+  "logs_since_startup_grace": {
+    "database_aborted": 0,
+    "upstream_closed": 0,
+    "permission_denied": 0,
+    "fatal": 0,
+    "connection_refused": 0
+  },
+  "application_log_categories": {}
+}

@@ -1,0 +1,82 @@
+{
+  "version": "2.14.0",
+  "source": "4a07fc4aa93cb08e2fcea7ebf84982b2dd3b4404",
+  "source_repo": "P0me1oo/YZboard",
+  "base_version": "v2.12.1",
+  "scope": "Only authenticated machine deletion and Agent automatic unbinding; pending 2.13 work and independent production 2.12.2-2.12.5 patches excluded",
+  "admin_version": "0.96.1",
+  "dependency_policy": "composer.lock; dependencies installed by consumer",
+  "artifact": {
+    "name": "yzboard-2.14.0.tar.gz",
+    "sha256": "1548b5c74bc91d1cf1daf94f6113b7c76f67dc07e6752d1ae870c9dae9c286d7",
+    "bytes": 85453525
+  },
+  "validation": {
+    "php": "8.4.27",
+    "sqlite": {
+      "tests": "1746",
+      "assertions": "33108",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "12",
+      "time": "117.868715"
+    },
+    "mariadb": {
+      "version": "11.4.8",
+      "only_full_group_by": true,
+      "innodb_snapshot_isolation": true,
+      "tests": "1746",
+      "assertions": "33126",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "time": "137.032267"
+    },
+    "redis": "8.0.2",
+    "admin_asset_tests": 5,
+    "initial_mariadb_failure": "Two concurrency cases require innodb_snapshot_isolation=ON; corrected isolated test database; full rerun passed"
+  },
+  "production_updated": false,
+  "docker_published": false,
+  "tag": "v2.14.0",
+  "id": 439863725,
+  "url": "https://github.com/P0me1oo/YZboard/releases/tag/v2.14.0",
+  "published_at": "2026-11-10T02:11:50Z",
+  "latest": true,
+  "assets": [
+    {
+      "name": "release-manifest.json",
+      "bytes": 1310,
+      "sha256": "b741739bff22507a603caca06eb951bcad60c57095d646cd1b51e3d7a834da29",
+      "public_download_verified": true
+    },
+    {
+      "name": "SHA256SUMS",
+      "bytes": 176,
+      "sha256": "764abee30d7af3558f44314fc8711a4cf6449127938f43414e1957e4acdaeec5",
+      "public_download_verified": true
+    },
+    {
+      "name": "yzboard-2.14.0.tar.gz",
+      "bytes": 85453525,
+      "sha256": "1548b5c74bc91d1cf1daf94f6113b7c76f67dc07e6752d1ae870c9dae9c286d7",
+      "public_download_verified": true
+    }
+  ],
+  "verified_at": "2026-11-10T02:12:24.451822+00:00",
+  "workflows": [
+    {
+      "repo": "YZboard",
+      "run_id": 42740546245,
+      "jobs": [
+        {
+          "name": "SQLite、MariaDB 11.4 与管理端资源",
+          "steps": 0,
+          "messages": [
+            "The job was not started because your account is locked due to a billing issue."
+          ]
+        }
+      ]
+    }
+  ]
+}

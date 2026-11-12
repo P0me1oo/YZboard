@@ -1,0 +1,213 @@
+{
+  "server": "Solid-US LA",
+  "directory": "/root/yzboard",
+  "run_user": "www-data",
+  "source_commit": "6aa59b80666d6f8ccb6a0af7692e681277d9ce28",
+  "dash_source_commit": "a59dede5fc23b1e8b6e01497c4e112d5809de015",
+  "from_version": "2.15.1",
+  "to_version": "2.16.2",
+  "dash_version": "0.98.1",
+  "cutover": {
+    "started_at": "2026-11-12T06:54:41.120330+00:00",
+    "finished_at": "2026-11-12T06:54:44.641674+00:00",
+    "seconds": 3.521,
+    "files": 40
+  },
+  "first_attempt": {
+    "started_at": "2026-11-12T06:53:15.140497+00:00",
+    "failed_at": "2026-11-12T06:53:20.245117+00:00",
+    "reason": "deployment PATH omitted /usr/sbin/runuser",
+    "recovery": "automatic rollback before database migration; corrected and retried"
+  },
+  "health": {
+    "recorded_at": "2026-11-12T06:58:09+00:00",
+    "version": "2.16.2",
+    "carrier_dns_ready": false,
+    "migration_count": 148,
+    "failed_jobs": 713,
+    "recent_machines": 47,
+    "agent_log_141": {
+      "count": 47,
+      "newest": 1794466482
+    },
+    "queues": {
+      "default": {
+        "waiting": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "order_handle": {
+        "waiting": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "traffic_fetch": {
+        "waiting": 1,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "stat": {
+        "waiting": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "user_alive_sync": {
+        "waiting": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "node_sync": {
+        "waiting": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_telegram": {
+        "waiting": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email": {
+        "waiting": 0,
+        "reserved": 0,
+        "delayed": 0
+      },
+      "send_email_mass": {
+        "waiting": 0,
+        "reserved": 0,
+        "delayed": 0
+      }
+    },
+    "http": {
+      "home": {
+        "status": 200,
+        "bytes": 902
+      },
+      "admin": {
+        "status": 200,
+        "bytes": 1903
+      },
+      "public_config": {
+        "status": 200,
+        "bytes": 535
+      },
+      "asset:assets/index-DmdTKXV_.js": {
+        "status": 200,
+        "bytes": 2232,
+        "sha256": "6d2ff1ff8c1542258118cc0cfc521a943d390e793da764a53ae2960aaa3a2816",
+        "matches_file": true
+      },
+      "asset:assets/index-CmSzTqZe.css": {
+        "status": 200,
+        "bytes": 288114,
+        "sha256": "1fe4be7aaba626ddd99cdcaf37bf0482d96d152078ab002e9fece2510f074b96",
+        "matches_file": true
+      },
+      "asset:assets/css.worker-Bx7Y3X-c-BT-8rbQO.js": {
+        "status": 200,
+        "bytes": 1028208,
+        "sha256": "fdff667d23e6e03dbae87b9dfc31c2aa40f410c9839d82068df885d9a14e4bd4",
+        "matches_file": true
+      },
+      "asset:assets/html.worker-C4RoLUfz-n1ry_TGw.js": {
+        "status": 200,
+        "bytes": 689614,
+        "sha256": "baceba69baf1d23fae3bb09845c116c3bfe6700360dac3bec66b585932a38858",
+        "matches_file": true
+      },
+      "asset:assets/json.worker-qCj-lAKT-BM10dhzB.js": {
+        "status": 200,
+        "bytes": 379439,
+        "sha256": "5098a5b1931c128708cd96517f8408706763cd15f43654ee45f1a3bd91294c82",
+        "matches_file": true
+      },
+      "asset:assets/ts.worker-sc26f_2L-B4HlE0za.js": {
+        "status": 200,
+        "bytes": 6974974,
+        "sha256": "d79628168037acc1350b9f2085ffda1c068d95a6995251941da6bdbe223261da",
+        "matches_file": true
+      },
+      "asset:assets/admin-CXGwpoRb.js": {
+        "status": 200,
+        "bytes": 6946075,
+        "sha256": "4b5d308692e178b58d1474c0805ad30ce8e9241361db57d7a2f7bba3f2580000",
+        "matches_file": true
+      },
+      "asset:assets/admin-DDE7SkDm.css": {
+        "status": 200,
+        "bytes": 72322,
+        "sha256": "7d40213a7e6a5bcd9884379fa7c4849c4f7fb7092fcd53838ef821b57934380f",
+        "matches_file": true
+      },
+      "locale:en-US": {
+        "status": 200,
+        "bytes": 184350,
+        "sha256": "70948ca16d81616eda3c9f27c4db6ad18add5df47dcbf58f6c8e7c45aa3fd299",
+        "matches_file": true
+      },
+      "locale:zh-CN": {
+        "status": 200,
+        "bytes": 178499,
+        "sha256": "0e0b788dfbd815168c850287cdbcb331d295b0a70e20dad98e4ed2afcf8210a4",
+        "matches_file": true
+      },
+      "locale:ru-RU": {
+        "status": 200,
+        "bytes": 243870,
+        "sha256": "28c1ed16908f8f0dda29540e0cfe941a65248f65ef2c3d110be720523ccf8299",
+        "matches_file": true
+      }
+    }
+  },
+  "preservation": {
+    "recorded_at": "2026-11-12T06:57:24.552048+00:00",
+    "runtime_files_match": 1011,
+    "plugin_metadata_unchanged": true,
+    "plugin_config_unchanged": true,
+    "persistent_files_match": 83,
+    "environment_unchanged": true,
+    "services": {
+      "yzboard-web": {
+        "NRestarts": "0",
+        "ActiveState": "active",
+        "SubState": "running"
+      },
+      "yzboard-horizon": {
+        "NRestarts": "0",
+        "ActiveState": "active",
+        "SubState": "running"
+      },
+      "yzboard-websocket": {
+        "NRestarts": "0",
+        "ActiveState": "active",
+        "SubState": "running"
+      },
+      "nginx": {
+        "NRestarts": "0",
+        "ActiveState": "active",
+        "SubState": "running"
+      },
+      "mariadb": {
+        "NRestarts": "0",
+        "ActiveState": "active",
+        "SubState": "running"
+      },
+      "redis-server": {
+        "NRestarts": "0",
+        "ActiveState": "active",
+        "SubState": "running"
+      }
+    },
+    "service_log_error_matches": 0,
+    "websocket_unauthenticated_status": 401
+  },
+  "agent": {
+    "machine": "RAKsmart-US CN2",
+    "pending_logs": 0,
+    "queued_logs": 0,
+    "http403_after_deployment": 0,
+    "pid": 5816,
+    "restart_count_unchanged": 93
+  },
+  "rollback_directory": "/root/yzboard-deployments/2.16.2/runtime-before",
+  "first_attempt_directory": "/root/yzboard-deployments/2.16.2-attempt-1"
+}

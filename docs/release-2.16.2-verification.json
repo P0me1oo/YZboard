@@ -1,0 +1,103 @@
+{
+  "panel_source": "6aa59b80666d6f8ccb6a0af7692e681277d9ce28",
+  "dash_source": "a59dede5fc23b1e8b6e01497c4e112d5809de015",
+  "panel_version": "2.16.2",
+  "dash_version": "0.98.1",
+  "php": "8.4.27",
+  "node": "24.22.1",
+  "test_redis": "8.0.2",
+  "databases": {
+    "sqlite-full": {
+      "name": "/root/YZboard/YZboard/phpunit.xml",
+      "tests": "1846",
+      "assertions": "34937",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "12",
+      "time": "101.314823"
+    },
+    "mariadb-11.4.8-full": {
+      "name": "/root/YZboard/YZboard/phpunit.xml",
+      "tests": "1846",
+      "assertions": "34953",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "time": "130.312393"
+    },
+    "mariadb-12.3.3-full": {
+      "name": "/root/YZboard/YZboard/phpunit.xml",
+      "tests": "1846",
+      "assertions": "34953",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "time": "131.228456"
+    }
+  },
+  "frontend": {
+    "source_files": 3122,
+    "behavior_tests": 162,
+    "browser_tests": 446,
+    "development": "passed",
+    "integrated_assets": 274,
+    "panel_asset_tests": 5
+  },
+  "artifacts": [
+    {
+      "repository": "panel",
+      "name": "SHA256SUMS",
+      "sha256": "d91db3d859ffe6cb0cc7d7254e889389f5ee54691c339039b27dcf73500e2175",
+      "bytes": 167,
+      "download": "anonymous"
+    },
+    {
+      "repository": "panel",
+      "name": "release.json",
+      "sha256": "2e4c7a294d62f9944531cb573389c276afd84b627695098d67fe415783507986",
+      "bytes": 263,
+      "download": "anonymous"
+    },
+    {
+      "repository": "panel",
+      "name": "yzboard-2.16.2.tar.gz",
+      "sha256": "a0caab3482d1a857b55c34bb8c9cd0978d18644609b1e0d56a6a247287ef4dd6",
+      "bytes": 92840034,
+      "download": "anonymous"
+    },
+    {
+      "repository": "dash",
+      "name": "SHA256SUMS",
+      "sha256": "a8dee8288bfda8cc0faaf05be62f864fca3b0e7abb9e28620bddfcda1968c701",
+      "bytes": 172,
+      "download": "authenticated"
+    },
+    {
+      "repository": "dash",
+      "name": "release.json",
+      "sha256": "889b337ea5e8b58cd83a89608453d1226ed9b14decb574bc78a4948e403c5eef",
+      "bytes": 272,
+      "download": "authenticated"
+    },
+    {
+      "repository": "dash",
+      "name": "yzboard-dash-0.98.1.tar.gz",
+      "sha256": "600fd62cb706972865fd003e6ad82057f7228a29e3349659b4a6bf29ae855ebe",
+      "bytes": 4659988,
+      "download": "authenticated"
+    }
+  ],
+  "github_actions": [
+    {
+      "repo": "YZboard",
+      "run_id": 43169441352,
+      "reason": "account locked due to billing issue"
+    },
+    {
+      "repo": "YZboard-Dash",
+      "run_id": 43169437147,
+      "status": "startup_failure"
+    }
+  ],
+  "docker_published": false
+}

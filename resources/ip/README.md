@@ -2,7 +2,7 @@
 
 ## 纯真 IPv4
 
-`qqwry.dat` 来自 [metowolf/qqwry.dat 的 20260930 版本](https://github.com/metowolf/qqwry.dat/releases/tag/20260930)，用于中国大陆 IPv4 地区查询。
+`qqwry.dat` 来自 [metowolf/qqwry.dat 的 20260930 版本](https://github.com/metowolf/qqwry.dat/releases/tag/20260930)，用于中国大陆 IPv4 地区查询；面板 2.16.1 起同时提供独立运营商字段，保留原库网络名称。
 
 - 文件大小：27,274,499 字节。
 - SHA-256：`46cc2175f60cf8d62e24774bc4ecefdffb8047f60877dc95d85cd543d34e780a`。

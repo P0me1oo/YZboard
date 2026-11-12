@@ -4,6 +4,15 @@ namespace App\Services;
 
 class IpProperties
 {
+    /** 国内纯真运营商覆盖外部属性；运营商字段缺失时保留未知，不用外部网络名猜测。 */
+    public static function withLocalOperator(array $properties, array $location): array
+    {
+        if (($location['source'] ?? null) === 'qqwry') {
+            $properties['isp'] = self::fromResponse(['isp' => $location['isp'] ?? null])['isp'];
+        }
+        return $properties;
+    }
+
     /** 只接受接口明确返回的判断，缺失、占位或错误类型均保留为未知。 */
     public static function fromResponse(array $body = []): array
     {

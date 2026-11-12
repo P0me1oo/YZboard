@@ -14,7 +14,7 @@ class QqwryLocation
 
     public function lookup(string $ip): array
     {
-        $unknown = ['region' => '未知', 'province' => '未知'];
+        $unknown = ['region' => '未知', 'province' => '未知', 'isp' => '未知'];
         if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) return $unknown;
         try {
             $this->open();
@@ -39,6 +39,7 @@ class QqwryLocation
             return [
                 'region' => mb_substr(implode(' ', array_unique(array_filter([$place, $network]))), 0, 512) ?: '未知',
                 'province' => mb_substr(IpProvince::fromChinese($place), 0, 128),
+                'isp' => !in_array($network, ['', '0', '-', '未知'], true) ? mb_substr($network, 0, 200) : '未知',
             ];
         } catch (\Throwable) {
             return $unknown;

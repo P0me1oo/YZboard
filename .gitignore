@@ -34,3 +34,4 @@ compose.split.yaml
 .scribe
 # 工作区内部开发规则，不进入公开仓库和镜像
 AGENTS.md
+/storage/framework/testing/

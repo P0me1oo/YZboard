@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-/** 中国大陆 IPv4 用纯真，其他 IPv4 和全部 IPv6 用 ip2region。 */
+/** 地区和运营商：中国大陆 IPv4 用纯真，其他 IPv4 和全部 IPv6 用 ip2region。 */
 class IpLocation
 {
     public function __construct(

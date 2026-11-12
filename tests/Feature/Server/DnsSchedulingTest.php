@@ -625,6 +625,119 @@ class DnsSchedulingTest extends TestCase
         $this->assertArrayNotHasKey('gateway_machine_id', $view);
     }
 
+    public function test_fixed_landings_have_independent_health_dns_and_confirmed_recovery(): void
+    {
+        $pool = $this->pool();
+        $users = $this->usersForPool($pool);
+        $first = Server::where('relay_pool_id', $pool->id)->first();
+        $second = $this->node('192.0.2.40'); $second->update(['relay_pool_id' => $pool->id]);
+        foreach ($pool->members as $member) $member->runtimeNode->machine->update(['agent_runtime' => ['version' => 'v2.30.0']]);
+        $pool->update(['scheduling_config' => ['health_enabled' => true]]);
+        $this->mock(\App\Services\FrontPortProbe::class)->shouldReceive('check')->andReturn([
+            '192.0.2.10' => ['ok' => true], '192.0.2.11' => ['ok' => true]]);
+        $sample = function (bool $firstOk) use ($pool, $first, $second) {
+            foreach (Server::all() as $node) $this->heartbeat($node->id, now()->timestamp);
+            foreach ($pool->members as $index => $member) {
+                Cache::forget('scheduling:targets:' . $member->runtime_node_id);
+                foreach ([$first, $second] as $route) {
+                    $target = \App\Services\SchedulingProbeService::target($route);
+                    $this->assertTrue(\App\Services\SchedulingProbeService::accept($member->runtimeNode, [[...$target,
+                        'healthy' => $index !== 0 || $route->id !== $first->id || $firstOk, 'checked_at' => now()->timestamp, 'rtt_ms' => 20]]));
+                }
+            }
+        };
+        $sample(true); $this->assertTrue($this->sync($pool));
+        $project = fn ($route) => app(\App\Services\DnsPoolService::class)->project($pool->fresh(), $users[0], $route->id);
+        $firstName = $project($first); $secondName = $project($second);
+        $this->assertNotSame($firstName, $secondName);
+        $before = PoolDnsAlias::where('user_id', $users[0]->id)->first()->assignment_state;
+        $this->travel(15)->seconds(); $sample(false); $this->assertTrue($this->sync($pool));
+        $this->assertSame($before, PoolDnsAlias::where('user_id', $users[0]->id)->first()->assignment_state);
+        // 同一份失败报告不能重复计数。
+        $this->assertTrue($this->sync($pool));
+        $this->assertSame($before, PoolDnsAlias::where('user_id', $users[0]->id)->first()->assignment_state);
+        $this->travel(15)->seconds(); $sample(false);
+        $this->loseResponse = true; $this->assertFalse($this->sync($pool));
+        $this->assertSame($before, PoolDnsAlias::where('user_id', $users[0]->id)->first()->assignment_state);
+        $this->assertTrue($this->sync($pool));
+        $after = PoolDnsAlias::where('user_id', $users[0]->id)->first()->assignment_state;
+        $this->assertSame($pool->members[1]->id, $after[$first->id]['default']['member_id']);
+        $this->assertSame($before[$second->id], $after[$second->id]);
+        $this->assertSame($firstName, $project($first)); $this->assertSame($secondName, $project($second));
+        $this->travel(15)->seconds(); $sample(true); $this->assertTrue($this->sync($pool));
+        $this->assertSame($after, PoolDnsAlias::where('user_id', $users[0]->id)->first()->assignment_state);
+        $this->travel(15)->seconds(); $sample(true); $this->assertTrue($this->sync($pool));
+        $this->assertSame($pool->members[0]->id, PoolDnsAlias::where('user_id', $users[0]->id)->first()->assignment_state[$first->id]['default']['member_id']);
+    }
+
+    public function test_carrier_dns_publishes_real_lua_and_falls_back_and_cleans_up_owned_records(): void
+    {
+        config(['dns.carrier_ready' => true]);
+        // 固定随源码网段库的有效日期，使回归不依赖实际执行日期。
+        $this->travelTo(\Carbon\Carbon::parse('2026-11-12 12:00:00'));
+        $pool = $this->pool(); $this->usersForPool($pool);
+        $pool->members[0]->update(['carriers' => ['default']]);
+        $pool->members[1]->update(['carriers' => ['telecom', 'unicom', 'mobile']]);
+        $pool->update(['scheduling_config' => ['carrier_enabled' => true]]);
+        $this->assertTrue($this->sync($pool));
+        $alias = PoolDnsAlias::where('pool_id', $pool->id)->first();
+        $this->assertSame($pool->members[0]->id, $alias->assignment_state[0]['default']['member_id']);
+        $this->assertSame($pool->members[1]->id, $alias->assignment_state[0]['telecom']['member_id']);
+        $name = $alias->label . '.' . $pool->domain . '.';
+        $this->assertStringStartsWith('CNAME ', $this->remote[$name . '|LUA']['records'][0]['content']);
+        $this->assertArrayHasKey('_isp.' . $pool->domain . '.|LUA', $this->remote);
+        $pool->members[1]->runtimeNode->update(['enabled' => false]);
+        $this->assertTrue($this->sync($pool));
+        $this->assertSame($pool->members[0]->id, $alias->fresh()->assignment_state[0]['telecom']['member_id']);
+        config(['dns.carrier_ranges' => '/nonexistent/yz-test-carriers.json']);
+        $this->assertTrue($this->sync($pool));
+        $this->assertArrayHasKey($name . '|CNAME', $this->remote);
+        $this->assertArrayNotHasKey($name . '|LUA', $this->remote);
+        $this->assertArrayNotHasKey('_isp.' . $pool->domain . '.|LUA', $this->remote);
+        $pool->update(['enabled' => false]);
+        $this->assertTrue($this->sync($pool));
+        $this->assertSame([], $this->remote);
+    }
+
+    public function test_carrier_enable_rejects_unready_authorities_and_foreign_lua_is_not_overwritten(): void
+    {
+        config(['dns.carrier_ready' => false]);
+        $pool = $this->pool();
+        try { $this->savePool($pool, ['scheduling_config' => ['carrier_enabled' => true]]); $this->fail('必须拒绝未准备的 DNS'); }
+        catch (ValidationException $error) { $this->assertArrayHasKey('scheduling_config.carrier_enabled', $error->errors()); }
+        $this->assertFalse($pool->fresh()->scheduling_config['carrier_enabled']);
+        $name = 'pool.example.com.';
+        $foreign = ['name' => $name, 'type' => 'LUA', 'ttl' => 60, 'records' => [['content' => 'A "\'192.0.2.55\'"', 'disabled' => false]], 'comments' => []];
+        $this->remote[$name . '|LUA'] = $foreign;
+        $this->assertFalse($this->sync($pool));
+        $this->assertSame($foreign, $this->remote[$name . '|LUA']);
+    }
+
+    public function test_bandwidth_and_carriers_are_preserved_by_old_clients_and_admin_view(): void
+    {
+        $pool = $this->pool();
+        $pool->members[0]->update(['bandwidth_mbps' => 125.5, 'carriers' => ['default', 'telecom']]);
+        $this->savePool($pool);
+        $member = $pool->members[0]->fresh();
+        $this->assertSame(125.5, $member->bandwidth_mbps);
+        $this->assertSame(['default', 'telecom'], $member->carriers);
+        $view = (new LoadBalancerController())->fetch()->getData(true)['data'];
+        $this->assertSame(125.5, $view['pools'][0]['members'][0]['bandwidth_mbps']);
+        $this->assertArrayHasKey('carrier_dns', $view);
+    }
+
+    public function test_dynamic_switch_preserves_legacy_latency_target_without_running_its_probes(): void
+    {
+        $pool = $this->pool();
+        foreach ($pool->members as $member) $member->runtimeNode->machine->update(['agent_runtime' => ['version' => 'v2.30.0']]);
+        $target = $this->node('192.0.2.40'); $target->update(['relay_pool_id' => $pool->id]);
+        $pool = $this->savePool($pool, ['scheduling_config' => ['dynamic_enabled' => true, 'strategy' => 'latency', 'latency_node_id' => $target->id]]);
+        $this->assertSame($target->id, $pool->scheduling_config['latency_node_id']);
+        $this->assertSame([], \App\Services\SchedulingProbeService::targets($pool->members[0]->runtimeNode, false));
+        $pool = $this->savePool($pool, ['scheduling_config' => [...$pool->scheduling_config, 'dynamic_enabled' => false]]);
+        $this->assertSame($target->id, \App\Services\SchedulingProbeService::targets($pool->members[0]->runtimeNode, false)[0]['node_id']);
+    }
+
     public function test_assignment_changes_are_only_saved_after_confirmed_dns_write(): void
     {
         $pool = $this->pool(); $pool->members[1]->update(['priority' => 1]);

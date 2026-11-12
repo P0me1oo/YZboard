@@ -229,6 +229,56 @@ class ServerRelayTest extends TestCase
         ], $overrides));
     }
 
+    public static function blockedRoutePositions(): array
+    {
+        return [
+            'none' => [[]],
+            'first' => [[0]],
+            'middle' => [[1]],
+            'last' => [[2]],
+            'gapped' => [[0, 2]],
+            'all' => [[0, 1, 2]],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('blockedRoutePositions')]
+    public function test_blocked_routes_remain_json_lists_across_config_sync_and_recovery(array $disabled): void
+    {
+        $entry = $this->makeEntry();
+        $children = collect(range(0, 2))->map(fn ($position) => $this->makeChild($entry, [
+            'enabled' => !in_array($position, $disabled, true),
+        ]));
+        $blocked = array_map(fn ($position) => $children[$position]->vless_route, $disabled);
+        $auth = http_build_query(['token' => 'relay-test-token', 'node_id' => $entry->id]);
+        $paths = [
+            '/api/v2/server/config?' . $auth => 'relay',
+            '/api/v2/server/realtime/sync?' . $auth => 'data.control.config.relay',
+        ];
+
+        foreach ($paths as $url => $path) {
+            for ($attempt = 0; $attempt < 2; $attempt++) {
+                $response = $this->getJson($url)->assertOk();
+                // 保留 JSON 对象类型，避免关联数组解码掩盖列表变成对象的问题。
+                $relay = data_get(json_decode($response->getContent(), false, 512, JSON_THROW_ON_ERROR), $path);
+                $this->assertSame($blocked, $relay->blocked_route_ids ?? []);
+                $this->assertEqualsCanonicalizing(
+                    $children->filter(fn ($child) => $child->enabled)->pluck('id')->all(),
+                    array_column($relay->children, 'node_id'),
+                );
+            }
+        }
+
+        foreach ($children as $child) {
+            $child->update(['enabled' => true]);
+        }
+        foreach ($paths as $url => $path) {
+            $response = $this->getJson($url)->assertOk();
+            $relay = data_get(json_decode($response->getContent(), false, 512, JSON_THROW_ON_ERROR), $path);
+            $this->assertFalse(property_exists($relay, 'blocked_route_ids'));
+            $this->assertEqualsCanonicalizing($children->pluck('id')->all(), array_column($relay->children, 'node_id'));
+        }
+    }
+
     public function test_relay_filter_batches_machine_reads_and_rechecks_protection_on_the_next_call(): void
     {
         $entry = $this->makeEntry();
@@ -251,12 +301,12 @@ class ServerRelayTest extends TestCase
             DB::disableQueryLog();
             DB::flushQueryLog();
         }
-        $this->assertSame([$disabled->vless_route], array_values(ServerRelayService::blockedWireGuardRoutes($entry)));
+        $this->assertSame([$disabled->vless_route], ServerRelayService::blockedWireGuardRoutes($entry));
 
         ServerMachine::whereKey($machine->id)->update(['is_active' => false]);
         $this->assertCount(0, ServerRelayService::childrenOf($entry));
         $this->assertSame([$first->vless_route, $second->vless_route, $disabled->vless_route],
-            array_values(ServerRelayService::blockedWireGuardRoutes($entry)));
+            ServerRelayService::blockedWireGuardRoutes($entry));
         ServerMachine::whereKey($machine->id)->update(['is_active' => true]);
         $this->assertSame([$second->id, $first->id], ServerRelayService::childrenOf($entry)->pluck('id')->all());
     }

@@ -11,7 +11,7 @@ class RealityTargetLocation
         $this->local = $local ?? new IpLocation();
     }
 
-    /** 只读取随源码交付的 ip2region 库，不调用任何外部查询服务。 */
+    /** 只读取随源码交付的本地库，不调用任何外部查询服务。 */
     public function enrich(array $results): array
     {
         $locations = [];

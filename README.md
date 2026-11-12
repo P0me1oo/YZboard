@@ -50,6 +50,8 @@ docker compose up -d
 - [节点检查、对账、证书与套餐临时限速](./docs/node-operations.md) - 本地 2.6.0 配套功能、接口与验证范围
 - [Plugin Development Guide](./docs/en/development/plugin-development-guide.md) - Complete guide for developing XBoard plugins
 - [插件上传限制与错误提示](./docs/plugin-upload.md) - 64 MiB 安装包、独立上传超时及网关错误排查
+- [插件安装状态](./docs/plugin-installation-state.md) - 加载失败时保留配置、文件恢复与安装状态排查
+- [原生部署预检](./docs/deployment-preflight.md) - 暂存环境隔离及插件文件与数据库记录核对
 - [Node User Sync Reconciliation](./docs/en/development/node-user-sync.md) - Explains periodic node user-list reconciliation for expired users
 - [Mihomo 订阅兼容说明](./docs/mihomo-subscription.md) - 各协议参数核对、ECH / XHTTP 转换、内核版本要求与验证范围
 - [节点防火墙和 HY2 端口跳跃](./docs/firewall-port-hopping.md) - 端口列表、范围、自动放行与停用清理

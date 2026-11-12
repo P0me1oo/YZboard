@@ -10,8 +10,8 @@ class FrontendAssignment
         $winner = null;
         $best = INF;
         foreach ($candidates as $candidate) {
-            $weight = (int) ($candidate['weight'] ?? 1);
-            if ($weight < 1 || empty($candidate['addresses'])) continue;
+            $weight = (float) ($candidate['weight'] ?? 1);
+            if ($weight <= 0 || !is_finite($weight) || empty($candidate['addresses'])) continue;
             // 取 52 位整数，避免浮点舍入到 1；哈希只使用随机域名标签与成员编号。
             $number = hexdec(substr(hash('sha256', $label . ':' . $candidate['member_id']), 0, 13));
             $score = -log(($number + 1) / 4503599627370497) / $weight;

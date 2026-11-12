@@ -83,8 +83,8 @@ class PluginManager
         if (!class_exists($pluginClass)) {
             $pluginFile = $this->getPluginPath($pluginCode) . '/Plugin.php';
             if (!File::exists($pluginFile)) {
+                // 文件暂时不可用不等于卸载，保留安装记录及用户配置供恢复后继续加载。
                 Log::warning("Plugin class file not found: {$pluginFile}");
-                Plugin::query()->where('code', $pluginCode)->delete();
                 return null;
             }
             require_once $pluginFile;
@@ -349,7 +349,6 @@ class PluginManager
         $plugin = $this->loadPlugin($pluginCode);
 
         if (!$plugin) {
-            Plugin::where('code', $pluginCode)->delete();
             throw new \Exception('Plugin not found: ' . $pluginCode);
         }
 

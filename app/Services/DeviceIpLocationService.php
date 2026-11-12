@@ -45,7 +45,7 @@ class DeviceIpLocationService
                 // 缓存故障不影响本地 IP 信息。
             }
         }
-        if ($pending === []) return $result;
+        if ($pending === []) return $this->applyLocalOperators($result);
 
         try {
             $date = CarbonImmutable::now('UTC');
@@ -59,7 +59,7 @@ class DeviceIpLocationService
                 }
                 return $ips;
             });
-            if ($allowed === []) return $result;
+            if ($allowed === []) return $this->applyLocalOperators($result);
 
             $responses = Http::pool(function (Pool $pool) use ($allowed): void {
                 foreach ($allowed as $ip) {
@@ -74,7 +74,16 @@ class DeviceIpLocationService
         } catch (\Throwable) {
             try { Cache::put('device_asn:backoff', true, 300); } catch (\Throwable) {}
         }
-        return $result;
+        return $this->applyLocalOperators($result);
+    }
+
+    private function applyLocalOperators(array $locations): array
+    {
+        foreach ($locations as &$location) {
+            $location['ip_properties'] = IpProperties::withLocalOperator($location['ip_properties'], $location);
+        }
+        unset($location);
+        return $locations;
     }
 
     private function localLocation(string $ip): array

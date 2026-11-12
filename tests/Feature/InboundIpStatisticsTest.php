@@ -128,6 +128,45 @@ class InboundIpStatisticsTest extends TestCase
             ->assertJsonPath('data.list.0.ip_properties.usage_type', null);
     }
 
+    public function test_domestic_qqwry_operator_overrides_cached_api_and_web_names_without_losing_other_data(): void
+    {
+        $this->app->instance(IpLocation::class, new IpLocation());
+        $user = $this->user();
+        $ip = '202.96.128.86';
+        $this->record($user->id, [$ip]);
+        $expires = now()->addDays(30)->timestamp;
+        DB::table('v2_inbound_ip')->where('ip', $ip)->update([
+            'region' => '中国–广东–广州 电信/DNS服务器', 'province' => '广东省', 'local_expires_at' => $expires,
+            'asn' => 'AS64500', 'as_name' => '独立外部网络名称', 'external_expires_at' => $expires, 'lookup_after' => $expires,
+            'ip_properties' => json_encode(['isp' => '旧接口运营商', 'is_proxy' => false]),
+            'web_data' => json_encode(['ip_properties' => ['isp' => '旧网页运营商', 'usage_type' => 'DCH', 'proxy' => ['is_tor' => true]]]),
+            'web_expires_at' => $expires,
+        ]);
+        $stored = DB::table('v2_inbound_ip')->where('ip', $ip)->first();
+        $history = DB::table('v2_stat_user_inbound_ip')->get()->toArray();
+        $url = $this->path('inboundUser', ['user_id' => $user->id]);
+        foreach (range(1, 2) as $attempt) {
+            $this->getJson($url)->assertOk()
+                ->assertJsonPath('data.list.0.ip_properties.isp', '电信/DNS服务器')
+                ->assertJsonPath('data.list.0.isp_source', 'qqwry')
+                ->assertJsonPath('data.list.0.ip_properties.is_proxy', false)
+                ->assertJsonPath('data.list.0.ip_properties.proxy.is_tor', true)
+                ->assertJsonPath('data.list.0.ip_properties.usage_type', 'DCH')
+                ->assertJsonPath('data.list.0.asn', 'AS64500')
+                ->assertJsonPath('data.list.0.as_name', '独立外部网络名称');
+            Cache::flush();
+        }
+        $this->assertEquals($stored, DB::table('v2_inbound_ip')->where('ip', $ip)->first());
+        $this->assertEquals($history, DB::table('v2_stat_user_inbound_ip')->get()->toArray());
+        Http::assertNothingSent();
+
+        $this->mock(IpLocation::class)->shouldReceive('lookup')->with($ip)->andReturn([
+            'region' => '中国–广东–广州', 'province' => '广东省', 'isp' => '未知', 'source' => 'qqwry', 'location_source' => 'local']);
+        $this->getJson($url)->assertOk()->assertJsonPath('data.list.0.ip_properties.isp', null)
+            ->assertJsonPath('data.list.0.isp_source', 'qqwry')->assertJsonPath('data.list.0.as_name', '独立外部网络名称');
+        Http::assertNothingSent();
+    }
+
     private function path(string $endpoint, array $params = []): string
     {
         return '/api/v2/' . hash('crc32b', config('app.key')) . '/statistics/' . $endpoint . '?' . http_build_query($params);
@@ -304,7 +343,8 @@ class InboundIpStatisticsTest extends TestCase
         $this->assertEquals($expected, DB::table('v2_inbound_ip')->orderBy('ip')->get()->keyBy('ip')->toArray());
 
         $this->mock(IpLocation::class, function ($mock): void {
-            $mock->shouldReceive('lookup')->once()->with('8.8.8.8')->andReturn([
+            // 一次迁移后地区补查，加上两次明细请求各自读取运营商。
+            $mock->shouldReceive('lookup')->times(3)->with('8.8.8.8')->andReturn([
                 'region' => '中国–上海–上海–宝山区 测试网络',
                 'province' => \App\Services\IpProvince::fromChinese('中国–上海–上海–宝山区'),
             ]);

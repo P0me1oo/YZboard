@@ -140,7 +140,8 @@ class LoadBalancerService
             if (!PoolRealityService::enabled($pool)) $this->invalid('reality_sync_enabled', '请先在前置池开启自动统一 Reality 配置');
             return $this->persist([...$pool->only(['name', 'domain', 'dns_preset_id', 'dns_ttl', 'enabled', 'follow_user_status', 'scheduling_config']),
                 'id' => $pool->id, 'reality_sync_enabled' => true, '_sync_reality' => true,
-                'members' => $pool->members->map(fn ($member) => ['node_id' => $member->source_node_id, 'priority' => $member->priority, 'weight' => $member->weight])->all()]);
+                'members' => $pool->members->map(fn ($member) => ['node_id' => $member->source_node_id, 'priority' => $member->priority, 'weight' => $member->weight,
+                    'bandwidth_mbps' => $member->bandwidth_mbps, 'carriers' => $member->carriers ?: ['default']])->all()]);
         });
     }
 
@@ -172,11 +173,20 @@ class LoadBalancerService
             }
             $sources = Server::with('machine')->whereIn('id', $members->pluck('node_id'))->lockForUpdate()->get()->keyBy('id');
             $stored = $pool->exists ? $pool->members()->get()->keyBy('source_node_id') : collect();
+            $members = $members->map(fn ($member) => [...$member,
+                'bandwidth_mbps' => array_key_exists('bandwidth_mbps', $member) ? $member['bandwidth_mbps'] : $stored->get($member['node_id'])?->bandwidth_mbps,
+                'carriers' => $member['carriers'] ?? $stored->get($member['node_id'])?->carriers ?? ['default']]);
+            foreach ($members as $member) {
+                if ($member['bandwidth_mbps'] !== null && (!is_numeric($member['bandwidth_mbps']) || $member['bandwidth_mbps'] < 0.01 || $member['bandwidth_mbps'] > 10000000)) $this->invalid('members', '可用带宽范围为 0.01–10000000 Mbps，未知时留空');
+                if (!is_array($member['carriers']) || !$member['carriers'] || array_diff($member['carriers'], ['default', ...CarrierDns::CARRIERS])) $this->invalid('members', '请选择有效的运营商线路');
+            }
             $syncReality = (bool) ($data['reality_sync_enabled'] ?? PoolRealityService::enabled($pool));
             // 参数已不兼容时仍允许只停用；不以停用操作修改节点或密钥。
             $statusOnly = $pool->exists && !$starting && empty($data['_sync_reality'])
                 && $syncReality === PoolRealityService::enabled($pool)
                 && PoolRealityService::unchanged($pool, (array) ($data['reality_settings'] ?? []))
+                && $members->every(fn ($m) => $m['bandwidth_mbps'] == $stored->get($m['node_id'])?->bandwidth_mbps
+                    && $m['carriers'] === ($stored->get($m['node_id'])?->carriers ?: ['default']))
                 && $members->map(fn ($m) => [(int) $m['node_id'], (int) $m['priority'], (int) ($m['weight'] ?? 1)])->values()->all()
                     === $stored->map(fn ($m) => [(int) $m->source_node_id, (int) $m->priority, (int) $m->weight])->values()->all();
             foreach (collect($data)->except(['id', 'members', 'enabled', 'reality_sync_enabled', 'reality_settings', '_sync_reality']) as $key => $value) {
@@ -223,12 +233,21 @@ class LoadBalancerService
             $hosts = $sources->map(fn ($source) => strtolower(rtrim(trim($source->host, '[] '), '.')));
             if ($hosts->unique()->count() !== $hosts->count() || $hosts->contains(strtolower(rtrim($data['domain'], '.')))) $this->invalid('members', '节点连接地址必须分别直达各自服务器');
             $policy = array_replace(FrontPoolScheduler::DEFAULTS, $data['scheduling_config'] ?? $pool->scheduling_config ?? []);
+            foreach (['bandwidth_threshold' => [10, 100], 'connection_threshold' => [1, 10000000],
+                'load_confirm_seconds' => [30, 600], 'load_cooldown_seconds' => [60, 3600]] as $field => [$min, $max]) {
+                if (!is_numeric($policy[$field]) || $policy[$field] < $min || $policy[$field] > $max) $this->invalid('scheduling_config.' . $field, '调度阈值超出允许范围');
+            }
+            if ($policy['carrier_enabled']) {
+                if ($starting && !($pool->scheduling_config['carrier_enabled'] ?? false)) app(CarrierDns::class)->assertReady();
+                if (!$members->contains(fn ($m) => in_array('default', $m['carriers'], true))) $this->invalid('members', '运营商分流至少需要一条默认线路');
+            }
+            if ($starting && $policy['health_enabled'] && $sources->contains(fn ($source) => !LandingPoolService::compatibleAgent($source))) $this->invalid('members', '链路健康探测需要前置运行 Agent v2.30.0 或更新版本');
             if (!in_array($policy['strategy'], ['priority', 'latency', 'latency_balanced', 'cycle'], true)) $this->invalid('scheduling_config', '请选择有效的前置选择方式');
-            if (in_array($policy['strategy'], ['latency', 'latency_balanced'], true)) {
+            if (!$policy['health_enabled'] && !$policy['dynamic_enabled'] && in_array($policy['strategy'], ['latency', 'latency_balanced'], true)) {
                 $target = Server::find($policy['latency_node_id']);
                 if (!$pool->exists || !$target || (int) $target->relay_pool_id !== (int) $pool->id || !SchedulingProbeService::target($target)) $this->invalid('scheduling_config.latency_node_id', '请选择绑定该池、使用 TCP 内部链路的落地作为测速目标');
                 if ($starting && $sources->contains(fn ($source) => !LandingPoolService::compatibleAgent($source))) $this->invalid('members', '延迟选择需要前置运行 Agent v2.30.0 或更新版本');
-            } else $policy['latency_node_id'] = null;
+            } elseif (!in_array($policy['strategy'], ['latency', 'latency_balanced'], true)) $policy['latency_node_id'] = null;
             $data['scheduling_config'] = $policy;
             $preset = \App\Models\BalancerDnsPreset::whereKey($data['dns_preset_id'] ?? 0)->lockForUpdate()->first();
             if (!$preset || $preset->provider !== 'powerdns') $this->invalid('dns_preset_id', '请选择 PowerDNS 域名配置');
@@ -261,6 +280,8 @@ class LoadBalancerService
                 $member->runtime_node_id = $source->id;
                 $member->priority = (int) $values['priority'];
                 $member->weight = (int) ($values['weight'] ?? 1);
+                $member->bandwidth_mbps = $values['bandwidth_mbps'];
+                $member->carriers = array_values(array_unique($values['carriers']));
                 $member->position = $position;
                 $member->dns_label ??= bin2hex(random_bytes(12));
                 $member->dns_addresses = DnsPoolService::addresses($source);
@@ -272,7 +293,7 @@ class LoadBalancerService
                 $member->delete();
                 DB::afterCommit(fn () => NodeSyncService::notifyFullSync($id));
             }
-            if ($starting && in_array($policy['strategy'], ['latency', 'latency_balanced'], true)
+            if ($starting && ($policy['health_enabled'] || in_array($policy['strategy'], ['latency', 'latency_balanced'], true))
                 && $sources->contains(fn ($source) => count(SchedulingProbeService::targets($source, false)) > 256)) $this->invalid('members', '前置探测目标超过 256 个');
             if ($cleanupPreset) {
                 // 全部校验和数据库写入通过后，用旧配置清理本池记录；失败回滚配置，保留原归属供重试。

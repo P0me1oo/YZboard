@@ -507,6 +507,11 @@ class ServerService
 
         if (!HostMonitoring::enabled(node: $node)) unset($metricsData['cpu_per_core'], $metricsData['load']);
 
+        // 缺失指标不能补成零负载，否则旧 Agent 会被误判为空闲前置。
+        foreach (['active_connections', 'inbound_speed', 'outbound_speed'] as $field) {
+            if (!is_numeric($metrics[$field] ?? null) || $metrics[$field] < 0) unset($metricsData[$field]);
+        }
+
         Cache::put(
             CacheKey::get('SERVER_' . $nodeType . '_METRICS', $nodeId),
             $metricsData,

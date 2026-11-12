@@ -14,14 +14,18 @@ class QqwryLocationTest extends TestCase
         $reader = new QqwryLocation();
         $this->assertNotSame('未知', $reader->lookup('8.8.8.8')['region']);
         $this->assertSame('浙江省', $reader->lookup('223.5.5.5')['province']);
+        $this->assertSame('电信/DNS服务器', $reader->lookup('202.96.128.86')['isp']);
+        $this->assertSame('联通/DNS服务器', $reader->lookup('202.106.0.20')['isp']);
+        $this->assertSame('移动/公用DNS服务器', $reader->lookup('211.136.192.6')['isp']);
         $this->assertSame('未知', $reader->lookup('2400:cb00::1')['region']);
+        $this->assertSame('未知', $reader->lookup('2400:cb00::1')['isp']);
     }
 
     public function test_direct_and_redirected_gbk_records_and_corrupt_offsets(): void
     {
-        $directory = storage_path('framework/testing');
-        if (!is_dir($directory)) mkdir($directory, 0755, true);
-        $path = tempnam($directory, 'qqwry-test-');
+        $directory = sys_get_temp_dir() . '/yz-qqwry-test-' . bin2hex(random_bytes(8));
+        mkdir($directory, 0700);
+        $path = $directory . '/qqwry.dat';
         try {
             $country = mb_convert_encoding('广东省广州市', 'GB18030', 'UTF-8') . "\0";
             $area = mb_convert_encoding('测试网络', 'GB18030', 'UTF-8') . "\0";
@@ -32,7 +36,7 @@ class QqwryLocationTest extends TestCase
                 $index = 8 + strlen($record);
                 file_put_contents($path, pack('VV', $index, $index) . $record . pack('V', ip2long('8.8.8.0')) . $pointer(8));
                 $reader = new QqwryLocation($path);
-                $this->assertSame(['region' => '广东省广州市 测试网络', 'province' => '广东省'], $reader->lookup('8.8.8.8'));
+                $this->assertSame(['region' => '广东省广州市 测试网络', 'province' => '广东省', 'isp' => '测试网络'], $reader->lookup('8.8.8.8'));
                 $this->assertSame('未知', $reader->lookup('8.8.9.0')['region']);
                 unset($reader);
             }
@@ -40,9 +44,20 @@ class QqwryLocationTest extends TestCase
                 . pack('V', ip2long('8.8.8.0')) . $pointer(8));
             $reader = new QqwryLocation($path);
             $this->assertSame('未知', $reader->lookup('8.8.8.8')['region']);
+            $this->assertSame('未知', $reader->lookup('8.8.8.8')['isp']);
             unset($reader);
+            foreach (["\0", "CZ88.NET\0", "IANA\0", "0\0", "-\0"] as $area) {
+                $record = pack('V', ip2long('8.8.8.255')) . $country . $area;
+                $index = 8 + strlen($record);
+                file_put_contents($path, pack('VV', $index, $index) . $record . pack('V', ip2long('8.8.8.0')) . $pointer(8));
+                $reader = new QqwryLocation($path);
+                $this->assertSame('未知', $reader->lookup('8.8.8.8')['isp']);
+                $this->assertSame('广东省', $reader->lookup('8.8.8.8')['province']);
+                unset($reader);
+            }
         } finally {
-            unlink($path);
+            if (is_file($path)) unlink($path);
+            rmdir($directory);
         }
     }
 

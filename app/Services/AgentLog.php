@@ -41,8 +41,9 @@ class AgentLog
             }
             $nodeId = $record['node_id'] ?? $node?->id;
             if ($nodeId && !$allowed->has($nodeId)) {
-                // 已删除节点的迟到日志确认并丢弃，不阻塞机器后续批次。
-                if (!Server::where('id', $nodeId)->exists()) continue;
+                // 机器可补报迁移、解绑或删除节点的收尾日志；只丢弃该条，保留原批次下标。
+                // 独立节点身份仍拒绝其他现存节点的日志。
+                if (!$node || !Server::where('id', $nodeId)->exists()) continue;
                 abort(403, '日志节点不属于上报身份');
             }
             if ($record['occurred_at'] < $cutoff) continue;

@@ -39,4 +39,13 @@ class RealityTargetLocationTest extends TestCase
         $this->assertSame(['region' => null, 'isp' => null, 'source' => 'ip2region'],
             RealityTargetLocation::parse('0|0|0|0|0'));
     }
+
+    public function test_domestic_scan_uses_qqwry_operator(): void
+    {
+        Http::fake();
+        $result = app(RealityTargetLocation::class)->enrich([['ip' => '202.96.128.86']]);
+        $this->assertSame('电信/DNS服务器', $result[0]['location']['isp']);
+        $this->assertSame('qqwry', $result[0]['location']['source']);
+        Http::assertNothingSent();
+    }
 }

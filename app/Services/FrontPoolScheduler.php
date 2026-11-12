@@ -8,7 +8,9 @@ use App\Models\Server;
 class FrontPoolScheduler
 {
     public const DEFAULTS = ['health_enabled' => false, 'strategy' => 'priority', 'latency_node_id' => null,
-        'quota_enabled' => false, 'quota_percent' => 10];
+        'quota_enabled' => false, 'quota_percent' => 10,
+        'dynamic_enabled' => false, 'bandwidth_threshold' => 80, 'connection_threshold' => 1000,
+        'load_confirm_seconds' => 60, 'load_cooldown_seconds' => 300, 'carrier_enabled' => false];
 
     public function __construct(private readonly FrontPortProbe $probe) {}
 
@@ -16,6 +18,7 @@ class FrontPoolScheduler
     public function select(BalancerPool $pool): array
     {
         $config = array_replace(self::DEFAULTS, $pool->scheduling_config ?? []);
+        if ($config['dynamic_enabled']) $config['strategy'] = 'priority';
         $all = []; $members = [];
         foreach ($pool->members as $member) {
             $node = $member->runtimeNode;
@@ -30,7 +33,7 @@ class FrontPoolScheduler
         $probes = $config['health_enabled'] && $all ? $this->probe->check($all, $pool->gateway_port) : [];
         $lite = app(LiteMonitor::class)->schedulingSnapshot($pool->members
             ->map(fn ($member) => $member->runtimeNode?->machine_id)->filter()->unique()->values()->all());
-        $eligible = []; $snapshot = []; $target = in_array($config['strategy'], ['latency', 'latency_balanced'], true) ? Server::find($config['latency_node_id']) : null;
+        $eligible = []; $snapshot = []; $target = !$config['health_enabled'] && in_array($config['strategy'], ['latency', 'latency_balanced'], true) ? Server::find($config['latency_node_id']) : null;
         foreach ($members as $id => $item) {
             $member = $item['member']; $node = $item['node']; $state = $member->scheduling_state ?? [];
             $interrupted = in_array($item['reason'], ['disabled', 'offline', 'incompatible', 'no_address'], true);
@@ -57,7 +60,7 @@ class FrontPoolScheduler
             $reason = $item['reason'];
             if ($reason === 'healthy' && !$addresses) $reason = 'port_failed';
             $latency = $node && $target ? SchedulingProbeService::result($node, $target) : null;
-            if ($reason === 'healthy' && in_array($config['strategy'], ['latency', 'latency_balanced'], true)) {
+            if (!$config['health_enabled'] && $reason === 'healthy' && in_array($config['strategy'], ['latency', 'latency_balanced'], true)) {
                 if (!LandingPoolService::compatibleAgent($node)) $reason = 'agent_required';
                 elseif (!$latency) $reason = 'probe_pending';
                 elseif (!$latency['healthy']) $reason = 'latency_failed';
@@ -70,6 +73,8 @@ class FrontPoolScheduler
                 ? $ratio < ($config['quota_percent'] + ($wasLow ? 5 : 0))
                 : ($traffic['traffic_status'] === 'unavailable' && $wasLow));
             $state = [...$traffic, 'ports' => $ports, 'reason' => $reason, 'quota_low' => $low,
+                'links' => $state['links'] ?? [],
+                'load' => $config['dynamic_enabled'] ? FrontDynamicLoad::sample($member, $config) : [],
                 'remaining_percent' => $ratio === null ? null : round($ratio, 1),
                 'latency_group' => $state['latency_group'] ?? null,
                 'latency_ms' => $latency && $latency['healthy'] ? $latency['rtt_ms'] : null];
@@ -82,6 +87,8 @@ class FrontPoolScheduler
                 'ratio' => $ratio ?? ($traffic['traffic_status'] === 'unlimited' ? 101 : -1),
                 'reset_at' => $resetAt, 'latency' => $latency];
         }
+        // 线路健康、运营商和额度需要在同一候选范围内判断，保留所有端口健康成员供后续筛选。
+        $available = array_map(fn ($item) => self::candidate($item), array_values($eligible));
         if ($config['quota_enabled'] && $eligible) {
             $enough = array_filter($eligible, fn ($item) => !$item['low']);
             if ($enough) $eligible = $enough;
@@ -94,6 +101,7 @@ class FrontPoolScheduler
             $usable = array_filter($eligible, fn ($item) => $item['ratio'] != 0);
             if ($usable) $eligible = $usable;
         }
+        // 链路与运营商筛选必须先于优先级，否则主线路故障时无法选择低优先级备用。
         if ($eligible) {
             $priority = min(array_map(fn ($item) => $item['member']->priority, $eligible));
             $eligible = array_filter($eligible, fn ($item) => $item['member']->priority === $priority);
@@ -106,7 +114,7 @@ class FrontPoolScheduler
                 $eligible = array_filter($metered, fn ($item) => $item['reset_at'] === $next);
             }
         }
-        if ($config['strategy'] === 'latency_balanced') {
+        if (!$config['health_enabled'] && $config['strategy'] === 'latency_balanced') {
             $measured = array_filter($eligible, fn ($item) => $item['latency'] && $item['latency']['healthy']);
             if ($measured) {
                 $best = min(array_map(fn ($item) => $item['latency']['rtt_ms'], $measured));
@@ -129,7 +137,7 @@ class FrontPoolScheduler
             }
         }
         $state = $pool->scheduling_state ?? [];
-        if ($config['strategy'] === 'latency') {
+        if (!$config['health_enabled'] && $config['strategy'] === 'latency') {
             $measured = array_filter($eligible, fn ($item) => $item['latency'] && $item['latency']['healthy']);
             if ($measured) {
                 uasort($measured, fn ($a, $b) => $a['latency']['rtt_ms'] <=> $b['latency']['rtt_ms']);
@@ -151,13 +159,22 @@ class FrontPoolScheduler
         $addresses = []; $candidates = [];
         foreach ($eligible as $id => $item) {
             $addresses = array_merge($addresses, $item['addresses']); $snapshot[$id]['selected'] = true;
-            $candidates[] = ['member_id' => (int) $id, 'node_id' => (int) $item['member']->source_node_id,
-                'weight' => (int) ($item['member']->weight ?: 1), 'addresses' => $item['addresses']];
+            $candidates[] = self::candidate($item);
         }
         $addresses = array_values(array_unique($addresses)); sort($addresses);
         $state['candidates'] = $candidates;
+        $state['available_candidates'] = $available;
         $state['snapshot'] = ['addresses' => $addresses, 'members' => array_values($snapshot)];
         $state['checked_at'] = now()->timestamp;
         return [$addresses, $state];
+    }
+
+    private static function candidate(array $item): array
+    {
+        $member = $item['member'];
+        return ['member_id' => (int) $member->id, 'node_id' => (int) $member->source_node_id,
+            'priority' => (int) $member->priority, 'weight' => (int) ($member->weight ?: 1), 'addresses' => $item['addresses'],
+            'carriers' => $member->carriers ?: ['default'], 'load' => $member->scheduling_state['load'] ?? [],
+            'reset_at' => $item['reset_at'], 'ratio' => $item['ratio'], 'quota_low' => $item['low']];
     }
 }

@@ -27,7 +27,12 @@ class SchedulingProbeService
         if ($cached) return Cache::remember('scheduling:targets:' . $entry->id, 10, fn () => self::targets($entry, false));
         $ids = [];
         foreach (BalancerPool::where('mode', 'dns')->where('enabled', true)->get() as $pool) {
-            if (in_array($pool->scheduling_config['strategy'] ?? 'priority', ['latency', 'latency_balanced'], true)
+            if (($pool->scheduling_config['health_enabled'] ?? false)
+                && $pool->members()->where('runtime_node_id', $entry->id)->exists()) {
+                $ids = array_merge($ids, Server::where('relay_pool_id', $pool->id)->where(fn ($q) => $q->where('enabled', true)->orWhereNull('enabled'))->pluck('id')->all());
+            }
+            if (!($pool->scheduling_config['health_enabled'] ?? false) && !($pool->scheduling_config['dynamic_enabled'] ?? false)
+                && in_array($pool->scheduling_config['strategy'] ?? 'priority', ['latency', 'latency_balanced'], true)
                 && $pool->members()->where('runtime_node_id', $entry->id)->exists()) $ids[] = (int) ($pool->scheduling_config['latency_node_id'] ?? 0);
         }
         foreach (LandingPool::with('node')->where('enabled', true)->get() as $pool) {

@@ -64,7 +64,7 @@ class PowerDnsService
             foreach ($wanted as $key => $value) {
                 $record = $stored->get($key);
                 foreach ($byName->get($value['name'], []) as $rkey => $r) {
-                    if (($rkey === $key || $r['type'] === 'CNAME' || $value['type'] === 'CNAME'
+                    if (($rkey === $key || in_array($r['type'], ['CNAME', 'LUA'], true) || in_array($value['type'], ['CNAME', 'LUA'], true)
                         || (in_array($r['type'], ['A', 'AAAA'], true) && in_array($value['type'], ['A', 'AAAA'], true)))
                         && (!$stored->has($rkey) || array_column($r['comments'] ?? [], 'content') !== [$stored[$rkey]->marker])) {
                         throw new DdnsSyncException('域名存在非本功能管理的记录');

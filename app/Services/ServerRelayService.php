@@ -249,7 +249,8 @@ class ServerRelayService
                 $managed = $managedPools->get($child->id);
                 return $child->enabled === false || ($managed ? LandingPoolService::targetFor($child, $entry, $managed) === null : $blocked[(int) $child->id]) || !self::poolRouteAvailable($entry, $child);
             })
-            ->map(fn (Server $child) => self::ensureRouteId($child))->all();
+            // 过滤会保留原下标；重排后才能始终编码为 Agent 要求的 JSON 数组。
+            ->map(fn (Server $child) => self::ensureRouteId($child))->values()->all();
     }
 
     /** 入口按实际内核校验，且自身不能再连接其它前置入口。 */

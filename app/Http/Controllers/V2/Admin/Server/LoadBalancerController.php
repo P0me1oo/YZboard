@@ -17,7 +17,12 @@ class LoadBalancerController extends Controller
 {
     public function fetch()
     {
-        $counts = \App\Models\PoolDnsAlias::whereNotNull('member_id')->selectRaw('member_id, count(*) as total')->groupBy('member_id')->pluck('total', 'member_id');
+        $counts = [];
+        foreach (\App\Models\PoolDnsAlias::cursor() as $alias) {
+            $ids = [$alias->member_id];
+            foreach ($alias->assignment_state ?? [] as $lanes) foreach ($lanes as $choice) $ids[] = $choice['member_id'] ?? null;
+            foreach (array_unique(array_filter($ids)) as $id) $counts[$id] = ($counts[$id] ?? 0) + 1;
+        }
         $pools = BalancerPool::with(['members.sourceNode', 'members.runtimeNode.machine'])->orderBy('id')->get()->map(function ($pool) use ($counts) {
             $view = $pool->attributesToArray();
             $view['reality_sync_enabled'] = \App\Services\PoolRealityService::enabled($pool);
@@ -29,11 +34,13 @@ class LoadBalancerController extends Controller
                 'compatibility_reasons' => $member->runtimeNode ? LoadBalancerService::memberCompatibility($pool, $member->runtimeNode) : [],
                 'addresses' => $member->dns_addresses, 'healthy_addresses' => $member->healthy_addresses, 'checked_at' => $member->checked_at,
                 'scheduling_state' => $member->scheduling_state,
+                'bandwidth_mbps' => $member->bandwidth_mbps, 'carriers' => $member->carriers ?: ['default'],
                 'last_report_at' => $member->runtimeNode ? LoadBalancerService::heartbeat($member->runtimeNode) : null,
             ])->values();
             return $view;
         });
-        return $this->success(['pools' => $pools, 'presets' => BalancerDnsPreset::orderBy('id')->get()]);
+        return $this->success(['pools' => $pools, 'presets' => BalancerDnsPreset::orderBy('id')->get(),
+            'carrier_dns' => app(\App\Services\CarrierDns::class)->status()]);
     }
 
     public function savePreset(Request $request)
@@ -112,14 +119,21 @@ class LoadBalancerController extends Controller
             'reality_settings.private_key' => 'nullable|string|max:43', 'reality_settings.public_key' => 'nullable|string|max:43',
             'reality_settings.short_id' => 'nullable|string|max:16', 'reality_settings.server_name' => 'nullable|string|max:253',
             'reality_settings.server_port' => 'nullable|integer|min:1|max:65535',
-            'scheduling_config' => 'sometimes|nullable|array:health_enabled,strategy,latency_node_id,quota_enabled,quota_percent',
+            'scheduling_config' => 'sometimes|nullable|array:health_enabled,strategy,latency_node_id,quota_enabled,quota_percent,dynamic_enabled,bandwidth_threshold,connection_threshold,load_confirm_seconds,load_cooldown_seconds,carrier_enabled',
+            'scheduling_config.dynamic_enabled' => 'sometimes|boolean', 'scheduling_config.carrier_enabled' => 'sometimes|boolean',
+            'scheduling_config.bandwidth_threshold' => 'sometimes|integer|min:10|max:100',
+            'scheduling_config.connection_threshold' => 'sometimes|integer|min:1|max:10000000',
+            'scheduling_config.load_confirm_seconds' => 'sometimes|integer|min:30|max:600',
+            'scheduling_config.load_cooldown_seconds' => 'sometimes|integer|min:60|max:3600',
             'scheduling_config.health_enabled' => 'sometimes|boolean', 'scheduling_config.strategy' => 'sometimes|in:priority,latency,latency_balanced,cycle',
             'scheduling_config.latency_node_id' => 'nullable|integer|exists:v2_server,id',
             'scheduling_config.quota_enabled' => 'sometimes|boolean', 'scheduling_config.quota_percent' => 'sometimes|integer|min:1|max:50',
             'gateway_machine_id' => 'prohibited', 'gateway_address' => 'prohibited', 'gateway_port' => 'prohibited',
             'gateway_source_ips' => 'prohibited', 'ddns' => 'prohibited', 'enabled' => 'required|boolean',
             'members' => 'required|array|min:1|max:64', 'members.*.node_id' => 'required|integer|distinct|exists:v2_server,id',
-            'members.*.priority' => 'required|integer|min:1|max:65535', 'members.*.weight' => 'sometimes|integer|min:1|max:1000']);
+            'members.*.priority' => 'required|integer|min:1|max:65535', 'members.*.weight' => 'sometimes|integer|min:1|max:1000',
+            'members.*.bandwidth_mbps' => 'nullable|numeric|min:0.01|max:10000000',
+            'members.*.carriers' => 'sometimes|array|min:1|max:4', 'members.*.carriers.*' => 'required|in:default,telecom,unicom,mobile|distinct']);
         if (!empty($data['dns_preset_id'])) {
             $preset = BalancerDnsPreset::findOrFail($data['dns_preset_id']);
             if (!(($mode === 'dns' && $data['domain'] === $preset->domain) || str_ends_with(strtolower($data['domain']), '.' . $preset->domain))) {

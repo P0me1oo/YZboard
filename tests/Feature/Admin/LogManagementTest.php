@@ -129,7 +129,7 @@ class LogManagementTest extends TestCase
         $this->artisan('management-log:prune')->assertSuccessful();
         $this->assertDatabaseCount('v2_user_event_log', 0);
     }
-    public function test_agent_ingestion_redacts_retries_and_rejects_other_machine_nodes(): void
+    public function test_agent_ingestion_redacts_retries_and_discards_other_machine_nodes(): void
     {
         $machine = ServerMachine::create(['name' => '测试机器', 'token' => Str::random(32), 'is_active' => true]); $node = $this->node($machine);
         $batch = ['batch_id' => str_repeat('a', 32), 'records' => [['node_id' => $node->id, 'source' => 'singbox', 'level' => 'error',
@@ -141,8 +141,9 @@ class LogManagementTest extends TestCase
         Sanctum::actingAs($this->user(true));
         $this->getJson(self::URL . 'agent?source=singbox&machine_id=' . $machine->id)->assertOk()->assertJsonPath('data.total', 1);
         $other = ServerMachine::create(['name' => '其他机器', 'token' => Str::random(32), 'is_active' => true]);
-        try { $logs->accept(null, $other, $batch); $this->fail('应拒绝其他机器节点'); }
-        catch (\Symfony\Component\HttpKernel\Exception\HttpException $error) { $this->assertSame(403, $error->getStatusCode()); }
+        $this->assertSame(['batch_id' => $batch['batch_id']], $logs->accept(null, $other, $batch));
+        $this->assertDatabaseCount('v2_agent_log', 1);
+        $this->assertDatabaseMissing('v2_agent_log', ['machine_id' => $other->id]);
         $this->travel(8)->days();
         $this->getJson(self::URL . 'agent')->assertOk()->assertJsonPath('data.total', 0);
     }

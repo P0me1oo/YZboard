@@ -9,6 +9,33 @@ use Tests\TestCase;
 
 class DeviceIpLocationServiceTest extends TestCase
 {
+    public function test_domestic_operator_is_qqwry_on_fresh_cached_failed_and_quota_limited_lookups(): void
+    {
+        $ip = '202.96.128.86';
+        $key = 'device_location:v5:' . hash('sha256', $ip);
+        foreach (['fresh', 'cached', 'failed', 'quota'] as $mode) {
+            Cache::flush();
+            Http::fake(['api.ip2location.io/*' => $mode === 'failed' ? Http::response([], 503) : Http::response([
+                'ip' => $ip, 'isp' => '外部运营商', 'as' => '外部网络名称', 'asn' => 64500, 'is_proxy' => false,
+            ])]);
+            if ($mode === 'cached') Cache::put($key, ['asn' => 'AS64500', 'as_name' => '外部网络名称',
+                'ip_properties' => \App\Services\IpProperties::fromResponse(['isp' => '旧缓存运营商', 'is_proxy' => false])], 86400);
+            if ($mode === 'quota') Cache::put('device_asn:quota:' . now('UTC')->toDateString(), 1000, 86400);
+            $service = new DeviceIpLocationService();
+            foreach (range(1, 2) as $attempt) {
+                $result = $service->lookup($ip);
+                $this->assertSame('电信/DNS服务器', $result['isp'], $mode);
+                $this->assertSame('电信/DNS服务器', $result['ip_properties']['isp'], $mode);
+                if (in_array($mode, ['fresh', 'cached'], true)) {
+                    $this->assertSame('AS64500', $result['asn']);
+                    $this->assertSame('外部网络名称', $result['as_name']);
+                    $this->assertFalse($result['ip_properties']['is_proxy']);
+                }
+            }
+            Http::assertSentCount(in_array($mode, ['fresh', 'failed'], true) ? 1 : 0);
+        }
+    }
+
     public function test_external_location_and_old_cached_location_never_override_local_databases(): void
     {
         Cache::flush();

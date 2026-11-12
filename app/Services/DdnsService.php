@@ -124,7 +124,7 @@ class DdnsService
             [$type, $id] = self::endpoint($server);
             if ($type === 'pool' && ($pool = BalancerPool::find($id))) {
                 try {
-                    $server['host'] = app(DnsPoolService::class)->project($pool, $user);
+                    $server['host'] = app(DnsPoolService::class)->project($pool, $user, (int) $server['id']);
                 } catch (HttpResponseException $error) {
                     // 仅隔离池解析未就绪；用户鉴权失败及其他错误仍按原路径返回。
                     if ($error->getResponse()->getStatusCode() !== 503) throw $error;

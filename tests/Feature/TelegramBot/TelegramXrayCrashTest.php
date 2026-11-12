@@ -132,12 +132,12 @@ class TelegramXrayCrashTest extends TestCase
         $this->assertSame('sent', $this->send()->status);
         Http::assertSent(fn ($request) => str_contains($request['text'], '测试服务器'));
         $other = ServerMachine::create(['name' => '其他服务器', 'token' => Str::random(32), 'is_active' => true]);
-        try {
-            $logs->accept(null, $other, $this->batch(['node_id' => $node->id], 'd'));
-            $this->fail('必须拒绝其他服务器节点');
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $error) {
-            $this->assertSame(403, $error->getStatusCode());
-        }
+        $this->assertSame(['batch_id' => str_repeat('d', 32)],
+            $logs->accept(null, $other, $this->batch(['node_id' => $node->id], 'd')));
+        $this->assertDatabaseCount('v2_agent_log', 3);
+        $this->assertDatabaseMissing('v2_agent_log', ['machine_id' => $other->id]);
+        $this->assertDatabaseCount('v2_telegram_business_notifications', 1);
+        Http::assertSentCount(1);
     }
 
     public function test_disabled_notification_does_not_backfill_and_invalid_events_are_rejected(): void

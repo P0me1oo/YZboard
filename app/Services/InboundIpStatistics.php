@@ -86,6 +86,7 @@ class InboundIpStatistics
         // 属性在本页汇总后批量读取；网页数据只由后台补齐，列表和卡片不请求网页。
         $properties = DB::table('v2_inbound_ip')->whereIn('ip', array_column($result['list'], 'ip'))
             ->get(['ip', 'ip_properties', 'external_expires_at', 'web_data', 'web_expires_at'])->keyBy('ip');
+        $locations = app(IpLocation::class);
         foreach ($result['list'] as &$row) {
             $details = $properties->get($row['ip']);
             $stored = $details && $details->external_expires_at > $now ? json_decode($details->ip_properties ?? 'null', true) : [];
@@ -95,6 +96,12 @@ class InboundIpStatistics
                 $row['ip_properties'] = IpProperties::merge($row['ip_properties'], is_array($web['ip_properties'] ?? null) ? $web['ip_properties'] : []);
                 $row['asn'] ??= $web['asn'] ?? null;
                 $row['as_name'] ??= $web['as_name'] ?? null;
+            }
+            // 每页本地读取运营商，使历史外部缓存无需清空即可使用新的纯真来源。
+            $local = $locations->lookup($row['ip']);
+            if (($local['source'] ?? null) === 'qqwry') {
+                $row['ip_properties'] = IpProperties::withLocalOperator($row['ip_properties'], $local);
+                $row['isp_source'] = 'qqwry';
             }
         }
         unset($row);

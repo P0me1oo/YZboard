@@ -1,5 +1,9 @@
 # YZboard 兼容矩阵
 
+## 2.16.5 发布与部署（2026-11-13）
+
+[面板 v2.16.5](https://github.com/P0me1oo/YZboard/releases/tag/v2.16.5) 与[管理端 v0.98.3](https://github.com/P0me1oo/YZboard-Dash/releases/tag/v0.98.3) 已发布并部署至 Solid-US LA，包含健康归属、前置池成员校验、状态读取去重和资源预压缩。SQLite 与 MariaDB 11.4.8 完整回归各 1,873 项通过，前端 165 项行为、16 个相关浏览器场景及六份附件核验通过。无数据库迁移或 Agent 升级。来源见[发布记录](docs/release-2.16.5.md)，4.569 秒切换、压缩和连接复用实测见[部署记录](docs/deployment-2.16.5.md)。
+
 ## 2.16.2 完整发布与部署（2026-11-12）
 
 已汇总全部待发布改动并发布至 [v2.16.2](https://github.com/P0me1oo/YZboard/releases/tag/v2.16.2)，配套管理端 [v0.98.1](https://github.com/P0me1oo/YZboard-Dash/releases/tag/v0.98.1)。固定源码、三套各 1,846 项完整数据库回归、446 个浏览器场景、六份附件核验见[发布记录](docs/release-2.16.2.md)。Solid-US LA 已从 2.15.1 更新，旧日志 403 恢复，插件配置保持；本版包含 2.16.0 的兼容加列迁移，运营商 DNS 准备门禁继续关闭，见[部署记录](docs/deployment-2.16.2.md)。

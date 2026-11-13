@@ -1,0 +1,76 @@
+{
+  "target": "Solid-US LA",
+  "path": "/root/yzboard",
+  "user": "www-data",
+  "from_version": "2.16.3",
+  "version": "2.16.5",
+  "dashboard_version": "0.98.3",
+  "source_commit": "ee92caab06c3875f2f4b0fd26c75e192239655ea",
+  "started_at": "2026-11-13T11:47:58.576846+08:00",
+  "finished_at": "2026-11-13T11:48:03.145623+08:00",
+  "duration_seconds": 4.568778038024902,
+  "source_files_verified": 1156,
+  "changed_runtime_files": 131,
+  "new_gzip_files": 125,
+  "nginx_files": 16,
+  "migrations_before_after": [
+    148,
+    148
+  ],
+  "failed_jobs_before_after": [
+    713,
+    713
+  ],
+  "fresh_machines_before_after": [
+    48,
+    48
+  ],
+  "plugin_count": 8,
+  "persistent_file_count": 83,
+  "persistent_state_unchanged": true,
+  "active_services": [
+    "yzboard-web",
+    "yzboard-horizon",
+    "yzboard-websocket",
+    "nginx",
+    "mariadb",
+    "redis-server"
+  ],
+  "automatic_restarts": 0,
+  "http_checks": {
+    "home": 200,
+    "configured_admin_entry": 200,
+    "public_config": 200,
+    "gzip_asset": 200,
+    "identity_asset": 200,
+    "gzip_q0_asset": 200,
+    "range": 206,
+    "unauthenticated_websocket": 401
+  },
+  "asset_bytes": {
+    "raw": 6946903,
+    "gzip": 1876867
+  },
+  "new_error_patterns": 0,
+  "performance": {
+    "sample_seconds_before": 15.14917540550232,
+    "sample_seconds_after": 15.113899230957031,
+    "host_cpu_pct_before": 41.90507689763519,
+    "host_cpu_pct_after": 41.81968569065343,
+    "sql_select_per_second_before": 904.4716714431406,
+    "sql_select_per_second_after": 940.5249950908855,
+    "redis_commands_per_second_before": 6327.341088491519,
+    "redis_commands_per_second_after": 6494.154718125965,
+    "http_time_wait_before": 7091,
+    "http_time_wait_after": 197,
+    "websocket_established_before_after": [
+      48,
+      48
+    ]
+  },
+  "rollback_directory": "/root/yzboard-deployments/2.16.5",
+  "notes": [
+    "Initial admin probe used an old hard-coded path; verification succeeded using current database settings without changing configuration.",
+    "Short samples do not show a material host CPU reduction."
+  ]
+}

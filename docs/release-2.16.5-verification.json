@@ -1,0 +1,54 @@
+{
+  "date": "2026-11-13",
+  "panel": {
+    "version": "2.16.5",
+    "source_commit": "ee92caab06c3875f2f4b0fd26c75e192239655ea",
+    "archive": "yzboard-2.16.5.tar.gz",
+    "sha256": "5cc3c229ae1cc703df46b56dc059be8426503259280bcbdd26926da6b540508a"
+  },
+  "dashboard": {
+    "version": "0.98.3",
+    "source_commit": "09c2f27e2f66efc27b52cdae45f031bf61b2ff99",
+    "archive": "yzboard-dash-0.98.3.tar.gz",
+    "sha256": "ee597bc5d34fdfdd226bf9609d93a234b4e18e5a0fce80d9a83c16c88ba1dc81"
+  },
+  "release_urls": [
+    "https://github.com/P0me1oo/YZboard/releases/tag/v2.16.5",
+    "https://github.com/P0me1oo/YZboard-Dash/releases/tag/v0.98.3"
+  ],
+  "downloaded_assets_verified": 6,
+  "php": "8.4.27",
+  "sqlite": {
+    "tests": 1873,
+    "assertions": 35108,
+    "skipped": 12
+  },
+  "mariadb": {
+    "version": "11.4.8",
+    "tests": 1873,
+    "assertions": 35124,
+    "skipped": 0,
+    "only_full_group_by": true,
+    "innodb_snapshot_isolation": true
+  },
+  "redis": "8.0.2",
+  "phpredis": "6.2.0",
+  "frontend": {
+    "source_files": 3122,
+    "behavior_tests": 165,
+    "affected_browser_tests": 16,
+    "integrated_files": 274,
+    "gzip_files": 125,
+    "panel_resource_tests": 5
+  },
+  "github_actions": {
+    "panel_run": 43359488350,
+    "dashboard_runs": [
+      43359490691,
+      43359491083
+    ],
+    "started": false,
+    "reason": "account locked due to billing issue"
+  },
+  "docker_published": false
+}

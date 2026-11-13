@@ -418,13 +418,13 @@ class ServerService
     /**
      * 处理节点负载状态汇报
      */
-    public static function processStatus(Server $node, array $status): void
+    public static function processStatus(Server $node, array $status, ?bool $hostMonitoring = null): void
     {
         ServerAutoSort::onReport($node);
         $nodeType = strtoupper($node->type);
         $nodeId = $node->id;
 
-        if (!HostMonitoring::enabled(node: $node) || (!isset($status['cpu']) && !isset($status['mem']))) {
+        if ((!isset($status['cpu']) && !isset($status['mem'])) || !($hostMonitoring ?? HostMonitoring::enabled(node: $node))) {
             Cache::forget(CacheKey::get("SERVER_{$nodeType}_LOAD_STATUS", $nodeId));
             return;
         }
@@ -475,8 +475,10 @@ class ServerService
     /**
      * Update node metrics and load status
      */
-    public static function updateMetrics(Server $node, array $metrics): void
+    public static function updateMetrics(Server $node, array $metrics, ?bool $hostMonitoring = null): void
     {
+        // 控制结果和调度处理可能等待或写入配置，随后仍重新读取监控开关。
+        if (isset($metrics['operations']) || isset($metrics['scheduling_probes'])) $hostMonitoring = null;
         if (isset($metrics['operations']) && is_array($metrics['operations'])) app(NodeOperations::class)->accept($node, $metrics['operations']);
  if (isset($metrics['scheduling_probes'])) {
             if (SchedulingProbeService::accept($node, $metrics['scheduling_probes']) && Cache::add('scheduling:refresh:' . $node->id, true, 10)) app(LandingPoolService::class)->syncForEntry($node);
@@ -505,7 +507,7 @@ class ServerService
             'kernel_status' => (bool) ($metrics['kernel_status'] ?? false),
         ];
 
-        if (!HostMonitoring::enabled(node: $node)) unset($metricsData['cpu_per_core'], $metricsData['load']);
+        if (!($hostMonitoring ?? HostMonitoring::enabled(node: $node))) unset($metricsData['cpu_per_core'], $metricsData['load']);
 
         // 缺失指标不能补成零负载，否则旧 Agent 会被误判为空闲前置。
         foreach (['active_connections', 'inbound_speed', 'outbound_speed'] as $field) {

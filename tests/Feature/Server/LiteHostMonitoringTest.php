@@ -11,6 +11,7 @@ use App\Services\HostMonitoring;
 use App\Services\LiteClient;
 use App\Services\LiteMonitor;
 use App\Services\MachineStateService;
+use App\Services\NodeStateService;
 use App\Services\RealtimeStateStore;
 use App\Support\Setting;
 use App\Utils\CacheKey;
@@ -18,6 +19,7 @@ use App\WebSocket\NodeEventHandlers;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
 use Tests\TestCase;
 use Workerman\Connection\TcpConnection;
@@ -69,6 +71,71 @@ class LiteHostMonitoringTest extends TestCase
     {
         return ['cpu' => 23, 'mem' => ['total' => 1024, 'used' => 256], 'disk' => ['total' => 2000, 'used' => 300],
             'net' => ['in_speed' => 10, 'out_speed' => 20], 'kernel_status' => true];
+    }
+
+    private function monitoringQueries(callable $action): int
+    {
+        $count = 0;
+        DB::listen(function ($query) use (&$count): void {
+            if (str_contains($query->sql, 'v2_lite_machine') && str_starts_with(strtolower($query->sql), 'select')) $count++;
+        });
+        $action();
+        return $count;
+    }
+
+    public function test_projection_reads_policy_once_and_rechecks_after_binding_changes(): void
+    {
+        $this->configure();
+        $state = ['status' => $this->load(), 'metrics' => ['cpu_per_core' => [23], 'load' => ['load1' => 1], 'uptime' => 20]];
+        foreach ([false, true, false] as $bound) {
+            if ($bound) $this->bind();
+            else app(LiteMonitor::class)->bind(['action' => 'unbind', 'machine_id' => $this->machine->id]);
+            $this->assertSame(1, $this->monitoringQueries(fn () => NodeStateService::apply($this->node, $state)));
+            $metrics = Cache::get(CacheKey::get('SERVER_VMESS_METRICS', $this->node->id));
+            $this->assertSame(!$bound, array_key_exists('cpu_per_core', $metrics));
+            $this->assertSame(20, $metrics['uptime']);
+            $this->assertSame(!$bound, Cache::has(CacheKey::get('SERVER_VMESS_LOAD_STATUS', $this->node->id)));
+        }
+    }
+
+    public function test_projection_uses_current_policy_instead_of_the_policy_when_snapshot_was_received(): void
+    {
+        $this->configure();
+        $store = app(RealtimeStateStore::class);
+        $session = $store->begin('node:' . $this->node->id, str_repeat('c', 32));
+        $store->accept('node:' . $this->node->id, $session['epoch'], 1,
+            ['status' => $this->load(), 'metrics' => ['cpu_per_core' => [23], 'load' => ['load1' => 1], 'uptime' => 20]]);
+        $this->bind();
+        $this->assertSame(1, $this->monitoringQueries(fn () => app(NodeStateService::class)->projectLatest($this->node)));
+        $this->assertNull(Cache::get(CacheKey::get('SERVER_VMESS_LOAD_STATUS', $this->node->id)));
+        $this->assertArrayNotHasKey('cpu_per_core', Cache::get(CacheKey::get('SERVER_VMESS_METRICS', $this->node->id)));
+    }
+
+    public function test_machine_history_throttle_does_not_repeat_policy_query_or_write_history(): void
+    {
+        $session = app(RealtimeStateStore::class)->begin('machine:' . $this->machine->id, str_repeat('d', 32));
+        $body = ['epoch' => $session['epoch'], 'sequence' => 1, 'telemetry_mode' => 1, 'state' => ['status' => $this->load()]];
+        $service = app(MachineStateService::class);
+        $service->accept($this->machine, $body);
+        $body['sequence'] = 2;
+        $this->assertSame(1, $this->monitoringQueries(fn () => $service->accept($this->machine, $body)));
+        $this->assertDatabaseCount('v2_server_machine_load_history', 1);
+        $this->configure();
+        $this->bind();
+        $body['sequence'] = 3;
+        $this->assertFalse($service->accept($this->machine, $body)['host_monitoring']);
+        $this->assertDatabaseCount('v2_server_machine_load_history', 1);
+    }
+
+    public function test_metrics_with_control_work_rechecks_policy_instead_of_reusing_prior_decision(): void
+    {
+        $this->configure();
+        $this->bind();
+        \App\Services\ServerService::updateMetrics($this->node,
+            ['operations' => [], 'cpu_per_core' => [23], 'load' => ['load1' => 1]], true);
+        $metrics = Cache::get(CacheKey::get('SERVER_VMESS_METRICS', $this->node->id));
+        $this->assertArrayNotHasKey('cpu_per_core', $metrics);
+        $this->assertArrayNotHasKey('load', $metrics);
     }
 
     public function test_binding_disable_unbind_and_reenable_change_all_policy_endpoints(): void

@@ -49,8 +49,8 @@ class MachineStateService
     {
         $key = 'realtime:machine:history:' . $machine->id;
         Cache::lock($key . ':lock', 20)->block(2, function () use ($machine, $key): void {
-            if (!HostMonitoring::enabled($machine)) return;
             if (Cache::has($key)) return;
+            if (!HostMonitoring::enabled($machine)) return;
             $snapshot = $this->store->read('machine:' . $machine->id);
             if (!$snapshot || !$snapshot['fresh'] || !isset($snapshot['data']['status'])) return;
             $status = $snapshot['data']['status'];

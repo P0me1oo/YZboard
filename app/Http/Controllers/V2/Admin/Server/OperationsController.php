@@ -12,6 +12,7 @@ use App\Services\NodeSyncService;
 use App\Services\RealtimeStateStore;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class OperationsController extends Controller
@@ -65,8 +66,17 @@ class OperationsController extends Controller
         if (!Cache::add('node:health:request:'.$node->id, true, 15)) {
             return $this->success(true);
         }
-        $node->health_check = array_merge($node->health_check ?? [], ['request' => bin2hex(random_bytes(16))]);
-        $node->save();
+        try {
+            DB::transaction(function () use ($node, $service) {
+                foreach ($service->checkTargets($node) as $target) {
+                    $target->health_check = array_merge($target->health_check ?? [], ['request' => bin2hex(random_bytes(16))]);
+                    $target->save();
+                }
+            });
+        } catch (\Throwable $e) {
+            Cache::forget('node:health:request:'.$node->id);
+            throw $e;
+        }
         return $this->success(true);
     }
     public function certificates(Request $r, NodeOperations $service)

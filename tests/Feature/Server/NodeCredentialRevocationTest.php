@@ -110,6 +110,33 @@ class NodeCredentialRevocationTest extends TestCase
         $this->assertSame(1, $this->closed);
     }
 
+    public function test_node_message_checks_machine_and_node_once_then_next_message_rechecks(): void
+    {
+        $calls = 0;
+        (new \ReflectionProperty(NodeWorker::class, 'handlers'))->setValue($this->worker,
+            ['test.state' => function () use (&$calls): void { $calls++; }]);
+        $this->mock(\App\Services\NodeRuntimeMetadata::class, function ($mock): void {
+            $mock->shouldReceive('machineOrFail')->with($this->machine->id)->twice()->andReturn($this->machine);
+            $mock->shouldReceive('node')->with($this->node->id)->twice()->andReturn($this->node);
+        });
+        $message = json_encode(['event' => 'test.state', 'data' => ['node_id' => $this->node->id]]);
+        $this->worker->onMessage($this->conn, $message);
+        $this->worker->onMessage($this->conn, $message);
+        $this->assertSame(2, $calls);
+        $this->assertSame(0, $this->closed);
+    }
+
+    public function test_unknown_event_and_unregistered_node_remain_ignored_but_revoked_identity_is_closed(): void
+    {
+        $this->worker->onMessage($this->conn, json_encode(['event' => 'unknown', 'data' => ['node_id' => $this->node->id]]));
+        $this->worker->onMessage($this->conn, json_encode(['event' => 'report.traffic', 'data' => ['node_id' => 999999]]));
+        $this->assertSame(0, $this->closed);
+        $this->assertSame([], $this->frames);
+        $this->machine->update(['token' => 'revoked-test-token']);
+        $this->worker->onMessage($this->conn, json_encode(['event' => 'unknown']));
+        $this->assertSame(1, $this->closed);
+    }
+
     public function test_machine_handshake_binds_revocable_identity_before_sending_snapshots(): void
     {
         unset($this->conn->authTokenHash, $this->conn->authorizeSend);

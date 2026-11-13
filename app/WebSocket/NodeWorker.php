@@ -400,25 +400,28 @@ class NodeWorker
         $event = $msg['event'];
         $body = $msg['data'] ?? [];
         if (!is_array($body)) return;
-        $machineState = $event === 'machine.state' && !empty($conn->machineId) && !empty($conn->realtime);
-        if (!NodeConnectionAuth::check($conn)) return;
+        $isMachine = !empty($conn->machineId);
+        $machineState = $event === 'machine.state' && $isMachine && !empty($conn->realtime);
+        $currentMachine = !$isMachine || NodeRegistry::getMachine((int) $conn->machineId) === $conn;
+        $nodeId = $isMachine ? ($machineState || $event === 'pong' ? 0 : (int) ($body['node_id'] ?? 0))
+            : (int) ($conn->nodeId ?? 0);
+        $registeredNode = $nodeId > 0 && isset($this->handlers[$event])
+            && NodeRegistry::get($nodeId) === $conn
+            && (!$isMachine || in_array($nodeId, $conn->machineNodeIds ?? [], true));
+        // 同一消息一次完成机器和节点认证；未知消息仍复核身份，发送时继续独立复核。
+        if (!NodeConnectionAuth::check($conn, $currentMachine && $registeredNode ? $nodeId : null)) return;
         $conn->lastMessageAt = time();
 
-        if (!empty($conn->machineId)) {
-            if (NodeRegistry::getMachine((int) $conn->machineId) !== $conn) return;
+        if ($isMachine) {
+            if (!$currentMachine) return;
             if ($event === 'pong') {
                 foreach ($conn->machineNodeIds ?? [] as $nid) {
                     Cache::put("node_ws_alive:{$nid}", true, 86400);
                 }
                 return;
             }
-            $nodeId = $machineState ? 0 : (int) ($body['node_id'] ?? 0);
-            if (!$machineState && ($nodeId <= 0 || !in_array($nodeId, $conn->machineNodeIds ?? [], true))) return;
-        } else {
-            $nodeId = (int) ($conn->nodeId ?? 0);
         }
-        if (!$machineState && (!$nodeId || NodeRegistry::get($nodeId) !== $conn || !isset($this->handlers[$event]))) return;
-        if (!$machineState && !NodeConnectionAuth::check($conn, $nodeId)) return;
+        if (!$machineState && !$registeredNode) return;
         try {
             if ($machineState) {
                 $receipt = app(\App\Services\MachineStateService::class)->accept(app(NodeRuntimeMetadata::class)->machineOrFail((int) $conn->machineId), $body);

@@ -133,7 +133,14 @@ class LoadBalancerController extends Controller
             'members' => 'required|array|min:1|max:64', 'members.*.node_id' => 'required|integer|distinct|exists:v2_server,id',
             'members.*.priority' => 'required|integer|min:1|max:65535', 'members.*.weight' => 'sometimes|integer|min:1|max:1000',
             'members.*.bandwidth_mbps' => 'nullable|numeric|min:0.01|max:10000000',
-            'members.*.carriers' => 'sometimes|array|min:1|max:4', 'members.*.carriers.*' => 'required|in:default,telecom,unicom,mobile|distinct']);
+            'members.*.carriers' => ['bail', 'sometimes', 'array', 'min:1', 'max:4',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    // 嵌套通配符的 distinct 会跨成员查重，这里只检查当前成员。
+                    if (count($value) !== count(array_unique($value, SORT_REGULAR))) {
+                        $fail('同一成员的运营商分组不能重复');
+                    }
+                }],
+            'members.*.carriers.*' => 'required|in:default,telecom,unicom,mobile']);
         if (!empty($data['dns_preset_id'])) {
             $preset = BalancerDnsPreset::findOrFail($data['dns_preset_id']);
             if (!(($mode === 'dns' && $data['domain'] === $preset->domain) || str_ends_with(strtolower($data['domain']), '.' . $preset->domain))) {

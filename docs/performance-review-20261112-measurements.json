@@ -1,0 +1,284 @@
+{
+  "date": "2026-11-12",
+  "timezone": "Asia/Shanghai",
+  "target": "Solid-US LA",
+  "application_version": "2.16.3",
+  "dashboard_version": "0.98.2",
+  "measurement_type": "3 separate read-only 15-second windows; not a continuous or peak-load benchmark",
+  "cpu_process_unit": "100% = one logical CPU; host has 4 CPUs",
+  "total_sample_seconds": 45.38326859474182,
+  "weighted_cpu_busy_pct": 53.69228151395729,
+  "weighted_cpu_iowait_pct": 0.5403055214477201,
+  "samples": [
+    {
+      "started_at": "2026-11-12T08:06:41.429Z",
+      "ended_at": "2026-11-12T08:06:56.555Z",
+      "seconds": 15.126659631729126,
+      "cpu_busy_pct": 53.37268128161889,
+      "cpu_iowait_pct": 0.5733558178752108,
+      "cpu_steal_pct": 0,
+      "services": {
+        "yzboard-web.service": {
+          "cpu_single_core_pct": 77.03175905114236,
+          "memory_current_mib": 206.125,
+          "memory_swap_mib": 0
+        },
+        "yzboard-websocket.service": {
+          "cpu_single_core_pct": 62.88147040770494,
+          "memory_current_mib": 67.39453125,
+          "memory_swap_mib": 0
+        },
+        "yzboard-horizon.service": {
+          "cpu_single_core_pct": 3.6296645351121617,
+          "memory_current_mib": 212.265625,
+          "memory_swap_mib": 0
+        },
+        "mariadb.service": {
+          "cpu_single_core_pct": 29.460959051741305,
+          "memory_current_mib": 1277.3515625,
+          "memory_swap_mib": 142.73828125
+        },
+        "redis-server.service": {
+          "cpu_single_core_pct": 18.937703827163745,
+          "memory_current_mib": 40.37109375,
+          "memory_swap_mib": 7.3046875
+        },
+        "nginx.service": {
+          "cpu_single_core_pct": 6.341922297159139,
+          "memory_current_mib": 50.0078125,
+          "memory_swap_mib": 2.6640625
+        },
+        "cron.service": {
+          "cpu_single_core_pct": 0,
+          "memory_current_mib": 12.421875,
+          "memory_swap_mib": 0.11328125
+        }
+      },
+      "database_per_second": {
+        "Queries": 3550.6847716292814,
+        "Com_select": 1067.51922718804,
+        "Com_update": 72.65318495662969,
+        "Com_insert": 26.575596317165726,
+        "Connections": 0.264433794200654,
+        "Innodb_buffer_pool_reads": 0,
+        "Innodb_buffer_pool_read_requests": 6318.843837770277,
+        "Innodb_os_log_written": 67180.5292603015,
+        "Innodb_row_lock_waits": 0.132216897100327,
+        "Innodb_log_waits": 0,
+        "Slow_queries": 0
+      },
+      "redis": {
+        "commands_per_second": 7188.302153102028,
+        "used_memory_mib": 20.63695526123047,
+        "output_bytes_per_second": 3464955.0050071864,
+        "evicted_keys_delta": 0
+      },
+      "swap_pages_in": 0,
+      "swap_pages_out": 0,
+      "disk": {
+        "read_mib_per_sec": 0.8718051652552811,
+        "write_mib_per_sec": 0.8446580923887345,
+        "write_await_ms": 0.3004722550177096,
+        "util_pct": 3.3583091863483054
+      }
+    },
+    {
+      "started_at": "2026-11-12T08:07:23.553Z",
+      "ended_at": "2026-11-12T08:07:38.674Z",
+      "seconds": 15.121474742889404,
+      "cpu_busy_pct": 44.62907015777106,
+      "cpu_iowait_pct": 0.45317220543806647,
+      "cpu_steal_pct": 0,
+      "services": {
+        "yzboard-web.service": {
+          "cpu_single_core_pct": 47.94288998438479,
+          "memory_current_mib": 201.52734375,
+          "memory_swap_mib": 0
+        },
+        "yzboard-websocket.service": {
+          "cpu_single_core_pct": 73.2886586026357,
+          "memory_current_mib": 67.66796875,
+          "memory_swap_mib": 0
+        },
+        "yzboard-horizon.service": {
+          "cpu_single_core_pct": 6.565199604402506,
+          "memory_current_mib": 255.2265625,
+          "memory_swap_mib": 0
+        },
+        "mariadb.service": {
+          "cpu_single_core_pct": 24.694780525662328,
+          "memory_current_mib": 1277.109375,
+          "memory_swap_mib": 142.73828125
+        },
+        "redis-server.service": {
+          "cpu_single_core_pct": 15.877141884781837,
+          "memory_current_mib": 40.34765625,
+          "memory_swap_mib": 7.3046875
+        },
+        "nginx.service": {
+          "cpu_single_core_pct": 4.993018292445539,
+          "memory_current_mib": 48.84375,
+          "memory_swap_mib": 2.6640625
+        },
+        "cron.service": {
+          "cpu_single_core_pct": 0,
+          "memory_current_mib": 12.421875,
+          "memory_swap_mib": 0.11328125
+        }
+      },
+      "database_per_second": {
+        "Queries": 3014.7191841481235,
+        "Com_select": 904.7397977127356,
+        "Com_update": 58.98895545353118,
+        "Com_insert": 22.6829727808982,
+        "Connections": 0.46291781185506536,
+        "Innodb_buffer_pool_reads": 0,
+        "Innodb_buffer_pool_read_requests": 5962.381416693242,
+        "Innodb_os_log_written": 56327.310297596516,
+        "Innodb_row_lock_waits": 0.2645244639171802,
+        "Innodb_log_waits": 0,
+        "Slow_queries": 0
+      },
+      "redis": {
+        "commands_per_second": 6399.177437736485,
+        "used_memory_mib": 20.59168243408203,
+        "output_bytes_per_second": 2898677.526185819,
+        "evicted_keys_delta": 0
+      },
+      "swap_pages_in": 0,
+      "swap_pages_out": 0,
+      "disk": {
+        "read_mib_per_sec": 0,
+        "write_mib_per_sec": 0.10126327134329555,
+        "write_await_ms": 0.2799412196914034,
+        "util_pct": 2.40717262164634
+      }
+    },
+    {
+      "started_at": "2026-11-12T08:08:45.221Z",
+      "ended_at": "2026-11-12T08:09:00.356Z",
+      "seconds": 15.135134220123291,
+      "cpu_busy_pct": 63.066734589913395,
+      "cpu_iowait_pct": 0.5943284088979454,
+      "cpu_steal_pct": 0.016980811682798438,
+      "services": {
+        "yzboard-web.service": {
+          "cpu_single_core_pct": 126.28084245588083,
+          "memory_current_mib": 209.6875,
+          "memory_swap_mib": 0
+        },
+        "yzboard-websocket.service": {
+          "cpu_single_core_pct": 46.575034601461084,
+          "memory_current_mib": 67.6171875,
+          "memory_swap_mib": 0
+        },
+        "yzboard-horizon.service": {
+          "cpu_single_core_pct": 5.831372138256534,
+          "memory_current_mib": 255.41796875,
+          "memory_swap_mib": 0
+        },
+        "mariadb.service": {
+          "cpu_single_core_pct": 37.98484318927413,
+          "memory_current_mib": 1277.28125,
+          "memory_swap_mib": 142.73828125
+        },
+        "redis-server.service": {
+          "cpu_single_core_pct": 21.58473755492991,
+          "memory_current_mib": 40.29296875,
+          "memory_swap_mib": 7.3046875
+        },
+        "nginx.service": {
+          "cpu_single_core_pct": 8.229870854689079,
+          "memory_current_mib": 49.0859375,
+          "memory_swap_mib": 2.6640625
+        },
+        "cron.service": {
+          "cpu_single_core_pct": 0,
+          "memory_current_mib": 12.41796875,
+          "memory_swap_mib": 0.11328125
+        }
+      },
+      "database_per_second": {
+        "Queries": 4534.680631292143,
+        "Com_select": 1373.0965115835431,
+        "Com_update": 92.69821988989082,
+        "Com_insert": 28.278573138184797,
+        "Connections": 0.33035716282926164,
+        "Innodb_buffer_pool_reads": 0.33035716282926164,
+        "Innodb_buffer_pool_read_requests": 7524.280812031829,
+        "Innodb_os_log_written": 74987.64024774898,
+        "Innodb_row_lock_waits": 0.2642857302634093,
+        "Innodb_log_waits": 0,
+        "Slow_queries": 0
+      },
+      "redis": {
+        "commands_per_second": 8132.071920205105,
+        "used_memory_mib": 20.577285766601562,
+        "output_bytes_per_second": 4364401.929926321,
+        "evicted_keys_delta": 0
+      },
+      "swap_pages_in": 0,
+      "swap_pages_out": 0,
+      "disk": {
+        "read_mib_per_sec": 0.005161830669207213,
+        "write_mib_per_sec": 0.8459595237996972,
+        "write_await_ms": 0.29060716139076287,
+        "util_pct": 3.303571628292617
+      }
+    }
+  ],
+  "host_snapshot": {
+    "memory_total_bytes": 4111761408,
+    "memory_used_bytes": 2291687424,
+    "memory_available_bytes": 1820073984,
+    "swap_used_bytes": 882438144,
+    "disk_used_bytes": 10568761344,
+    "disk_available_bytes": 29424848896
+  },
+  "database": {
+    "version": "12.3.3-MariaDB-deb13",
+    "buffer_pool_bytes": 1073741824,
+    "performance_schema": false,
+    "slow_query_log": false,
+    "table_size_mib": 2396.3,
+    "report_table_estimated_rows": 4497222,
+    "report_table_data_bytes": 1206910976,
+    "report_table_index_bytes": 960774144,
+    "report_payload_retention_days": 7,
+    "deduplication_rows_retained_permanently": true,
+    "failed_jobs_count": 713,
+    "report_queue_last": {
+      "pending": 4,
+      "processing": 0,
+      "failed": 0
+    }
+  },
+  "population": {
+    "machines": 50,
+    "active_machines": 50,
+    "heartbeat_fresh_180s": 46,
+    "nodes": 136,
+    "enabled_nodes": 117,
+    "lite_bindings": 46
+  },
+  "frontend": {
+    "asset": "admin-YrSSK1VH.js",
+    "origin_status": 200,
+    "origin_content_encoding": null,
+    "origin_transfer_bytes": 6946903,
+    "local_gzip_level6_bytes": 1868847,
+    "compression_measurement_note": "Local compression size only; no production compression configuration or browser benchmark changed."
+  },
+  "lite": {
+    "repository": "https://github.com/nuomiiiii/Lite",
+    "before": "61f74434",
+    "after": "07da671771b1070e9134dc07f634bb8884ae5b4f",
+    "update": "git pull --ff-only; working tree clean"
+  },
+  "limitations": [
+    "Node access logging and application performance diagnostics disabled; endpoint-level CPU attribution unavailable.",
+    "Database performance_schema and slow query logging disabled; current counters do not identify costly SQL digests.",
+    "No production configuration, service, schema, billing or cache writes performed.",
+    "No browser interaction or live load test; normal frontend asset download only."
+  ]
+}

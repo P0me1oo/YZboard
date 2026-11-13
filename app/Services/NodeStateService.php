@@ -76,11 +76,16 @@ class NodeStateService
         if (is_array($state['online'] ?? null)) {
             ServerService::processOnline($node, $state['online']);
         }
-        if (is_array($state['status'] ?? null) && $state['status'] !== []) {
-            ServerService::processStatus($node, $state['status']);
+        $hasStatus = is_array($state['status'] ?? null) && $state['status'] !== [];
+        $hasMetrics = is_array($state['metrics'] ?? null) && $state['metrics'] !== [];
+        // 只在当前投影中复用；接收快照和等待投影锁之前的判断不能带入这里。
+        $hostMonitoring = $hasMetrics || ($hasStatus && (isset($state['status']['cpu']) || isset($state['status']['mem'])))
+            ? HostMonitoring::enabled(node: $node) : null;
+        if ($hasStatus) {
+            ServerService::processStatus($node, $state['status'], $hostMonitoring);
         }
-        if (is_array($state['metrics'] ?? null) && $state['metrics'] !== []) {
-            ServerService::updateMetrics($node, $state['metrics']);
+        if ($hasMetrics) {
+            ServerService::updateMetrics($node, $state['metrics'], $hostMonitoring);
         }
     }
 }

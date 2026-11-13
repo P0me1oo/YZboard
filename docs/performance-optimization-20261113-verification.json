@@ -1,0 +1,67 @@
+{
+  "date": "2026-11-13",
+  "panel_version": "2.16.5",
+  "dashboard_version": "0.98.3",
+  "production_version_observed": "2.16.3",
+  "production_modified": false,
+  "panel_base_commit": "4645fe0eb19a795dde42c7fce79c452994a88a01",
+  "php": "8.4.27",
+  "sqlite": {
+    "tests": 58,
+    "assertions": 454,
+    "status": "passed"
+  },
+  "mariadb": {
+    "version": "11.8.6",
+    "strict_grouping": true,
+    "tests": 58,
+    "assertions": 454,
+    "status": "passed"
+  },
+  "dashboard": {
+    "compression_tests": 2,
+    "build": "passed",
+    "build_contract": "passed",
+    "panel_contract_tests": 5,
+    "integrated_files": 274,
+    "gzip_files": 125,
+    "all_gzip_contents_verified": true
+  },
+  "nginx": {
+    "version": "1.26.3",
+    "environment": "isolated loopback ports",
+    "independent_http_requests": 20,
+    "entry_connections": 1,
+    "backend_connections": 1,
+    "websocket_status": 101,
+    "encoding_fallback_cases": 3,
+    "range_status": 206,
+    "missing_resource_status": 404
+  },
+  "asset": {
+    "file": "assets/admin-YrSSK1VH.js",
+    "bytes": 6946903,
+    "gzip_bytes": 1876867,
+    "sha256": "7163e72c15354e19bbeb24bdd486ed279738d2f1c876a7995c241b03f4a9e682",
+    "gzip_sha256": "0aaa4f88f7bbf88857767d89e16ea6c66c3c60bed3388d5b1db116232b1a0891"
+  },
+  "files_sha256": {
+    "app/Services/NodeStateService.php": "8b38ec4baacf53ceb55465d7133705cf58fc2a63daae5174579c04d4c86620ff",
+    "app/Services/MachineStateService.php": "4aa425e0624e0daf11cd2797770ef1058879d6758d4b055641f2e6e3b4ccc379",
+    "app/Services/ServerService.php": "67841e76a14322de981f794dcfb65583d67389b9706844f35eb3dac8a1b1f278",
+    "app/WebSocket/NodeWorker.php": "b9a62e01d356341a323c0402b462e5aba5ae6475fb041fb8be43708fdb39f972",
+    "config/app.php": "298b3ddeac445cd641f719de3954e0c4641284aa623d5a7f5d99ceead534d47c",
+    "docs/examples/nginx-yzboard-keepalive.conf": "462d227d270eddec35c0459171f4f0079dd73f54a7b0c5256caa55ed510f71c4",
+    "docs/examples/nginx-yzboard-admin-static.conf": "59cb3d70e45b9ffc150f60fb7d2bb7d3ddc1edc674dec16e817b7752a48d6994",
+    "tests/Feature/Server/LiteHostMonitoringTest.php": "95c47b7b139cdaa21e42406453132ec6b4e4a7b0d1189556b4550ab173dfda3b",
+    "tests/Feature/Server/NodeCredentialRevocationTest.php": "69a44f92f9af4a7cab21180fffa7d36fc5c9e03f50775386a1d7144bc5ee6843",
+    "tests/Integration/nginx-performance.py": "b6ce487fc54a992cd9079347b7f7e28ad13c118a6b44642ecc8df33d5d0d0f66"
+  },
+  "dashboard_files_sha256": {
+    "tools/precompress-asset.mjs": "d58c16e1b079b5825d4c180d7027dd94b37bf24ae1754d2afb66e219d6651763",
+    "tools/sync-to-panel.mjs": "bfa7d8b252f5008977d3ae9ba1765bb0e01ca0ff0b752a414655582caa0fa4a8",
+    "tests/precompress-asset.test.mjs": "bc5d5ea0d0cb2954c36c217c3f47e1c7b70d918eb0174eb8ba96ef0d87a286d6",
+    "package.json": "48b91080fcb171db0cc887fad7b0e226d13f6e3308934cc8d4c80b6019675af1",
+    "package-lock.json": "73d43dcfb333a232f8b08d38218d77e8f90d10d039c5f27b1fbab91b4e66fad7"
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "target": "Solid-US LA",
+  "path": "/root/yzboard",
+  "user": "www-data",
+  "panel_version": "2.16.6",
+  "panel_source": "214ba5ba148d2e88c6ac581d2483d4a3e1db9918",
+  "plugin_version": "9.2.1",
+  "plugin_source": "da53c0c79aa3d737190209069345dc0e124bf312",
+  "started_at": "2026-11-13T17:30:56.094381+08:00",
+  "finished_at": "2026-11-13T17:31:01.044806+08:00",
+  "duration_seconds": 4.95,
+  "runtime_files_verified": 1241,
+  "changed_files": 31,
+  "plugin_runtime_files_verified": 70,
+  "plugin_changed_files": 19,
+  "plugin_semantic_changed_files": 3,
+  "migrations": 148,
+  "failed_jobs": 713,
+  "plugin_sources_preserved": 3,
+  "persistent_state_preserved": true,
+  "active_services": [
+    "yzboard-web",
+    "yzboard-horizon",
+    "yzboard-websocket",
+    "nginx",
+    "mariadb",
+    "redis-server"
+  ],
+  "automatic_restarts": 0,
+  "http": {
+    "home": 200,
+    "configured_admin": 200,
+    "plugin_page": 200,
+    "plugin_js": 200,
+    "guest_config": 200,
+    "unauthenticated_websocket_http11": 401
+  },
+  "post_deploy_fresh_machines": 46,
+  "post_deploy_websocket_connections": 44,
+  "unavailable_machines": [
+    {
+      "name": "XTom-美国³",
+      "last_seen": "2026-11-13 17:35:39",
+      "lite_online": false
+    },
+    {
+      "name": "XTom-美国⁶",
+      "last_seen": "2026-11-13 17:34:22",
+      "lite_online": false
+    }
+  ],
+  "rollback_directory": "/root/yzboard-deployments/2.16.6",
+  "agent_nodes_updated": false,
+  "docker_published": false
+}

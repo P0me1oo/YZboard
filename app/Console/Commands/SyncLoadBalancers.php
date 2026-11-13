@@ -21,7 +21,11 @@ class SyncLoadBalancers extends Command
         \App\Models\SchedulingEvent::where('created_at', '<', now()->subDays(30))->delete();
         foreach (BalancerPool::all() as $pool) {
             try { if (!$dns->sync($pool)) $success = false; }
-            catch (\Throwable) { $success = false; }
+            catch (\Throwable $error) {
+                \App\Services\FailureLog::record('前置池 DNS 调度失败', $error,
+                    ['pool_id' => (int) $pool->id, 'event' => 'dns.dispatch'], 'warning', includeExpected: true);
+                $success = false;
+            }
         }
         return $success ? self::SUCCESS : self::FAILURE;
     }

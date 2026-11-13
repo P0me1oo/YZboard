@@ -15,14 +15,23 @@ class DeviceHandoverService
 
     public const COOLDOWN_MS = 60000;
     private const CLAIM_MS = 5000;
+    private int $lockWaitSeconds = 2;
 
     public function __construct(private readonly DeviceStateService $devices) {}
+
+    /** 仅本次请求选择快速退让，不能改变常驻服务或旧节点的锁等待策略。 */
+    public function withoutLockWaiting(): static
+    {
+        $service = clone $this;
+        $service->lockWaitSeconds = 0;
+        return $service;
+    }
 
     /** 删除提交后清理已知用户；遗漏的旧记录由下一次协调时核对数据库兜底。 */
     public function deletedNode(int $nodeId): void
     {
         if (Server::query()->whereKey($nodeId)->exists()) return;
-        $users = Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($nodeId): array {
+        $users = Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block($this->lockWaitSeconds, function () use ($nodeId): array {
             $node = Cache::get($this->nodeKey($nodeId), []);
             return array_unique(array_merge(array_column($node['sources'] ?? [], 'user_id'), Cache::get($this->queueKey($nodeId), [])));
         });
@@ -36,7 +45,7 @@ class DeviceHandoverService
 
     public function begin(int $nodeId, string $run, bool $leaseCache = false): array
     {
-        return Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($nodeId, $run, $leaseCache): array {
+        return Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block($this->lockWaitSeconds, function () use ($nodeId, $run, $leaseCache): array {
             $current = Cache::get($this->nodeKey($nodeId));
             if (($current['run'] ?? null) !== $run) {
                 foreach (array_unique(array_column($current['sources'] ?? [], 'user_id')) as $userId) {
@@ -55,7 +64,7 @@ class DeviceHandoverService
     /** 旧 Node 握手时明确退出新协议，避免回滚后把旧节点来源误当作已托管来源。 */
     public function legacyNode(int $nodeId): void
     {
-        $users = Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($nodeId): array {
+        $users = Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block($this->lockWaitSeconds, function () use ($nodeId): array {
             $current = Cache::get($this->nodeKey($nodeId), []);
             Cache::forever($this->nodeKey($nodeId), [
                 'run' => '', 'sequence' => 0, 'pending' => [], 'sources' => [], 'version' => 0, 'seen_at' => $this->now(),
@@ -69,7 +78,7 @@ class DeviceHandoverService
     public function sync(int $nodeId, array $data): array
     {
         if (!empty($data['lease_cache'])) return $this->syncLeases($nodeId, $data);
-        Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($nodeId, $data): void {
+        Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block($this->lockWaitSeconds, function () use ($nodeId, $data): void {
             if (!empty($data['unchanged'])) {
                 $this->renew($nodeId, $data);
                 return;
@@ -181,7 +190,7 @@ class DeviceHandoverService
 
     public function admit(int $nodeId, int $userId, int $limit, array $data): array
     {
-        return Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($nodeId, $userId, $limit, $data): array {
+        return Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block($this->lockWaitSeconds, function () use ($nodeId, $userId, $limit, $data): array {
             $node = isset($data['snapshot']) ? $this->storeSnapshot($nodeId, $data['snapshot']) : $this->node($nodeId, $data['run']);
             if (!empty($data['lease_cache'])) $this->requireLeaseCache($node);
             // 较新状态已确认申请结束，迟到的旧快照不能复活该申请。
@@ -397,7 +406,7 @@ class DeviceHandoverService
     private function locked(int $userId, callable $action, array $knownNodes = [], ?array &$existingNodes = null, ?DeviceCoordinationReadContext $readContext = null): mixed
     {
         $key = 'device_handover:user:' . $userId;
-        return Cache::lock($key . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($key, $userId, $action, $knownNodes, &$existingNodes, $readContext): mixed {
+        return Cache::lock($key . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block($this->lockWaitSeconds, function () use ($key, $userId, $action, $knownNodes, &$existingNodes, $readContext): mixed {
             $previous = app(DeviceCoordinationStateReader::class)->get($key);
             $state = $previous ?? ['sources' => [], 'cooldown' => [], 'pending' => null];
             $reads = $this->coordinationReads($state, $knownNodes, $existingNodes, $readContext);
@@ -489,7 +498,7 @@ class DeviceHandoverService
     private function queue(int $nodeId, int $userId, bool $add): void
     {
         $key = $this->queueKey($nodeId);
-        Cache::lock($key . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($key, $userId, $add): void {
+        Cache::lock($key . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block($this->lockWaitSeconds, function () use ($key, $userId, $add): void {
             $users = array_fill_keys(Cache::get($key, []), true);
             if (isset($users[$userId]) === $add) return;
             if ($add) $users[$userId] = true;

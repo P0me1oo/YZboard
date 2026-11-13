@@ -44,6 +44,8 @@ class Handler extends ExceptionHandler
      */
     public function report(Throwable $exception)
     {
+        // 设备协调已记录带节点归属的锁竞争诊断，不再重复记录成系统故障。
+        if ($exception instanceof DeviceCoordinationBusy) return;
         // 参数校验和业务拒绝仍保持安静；显式服务端失败不能被 ApiException/HTTP 排除规则吞掉。
         $code = $exception instanceof ApiException ? (int) substr((string) $exception->getCode(), 0, 3)
             : ($this->isHttpException($exception) ? $exception->getStatusCode() : 0);

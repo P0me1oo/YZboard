@@ -1,5 +1,9 @@
 # YZboard 兼容矩阵
 
+## 2.16.6 设备锁恢复与 DNS 诊断（2026-11-13，本地未发布、未部署）
+
+配套 Agent v2.37.1，新节点通过请求能力声明启用非阻塞协调与 503 退避；旧节点和旧面板继续兼容。无迁移、管理端或核心变化。SQLite / MariaDB 与真实 Redis 的分批相关验证分别为 191 项、129 项，详见[修复与验证记录](docs/runtime-log-fixes-20261113.md)。
+
 ## 2.16.5 发布与部署（2026-11-13）
 
 [面板 v2.16.5](https://github.com/P0me1oo/YZboard/releases/tag/v2.16.5) 与[管理端 v0.98.3](https://github.com/P0me1oo/YZboard-Dash/releases/tag/v0.98.3) 已发布并部署至 Solid-US LA，包含健康归属、前置池成员校验、状态读取去重和资源预压缩。SQLite 与 MariaDB 11.4.8 完整回归各 1,873 项通过，前端 165 项行为、16 个相关浏览器场景及六份附件核验通过。无数据库迁移或 Agent 升级。来源见[发布记录](docs/release-2.16.5.md)，4.569 秒切换、压缩和连接复用实测见[部署记录](docs/deployment-2.16.5.md)。

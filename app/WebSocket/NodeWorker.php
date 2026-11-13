@@ -442,8 +442,10 @@ class NodeWorker
                 default => 'error',
             };
             $level = $event === 'device.sync' && $code === 412 && !empty($body['unchanged']) ? 'debug' : 'warning';
-            \App\Services\FailureLog::record('[WS] Node request failed', $exception,
-                ['node_id' => $nodeId, 'event' => $event, 'code' => $code], $level, includeExpected: true);
+            if (!$exception instanceof \App\Exceptions\DeviceCoordinationBusy) {
+                \App\Services\FailureLog::record('[WS] Node request failed', $exception,
+                    ['node_id' => $nodeId, 'event' => $event, 'code' => $code], $level, includeExpected: true);
+            }
             $conn->send(json_encode(['event' => $errorEvent, 'data' => [
                 'node_id' => $nodeId,
                 'request_id' => $body['request_id'] ?? null,

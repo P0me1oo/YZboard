@@ -78,6 +78,96 @@ class DeviceLeaseCacheTest extends TestCase
         return $this->retired($lease) + ['connect_sequence' => 1, 'age_ms' => 0];
     }
 
+    public function test_busy_sync_releases_node_lock_and_replays_the_same_return_without_freeing_early(): void
+    {
+        $lease = $this->admit();
+        $key = 'device_handover:user:' . $this->user->id;
+        $before = Cache::get($key);
+        $request = ['run' => $this->runID(1), 'sequence' => ++$this->sequences[1], 'lease_cache' => 1,
+            'lock_retry' => 1, 'pending' => [], 'sources' => [], 'retired' => [$this->retired($lease)]];
+        $lock = Cache::lock($key . ':lock', 15);
+        $this->assertTrue($lock->get());
+        $started = microtime(true);
+        try {
+            $this->protocol->handle($this->nodes[1], 'sync', $request);
+            $this->fail('账号锁繁忙时不能确认归还');
+        } catch (\App\Exceptions\DeviceCoordinationBusy $error) {
+            $this->assertSame(503, $error->getStatusCode());
+            $this->assertSame(1, $error->getHeaders()['Retry-After']);
+            $this->assertLessThan(0.5, microtime(true) - $started, '不能持有节点锁等待账号锁');
+            $this->assertSame($before, Cache::get($key));
+            $nodeLock = Cache::lock('device_handover:node:' . $this->nodes[1]->id . ':lock', 15);
+            $this->assertTrue($nodeLock->get(), '繁忙响应前必须释放本次持有的节点锁');
+            $nodeLock->release();
+        } finally {
+            $lock->release();
+        }
+        $reply = $this->protocol->handle($this->nodes[1], 'sync', $request);
+        $this->assertSame($request['sequence'], $reply['sequence']);
+        $this->assertSame([], Cache::get($key)['sources']);
+        $this->assertSame($reply, $this->protocol->handle($this->nodes[1], 'sync', $request));
+        $this->assertSame('allowed', $this->admit(2, '1.1.1.1')['status']);
+    }
+
+    public function test_busy_admission_rechecks_permissions_before_retrying(): void
+    {
+        $sequence = ++$this->sequences[1];
+        $request = ['run' => $this->runID(1), 'sequence' => $sequence, 'user_id' => $this->user->id,
+            'ip' => '8.8.8.8', 'lease_cache' => 1, 'lock_retry' => 1,
+            'snapshot' => ['run' => $this->runID(1), 'sequence' => ++$this->sequences[1],
+                'pending' => [$sequence], 'sources' => [], 'retired' => []]];
+        $lock = Cache::lock('device_handover:user:' . $this->user->id . ':lock', 15);
+        $this->assertTrue($lock->get());
+        try {
+            $this->protocol->handle($this->nodes[1], 'admit', $request);
+            $this->fail('账号锁繁忙不能返回许可');
+        } catch (\App\Exceptions\DeviceCoordinationBusy) {
+            $this->assertNull(Cache::get('device_handover:user:' . $this->user->id));
+        } finally {
+            $lock->release();
+        }
+        $this->user->forceFill(['group_id' => 2])->saveQuietly();
+        try {
+            $this->protocol->handle($this->nodes[1], 'admit', $request);
+            $this->fail('重试不能沿用已撤销的权限');
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $error) {
+            $this->assertSame(403, $error->getStatusCode());
+        }
+        $this->assertNull(Cache::get('device_handover:user:' . $this->user->id));
+    }
+
+    public function test_queue_lock_contention_keeps_one_reserved_lease_and_retry_repairs_queue(): void
+    {
+        $request = ['run' => $this->runID(1), 'sequence' => 1, 'user_id' => $this->user->id,
+            'ip' => '8.8.8.8', 'lease_cache' => 1, 'lock_retry' => 1,
+            'snapshot' => ['run' => $this->runID(1), 'sequence' => 2, 'pending' => [1], 'sources' => [], 'retired' => []]];
+        $queueKey = 'device_handover:queue:' . $this->nodes[1]->id;
+        $userKey = 'device_handover:user:' . $this->user->id;
+        $queueLock = Cache::lock($queueKey . ':lock', 15);
+        $this->assertTrue($queueLock->get());
+        try {
+            $this->protocol->handle($this->nodes[1], 'admit', $request);
+            $this->fail('队列未确认写入时不能返回许可');
+        } catch (\App\Exceptions\DeviceCoordinationBusy) {
+            $source = Cache::get($userKey)['sources']['8.8.8.8'];
+            $this->assertCount(1, $source['holders']);
+            foreach ([$userKey, 'device_handover:node:' . $this->nodes[1]->id] as $key) {
+                $lock = Cache::lock($key . ':lock', 15);
+                $this->assertTrue($lock->get(), '退出忙状态必须释放已取得的锁');
+                $lock->release();
+            }
+        } finally {
+            $queueLock->release();
+        }
+        $reply = $this->protocol->handle($this->nodes[1], 'admit', $request);
+        $this->assertSame('allowed', $reply['status']);
+        $this->assertSame($source['lease'], $reply['lease']);
+        $this->assertSame([$this->user->id], Cache::get($queueKey));
+        $again = $this->protocol->handle($this->nodes[1], 'admit', $request);
+        $this->assertSame($reply['lease'], $again['lease']);
+        $this->assertCount(1, Cache::get($userKey)['sources']['8.8.8.8']['holders']);
+    }
+
     public function test_idle_sync_never_renews_and_acknowledged_return_frees_last_slot(): void
     {
         $first = $this->admit();

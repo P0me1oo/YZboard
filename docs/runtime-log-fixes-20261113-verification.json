@@ -1,0 +1,64 @@
+{
+  "date": "2026-11-13",
+  "status": "local_uncommitted_unreleased_undeployed",
+  "versions": {
+    "panel": "2.16.6",
+    "agent": "v2.37.1",
+    "subscription_hub": "9.2.1"
+  },
+  "validation": {
+    "php": "8.4.27",
+    "go": "1.27.3",
+    "redis": "8.0.2",
+    "mariadb": {
+      "tests": 129,
+      "assertions": 5591,
+      "batches": 2
+    },
+    "mariadb_only_full_group_by": true,
+    "sqlite": {
+      "tests": 191,
+      "assertions": 6055,
+      "batches": 2
+    },
+    "agent_race_packages": [
+      "internal/panel",
+      "internal/devicegate"
+    ],
+    "plugin_checks": {
+      "chain_output": 20,
+      "singbox_compatibility": 167,
+      "source_visibility": 1320,
+      "source_dialer": 68,
+      "source_output_scope": 662
+    },
+    "plugin_baseline_new_test_failures": 10,
+    "plugin_frontend_build": true
+  },
+  "source_files": {
+    "YZboard": {
+      "app/Console/Commands/SyncLoadBalancers.php": "922f41a39ccd21047621f944644b836ca8564a71b3ed5f18020b5d00b457b217",
+      "app/Exceptions/DeviceCoordinationBusy.php": "360f63e46cd1ddb787b4f33292f34463bb4995e7f5545fa49da7bc6f5e3e6b48",
+      "app/Exceptions/Handler.php": "fc530e372c42702245133ab82d3451cfa89c27f33ebfa057b0c04ad186e076e2",
+      "app/Services/BalancerDnsService.php": "ae268d8b83c2d3278344b34379982fedfb5f2aba555a046a6a0413df0d539c98",
+      "app/Services/DeviceHandoverProtocol.php": "d9b9cff0f311b8db50a7b81b43ef3c9a81378748859db4fee3ff9f75ae15d6cd",
+      "app/Services/DeviceHandoverService.php": "590835cad72f6135edba33686a87b278018f0106675adbe5d75c54594d0b8ac9",
+      "app/Services/DeviceLeaseCache.php": "5a4c12644a39a1202976dd3b5906f0cd2c66a6a5b97092c1892757831ef95c67",
+      "app/Services/FailureLog.php": "ab2be8ec3b055453f2a93be8ff66270f049cdd26bf7ddda3e2f0c81524204696",
+      "app/WebSocket/NodeWorker.php": "748f18dcc5e9734d0b57a31992da3bdcc41df4c6b5dd704e345626d2a49dc569"
+    },
+    "YZ-Agent": {
+      "internal/panel/device_handover.go": "52dfe087358032db43448c3d859d04094ecd8cd657718f9d5b7efab997b53cb4"
+    },
+    "SubscriptionHub": {
+      "Protocols/SingBox.php": "5da65d05faff3d473267e0e639e5a99d86c802eacbdd1c43adf8b71e2953dcf5",
+      "Support/SingBoxDns.php": "b29d0288b33d07d454e1767dac6de269f8b83f7518897483465e743cffb32a04"
+    }
+  },
+  "limits": [
+    "No production changes or deployment.",
+    "IPv6 host network and configured source binding were not changed.",
+    "Full release test matrix was not run.",
+    "Existing SubscriptionHub working changes were preserved."
+  ]
+}

@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\Server;
+use App\Exceptions\DeviceCoordinationBusy;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Validator;
 
 /** HTTP 和长连接共用校验、权限筛选与设备协调，确认只在处理完成后返回。 */
@@ -15,7 +17,7 @@ class DeviceHandoverProtocol
 
     public function handle(Server $node, string $action, array $payload): array
     {
-        $rules = ['run' => self::RUN, 'lease_cache' => 'sometimes|integer|in:1'];
+        $rules = ['run' => self::RUN, 'lease_cache' => 'sometimes|integer|in:1', 'lock_retry' => 'sometimes|integer|in:1'];
         if ($action === 'admit') {
             $rules += ['sequence' => self::SEQUENCE, 'user_id' => 'required|integer|min:1', 'ip' => 'required|ip'];
             $rules += ['snapshot' => 'sometimes|array:run,sequence,pending,sources,retired'];
@@ -42,12 +44,19 @@ class DeviceHandoverProtocol
         if (isset($data['snapshot'])) {
             abort_unless(in_array((int) $data['sequence'], array_map('intval', $data['snapshot']['pending']), true), 422, '完整快照必须包含当前申请');
         }
-        if ($action === 'begin') return $this->service->begin((int) $node->id, $data['run'], !empty($data['lease_cache']));
-        if ($action === 'sync') return $this->service->sync((int) $node->id, $data);
+        $service = !empty($data['lock_retry']) ? $this->service->withoutLockWaiting() : $this->service;
+        try {
+            if ($action === 'begin') return $service->begin((int) $node->id, $data['run'], !empty($data['lease_cache']));
+            if ($action === 'sync') return $service->sync((int) $node->id, $data);
 
-        $user = ServerService::getAvailableUsers($node, (int) $data['user_id'])->first();
-        abort_if($user === null, 403, '用户当前无权使用此节点');
-        return $this->service->admit((int) $node->id, (int) $user->id, (int) $user->device_limit, $data);
+            $user = ServerService::getAvailableUsers($node, (int) $data['user_id'])->first();
+            abort_if($user === null, 403, '用户当前无权使用此节点');
+            return $service->admit((int) $node->id, (int) $user->id, (int) $user->device_limit, $data);
+        } catch (LockTimeoutException $error) {
+            FailureLog::record('设备协调锁繁忙，等待重试', $error,
+                ['node_id' => (int) $node->id, 'event' => 'device.' . $action], 'warning');
+            throw new DeviceCoordinationBusy($error);
+        }
     }
 
     private function fullSnapshotRules(string $prefix = ''): array

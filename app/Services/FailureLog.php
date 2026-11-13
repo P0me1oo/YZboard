@@ -20,14 +20,15 @@ class FailureLog
             || $error instanceof ApiException && (int) substr((string) $error->getCode(), 0, 3) < 500
             || $error instanceof HttpExceptionInterface && $error->getStatusCode() < 500)) return;
         // 内存限频不依赖 Redis/数据库，依赖故障时仍可用；常驻进程最多保留 256 项。
-        $key = $operation . '|' . $level . '|' . get_class($error) . '|' . ($context['node_id'] ?? $context['machine_id'] ?? '');
+        $key = $operation . '|' . $level . '|' . get_class($error) . '|'
+            . ($context['node_id'] ?? $context['machine_id'] ?? $context['pool_id'] ?? '');
         $now = microtime(true);
         if ($now - (self::$last[$key] ?? 0) < 60) return;
         if (count(self::$last) >= 256) array_shift(self::$last);
         self::$last[$key] = $now;
         try {
             $safe = [];
-            foreach (['id', 'user_id', 'node_id', 'machine_id', 'ticket_id', 'notice_id', 'code'] as $field) {
+            foreach (['id', 'user_id', 'node_id', 'machine_id', 'pool_id', 'ticket_id', 'notice_id', 'code'] as $field) {
                 if (isset($context[$field]) && is_int($context[$field])) $safe[$field] = $context[$field];
             }
             if (isset($context['event']) && is_string($context['event']) && preg_match('/\A[a-z][a-z._]{0,63}\z/', $context['event'])) {

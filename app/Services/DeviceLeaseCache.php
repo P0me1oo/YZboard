@@ -86,7 +86,7 @@ trait DeviceLeaseCache
 
     private function syncLeases(int $nodeId, array $data): array
     {
-        return Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block(2, function () use ($nodeId, $data): array {
+        return Cache::lock($this->nodeKey($nodeId) . ':lock', 15)->betweenBlockedAttemptsSleepFor(25)->block($this->lockWaitSeconds, function () use ($nodeId, $data): array {
             $node = $this->node($nodeId, $data['run'], false);
             $this->requireLeaseCache($node);
             if (!empty($data['unchanged'])) {

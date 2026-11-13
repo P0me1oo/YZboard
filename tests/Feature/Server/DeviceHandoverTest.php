@@ -69,6 +69,61 @@ class DeviceHandoverTest extends TestCase
         ]);
     }
 
+    public function test_http_busy_reply_preserves_request_and_retry_capability_is_request_scoped(): void
+    {
+        $lock = Cache::lock('device_handover:node:' . $this->node->id . ':lock', 15);
+        $this->assertTrue($lock->get());
+        $started = microtime(true);
+        try {
+            $this->deviceRequest('begin', ['lock_retry' => 1])->assertStatus(503)->assertHeader('Retry-After', '1');
+            $this->assertLessThan(0.5, microtime(true) - $started);
+            $this->assertNull(Cache::get('device_handover:node:' . $this->node->id));
+        } finally {
+            $lock->release();
+        }
+        $this->deviceRequest('begin', ['lock_retry' => 1])->assertOk()->assertJsonPath('data.run', $this->run);
+        $service = app(\App\Services\DeviceHandoverService::class);
+        $this->assertSame(2, (new \ReflectionProperty($service, 'lockWaitSeconds'))->getValue($service));
+        $this->deviceRequest('begin', ['lock_retry' => 2])->assertStatus(422);
+        $this->deviceRequest('begin')->assertOk();
+    }
+
+    public function test_websocket_busy_reply_keeps_correlation_and_allows_same_snapshot_retry(): void
+    {
+        $this->deviceRequest('begin')->assertOk();
+        $frames = [];
+        $connection = \Mockery::mock(TcpConnection::class);
+        $connection->realtime = true;
+        $connection->nodeId = (int) $this->node->id;
+        \App\Services\NodeConnectionAuth::bind($connection, 'device-handover-test-only');
+        $connection->shouldReceive('send')->andReturnUsing(function ($data) use (&$frames) {
+            $frames[] = json_decode($data, true);
+            return true;
+        });
+        $worker = (new \ReflectionClass(NodeWorker::class))->newInstanceWithoutConstructor();
+        NodeRegistry::add((int) $this->node->id, $connection);
+        $message = json_encode(['event' => 'device.sync', 'data' => ['node_id' => $this->node->id,
+            'run' => $this->run, 'sequence' => 1, 'request_id' => 'busy-device-test',
+            'lock_retry' => 1, 'pending' => [], 'sources' => []]]);
+        $lock = Cache::lock('device_handover:node:' . $this->node->id . ':lock', 15);
+        $this->assertTrue($lock->get());
+        try {
+            $worker->onMessage($connection, $message);
+            $this->assertSame('device.sync.error', $frames[0]['event']);
+            $this->assertSame(503, $frames[0]['data']['code']);
+            $this->assertSame('busy-device-test', $frames[0]['data']['request_id']);
+            $this->assertSame(1, $frames[0]['data']['sequence']);
+            $this->assertArrayNotHasKey('result', $frames[0]['data']);
+            $lock->release();
+            $worker->onMessage($connection, $message);
+            $this->assertSame('device.sync.ack', $frames[1]['event']);
+            $this->assertSame(1, $frames[1]['data']['result']['sequence']);
+        } finally {
+            $lock->release();
+            NodeRegistry::remove((int) $this->node->id, $connection);
+        }
+    }
+
     public function test_combined_admission_stores_state_before_deciding_and_confirms_real_close(): void
     {
         $this->postJson('/api/v2/server/handshake', $this->auth() + ['device_handover' => 1])->assertOk()

@@ -1,6 +1,6 @@
 {
   "index.html": {
-    "file": "assets/index-Fv_0962V.js",
+    "file": "assets/index-B2xDSgz5.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
@@ -1063,12 +1063,12 @@
     "src": "src/runtime/ts.worker-sc26f_2L.js"
   },
   "src/runtime/vendor-runtime.js": {
-    "file": "assets/admin-YrSSK1VH.js",
+    "file": "assets/admin-Z9uFwFcq.js",
     "name": "admin",
     "src": "src/runtime/vendor-runtime.js",
     "isDynamicEntry": true,
     "css": [
-      "assets/admin-DDE7SkDm.css"
+      "assets/admin-By1KsD-Y.css"
     ],
     "assets": [
       "assets/ad-B18i8NGa.svg",

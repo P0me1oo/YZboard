@@ -169,6 +169,74 @@ class DeviceCoordinationPerformanceTest extends TestCase
         $this->assertLessThanOrEqual(38, $this->store->snapshotReads);
     }
 
+    public function test_empty_node_does_not_contend_with_accounts_used_only_on_other_nodes(): void
+    {
+        $node = Server::create(['name' => '空闲节点', 'type' => 'vmess', 'host' => 'test.invalid',
+            'port' => '443', 'server_port' => 443, 'rate' => 1, 'group_ids' => [1], 'enabled' => true]);
+        $this->service->begin($node->id, $this->runID($node->id), true);
+        $lock = Cache::lock('device_handover:user:' . $this->users[0]->id . ':lock', 15);
+        $this->assertTrue($lock->get());
+        $this->store->resetCounts();
+        try {
+            $reply = $this->service->withoutLockWaiting()->sync($node->id, [
+                'run' => $this->runID($node->id), 'lease_cache' => 1, 'sequence' => 1,
+                'pending' => [], 'sources' => [], 'retired' => [],
+            ]);
+            $this->assertSame([], $reply['leases']);
+            $this->assertSame([], $reply['revoked']);
+            $this->assertSame(0, $this->store->userLocks);
+            $this->assertSame(0, $this->store->authorityWrites);
+            $this->assertSame(0, $this->store->queueLocks);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    public function test_idle_holders_with_a_missing_queue_are_still_returned_and_repair_the_queue(): void
+    {
+        $node = $this->nodes[0];
+        $key = 'device_handover:node:' . $node->id;
+        $snapshot = Cache::get($key);
+        $snapshot['sources'] = [];
+        Cache::forever($key, $snapshot);
+        Cache::forget('device_handover:queue:' . $node->id);
+        $this->store->resetCounts();
+
+        $reply = $this->sync();
+
+        $this->assertCount(12, $reply['leases']);
+        $this->assertCount(12, $reply['idle']);
+        $this->assertSame(12, $this->store->userLocks);
+        $this->assertSame(array_map(fn ($user) => $user->id, $this->users), Cache::get('device_handover:queue:' . $node->id));
+        foreach ($reply['leases'] as $lease) $this->assertSame(1, $lease['confirmed_sequence'], '空闲许可不能续期');
+    }
+
+    public function test_candidate_selection_does_not_reuse_authority_before_the_account_lock(): void
+    {
+        $node = $this->nodes[0];
+        $key = 'device_handover:node:' . $node->id;
+        $snapshot = Cache::get($key);
+        $snapshot['sources'] = [];
+        Cache::forever($key, $snapshot);
+        Cache::forget('device_handover:queue:' . $node->id);
+        $target = $this->users[0]->id;
+        $this->store->beforeUserLock = function ($userId) use ($target): void {
+            if ($userId !== $target) return;
+            $this->store->beforeUserLock = null;
+            $key = 'device_handover:user:' . $target;
+            $state = Cache::get($key);
+            foreach ($state['sources'] as &$source) $source['revoked'] = true;
+            unset($source);
+            Cache::forever($key, $state);
+        };
+
+        $reply = $this->sync();
+
+        $this->assertCount(11, $reply['leases']);
+        $this->assertSame([$target], array_column($reply['revoked'], 'user_id'));
+        $this->assertTrue(array_values($this->state(0)['sources'])[0]['revoked']);
+    }
+
     public function test_unchanged_idle_accounts_expire_despite_continuing_node_sync(): void
     {
         $this->seedCoordination(false);

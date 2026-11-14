@@ -89,6 +89,42 @@ class UserManageTest extends TestCase
             ->assertOk()->assertJsonPath('total', 7)->assertJsonPath('data.0.id', $withoutPlan->id);
     }
 
+    public function test_expiry_sort_keeps_permanent_users_last_before_pagination(): void
+    {
+        Route::post('/_tests/admin-user/fetch', [UserController::class, 'fetch']);
+        $now = time();
+        $permanent = $this->user(['email' => 'expiry-permanent@example.invalid', 'expired_at' => null]);
+        $later = $this->user(['email' => 'expiry-later@example.invalid', 'expired_at' => $now + 86400 * 30]);
+        $expired = $this->user(['email' => 'expiry-past@example.invalid', 'expired_at' => $now - 86400]);
+        $soon = $this->user(['email' => 'expiry-soon@example.invalid', 'expired_at' => $now + 86400]);
+        $sameDate = $this->user(['email' => 'expiry-same@example.invalid', 'expired_at' => $soon->expired_at]);
+        $anotherPermanent = $this->user(['email' => 'expiry-permanent-new@example.invalid', 'expired_at' => null]);
+        $excluded = $this->user(['email' => 'excluded@example.invalid', 'expired_at' => 0]);
+
+        foreach ([false, true] as $descending) {
+            $expected = $descending
+                ? [$later->id, $sameDate->id, $soon->id, $expired->id, $anotherPermanent->id, $permanent->id]
+                : [$expired->id, $sameDate->id, $soon->id, $later->id, $anotherPermanent->id, $permanent->id];
+            $actual = [];
+            foreach ([1, 2, 3] as $page) {
+                $response = $this->postJson('/_tests/admin-user/fetch', [
+                    'sort' => [['id' => 'expired_at', 'desc' => $descending]],
+                    'filter' => [['id' => 'email', 'value' => 'expiry-']],
+                    'pageSize' => 2,
+                    'current' => $page,
+                ])->assertOk()->assertJsonPath('total', 6)->assertJsonPath('last_page', 3);
+                $actual = array_merge($actual, array_column($response->json('data'), 'id'));
+            }
+            $this->assertSame($expected, $actual);
+        }
+
+        $this->postJson('/_tests/admin-user/fetch', [
+            'sort' => [['id' => 'expired_at', 'desc' => false]],
+        ])->assertOk()->assertJsonPath('data.0.id', $excluded->id);
+        $this->postJson('/_tests/admin-user/fetch', ['sort' => []])
+            ->assertOk()->assertJsonPath('data.0.id', $excluded->id);
+    }
+
     public function test_changing_plan_syncs_group_and_limits_from_the_new_plan(): void
     {
         $old = $this->plan('旧套餐', ['group_id' => 1, 'device_limit' => null]);

@@ -15,9 +15,9 @@ class PowerDnsService
     public function reconcile(BalancerDnsPreset $preset, string $ownerType, int $ownerId, array $desired, int $ttl): void
     {
         $key = hash('sha256', $preset->api_url . '/' . $preset->server_id . '/' . $preset->domain);
-        Cache::lock('powerdns:zone:' . $key, 180)->block(2, function () use ($preset, $ownerType, $ownerId, $desired, $ttl) {
-            // 读取、退避、写入和结果核对共用预算，避免重试耗尽 HTTP/队列时限或同步锁。
-            $deadline = microtime(true) + 25;
+        // 区域等待也占用原有请求预算；短暂占用在本轮恢复，不额外延长远端重试。
+        $deadline = microtime(true) + 25;
+        Cache::lock('powerdns:zone:' . $key, 180)->betweenBlockedAttemptsSleepFor(100)->block(10, function () use ($preset, $ownerType, $ownerId, $desired, $ttl, $deadline) {
             $remote = collect($this->client->request($preset, 'get', deadline: $deadline)['rrsets'])->keyBy(fn ($r) => strtolower(rtrim($r['name'], '.')) . '|' . $r['type']);
             $byName = $remote->groupBy(fn ($r) => strtolower(rtrim($r['name'], '.')), preserveKeys: true);
             $stored = PowerDnsRecord::where('owner_type', $ownerType)->where('owner_id', $ownerId)->get()

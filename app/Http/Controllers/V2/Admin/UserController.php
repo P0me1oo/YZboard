@@ -151,6 +151,10 @@ class UserController extends Controller
             // 运行快照不在用户表中，由列表在分页前排序。
             if (in_array($field, ['connection_count', 'upload_speed', 'download_speed'], true)) return;
             $direction = $sort['desc'] ? 'DESC' : 'ASC';
+            if ($field === 'expired_at') {
+                // 长期有效没有到期日期，升降序都放在真实日期之后。
+                $builder->orderByRaw('CASE WHEN expired_at IS NULL THEN 1 ELSE 0 END ASC');
+            }
             $builder->orderBy($field, $direction);
         });
     }

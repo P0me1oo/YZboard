@@ -197,6 +197,37 @@ class DeviceLeaseCacheTest extends TestCase
         $this->assertSame('waiting', $this->admit(3, '1.1.1.1')['status']);
     }
 
+    public function test_idle_node_sync_succeeds_while_an_unrelated_account_lock_is_held(): void
+    {
+        $this->admit(1);
+        $key = 'device_handover:user:' . $this->user->id;
+        $state = Cache::get($key);
+        $lock = Cache::lock($key . ':lock', 15);
+        $this->assertTrue($lock->get());
+        try {
+            $reply = $this->protocol->handle($this->nodes[2], 'sync', [
+                'run' => $this->runID(2), 'sequence' => ++$this->sequences[2], 'lease_cache' => 1,
+                'lock_retry' => 1, 'pending' => [], 'sources' => [], 'retired' => [],
+            ]);
+            $this->assertSame([], $reply['leases']);
+            $this->assertSame([], $reply['revoked']);
+            $this->assertSame($state, Cache::get($key));
+        } finally {
+            $lock->release();
+        }
+    }
+
+    public function test_missing_idle_queue_is_recovered_without_renewing_or_recreating_the_holder(): void
+    {
+        $lease = $this->admit(1);
+        Cache::forget('device_handover:queue:' . $this->nodes[1]->id);
+        $reply = $this->sync(1);
+        $this->assertSame([$lease['lease']], array_column($reply['leases'], 'lease'));
+        $this->assertSame([$lease['lease']], array_column($reply['idle'], 'lease'));
+        $this->assertSame($lease['confirmed_sequence'], $reply['leases'][0]['confirmed_sequence']);
+        $this->assertSame([$this->user->id], Cache::get('device_handover:queue:' . $this->nodes[1]->id));
+    }
+
     public function test_large_decoded_state_cannot_hide_revocation_or_missing_authority(): void
     {
         $first = $this->admit();
@@ -495,12 +526,11 @@ class DeviceLeaseCacheTest extends TestCase
         $this->assertCount(2, $state['sources']['8.8.8.8']['holders']);
     }
 
-    private function redisCache(callable $lookup, ?callable $read = null): void
+    private function redisCache(?callable $read = null, ?callable $batch = null): void
     {
         $backing = Cache::getStore();
         $prefix = 'lease-read-test:';
         $connection = \Mockery::mock(\Illuminate\Redis\Connections\Connection::class);
-        $connection->shouldReceive('eval')->andReturnUsing($lookup);
         $connection->shouldReceive('exists')->andReturnUsing(fn ($key) => (int) ($backing->get(substr($key, strlen($prefix))) !== null));
         $factory = \Mockery::mock(\Illuminate\Contracts\Redis\Factory::class);
         $factory->shouldReceive('connection')->with('cache')->andReturn($connection);
@@ -509,9 +539,9 @@ class DeviceLeaseCacheTest extends TestCase
             if ($read) $read([$key], false);
             return $backing->get($key);
         });
-        $store->shouldReceive('many')->andReturnUsing(function ($keys) use ($backing, $read) {
+        $store->shouldReceive('many')->andReturnUsing(function ($keys) use ($backing, $read, $batch) {
             if ($read) $read($keys, true);
-            return $backing->many($keys);
+            return $batch ? $batch($keys) : $backing->many($keys);
         });
         foreach (['put', 'forever', 'forget', 'lock'] as $method) {
             $store->shouldReceive($method)->andReturnUsing(fn (...$arguments) => $backing->$method(...$arguments));
@@ -519,7 +549,7 @@ class DeviceLeaseCacheTest extends TestCase
         Cache::swap(new \Illuminate\Cache\Repository($store));
     }
 
-    public function test_redis_renewal_reads_snapshot_once_and_screens_large_user_list_without_loading_records(): void
+    public function test_redis_renewal_reads_snapshot_once_and_screens_unrelated_users_in_bounded_batches(): void
     {
         $first = $this->admit();
         $base = $this->sync(1);
@@ -533,17 +563,15 @@ class DeviceLeaseCacheTest extends TestCase
             $users[] = $row;
         }
         foreach (array_chunk($users, 50) as $chunk) User::insert($chunk);
-        $backing = Cache::getStore();
         $snapshotReads = $lookups = 0;
-        $this->redisCache(function ($script, $count, ...$keys) use ($backing, &$lookups): array {
-            $lookups++;
-            $this->assertLessThanOrEqual(256, $count);
-            $this->assertCount($count, $keys);
-            foreach ($keys as $key) $this->assertStringStartsWith('lease-read-test:device_handover:user:', $key);
-            return array_map(fn ($key) => (int) ($backing->get(substr($key, strlen('lease-read-test:'))) !== null), $keys);
-        }, function ($keys, $bulk) use (&$snapshotReads): void {
+        $this->redisCache(function ($keys, $bulk) use (&$snapshotReads, &$lookups): void {
+            if ($bulk && str_starts_with($keys[0] ?? '', 'device_handover:user:')) {
+                $lookups++;
+                $this->assertLessThanOrEqual(256, count($keys));
+                $this->assertNotContains('device_handover:user:' . $this->user->id, $keys, '队列内账号直接在锁内读取，不重复筛选');
+                foreach ($keys as $key) $this->assertStringStartsWith('device_handover:user:', $key);
+            }
             foreach ($keys as $key) {
-                if ($bulk) $this->assertStringStartsNotWith('device_handover:user:', $key);
                 if (!$bulk && $key === 'device_handover:node:' . $this->nodes[1]->id) $snapshotReads++;
             }
         });
@@ -559,20 +587,21 @@ class DeviceLeaseCacheTest extends TestCase
         $this->assertSame($reply['leases'], $repeat['leases']);
     }
 
-    public function test_invalid_redis_presence_response_cannot_confirm_or_extend_license(): void
+    public function test_invalid_redis_candidate_record_cannot_confirm_or_extend_license(): void
     {
         $this->admit();
         $base = $this->sync(1);
         $key = 'device_handover:user:' . $this->user->id;
         $original = Cache::get($key);
-        $this->redisCache(fn () => ['1']);
+        Cache::forget('device_handover:queue:' . $this->nodes[1]->id);
+        $this->redisCache(batch: fn ($keys) => array_fill_keys($keys, 'invalid'));
         Carbon::setTestNow(now()->addMinute());
         try {
             $this->protocol->handle($this->nodes[1], 'sync', ['run' => $this->runID(1), 'lease_cache' => 1,
                 'sequence' => ++$this->sequences[1], 'unchanged' => true, 'base_sequence' => $base['sequence']]);
             $this->fail('无效缓存响应不能确认许可');
         } catch (\RuntimeException $error) {
-            $this->assertSame('设备许可存在状态无效', $error->getMessage());
+            $this->assertSame('设备协调状态格式无效', $error->getMessage());
         }
         $this->assertSame($original, Cache::get($key));
     }

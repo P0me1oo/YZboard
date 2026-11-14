@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\Server;
-use Illuminate\Cache\RedisStore;
 use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
@@ -102,8 +101,11 @@ trait DeviceLeaseCache
             $queued = array_fill_keys(Cache::get($this->queueKey($nodeId), []), true);
             $ids = array_unique(array_merge($available->keys()->all(), array_keys($queued),
                 array_column($node['sources'], 'user_id'), array_column($data['retired'] ?? [], 'user_id')));
-            // 批量找出已有许可的账号；不为整个用户名单创建空协调记录。
-            $coordinated = $this->coordinatedUsers($ids);
+            $required = array_fill_keys(array_merge(array_keys($queued), array_column($node['sources'], 'user_id'),
+                array_column($data['retired'] ?? [], 'user_id')), true);
+            // 节点锁阻止并发授予本节点许可。预读只筛选关联，不能用于确认或归还；
+            // 队列丢失时仍从权威记录找回本节点的占位，其他节点的账号不参与争锁。
+            $related = $required + $this->relatedUsers($nodeId, array_values(array_diff($ids, array_keys($required))));
             $reportedByUser = [];
             foreach ($node['sources'] as $key => $source) {
                 $reportedByUser[$source['user_id']][$key] = $source;
@@ -113,7 +115,7 @@ trait DeviceLeaseCache
             $readContext = new DeviceCoordinationReadContext();
             foreach ($ids as $id) {
                 $reported = $reportedByUser[$id] ?? [];
-                if (!isset($coordinated[$id]) && $reported === [] && !isset($queued[$id])) continue;
+                if (!isset($related[$id])) continue;
                 $result = $this->locked((int) $id, function (array &$state, array &$reads) use ($nodeId, $data, $node, $available, $id, $reported): array {
                     if (empty($data['unchanged']) && (int) $node['sequence'] === (int) $data['sequence']) {
                         $this->retireLeases($state, $nodeId, $data);
@@ -173,33 +175,27 @@ trait DeviceLeaseCache
         });
     }
 
-    /** 筛选只需要知道记录是否存在；完整许可仍在取得账号锁后读取。 */
-    private function coordinatedUsers(array $ids): array
+    /** 调用方持有节点锁；实际处理必须在账号锁内重新读取，不能沿用筛选快照。 */
+    private function relatedUsers(int $nodeId, array $ids): array
     {
-        $present = [];
-        $store = Cache::getStore();
+        $related = [];
         foreach (array_chunk(array_values($ids), 256) as $chunk) {
             $keys = array_map(fn ($id) => 'device_handover:user:' . $id, $chunk);
-            if ($store instanceof RedisStore) {
-                $script = 'local found = {} for i, key in ipairs(KEYS) do found[i] = redis.call("EXISTS", key) end return found';
-                $found = $store->connection()->eval($script, count($keys),
-                    ...array_map(fn ($key) => $store->getPrefix() . $key, $keys));
-                if (!is_array($found) || count($found) !== count($keys)) {
-                    throw new \RuntimeException('设备许可存在状态读取失败');
+            $records = Cache::many($keys);
+            foreach ($chunk as $index => $id) {
+                $state = $records[$keys[$index]] ?? null;
+                if ($state === null) continue;
+                if (!is_array($state) || !is_array($state['sources'] ?? null)) {
+                    throw new \RuntimeException('设备协调状态格式无效');
                 }
-                foreach ($chunk as $index => $id) {
-                    if (!in_array($found[$index], [0, 1], true)) {
-                        throw new \RuntimeException('设备许可存在状态无效');
+                foreach ($state['sources'] as $source) {
+                    if (isset($source['owners'][$nodeId]) || $this->nodeHoldsLease($source, $nodeId)) {
+                        $related[$id] = true;
+                        break;
                     }
-                    if ($found[$index] === 1) $present[$id] = true;
-                }
-            } else {
-                $records = Cache::many($keys);
-                foreach ($chunk as $index => $id) {
-                    if (($records[$keys[$index]] ?? null) !== null) $present[$id] = true;
                 }
             }
         }
-        return $present;
+        return $related;
     }
 }

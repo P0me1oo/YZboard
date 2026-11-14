@@ -1,6 +1,6 @@
 # 用户管理
 
-## 到期排序与列布局（面板 2.16.7、管理端 0.98.4，本地未发布）
+## 到期排序与列布局（面板 2.16.7、管理端 0.98.4，已推送并部署）
 
 点击“到期时间”可切换日期从早到晚、从晚到早。长期有效没有到期日期，两种顺序都放在末尾；相同日期按用户编号倒序排列。排序在筛选后、分页前完成，跨页仍使用同一顺序；未选择到期排序时沿用原来的用户编号倒序。
 
@@ -8,7 +8,9 @@
 
 本地验证（2026-11-14）：修复前，新增接口测试复现长期有效占据升序前两项，浏览器测试复现状态标记宽 80 像素。修复后，`php vendor/bin/phpunit tests/Feature/Admin/UserManageTest.php tests/Feature/Admin/UserConnectionTest.php tests/Feature/Admin/UserSpeedTest.php --do-not-cache-result` 在 PHP 8.4.27、内存 SQLite 下通过 27 项、296 条断言；覆盖筛选、跨页升降序、相同日期、长期有效、时间戳零值及默认排序。
 
-管理端 `npm run check`、`npm run build`、`npm run check:build` 通过；`npm run test:browser -- user-columns.spec.mjs user-management.spec.mjs` 的 11 项全部通过，覆盖 1440/1024 像素表格、390 像素卡片、列设置、排序请求与创建编辑。已查看桌面和窄屏截图。`npm run sync:panel` 集成 274 份资源及 125 份 gzip 副本，全部逐字节一致，面板 `node --test tests/admin-dist.test.cjs` 的 5 项通过。无数据库迁移或 Agent 修改；未执行完整回归、生产联调、提交、推送、发布或部署。
+管理端 `npm run check`、`npm run build`、`npm run check:build` 通过；`npm run test:browser -- user-columns.spec.mjs user-management.spec.mjs` 的 11 项全部通过，覆盖 1440/1024 像素表格、390 像素卡片、列设置、排序请求与创建编辑。已查看桌面和窄屏截图。`npm run sync:panel` 集成 274 份资源及 125 份 gzip 副本，全部逐字节一致，面板 `node --test tests/admin-dist.test.cjs` 的 5 项通过。以上为实现阶段验证，无数据库迁移或 Agent 修改。
+
+同日提交前补充 SQLite、MariaDB 完整回归并再次通过前端相关检查，随后随面板 2.16.7 部署至 Solid-US LA。固定来源、源站入口及资源核验、公网 CDN 探针限制见[部署记录](deployment-2.16.7.md)。
 
 ## 在线设备 IP 查询链接（1.69.0，未发布）
 

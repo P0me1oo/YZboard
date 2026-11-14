@@ -1,0 +1,62 @@
+{
+  "version": "2.16.7",
+  "dash_version": "0.98.4",
+  "source": "18c752fe3c83cdb5803659af66c52d07adab7985",
+  "dash_source": "7ecd7f360af3292190e39589d121ef22f34bd835",
+  "archive_sha256": "d6edbec73b8ab84ee5f5cd1a70e464b333a64c60eee3c9885ae8618e733573b4",
+  "server": "Solid-US LA",
+  "runtime_files_verified": 1144,
+  "changed_files": 14,
+  "locked_dependencies": 113,
+  "switch_seconds": 5.69,
+  "persistent_files_verified": 89,
+  "persistent_files_unchanged": true,
+  "plugin_settings_unchanged": true,
+  "settings_unchanged": true,
+  "migration_records_unchanged": true,
+  "migrations": 148,
+  "plugins": 8,
+  "failed_jobs_before": 713,
+  "failed_jobs_after": 713,
+  "recent_machines_before": 48,
+  "recent_machines_after": 48,
+  "websocket_connections": 48,
+  "dns_pools_with_error": 0,
+  "ddns_bindings_with_error": 0,
+  "services_active": 6,
+  "service_restarts": {
+    "yzboard-web.service": 0,
+    "yzboard-horizon.service": 0,
+    "yzboard-websocket.service": 0
+  },
+  "origin_http": {
+    "home": 200,
+    "admin": 200,
+    "public_config": 200,
+    "websocket_unauthenticated": 401
+  },
+  "public_cdn_probe_status": 403,
+  "public_cdn_probe_result": "Cloudflare Attention Required; not counted as passing",
+  "admin_script": "assets/admin-Z9uFwFcq.js",
+  "asset_identity_bytes": 6946949,
+  "asset_gzip_bytes": 1876884,
+  "gzip_matches_identity": true,
+  "journal_error_matches": 0,
+  "local_tests": {
+    "php": "8.4.27",
+    "redis": "8.0.2",
+    "sqlite": {"tests": 1903, "assertions": 35417, "skipped": 12, "exit_code": 0},
+    "mariadb": {"version": "11.8.6", "tests": 1903, "assertions": 35433, "skipped": 0, "exit_code": 0},
+    "frontend_behavior": 165,
+    "frontend_browser": 11,
+    "admin_assets": 5,
+    "integrated_files": 274,
+    "gzip_files": 125
+  },
+  "github_actions": {
+    "panel_run": 43560783348,
+    "dash_run": 43560776942,
+    "steps_executed": 0,
+    "result": "not started; billing lock"
+  }
+}

@@ -1,0 +1,106 @@
+{
+  "date": "2026-11-15",
+  "verified_at": "2026-11-15T05:35:48.859659+00:00",
+  "panel": {
+    "project": "YZboard",
+    "version": "2.16.8",
+    "source_commit": "fb005c0c9eb5c971d4db34a2ff5a56d47adc237d",
+    "archive": "yzboard-2.16.8.tar.gz",
+    "sha256": "d8128334777aded000278bd713a31c113d6286a10fbc29da7c9c4597910f373e",
+    "files": 1602,
+    "docker_published": false,
+    "admin_version": "0.98.5",
+    "admin_source_commit": "3237173c8527c413593d1a71ac7b113ac1f00aee",
+    "composer_lock_sha256": "1050e1c00643b3a77b216635283974df6a98d2ef1fc3b96bba648c2bfc7dde7e",
+    "size": 107367151,
+    "asset_hashes": {
+      "yzboard-2.16.8.tar.gz": "d8128334777aded000278bd713a31c113d6286a10fbc29da7c9c4597910f373e",
+      "release.json": "365474f90e1f23ecf9214d82a40c4e51910a3af815812d92a17519a1f48ef158",
+      "SHA256SUMS": "2eaa9c592b1bc624e4fae8da477de4bf1d3dcdb4657fbc979955b2d7f7355039"
+    },
+    "tag": "v2.16.8",
+    "published": true,
+    "latest": true,
+    "release_id": 445835359,
+    "url": "https://github.com/P0me1oo/YZboard/releases/tag/v2.16.8",
+    "assets_verified": 3,
+    "published_at": "2026-11-15T05:34:24Z",
+    "private": false
+  },
+  "dash": {
+    "project": "YZboard-Dash",
+    "version": "0.98.5",
+    "source_commit": "3237173c8527c413593d1a71ac7b113ac1f00aee",
+    "archive": "yzboard-dash-0.98.5.tar.gz",
+    "sha256": "8c2d9e4088bdf30a2ed32a69696a49784b34caa3f6bb87cfa752c70631460188",
+    "files": 399,
+    "docker_published": false,
+    "integrated_panel_source_commit": "fb005c0c9eb5c971d4db34a2ff5a56d47adc237d",
+    "package_lock_sha256": "f2ec816670b1f46ea7448238f2804f870d26ffe46c0165031e975373a01b000c",
+    "size": 9367566,
+    "asset_hashes": {
+      "yzboard-dash-0.98.5.tar.gz": "8c2d9e4088bdf30a2ed32a69696a49784b34caa3f6bb87cfa752c70631460188",
+      "release.json": "faf72cb432cb7836c650e112b0344f1d5d227e056790fefedc93812303b1e59c",
+      "SHA256SUMS": "102e1b3eb73c297c9997dde4df2f8efec6c0195892add56258c451f7c898eec2"
+    },
+    "tag": "v0.98.5",
+    "published": true,
+    "latest": true,
+    "release_id": 445835172,
+    "url": "https://github.com/P0me1oo/YZboard-Dash/releases/tag/v0.98.5",
+    "assets_verified": 3,
+    "published_at": "2026-11-15T05:34:22Z",
+    "private": true
+  },
+  "reused_validation": {
+    "source_files": 3123,
+    "behavior_tests": 28,
+    "browser_scenarios": 63,
+    "page_screenshots": 27,
+    "panel_asset_tests": 5,
+    "integrated_files": 274,
+    "gzip_files": 125,
+    "source_map_matches": 8,
+    "source_and_build_audit": "本次 8 个组件的源码与构建映射一致；274 份最终文件及 125 份 gzip 副本逐字节一致。",
+    "full_verify_rerun": false,
+    "database_tests_rerun": false,
+    "script": "assets/admin-B2y9Tnlf.js",
+    "script_sha256": "a1a460a6250f9db470196a92fe8c6d5fb4b24668e63651f8489450bda76ebe13",
+    "details": "docs/ui-review-20261115.md"
+  },
+  "github_actions": {
+    "panel": {
+      "repo": "YZboard",
+      "run_id": 43681363115,
+      "sha": "fb005c0c9eb5c971d4db34a2ff5a56d47adc237d",
+      "status": "completed",
+      "conclusion": "failure",
+      "steps": 0,
+      "annotations": [
+        "The job was not started because your account is locked due to a billing issue."
+      ]
+    },
+    "dash": {
+      "repo": "YZboard-Dash",
+      "run_ids": [
+        43681317664,
+        43681317597
+      ],
+      "sha": "3237173c8527c413593d1a71ac7b113ac1f00aee",
+      "status": "completed",
+      "conclusion": "startup_failure",
+      "jobs": 0
+    }
+  },
+  "public_access": {
+    "panel_metadata_anonymous": true,
+    "panel_archive_anonymous_http": 200
+  },
+  "docker_published": false,
+  "production_deployed": false,
+  "unrelated_changes_preserved": [
+    "docs/front-dynamic-scheduling.md",
+    "docs/powerdns-carrier-enablement-20261115.md",
+    "docs/device-lock-diagnosis-20261115.md"
+  ]
+}

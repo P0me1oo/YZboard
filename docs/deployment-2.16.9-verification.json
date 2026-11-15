@@ -1,0 +1,57 @@
+{
+  "source": "ba2d73bf08a492259d7dd5aab3a7e7b84783f482",
+  "dash_source": "3237173c8527c413593d1a71ac7b113ac1f00aee",
+  "version": "2.16.9",
+  "runtime_files_verified": 1150,
+  "changed_files": 15,
+  "dependencies": 113,
+  "persistent_files_verified": 89,
+  "persistent_files_unchanged": true,
+  "plugin_settings_unchanged": true,
+  "settings_unchanged": true,
+  "migration_records_unchanged": true,
+  "state": {
+    "version": "2.16.9",
+    "migrations": 148,
+    "plugins": 8,
+    "failed_jobs": 714,
+    "recent_machines": 48,
+    "dns_pools_with_error": 0,
+    "ddns_bindings_with_error": 0
+  },
+  "services_active": 6,
+  "service_restarts": {
+    "yzboard-web.service": 0,
+    "yzboard-horizon.service": 0,
+    "yzboard-websocket.service": 0
+  },
+  "http": {
+    "home": 200,
+    "admin": 200,
+    "public_config": 200,
+    "websocket_unauthenticated": 401
+  },
+  "websocket_connections": 48,
+  "admin_entry": "assets/admin-B2y9Tnlf.js",
+  "asset_identity_bytes": 6947740,
+  "asset_gzip_bytes": 1877504,
+  "journal_error_matches": 0,
+  "switch_seconds": 8.34,
+  "checked_at": 1794727211.513521,
+  "git_metadata": {
+    "source": "ba2d73bf08a492259d7dd5aab3a7e7b84783f482",
+    "git_dir": "/root/yzboard-deployments/2.16.9/runtime-git.git",
+    "drop_in": "/etc/systemd/system/yzboard-web.service.d/source-metadata.conf",
+    "production_git_preserved": true
+  },
+  "worker_reload_version_verified": true,
+  "log_observation": {
+    "since": "2026-11-15T14:55:44.375701",
+    "checked_at": "2026-11-15T15:20:11.583844",
+    "post_update_log_counts": {}
+  },
+  "server": "Solid-US LA",
+  "admin_version": "0.98.5",
+  "docker_published": false,
+  "agent_upgraded": false
+}

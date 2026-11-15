@@ -1,0 +1,239 @@
+{
+  "version": "2.16.9",
+  "generated_at": "2026-11-15T13:57:08+08:00",
+  "source_before": {
+    "commit": "fb005c0c9eb5c971d4db34a2ff5a56d47adc237d",
+    "files": {
+      "DeviceCoordinationStateReader.php": "6e3027ccdd93572e5b84d78625d1a9758a0588c911ebf2503ef018f1a4eba517",
+      "DeviceHandoverProtocol.php": "d9b9cff0f311b8db50a7b81b43ef3c9a81378748859db4fee3ff9f75ae15d6cd",
+      "DeviceHandoverService.php": "590835cad72f6135edba33686a87b278018f0106675adbe5d75c54594d0b8ac9",
+      "DeviceLeaseCache.php": "699414a09351df40c55e21ebffd6a8c2ec3a96d318e45b7e53f3d5ae42c4669a",
+      "ServerService.php": "67841e76a14322de981f794dcfb65583d67389b9706844f35eb3dac8a1b1f278"
+    }
+  },
+  "source_after": {
+    "committed": false,
+    "files": {
+      "DeviceCoordinationStateReader.php": "a6fb543a5d5c62cba754a7c3aceb92afd184bbbb20faca08f6989336b10c6aeb",
+      "DeviceHandoverProtocol.php": "2a66f455d96d06bbe5c19e3230083d21af6c7ee29ae3805a7c185b7f77e35f25",
+      "DeviceHandoverService.php": "5f71b64619a9e97c64db037f9bd882b0cd33e784e921c80522e21ee26c0a4ab8",
+      "DeviceLeaseCache.php": "759bb097b7c3e9e850ec910fc477c558294a581c06929f92125078cdd4fcddbd",
+      "ServerService.php": "3c27698422a8edb63d15f74d2a6977d0fd250ca41835ac018df4e685eb5c6394"
+    }
+  },
+  "environment": {
+    "php": "8.4.27",
+    "phpunit": "11.5.57",
+    "redis": "8.0.2",
+    "phpredis": "6.2.0",
+    "mariadb": "11.8.6",
+    "mariadb_only_full_group_by": true
+  },
+  "tests": {
+    "sqlite": {
+      "tests": 269,
+      "assertions": 5509,
+      "errors": 0,
+      "failures": 0,
+      "skipped": 1,
+      "seconds": 10.519541,
+      "skipped_cases": [
+        "Tests.Feature.Server.MachineTrafficConcurrencyTest::test_concurrent_duplicate_receipts_and_multiple_nodes_do_not_lose_or_double_usage"
+      ]
+    },
+    "mariadb": {
+      "tests": 269,
+      "assertions": 5517,
+      "errors": 0,
+      "failures": 0,
+      "skipped": 0,
+      "seconds": 14.791001,
+      "skipped_cases": []
+    }
+  },
+  "static_analysis": {
+    "baseline": {
+      "errors": 0,
+      "file_errors": 12
+    },
+    "current": {
+      "errors": 0,
+      "file_errors": 11
+    },
+    "new_warnings": {}
+  },
+  "benchmark": {
+    "runs": [
+      {
+        "mode": "baseline",
+        "accounts": 33,
+        "raw_bytes_per_read": 130629,
+        "prefilter": {
+          "iterations": 500,
+          "wall_ms": 132.737609,
+          "cpu_ms": 105.09100000000005
+        },
+        "empty_sync_vmess": {
+          "iterations": 150,
+          "wall_ms": 224.413872,
+          "cpu_ms": 172.38599999999994
+        },
+        "empty_sync_wireguard": {
+          "iterations": 150,
+          "wall_ms": 441.294309,
+          "cpu_ms": 372.185
+        },
+        "run": 1
+      },
+      {
+        "mode": "optimized",
+        "accounts": 33,
+        "raw_bytes_per_read": 130629,
+        "prefilter": {
+          "iterations": 500,
+          "wall_ms": 71.192579,
+          "cpu_ms": 42.75400000000001
+        },
+        "empty_sync_vmess": {
+          "iterations": 150,
+          "wall_ms": 184.982338,
+          "cpu_ms": 137.95300000000006
+        },
+        "empty_sync_wireguard": {
+          "iterations": 150,
+          "wall_ms": 177.868843,
+          "cpu_ms": 131.691
+        },
+        "run": 1
+      },
+      {
+        "mode": "baseline",
+        "accounts": 33,
+        "raw_bytes_per_read": 130629,
+        "prefilter": {
+          "iterations": 500,
+          "wall_ms": 141.74229,
+          "cpu_ms": 112.47199999999997
+        },
+        "empty_sync_vmess": {
+          "iterations": 150,
+          "wall_ms": 214.569609,
+          "cpu_ms": 161.89
+        },
+        "empty_sync_wireguard": {
+          "iterations": 150,
+          "wall_ms": 366.401379,
+          "cpu_ms": 310.199
+        },
+        "run": 2
+      },
+      {
+        "mode": "optimized",
+        "accounts": 33,
+        "raw_bytes_per_read": 130629,
+        "prefilter": {
+          "iterations": 500,
+          "wall_ms": 62.225667,
+          "cpu_ms": 38.41699999999998
+        },
+        "empty_sync_vmess": {
+          "iterations": 150,
+          "wall_ms": 175.207438,
+          "cpu_ms": 126.62200000000001
+        },
+        "empty_sync_wireguard": {
+          "iterations": 150,
+          "wall_ms": 195.121449,
+          "cpu_ms": 136.46800000000005
+        },
+        "run": 2
+      },
+      {
+        "mode": "baseline",
+        "accounts": 33,
+        "raw_bytes_per_read": 130629,
+        "prefilter": {
+          "iterations": 500,
+          "wall_ms": 127.213571,
+          "cpu_ms": 101.151
+        },
+        "empty_sync_vmess": {
+          "iterations": 150,
+          "wall_ms": 213.133084,
+          "cpu_ms": 162.77100000000004
+        },
+        "empty_sync_wireguard": {
+          "iterations": 150,
+          "wall_ms": 360.819471,
+          "cpu_ms": 306.4049999999999
+        },
+        "run": 3
+      },
+      {
+        "mode": "optimized",
+        "accounts": 33,
+        "raw_bytes_per_read": 130629,
+        "prefilter": {
+          "iterations": 500,
+          "wall_ms": 63.711963,
+          "cpu_ms": 38.04500000000005
+        },
+        "empty_sync_vmess": {
+          "iterations": 150,
+          "wall_ms": 165.397574,
+          "cpu_ms": 118.91099999999999
+        },
+        "empty_sync_wireguard": {
+          "iterations": 150,
+          "wall_ms": 174.402317,
+          "cpu_ms": 128.548
+        },
+        "run": 3
+      }
+    ],
+    "median": {
+      "prefilter": {
+        "wall_ms": {
+          "before": 132.737609,
+          "after": 63.711963,
+          "reduction_pct": 52.00157402262685
+        },
+        "cpu_ms": {
+          "before": 105.09100000000005,
+          "after": 38.41699999999998,
+          "reduction_pct": 63.44406276465161
+        }
+      },
+      "empty_sync_vmess": {
+        "wall_ms": {
+          "before": 214.569609,
+          "after": 175.207438,
+          "reduction_pct": 18.344709291985527
+        },
+        "cpu_ms": {
+          "before": 162.77100000000004,
+          "after": 126.62200000000001,
+          "reduction_pct": 22.20850151439754
+        }
+      },
+      "empty_sync_wireguard": {
+        "wall_ms": {
+          "before": 366.401379,
+          "after": 177.868843,
+          "reduction_pct": 51.4551928037367
+        },
+        "cpu_ms": {
+          "before": 310.199,
+          "after": 131.691,
+          "reduction_pct": 57.546284804270805
+        }
+      }
+    }
+  },
+  "deployment": {
+    "performed": false
+  },
+  "agent_changes": false,
+  "dependency_changes": false,
+  "database_migration": false
+}

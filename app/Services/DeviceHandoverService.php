@@ -108,9 +108,9 @@ class DeviceHandoverService
     }
 
     /** 调用方持有节点锁；先写入完整状态，后续名额判断才能看到真实关闭与连接排序。 */
-    private function storeSnapshot(int $nodeId, array $data): array
+    private function storeSnapshot(int $nodeId, array $data, ?array $current = null): array
     {
-        $current = $this->node($nodeId, $data['run']);
+        $current ??= $this->node($nodeId, $data['run']);
         if ($data['sequence'] <= $current['sequence']) return $current;
         $sources = [];
         $now = $this->now();

@@ -217,6 +217,22 @@ class DeviceLeaseCacheTest extends TestCase
         }
     }
 
+    public function test_late_full_snapshot_after_light_renewal_cannot_replace_current_sources(): void
+    {
+        $lease = $this->admit();
+        $full = $this->sync(1, [$this->active($lease)]);
+        $base = $full['sequence'];
+        $renewed = $this->protocol->handle($this->nodes[1], 'sync', ['run' => $this->runID(1),
+            'sequence' => $base + 2, 'base_sequence' => $base, 'unchanged' => true, 'lease_cache' => 1]);
+        $current = Cache::get('device_handover:node:' . $this->nodes[1]->id);
+        $reply = $this->protocol->handle($this->nodes[1], 'sync', ['run' => $this->runID(1),
+            'sequence' => $base + 1, 'pending' => [], 'sources' => [], 'retired' => [$this->retired($lease)], 'lease_cache' => 1]);
+        $this->assertSame($current, Cache::get('device_handover:node:' . $this->nodes[1]->id));
+        $this->assertSame($renewed['leases'], $reply['leases']);
+        $this->assertSame([], $reply['idle']);
+        $this->assertSame([], $reply['revoked']);
+    }
+
     public function test_missing_idle_queue_is_recovered_without_renewing_or_recreating_the_holder(): void
     {
         $lease = $this->admit(1);

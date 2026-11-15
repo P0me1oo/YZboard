@@ -94,12 +94,14 @@ trait DeviceLeaseCache
                 $node['sequence'] = $progress['sequence'];
                 $node['seen_at'] = $progress['seen_at'];
             } else {
-                $node = $this->storeSnapshot($nodeId, $data);
+                // 复用同锁内已校验的快照时，仍先合并较新的轻量续期进度。
+                $current = $this->withProgress($node, Cache::get($this->progressKey($nodeId)));
+                $node = $this->storeSnapshot($nodeId, $data, $current);
             }
             $server = Server::query()->findOrFail($nodeId);
-            $available = $server->enabled ? ServerService::getAvailableUsers($server)->keyBy('id') : collect();
+            $available = $server->enabled ? array_fill_keys(ServerService::getAvailableUserIds($server), true) : [];
             $queued = array_fill_keys(Cache::get($this->queueKey($nodeId), []), true);
-            $ids = array_unique(array_merge($available->keys()->all(), array_keys($queued),
+            $ids = array_unique(array_merge(array_keys($available), array_keys($queued),
                 array_column($node['sources'], 'user_id'), array_column($data['retired'] ?? [], 'user_id')));
             $required = array_fill_keys(array_merge(array_keys($queued), array_column($node['sources'], 'user_id'),
                 array_column($data['retired'] ?? [], 'user_id')), true);
@@ -122,7 +124,7 @@ trait DeviceLeaseCache
                     }
                     $this->reconcile($state, $reads);
                     $grants = $denied = $returns = [];
-                    $canUse = $available->has($id);
+                    $canUse = isset($available[$id]);
                     foreach ($reported as $item) {
                         $known = $state['sources'][$item['ip']] ?? null;
                         if (!$canUse || $known === null || $known['lease'] !== $item['lease'] || $known['revoked']
@@ -181,7 +183,7 @@ trait DeviceLeaseCache
         $related = [];
         foreach (array_chunk(array_values($ids), 256) as $chunk) {
             $keys = array_map(fn ($id) => 'device_handover:user:' . $id, $chunk);
-            $records = Cache::many($keys);
+            $records = app(DeviceCoordinationStateReader::class)->many($keys);
             foreach ($chunk as $index => $id) {
                 $state = $records[$keys[$index]] ?? null;
                 if ($state === null) continue;

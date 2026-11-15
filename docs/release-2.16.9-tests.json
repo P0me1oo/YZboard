@@ -1,0 +1,38 @@
+{
+  "version": "2.16.9",
+  "verified_at": "2026-11-15T14:41:29+08:00",
+  "environment": {
+    "php": "8.4.27",
+    "redis": "8.0.2",
+    "phpredis": "6.2.0",
+    "mariadb": "11.8.6",
+    "only_full_group_by": true
+  },
+  "sqlite": {
+    "tests": 1915,
+    "assertions": 35478,
+    "errors": 0,
+    "failures": 0,
+    "skipped": 12,
+    "seconds": 120.698788
+  },
+  "mariadb": {
+    "tests": 1915,
+    "assertions": 35494,
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0,
+    "seconds": 158.786802
+  },
+  "admin_asset_tests": 5,
+  "admin_version": "0.98.5",
+  "admin_source_commit": "3237173c8527c413593d1a71ac7b113ac1f00aee",
+  "composer_lock_sha256": "1050e1c00643b3a77b216635283974df6a98d2ef1fc3b96bba648c2bfc7dde7e",
+  "source_files": {
+    "app/Services/DeviceCoordinationStateReader.php": "a6fb543a5d5c62cba754a7c3aceb92afd184bbbb20faca08f6989336b10c6aeb",
+    "app/Services/DeviceHandoverProtocol.php": "2a66f455d96d06bbe5c19e3230083d21af6c7ee29ae3805a7c185b7f77e35f25",
+    "app/Services/DeviceHandoverService.php": "5f71b64619a9e97c64db037f9bd882b0cd33e784e921c80522e21ee26c0a4ab8",
+    "app/Services/DeviceLeaseCache.php": "759bb097b7c3e9e850ec910fc477c558294a581c06929f92125078cdd4fcddbd",
+    "app/Services/ServerService.php": "3c27698422a8edb63d15f74d2a6977d0fd250ca41835ac018df4e685eb5c6394"
+  }
+}

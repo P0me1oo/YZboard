@@ -11,6 +11,7 @@ use App\WebSocket\NodeWorker;
 use App\Support\Setting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 use Workerman\Connection\TcpConnection;
 
@@ -86,6 +87,25 @@ class DeviceHandoverTest extends TestCase
         $this->assertSame(2, (new \ReflectionProperty($service, 'lockWaitSeconds'))->getValue($service));
         $this->deviceRequest('begin', ['lock_retry' => 2])->assertStatus(422);
         $this->deviceRequest('begin')->assertOk();
+    }
+
+    public function test_fast_lock_retreat_is_debug_while_legacy_wait_timeout_remains_warning(): void
+    {
+        (new \ReflectionProperty(\App\Services\FailureLog::class, 'last'))->setValue(null, []);
+        Log::spy();
+        $lock = Cache::lock('device_handover:node:' . $this->node->id . ':lock', 15);
+        $this->assertTrue($lock->get());
+        try {
+            $this->deviceRequest('begin', ['lock_retry' => 1])->assertStatus(503)->assertHeader('Retry-After', '1');
+            $this->deviceRequest('begin')->assertStatus(503)->assertHeader('Retry-After', '1');
+            foreach (['debug', 'warning'] as $level) {
+                Log::shouldHaveReceived('log')->withArgs(fn ($severity, $message, $context) =>
+                    $severity === $level && $message === '设备协调锁繁忙，等待重试'
+                    && $context['node_id'] === $this->node->id && $context['event'] === 'device.begin')->once();
+            }
+        } finally {
+            $lock->release();
+        }
     }
 
     public function test_websocket_busy_reply_keeps_correlation_and_allows_same_snapshot_retry(): void

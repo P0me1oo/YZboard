@@ -54,7 +54,8 @@ class DeviceHandoverProtocol
             return $service->admit((int) $node->id, (int) $user->id, (int) $user->device_limit, $data);
         } catch (LockTimeoutException $error) {
             FailureLog::record('设备协调锁繁忙，等待重试', $error,
-                ['node_id' => (int) $node->id, 'event' => 'device.' . $action], 'warning');
+                ['node_id' => (int) $node->id, 'event' => 'device.' . $action],
+                !empty($data['lock_retry']) ? 'debug' : 'warning');
             throw new DeviceCoordinationBusy($error);
         }
     }

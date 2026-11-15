@@ -182,6 +182,15 @@ class ServerService
         return self::usersForNode($node, $userId, false);
     }
 
+    /** 设备协调仅核对账号资格；有插件过滤时仍提供原完整名单。 */
+    public static function getAvailableUserIds(Server $node): array
+    {
+        if (isset(HookManager::getFilters()['server.users.get'])) {
+            return self::getAvailableUsers($node)->pluck('id')->all();
+        }
+        return self::usersForNode($node, null, false, [], true)->pluck('id')->all();
+    }
+
     public static function getTrafficUsers(Server $node, array $ids)
     {
         return self::usersForNode($node, null, true, $ids);
@@ -195,7 +204,7 @@ class ServerService
         return $users;
     }
 
-    private static function usersForNode(Server $node, ?int $userId, bool $settlement, array $ids = [])
+    private static function usersForNode(Server $node, ?int $userId, bool $settlement, array $ids = [], bool $onlyIds = false)
     {
         if (!$settlement && MachineTrafficService::nodeBlocked($node)) {
             return collect();
@@ -216,8 +225,8 @@ class ServerService
         if (empty($groupIds)) {
             return collect();
         }
-        $fields = ['id', 'uuid', 'auto_speed_limit', 'speed_limit', 'device_limit', 'conn_limit', 'conn_rate_limit'];
-        if ($node->type === Server::TYPE_WIREGUARD) {
+        $fields = $onlyIds ? ['id'] : ['id', 'uuid', 'auto_speed_limit', 'speed_limit', 'device_limit', 'conn_limit', 'conn_rate_limit'];
+        if (!$onlyIds && $node->type === Server::TYPE_WIREGUARD) {
             $fields[] = 'expired_at';
         }
         $users = User::toBase()
@@ -251,6 +260,7 @@ class ServerService
                 return $user->relay_routes !== [];
             })->values();
         }
+        if ($onlyIds) return $users;
         if (!$settlement && $node->type === Server::TYPE_WIREGUARD) {
             foreach ($users as $user) {
                 $user->wireguard = WireGuardService::peer($node, $user);

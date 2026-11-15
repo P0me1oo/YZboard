@@ -92,6 +92,50 @@ class DeviceCoordinationStateReaderTest extends TestCase
         $this->reader->get($key);
     }
 
+    public function test_batch_prefilter_reuses_decoding_and_locked_read_still_observes_current_value(): void
+    {
+        $first = $this->key(1);
+        $second = $this->key(2);
+        $missing = $this->key(3);
+        foreach ([$first, $second] as $key) Cache::forever($key, $this->state());
+        $values = $this->reader->many([$first, $second, $first, $missing]);
+        $this->assertSame([$first => $this->state(), $second => $this->state(), $missing => null], $values);
+        $this->assertSame(2, $this->reader->decodes);
+        $values[$first]['sources']['192.0.2.1']['holders'][0]['run'] = 'caller-only';
+        $this->assertSame($this->state(), $this->reader->get($first));
+        $this->assertSame(2, $this->reader->decodes);
+        Cache::forever($first, $this->state('new'));
+        $this->assertSame($this->state('new'), $this->reader->get($first));
+        $this->assertSame(3, $this->reader->decodes);
+        Cache::forget($second);
+        $this->assertNull($this->reader->many([$second])[$second]);
+        Cache::forever($second, $this->state());
+        $this->assertSame($this->state(), $this->reader->many([$second])[$second]);
+        $this->assertSame(4, $this->reader->decodes);
+    }
+
+    public function test_batch_prefilter_cannot_hide_corruption_behind_a_memoized_value(): void
+    {
+        $key = $this->key(1);
+        Cache::forever($key, $this->state());
+        $this->reader->many([$key]);
+        $this->client->set('cache:' . $key, 'invalid');
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('设备协调状态格式无效');
+        $this->reader->many([$key]);
+    }
+
+    public function test_compact_shared_accounts_reuse_decoding_across_batch_and_single_reads(): void
+    {
+        $key = $this->key(1);
+        $state = ['sources' => [], 'padding' => str_repeat('x', 1024)];
+        Cache::forever($key, $state);
+        $this->reader->many([$key]);
+        $this->assertSame($state, $this->reader->many([$key])[$key]);
+        $this->assertSame($state, $this->reader->get($key));
+        $this->assertSame(1, $this->reader->decodes);
+    }
+
     public function test_backend_error_does_not_return_a_previous_permission(): void
     {
         $key = $this->key(1);
@@ -113,10 +157,12 @@ class DeviceCoordinationStateReaderTest extends TestCase
         $this->client->setOption(\Redis::OPT_SERIALIZER, \Redis::SERIALIZER_PHP);
         Cache::forever($key, $this->state());
         $this->assertSame($this->state(), $this->reader->get($key));
+        $this->assertSame([$key => $this->state()], $this->reader->many([$key]));
         $this->assertSame(0, $this->reader->decodes);
         Cache::swap(new Repository(new \Illuminate\Cache\ArrayStore()));
         Cache::forever($key, ['custom' => true]);
         $this->assertSame(['custom' => true], $this->reader->get($key));
+        $this->assertSame([$key => ['custom' => true]], $this->reader->many([$key]));
     }
 
     public function test_entry_limit_evicts_oldest_records_and_preserves_recent_ones(): void

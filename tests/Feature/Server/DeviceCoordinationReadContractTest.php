@@ -120,6 +120,47 @@ class DeviceCoordinationReadContractTest extends TestCase
         $this->assertSame($missing, $events[2]->key);
     }
 
+    public function test_account_prefilter_keeps_unique_events_and_cache_extensions(): void
+    {
+        $key = 'device_handover:user:1';
+        $missing = 'device_handover:user:2';
+        $value = ['sources' => [], 'padding' => str_repeat('x', 1024)];
+        $client = $this->client();
+        $client->expects($this->once())->method('mget')->willReturn([serialize($value), serialize($value), false]);
+        $repository = $this->repository($client);
+        Cache::swap($repository);
+        $events = [];
+        $this->app['events']->listen([RetrievingManyKeys::class, CacheHit::class, CacheMissed::class], function ($event) use (&$events): void {
+            $events[] = $event;
+        });
+        $reader = new DeviceCoordinationStateReader();
+        $this->assertSame([$key => $value, $missing => null], $reader->many([$key, $key, $missing]));
+        $this->assertSame([RetrievingManyKeys::class, CacheHit::class, CacheMissed::class], array_map(fn ($event) => get_class($event), $events));
+        $this->assertSame($value, $events[1]->value);
+        Cache::swap(new class($repository->getStore()) extends Repository {
+            public function many(array $keys) { return array_fill_keys($keys, ['extension' => true]); }
+        });
+        $this->assertSame([$key => ['extension' => true]], $reader->many([$key]));
+    }
+
+    public function test_account_prefilter_rejects_incomplete_backend_reply_without_hit_events(): void
+    {
+        $client = $this->client();
+        $client->expects($this->once())->method('mget')->willReturn([]);
+        Cache::swap($this->repository($client));
+        $events = [];
+        $this->app['events']->listen([RetrievingManyKeys::class, CacheHit::class, CacheMissed::class], function ($event) use (&$events): void {
+            $events[] = get_class($event);
+        });
+        try {
+            (new DeviceCoordinationStateReader())->many(['device_handover:user:1']);
+            $this->fail('批量读取失败必须传播');
+        } catch (\RuntimeException $error) {
+            $this->assertSame('设备协调状态读取失败', $error->getMessage());
+        }
+        $this->assertSame([RetrievingManyKeys::class], $events);
+    }
+
     public function test_failed_backend_read_does_not_emit_success_or_missing_events(): void
     {
         $client = $this->client();

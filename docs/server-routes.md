@@ -25,6 +25,36 @@
 - 至少填写一种条件。只填协议、端口或网络类型而不填匹配值时，对所有目标地址生效。
 - 已有路由升级后没有这些新条件，匹配结果不变。
 
+## 屏蔽测速网站预设
+
+在“路由管理 → 添加路由”中点击“屏蔽测速网站”，自动填入域名和“禁止访问”动作；备注为空时也会填入预设名称。选好要应用的节点后点击确认，才会保存和下发。预设不会自动选择全部节点。
+
+预设包含以下测速专用域名及其子域名：
+
+```text
+fast.com
+speedtest.net
+speedtestcustom.com
+ooklaserver.net
+cdnst.net
+speed.cloudflare.com
+nperf.com
+speedtest.cn
+speedtest.tw
+speedtest.org
+speedof.me
+testmy.net
+openspeedtest.com
+```
+
+点击预设会替换匹配值、动作，并清空协议、端口、网络和动作参数，避免只拦截部分测速连接；已填备注、所选节点、启用状态和“新增节点默认应用”设置保留。之后可以继续增删域名，保存失败保留输入，保存后作为普通路由编辑、启停或删除。
+
+域名清单参考 [v2fly 测速分类](https://github.com/v2fly/domain-list-community/blob/master/data/category-speedtest)、[Ookla 分类](https://github.com/v2fly/domain-list-community/blob/master/data/ookla-speedtest)和 [OpenSpeedTest 分类](https://github.com/v2fly/domain-list-community/blob/master/data/openspeedtest)，只保留专用测速域名，不包含 Netflix 视频域名或 Cloudflare 主站。清单随面板版本维护，不自动从网络更新。
+
+这是域名拦截预设，不保证覆盖所有测速服务；未列出的自建测速服务器、直接 IP 连接或无法识别目标域名的连接可能不命中。需要新增服务时，按它实际使用的测速域名补充匹配值，不建议直接填写 `fast`、`speedtest` 之类的泛关键词。
+
+配套面板 `2.20.0`、管理端 `0.102.0`，沿用现有路由接口和节点域名匹配，无需数据库迁移、Agent 或核心升级。
+
 ## BitTorrent 识别
 
 - BT 使用内核自带的协议识别，不靠关键词或固定端口：Xray 识别 TCP 握手和 uTP 建连包，sing-box 另外识别 UDP Tracker。两种内核都识别不了加密的 BT 连接和 DHT。

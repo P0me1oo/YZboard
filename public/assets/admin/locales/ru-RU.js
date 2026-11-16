@@ -3612,6 +3612,8 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
       "enabled": "Включить маршрут",
       "remarks": "Примечание",
       "remarksPlaceholder": "Введите примечание",
+      "preset": "Шаблон правила",
+      "speedtestPreset": "Блокировать сайты проверки скорости",
       "match": "Совпадение (домен или IP)",
       "matchPlaceholder": "example.com\n*.example.com",
       "protocol": "Протокол",

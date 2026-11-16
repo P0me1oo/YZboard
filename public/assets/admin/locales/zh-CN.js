@@ -3726,6 +3726,8 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
       "enabled": "启用路由",
       "remarks": "备注",
       "remarksPlaceholder": "请输入备注",
+      "preset": "预设规则",
+      "speedtestPreset": "屏蔽测速网站",
       "match": "匹配值（域名或 IP）",
       "matchPlaceholder": "example.com\n*.example.com",
       "protocol": "协议",

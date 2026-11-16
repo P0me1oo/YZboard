@@ -3697,6 +3697,8 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "enabled": "Enable route",
       "remarks": "Remarks",
       "remarksPlaceholder": "Please enter remarks",
+      "preset": "Rule preset",
+      "speedtestPreset": "Block speed test sites",
       "match": "Match (domain or IP)",
       "matchPlaceholder": "example.com\n*.example.com",
       "protocol": "Protocol",

@@ -1,0 +1,54 @@
+{
+  "server": "Solid-US LA",
+  "directory": "/root/yzboard",
+  "account": "www-data",
+  "version": "2.19.0",
+  "source": "2a7254064759750d714ceb2de9abb45b149faf25",
+  "previous_version": "2.16.9",
+  "previous_source": "ba2d73bf08a492259d7dd5aab3a7e7b84783f482",
+  "admin_version": "0.101.0",
+  "admin_source": "d424ba0996848fe46e61f4c1cf05b5cc90b3d1f4",
+  "runtime_files_verified": 1169,
+  "changed_files": 37,
+  "switch_seconds": 7.0,
+  "composer_lock_unchanged": true,
+  "database_version": "12.3.3-MariaDB-deb13",
+  "migrations": 148,
+  "migration_changes": 0,
+  "plugin_rows": 8,
+  "persistent_changed": [],
+  "services_active": 6,
+  "panel_service_restarts": 0,
+  "horizon": "running",
+  "http": {
+    "home": 200,
+    "admin": 200,
+    "public_config": 200,
+    "unauthenticated_websocket": 401,
+    "main_script": 200,
+    "gzip": 200
+  },
+  "main_script_sha256": "e616f02e85610b799ff0116d29330a6ee4d3119abf721a22945ce1239a0e751c",
+  "reload_version_preserved": true,
+  "agent_update": {
+    "version": "v2.38.0",
+    "target_count": 50,
+    "updated": 50,
+    "succeeded": 50,
+    "excluded": [
+      {
+        "id": 82,
+        "name": "Aliyun-香港²",
+        "reason": "offline",
+        "previous_version": "v2.10.1"
+      }
+    ]
+  },
+  "docker_published": false,
+  "final_node_health": {
+    "fresh_nodes": 123,
+    "failed_kernel_nodes": [],
+    "source_ip_snapshots": 123,
+    "fatal_journal_matches": 0
+  }
+}

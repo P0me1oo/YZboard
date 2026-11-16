@@ -1,0 +1,49 @@
+{
+  "repo": "YZboard",
+  "version": "v2.19.0",
+  "source_commit": "2a7254064759750d714ceb2de9abb45b149faf25",
+  "release_url": "https://github.com/P0me1oo/YZboard/releases/tag/v2.19.0",
+  "latest": true,
+  "assets": [
+    {
+      "repo": "YZboard",
+      "asset": "release.json",
+      "bytes": 532,
+      "sha256": "8cb6b7ef3019f3a511ad775e57c1a83df8b42a55169cc9558a7df27aa786132d",
+      "anonymous": true
+    },
+    {
+      "repo": "YZboard",
+      "asset": "SHA256SUMS",
+      "bytes": 167,
+      "sha256": "4d616d15b39f7efc112c359dba02d497b01fc3920814231ea5a25921771cd735",
+      "anonymous": true
+    },
+    {
+      "repo": "YZboard",
+      "asset": "yzboard-2.19.0.tar.gz",
+      "bytes": 121818847,
+      "sha256": "65c613de16369af352e54395315d0d0104da60e2c339a985c1561e8b673f0cea",
+      "anonymous": true
+    }
+  ],
+  "github_actions": [
+    {
+      "conclusion": "failure",
+      "databaseId": 43832028730,
+      "event": "push",
+      "headSha": "2a7254064759750d714ceb2de9abb45b149faf25",
+      "name": "面板完整回归",
+      "status": "completed"
+    }
+  ],
+  "docker_published": false,
+  "actions_execution": [
+    {
+      "run_id": 43832028730,
+      "jobs": 1,
+      "executed_steps": 0,
+      "conclusion": "failure"
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "repo": "YZboard",
+  "version": "v2.20.0",
+  "source_commit": "727feac07c8bfae7b139f6a7c5bf827bcdd01f80",
+  "release_url": "https://github.com/P0me1oo/YZboard/releases/tag/v2.20.0",
+  "latest": true,
+  "assets": [
+    {
+      "asset": "SHA256SUMS",
+      "bytes": 167,
+      "sha256": "bd801be3d5775d43c6d6457bbca17f3a5b7b2d597084173bd1032b04dd7ead85",
+      "anonymous": true
+    },
+    {
+      "asset": "release.json",
+      "bytes": 532,
+      "sha256": "413a8136b0a6f96f63750ea34a2e2da8839c51029dde65f4dd2297efbeb28bd1",
+      "anonymous": true
+    },
+    {
+      "asset": "yzboard-2.20.0.tar.gz",
+      "bytes": 125564063,
+      "sha256": "df773414a78a451cba63c2c25d98486302149f975d234db3d482daff721f504d",
+      "anonymous": true
+    }
+  ],
+  "github_actions": [
+    {
+      "run_id": 43881698815,
+      "conclusion": "failure",
+      "executed_steps": 0
+    }
+  ],
+  "docker_published": false,
+  "checks": {
+    "frontend_source_files": 3126,
+    "frontend_behavior_tests": 175,
+    "browser_route_scenarios": 9,
+    "browser_widths": [
+      1440,
+      390,
+      320
+    ],
+    "panel_asset_tests": 5,
+    "integrated_assets": 274,
+    "gzip_assets": 125,
+    "main_script_sha256": "d962fecc264458b316f60c116a09d10614cefa96947c4f0c70b7c83f0364c070",
+    "build_and_browser_results_reused": true,
+    "backend_business_unchanged": true,
+    "database_full_regression": "未为本次纯管理端预设重复执行；沿用 2.19.0 同一后端业务的完整回归作为基线"
+  }
+}

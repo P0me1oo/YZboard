@@ -1,0 +1,144 @@
+{
+  "verified_at": "2026-11-16T08:10:06.127007+08:00",
+  "releases": [
+    {
+      "project": "YZboard",
+      "version": "2.18.1",
+      "source": "3c3b2dfe28d0f3012f22c51d1e3c0e67401da45a",
+      "url": "https://github.com/P0me1oo/YZboard/releases/tag/v2.18.1",
+      "release_id": 446465948,
+      "published": true,
+      "latest": true,
+      "private": false,
+      "archive": "yzboard-2.18.1.tar.gz",
+      "archive_bytes": 118915556,
+      "archive_sha256": "838445e5296a0ac1d9f822fe80a6cbeb39b281594208df8fd5e174c0f0000177",
+      "files": 1629,
+      "assets_verified": 3,
+      "downloaded_anonymously": true,
+      "asset_digests": {
+        "release.json": "sha256:1d633f7c77d7edd17128574d3a2e3da588078e6f7e06e6dba9008f075e2383ec",
+        "SHA256SUMS": "sha256:493969803e88fe0bebcf8b0e00e193f8fb43ba91287580c33d0ce2bc32585106",
+        "yzboard-2.18.1.tar.gz": "sha256:838445e5296a0ac1d9f822fe80a6cbeb39b281594208df8fd5e174c0f0000177"
+      }
+    },
+    {
+      "project": "YZboard-Dash",
+      "version": "0.100.0",
+      "source": "bdf17c2bfa66c097adec77b4698e0411e4c80bf0",
+      "url": "https://github.com/P0me1oo/YZboard-Dash/releases/tag/v0.100.0",
+      "release_id": 446465949,
+      "published": true,
+      "latest": true,
+      "private": true,
+      "archive": "yzboard-dash-0.100.0.tar.gz",
+      "archive_bytes": 9376064,
+      "archive_sha256": "9dd1185670fd79738c8565f8074cb356bf5ce9e5b6bff1deeaf226c7df9e57f9",
+      "files": 399,
+      "assets_verified": 3,
+      "downloaded_anonymously": false,
+      "asset_digests": {
+        "release.json": "sha256:8ae9f5c89ec85edea38f143e44d57e37e38647ef241ce4fa94d95cd8812ef502",
+        "SHA256SUMS": "sha256:4de8e3136550dbdce8ca604538fbd157ea07f0fde4a5a222897dc668554d528b",
+        "yzboard-dash-0.100.0.tar.gz": "sha256:9dd1185670fd79738c8565f8074cb356bf5ce9e5b6bff1deeaf226c7df9e57f9"
+      }
+    }
+  ],
+  "tests": {
+    "version": "2.18.1",
+    "verified_at": "2026-11-16T08:02:48.660333+08:00",
+    "environment": {
+      "php": "8.4.27",
+      "phpunit": "11.5.57",
+      "redis": "8.0.2",
+      "phpredis": "6.2.0",
+      "mariadb": "11.8.6",
+      "only_full_group_by": true
+    },
+    "sqlite": {
+      "tests": 1926,
+      "assertions": 35673,
+      "errors": 0,
+      "failures": 0,
+      "skipped": 12,
+      "seconds": 117.042125
+    },
+    "mariadb": {
+      "tests": 1926,
+      "assertions": 35689,
+      "errors": 0,
+      "failures": 0,
+      "skipped": 0,
+      "seconds": 141.654483
+    },
+    "admin_version": "0.100.0",
+    "admin_source_commit": "bdf17c2bfa66c097adec77b4698e0411e4c80bf0",
+    "admin_source_check_files": 3125,
+    "admin_behavior_tests": 171,
+    "admin_reused_browser_checks": 29,
+    "admin_asset_tests": 5,
+    "integrated_admin_files": 274,
+    "integrated_admin_gzip_files": 125,
+    "admin_main_script": "assets/admin-BmU4CFa_.js",
+    "admin_main_script_sha256": "191a36d58e640a4ef95fbeddadf51e8fa4af684a13b94960a6632666d429e223",
+    "composer_lock_sha256": "1050e1c00643b3a77b216635283974df6a98d2ef1fc3b96bba648c2bfc7dde7e",
+    "source_files": {
+      "app/Services/PoolRealityService.php": "dbdee5c1336fc817123e8ee513b726c2e06b5544b3b217a40b7184ea8d604aff",
+      "config/app.php": "05a39abb2c69321c1a2b0be331fba74dc1c41438d80017907632749fd8a32e4e",
+      "tests/Feature/Server/PoolRealitySyncTest.php": "0cf9c0d467a13d713581f80f6564e7f0420ab58416579d912994cdc9894c4105",
+      "tests/Feature/Server/ServerBatchRealityTest.php": "cfd53b52778e63f56444aa26d6f2c2b12a0b1ea1a583a4725ac8629ae3d7135a",
+      "composer.lock": "1050e1c00643b3a77b216635283974df6a98d2ef1fc3b96bba648c2bfc7dde7e"
+    },
+    "isolation": "本机任务专用 Redis、MariaDB 实例与临时 PHP 扩展；未连接生产服务或数据库",
+    "github_actions": {
+      "admin": [
+        {
+          "run_id": 43777673493,
+          "source": "bdf17c2bfa66c097adec77b4698e0411e4c80bf0",
+          "conclusion": "startup_failure",
+          "executed_jobs": 0
+        },
+        {
+          "run_id": 43777673532,
+          "source": "bdf17c2bfa66c097adec77b4698e0411e4c80bf0",
+          "conclusion": "startup_failure",
+          "executed_jobs": 0
+        }
+      ]
+    },
+    "docker_published": false,
+    "production_deployed": false
+  },
+  "github_actions": {
+    "panel": {
+      "run_id": 43778173261,
+      "source": "3c3b2dfe28d0f3012f22c51d1e3c0e67401da45a",
+      "steps": 0,
+      "annotations": [
+        {
+          "end_line": 1,
+          "message": "The job was not started because your account is locked due to a billing issue.",
+          "path": ".github",
+          "start_line": 1
+        }
+      ]
+    },
+    "admin": [
+      {
+        "run_id": 43777673493,
+        "source": "bdf17c2bfa66c097adec77b4698e0411e4c80bf0",
+        "conclusion": "startup_failure",
+        "executed_jobs": 0
+      },
+      {
+        "run_id": 43777673532,
+        "source": "bdf17c2bfa66c097adec77b4698e0411e4c80bf0",
+        "conclusion": "startup_failure",
+        "executed_jobs": 0
+      }
+    ]
+  },
+  "docker_published": false,
+  "production_deployed": false,
+  "temporary_services_stopped": true
+}

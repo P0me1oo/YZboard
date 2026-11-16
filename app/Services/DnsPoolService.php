@@ -73,7 +73,8 @@ class DnsPoolService
         $state['carrier'] = $config['carrier_enabled'] ? $carrier->status() : null;
         $desired = [];
         $names = [];
-        $available = $config['health_enabled'] || $config['carrier_enabled'] ? $state['available_candidates'] : $state['candidates'];
+        $available = $config['health_enabled'] || $config['carrier_enabled'] || $config['source_ip_enabled']
+            ? $state['available_candidates'] : $state['candidates'];
         $routes = $config['health_enabled'] ? Server::with('machine')->where('relay_pool_id', $pool->id)->get() : collect();
         $scopes = [0 => $state['candidates']];
         foreach ($routes as $route) $scopes[$route->id] = FrontRouteHealth::select($pool, $route, $available);
@@ -82,7 +83,7 @@ class DnsPoolService
             $common = array_column($available, 'member_id');
             foreach ($routes->where('enabled', '!==', false) as $route) $common = array_intersect($common, array_column($scopes[$route->id], 'member_id'));
             $scopes[0] = array_values(array_filter($available, fn ($c) => in_array($c['member_id'], $common, true)));
-        } elseif ($config['carrier_enabled']) $scopes[0] = $available;
+        } elseif ($config['carrier_enabled'] || $config['source_ip_enabled']) $scopes[0] = $available;
         $state['routes'] = array_map(fn ($candidates) => array_column($candidates, 'member_id'), $scopes);
         $optionsByScope = [];
         $state['route_policies'] = $pool->scheduling_state['route_policies'] ?? [];
@@ -106,7 +107,9 @@ class DnsPoolService
         }
         // 池域名保留候选地址，供尚未更新订阅的客户端过渡；新订阅使用个人域名。
         $legacy = $optionsByScope[0]['default'];
+        if ($config['source_ip_enabled']) $legacy = FrontSourceIpLoad::policy($legacy, $config);
         $addresses = array_values(array_unique(array_merge([], ...array_column($legacy, 'addresses'))));
+        if ($config['source_ip_enabled']) { $state['snapshot']['addresses'] = $addresses; sort($state['snapshot']['addresses']); }
         foreach (['A', 'AAAA'] as $type) {
             $values = array_values(array_unique(array_filter($addresses, fn ($ip) => (str_contains($ip, ':') ? 'AAAA' : 'A') === $type)));
             if ($values) $desired[] = ['name' => $pool->domain, 'type' => $type, 'contents' => $values];
@@ -129,7 +132,9 @@ class DnsPoolService
                     foreach ($config['carrier_enabled'] ? ['default', ...CarrierDns::CARRIERS] : ['default'] as $lane) {
                         $options = $optionsByScope[$routeId][$lane];
                         $previous = $alias->assignment_state[$routeId][$lane] ?? ($routeId === 0 && $lane === 'default' ? ['member_id' => $alias->member_id] : []);
-                        $choice = FrontDynamicLoad::choose($label . ($lane === 'default' ? '' : ':' . $lane), $options, $previous, $config, $moveBudget);
+                        $key = $label . ($lane === 'default' ? '' : ':' . $lane);
+                        $choice = $config['source_ip_enabled'] ? FrontSourceIpLoad::choose($key, $options, $previous, $config)
+                            : FrontDynamicLoad::choose($key, $options, $previous, $config, $moveBudget);
                         $next[$routeId][$lane] = $choice;
                         if ($choice['member_id'] !== null) $targets[$lane] = $names[$choice['member_id']] . '.';
                     }

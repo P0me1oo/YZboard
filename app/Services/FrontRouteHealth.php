@@ -63,20 +63,22 @@ class FrontRouteHealth
 
     public static function eligible(array $candidates, array $config): array
     {
+        $candidates = FrontSourceIpLoad::eligible($candidates, $config);
         if ($config['quota_enabled'] && $candidates) {
             $enough = array_filter($candidates, fn ($c) => !$c['quota_low']);
             $best = max(array_column($candidates, 'ratio'));
             $candidates = $enough ?: array_filter($candidates, fn ($c) => $c['ratio'] === $best);
         }
-        if (!$config['dynamic_enabled'] && $config['strategy'] === 'cycle') {
+        if (!$config['dynamic_enabled'] && !$config['source_ip_enabled'] && $config['strategy'] === 'cycle') {
             $candidates = array_filter($candidates, fn ($c) => $c['ratio'] != 0) ?: $candidates;
         }
-        return self::prioritize(array_values($candidates));
+        return $config['source_ip_enabled'] && !FrontSourceIpLoad::hasFree($candidates, $config)
+            ? array_values($candidates) : self::prioritize(array_values($candidates));
     }
 
     public static function policy(array $candidates, array $config, array &$state): array
     {
-        if (!$candidates || $config['dynamic_enabled']) return $candidates;
+        if (!$candidates || $config['dynamic_enabled'] || $config['source_ip_enabled']) return $candidates;
         if ($config['strategy'] === 'cycle') {
             $metered = array_filter($candidates, fn ($c) => $c['reset_at'] !== null && $c['ratio'] > 0);
             if ($metered) {

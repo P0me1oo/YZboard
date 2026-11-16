@@ -52,6 +52,13 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
   },
   "balancer": {
     "dynamicLoad": "Динамическое распределение",
+    "sourceIpScheduling": "Распределение по активным IP",
+    "sourceIpThreshold": "Порог активных исходных IP",
+    "sourceIpStrategy": "Выбор входного сервера при смене",
+    "remainingTrafficPriority": "Максимальный остаток трафика",
+    "sourceIpCount": "Активные исходные IP: {{count}} / {{threshold}}",
+    "sourceIpUnavailable": "Данные об активных IP недоступны",
+    "sourceIpRule": "DNS переключается при достижении порога активных IP. Каждый IP учитывается один раз; текущие подключения сохраняются.",
     "bandwidthThreshold": "Порог загрузки канала (%)",
     "connectionThreshold": "Порог активных соединений",
     "loadConfirm": "Время подтверждения (сек.)",

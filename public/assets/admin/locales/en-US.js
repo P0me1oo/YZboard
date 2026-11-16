@@ -52,6 +52,13 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
   },
   "balancer": {
     "dynamicLoad": "Dynamic load allocation",
+    "sourceIpScheduling": "Online source IP scheduling",
+    "sourceIpThreshold": "Online source IP threshold",
+    "sourceIpStrategy": "Frontend selection on reassignment",
+    "remainingTrafficPriority": "Prefer the most remaining traffic",
+    "sourceIpCount": "Online source IPs: {{count}} / {{threshold}}",
+    "sourceIpUnavailable": "Online source IP data unavailable",
+    "sourceIpRule": "Switch DNS when online source IPs reach the threshold. Each IP counts once; existing connections keep using their frontend.",
     "bandwidthThreshold": "Bandwidth utilization threshold (%)",
     "connectionThreshold": "Active connection threshold",
     "loadConfirm": "Confirmation period (seconds)",

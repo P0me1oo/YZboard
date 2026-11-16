@@ -52,6 +52,13 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
   },
   "balancer": {
     "dynamicLoad": "动态负载分配",
+    "sourceIpScheduling": "在线 IP 数调度",
+    "sourceIpThreshold": "在线来源 IP 阈值",
+    "sourceIpStrategy": "切换前置选择方式",
+    "remainingTrafficPriority": "剩余流量最多优先",
+    "sourceIpCount": "在线来源 IP：{{count}} / {{threshold}}",
+    "sourceIpUnavailable": "在线来源 IP 数据未就绪",
+    "sourceIpRule": "在线来源 IP 达到阈值后切换 DNS；同一 IP 只计一次，已有连接继续使用原前置。",
     "bandwidthThreshold": "带宽利用率阈值（%）",
     "connectionThreshold": "活跃连接数阈值",
     "loadConfirm": "持续确认时间（秒）",

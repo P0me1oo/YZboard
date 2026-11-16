@@ -233,17 +233,22 @@ class LoadBalancerService
             $hosts = $sources->map(fn ($source) => strtolower(rtrim(trim($source->host, '[] '), '.')));
             if ($hosts->unique()->count() !== $hosts->count() || $hosts->contains(strtolower(rtrim($data['domain'], '.')))) $this->invalid('members', '节点连接地址必须分别直达各自服务器');
             $policy = array_replace(FrontPoolScheduler::DEFAULTS, $data['scheduling_config'] ?? $pool->scheduling_config ?? []);
-            foreach (['bandwidth_threshold' => [10, 100], 'connection_threshold' => [1, 10000000],
+            foreach (['bandwidth_threshold' => [10, 100], 'connection_threshold' => [1, 10000000], 'source_ip_threshold' => [1, 10000000],
                 'load_confirm_seconds' => [30, 600], 'load_cooldown_seconds' => [60, 3600]] as $field => [$min, $max]) {
                 if (!is_numeric($policy[$field]) || $policy[$field] < $min || $policy[$field] > $max) $this->invalid('scheduling_config.' . $field, '调度阈值超出允许范围');
             }
+            if (filter_var($policy['source_ip_threshold'], FILTER_VALIDATE_INT) === false) $this->invalid('scheduling_config.source_ip_threshold', '在线来源 IP 阈值必须是整数');
+            $policy['source_ip_enabled'] = (bool) $policy['source_ip_enabled'];
+            $policy['source_ip_threshold'] = (int) $policy['source_ip_threshold'];
+            if (!in_array($policy['source_ip_strategy'], ['remaining', 'cycle'], true)) $this->invalid('scheduling_config.source_ip_strategy', '请选择有效的在线 IP 调度方式');
+            if ($policy['source_ip_enabled'] && $policy['dynamic_enabled']) $this->invalid('scheduling_config', '在线 IP 数调度与动态负载分配不能同时开启');
             if ($policy['carrier_enabled']) {
                 if ($starting && !($pool->scheduling_config['carrier_enabled'] ?? false)) app(CarrierDns::class)->assertReady();
                 if (!$members->contains(fn ($m) => in_array('default', $m['carriers'], true))) $this->invalid('members', '运营商分流至少需要一条默认线路');
             }
             if ($starting && $policy['health_enabled'] && $sources->contains(fn ($source) => !LandingPoolService::compatibleAgent($source))) $this->invalid('members', '链路健康探测需要前置运行 Agent v2.30.0 或更新版本');
             if (!in_array($policy['strategy'], ['priority', 'latency', 'latency_balanced', 'cycle'], true)) $this->invalid('scheduling_config', '请选择有效的前置选择方式');
-            if (!$policy['health_enabled'] && !$policy['dynamic_enabled'] && in_array($policy['strategy'], ['latency', 'latency_balanced'], true)) {
+            if (!$policy['health_enabled'] && !$policy['dynamic_enabled'] && !$policy['source_ip_enabled'] && in_array($policy['strategy'], ['latency', 'latency_balanced'], true)) {
                 $target = Server::find($policy['latency_node_id']);
                 if (!$pool->exists || !$target || (int) $target->relay_pool_id !== (int) $pool->id || !SchedulingProbeService::target($target)) $this->invalid('scheduling_config.latency_node_id', '请选择绑定该池、使用 TCP 内部链路的落地作为测速目标');
                 if ($starting && $sources->contains(fn ($source) => !LandingPoolService::compatibleAgent($source))) $this->invalid('members', '延迟选择需要前置运行 Agent v2.30.0 或更新版本');

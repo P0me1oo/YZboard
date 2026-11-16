@@ -333,6 +333,7 @@ class ServerService
     {
         app(InboundIpRecorder::class)->record($alive, $receivedAt);
         app(DeviceStateService::class)->replaceNodeDevices($nodeId, $alive);
+        FrontSourceIpLoad::record($nodeId, $alive, $receivedAt);
     }
 
     /**

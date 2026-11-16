@@ -10,7 +10,8 @@ class FrontPoolScheduler
     public const DEFAULTS = ['health_enabled' => false, 'strategy' => 'priority', 'latency_node_id' => null,
         'quota_enabled' => false, 'quota_percent' => 10,
         'dynamic_enabled' => false, 'bandwidth_threshold' => 80, 'connection_threshold' => 1000,
-        'load_confirm_seconds' => 60, 'load_cooldown_seconds' => 300, 'carrier_enabled' => false];
+        'load_confirm_seconds' => 60, 'load_cooldown_seconds' => 300, 'carrier_enabled' => false,
+        'source_ip_enabled' => false, 'source_ip_threshold' => 3, 'source_ip_strategy' => 'remaining'];
 
     public function __construct(private readonly FrontPortProbe $probe) {}
 
@@ -18,7 +19,9 @@ class FrontPoolScheduler
     public function select(BalancerPool $pool): array
     {
         $config = array_replace(self::DEFAULTS, $pool->scheduling_config ?? []);
-        if ($config['dynamic_enabled']) $config['strategy'] = 'priority';
+        if ($config['dynamic_enabled'] || $config['source_ip_enabled']) $config['strategy'] = 'priority';
+        $sourceIps = $config['source_ip_enabled'] ? FrontSourceIpLoad::machines($pool->members
+            ->map(fn ($member) => $member->runtimeNode?->machine_id)->filter()->unique()->values()->all()) : [];
         $all = []; $members = [];
         foreach ($pool->members as $member) {
             $node = $member->runtimeNode;
@@ -75,6 +78,8 @@ class FrontPoolScheduler
             $state = [...$traffic, 'ports' => $ports, 'reason' => $reason, 'quota_low' => $low,
                 'links' => $state['links'] ?? [],
                 'load' => $config['dynamic_enabled'] ? FrontDynamicLoad::sample($member, $config) : [],
+                'source_ip' => $config['source_ip_enabled']
+                    ? ($sourceIps[$node?->machine_id] ?? ['count' => null, 'fresh' => false, 'updated_at' => null]) : [],
                 'remaining_percent' => $ratio === null ? null : round($ratio, 1),
                 'latency_group' => $state['latency_group'] ?? null,
                 'latency_ms' => $latency && $latency['healthy'] ? $latency['rtt_ms'] : null];
@@ -89,6 +94,10 @@ class FrontPoolScheduler
         }
         // 线路健康、运营商和额度需要在同一候选范围内判断，保留所有端口健康成员供后续筛选。
         $available = array_map(fn ($item) => self::candidate($item), array_values($eligible));
+        if ($config['source_ip_enabled']) {
+            $ids = array_column(FrontSourceIpLoad::eligible($available, $config), 'member_id');
+            $eligible = array_filter($eligible, fn ($item) => in_array((int) $item['member']->id, $ids, true));
+        }
         if ($config['quota_enabled'] && $eligible) {
             $enough = array_filter($eligible, fn ($item) => !$item['low']);
             if ($enough) $eligible = $enough;
@@ -175,6 +184,10 @@ class FrontPoolScheduler
         return ['member_id' => (int) $member->id, 'node_id' => (int) $member->source_node_id,
             'priority' => (int) $member->priority, 'weight' => (int) ($member->weight ?: 1), 'addresses' => $item['addresses'],
             'carriers' => $member->carriers ?: ['default'], 'load' => $member->scheduling_state['load'] ?? [],
+            'source_ip' => $member->scheduling_state['source_ip'] ?? [],
+            'traffic_status' => $member->scheduling_state['traffic_status'] ?? 'unavailable',
+            'traffic_remaining' => isset($member->scheduling_state['traffic_limit'], $member->scheduling_state['traffic_used'])
+                ? max(0, $member->scheduling_state['traffic_limit'] - $member->scheduling_state['traffic_used']) : null,
             'reset_at' => $item['reset_at'], 'ratio' => $item['ratio'], 'quota_low' => $item['low']];
     }
 }

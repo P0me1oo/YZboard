@@ -599,6 +599,77 @@ class DnsSchedulingTest extends TestCase
         return $users;
     }
 
+    public function test_source_ip_threshold_moves_personal_and_pool_dns_and_keeps_member_records(): void
+    {
+        $pool = $this->pool(['scheduling_config' => ['source_ip_enabled' => true]]);
+        $users = $this->usersForPool($pool);
+        foreach ($pool->members as $member) \App\Services\FrontSourceIpLoad::record($member->runtime_node_id, []);
+        $this->assertTrue($this->sync($pool));
+        $a = $pool->members[0]; $b = $pool->members[1];
+        $name = app(\App\Services\DnsPoolService::class)->project($pool->fresh(), $users[0]);
+        $this->assertSame([$a->id], array_unique(PoolDnsAlias::where('pool_id', $pool->id)->pluck('member_id')->all()));
+        \App\Services\FrontSourceIpLoad::record($a->runtime_node_id, [1 => ['1.1.1.1', '2.2.2.2'], 2 => ['2.2.2.2', '8.8.8.8']]);
+        $this->assertTrue($this->sync($pool));
+        $this->assertSame(['192.0.2.11'], $this->addresses());
+        $this->assertSame([$b->id], array_unique(PoolDnsAlias::where('pool_id', $pool->id)->pluck('member_id')->all()));
+        $this->assertSame($name, app(\App\Services\DnsPoolService::class)->project($pool->fresh(), $users[0]));
+        $target = $this->remote[$name . '.|CNAME']['records'][0]['content'];
+        $this->assertSame('192.0.2.11', $this->remote[$target . '|A']['records'][0]['content']);
+        $a->refresh();
+        $this->assertSame(3, $a->scheduling_state['source_ip']['count']);
+        $this->assertArrayHasKey('entry-' . $a->dns_label . '.pool.example.com.|A', $this->remote);
+        $this->assertArrayNotHasKey('ips', $a->scheduling_state['source_ip']);
+        \App\Services\FrontSourceIpLoad::record($b->runtime_node_id, [1 => ['9.9.9.9', '4.4.4.4', '3.3.3.3']]);
+        $this->assertTrue($this->sync($pool));
+        $this->assertSame([$b->id], array_unique(PoolDnsAlias::where('pool_id', $pool->id)->pluck('member_id')->all()));
+    }
+
+    public function test_source_ip_dns_failure_preserves_confirmed_assignment_and_retry_applies_move(): void
+    {
+        $pool = $this->pool(['scheduling_config' => ['source_ip_enabled' => true]]);
+        $this->usersForPool($pool);
+        foreach ($pool->members as $member) \App\Services\FrontSourceIpLoad::record($member->runtime_node_id, []);
+        $this->assertTrue($this->sync($pool));
+        $before = PoolDnsAlias::where('pool_id', $pool->id)->pluck('assignment_state', 'id')->all();
+        \App\Services\FrontSourceIpLoad::record($pool->members[0]->runtime_node_id, [1 => ['1.1.1.1', '2.2.2.2', '8.8.8.8']]);
+        $this->failedZone = 'pool.example.com.';
+        $this->assertFalse($this->sync($pool));
+        $this->assertSame($before, PoolDnsAlias::where('pool_id', $pool->id)->pluck('assignment_state', 'id')->all());
+        $this->failedZone = null;
+        $this->assertTrue($this->sync($pool));
+        $this->assertSame([$pool->members[1]->id], array_unique(PoolDnsAlias::where('pool_id', $pool->id)->pluck('member_id')->all()));
+    }
+
+    public function test_source_ip_machine_counts_union_independent_entries_and_ignore_internal_landings(): void
+    {
+        $pool = $this->pool(['scheduling_config' => ['source_ip_enabled' => true]]);
+        $a = $pool->members[0]->runtimeNode;
+        $other = $this->node('192.0.2.50'); $other->update(['machine_id' => $a->machine_id]);
+        $landing = $this->node('192.0.2.51'); $landing->update(['machine_id' => $a->machine_id, 'relay_entry_id' => $a->id]);
+        $this->heartbeat($other->id, now()->timestamp); $this->heartbeat($landing->id, now()->timestamp);
+        \App\Services\FrontSourceIpLoad::record($a->id, [1 => ['1.1.1.1', '2.2.2.2']]);
+        \App\Services\FrontSourceIpLoad::record($other->id, [2 => ['2.2.2.2', '8.8.8.8']]);
+        \App\Services\FrontSourceIpLoad::record($landing->id, [2 => ['9.9.9.9']]);
+        $row = \App\Services\FrontSourceIpLoad::machines([$a->machine_id])[$a->machine_id];
+        $this->assertSame(3, $row['count']); $this->assertTrue($row['fresh']);
+        Cache::forget(CacheKey::get('SERVER_RAW_SOURCE_IPS', $other->id));
+        $this->assertFalse(\App\Services\FrontSourceIpLoad::machines([$a->machine_id])[$a->machine_id]['fresh']);
+    }
+
+    public function test_source_ip_configuration_validates_mode_and_preserves_fields_on_toggle(): void
+    {
+        $pool = $this->pool(['scheduling_config' => ['source_ip_enabled' => '1', 'source_ip_threshold' => '3', 'source_ip_strategy' => 'cycle']]);
+        $this->assertTrue($pool->scheduling_config['source_ip_enabled']);
+        $saved = $this->savePool($pool, ['enabled' => false]);
+        $this->assertSame(3, $saved->scheduling_config['source_ip_threshold']);
+        $this->assertSame('cycle', $saved->scheduling_config['source_ip_strategy']);
+        foreach ([['source_ip_threshold' => 0], ['source_ip_threshold' => 3.5], ['source_ip_strategy' => 'invalid'], ['dynamic_enabled' => true, 'source_ip_enabled' => true]] as $invalid) {
+            try { $this->savePool($pool, ['scheduling_config' => [...$pool->scheduling_config, ...$invalid]]); $this->fail('无效配置应被拒绝'); }
+            catch (ValidationException) { $this->assertSame($saved->scheduling_config, $pool->fresh()->scheduling_config); }
+        }
+        $this->assertFalse($pool->fresh()->enabled);
+    }
+
     public function test_personal_dns_uses_member_addresses_and_only_failed_member_users_move(): void
     {
         $pool = $this->pool(); $pool->members[1]->update(['priority' => 1]);

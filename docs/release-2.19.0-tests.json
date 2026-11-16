@@ -1,0 +1,46 @@
+{
+  "version": "2.19.0",
+  "environment": {
+    "php": "8.4.27",
+    "phpunit": "11.5.57",
+    "redis": "8.0.2",
+    "mariadb": "11.8.6",
+    "only_full_group_by": true
+  },
+  "sqlite": {
+    "tests": 1939,
+    "assertions": 35930,
+    "errors": 0,
+    "failures": 0,
+    "skipped": 12,
+    "time": 115.65674
+  },
+  "mariadb": {
+    "tests": 1939,
+    "assertions": 35944,
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0,
+    "time": 168.519144
+  },
+  "admin_version": "0.101.0",
+  "admin_source_check_files": 3125,
+  "admin_behavior_tests": 172,
+  "admin_reused_browser_checks": 7,
+  "admin_asset_tests": 5,
+  "integrated_admin_files": 274,
+  "integrated_admin_gzip_files": 125,
+  "admin_main_script": "assets/admin-Dm0hmrJJ.js",
+  "admin_main_script_sha256": "e616f02e85610b799ff0116d29330a6ee4d3119abf721a22945ce1239a0e751c",
+  "composer_lock_sha256": "1050e1c00643b3a77b216635283974df6a98d2ef1fc3b96bba648c2bfc7dde7e",
+  "source_files": {
+    "app/Services/FrontSourceIpLoad.php": "92c9a32f9470f0f2aeb4153ded357795cc67ae1cefc792a7ce22db9537ba9624",
+    "app/Services/DnsPoolService.php": "8a237aaac72431a621adae6d6e473d39289b3b84ad96ac3766f6bf50b6caa8ce",
+    "app/Services/FrontPoolScheduler.php": "b05e28becf23d51238059faf121a6204840c26d9937d8305b6a46442032a9a70",
+    "app/Services/FrontRouteHealth.php": "14688bb5a09b6124d90a23022c3297acc68c7c1c3297fbfbe8cd75b782ab2cf2",
+    "app/Services/LoadBalancerService.php": "ce6d167e891544fea1d96fa41c90b24e0b3a1221da5bfaf5d70313cf74e2fa1c",
+    "app/Services/ServerService.php": "277fc6d483412e2e974f1a86314a6de046aee19ccbb5d5774e1ba6f91be72141",
+    "config/app.php": "50c8810a5be5f8ad3debc0ac6de086d6347449464a14ac7272b3fad5b17fc040"
+  },
+  "admin_source_commit": "d424ba0996848fe46e61f4c1cf05b5cc90b3d1f4"
+}

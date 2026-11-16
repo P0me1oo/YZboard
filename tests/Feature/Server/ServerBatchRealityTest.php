@@ -108,6 +108,69 @@ class ServerBatchRealityTest extends TestCase
             [['server_port' => 65536], 'server_port'], [['dest' => '127.0.0.1:443'], '']];
     }
 
+    public static function destinationModes(): array
+    {
+        return [['vless', 'manual', false], ['vless', 'manual', true], ['vless', 'node', false], ['vless', 'node', true],
+            ['trojan', 'manual', false], ['trojan', 'manual', true], ['trojan', 'node', false], ['trojan', 'node', true]];
+    }
+
+    #[DataProvider('destinationModes')]
+    public function test_domain_destination_follows_each_nodes_old_sni_and_keeps_its_port(string $type, string $mode, bool $antiAbuse): void
+    {
+        $a = $this->node(1, $type); $b = $this->node(2, $type);
+        foreach ([$a, $b] as $index => $node) {
+            $name = 'old' . $index . '.example.test';
+            $node->update(['protocol_settings' => [...$node->protocol_settings, 'reality_settings' => [
+                ...$node->protocol_settings['reality_settings'], 'server_name' => $name, 'server_port' => 443,
+                'dest' => ($index === 0 ? strtoupper($name) : $name) . ':' . (9444 + $index), 'anti_abuse' => $antiAbuse]]]);
+        }
+        $settings = $mode === 'node'
+            ? array_intersect_key($b->protocol_settings['reality_settings'], array_flip(PoolRealityService::FIELDS))
+            : [...$this->settings(), 'server_name' => 'new.example.test', 'server_port' => 8443];
+        $pool = $type === 'vless' ? $this->pool([$a, $b], $this->settings()) : null;
+        $payload = $mode === 'node'
+            ? ['ids' => [$a->id, $b->id], 'pool_ids' => $pool ? [$pool->id] : [], 'mode' => 'node', 'source_id' => $b->id]
+            : $this->payload([$a, $b], $settings, $pool ? [$pool->id] : []);
+
+        $this->postJson('/_tests/batch-reality', $payload)->assertOk()->assertJsonPath('data.updated', $mode === 'node' ? 1 : 2);
+        foreach ([$a, $b] as $index => $node) {
+            $reality = $node->fresh()->protocol_settings['reality_settings'];
+            $this->assertSame($settings['server_name'] . ':' . (9444 + $index), $reality['dest']);
+            $this->assertSame($settings['server_name'], $reality['server_name']);
+            $this->assertSame((string) $settings['server_port'], $reality['server_port']);
+            $this->assertSame($antiAbuse, $reality['anti_abuse']);
+            $config = ServerService::buildNodeConfig($node->fresh());
+            $this->assertSame($reality['dest'], data_get($config, 'tls_settings.dest'));
+            $this->assertSame($settings['server_name'], data_get($config, 'tls_settings.server_name'));
+        }
+        if ($pool) {
+            $this->assertSame($settings['server_name'], data_get($pool->fresh()->template_config, 'protocol_settings.reality_settings.server_name'));
+        }
+        $saved = [$a->fresh()->getAttributes(), $b->fresh()->getAttributes()];
+        $this->postJson('/_tests/batch-reality', $payload)->assertOk()->assertJsonPath('data.updated', 0)->assertJsonPath('data.pools_updated', 0);
+        $this->assertSame($saved, [$a->fresh()->getAttributes(), $b->fresh()->getAttributes()]);
+    }
+
+    public function test_independent_destinations_are_preserved_and_empty_vless_destinations_use_the_new_sni(): void
+    {
+        $destinations = ['origin.example.test:9443', '192.0.2.10:8443', '127.0.0.1:8443', '[::1]:8443', '[2001:db8::1]:8443', '', null];
+        $nodes = [];
+        foreach ($destinations as $index => $dest) {
+            $node = $this->node($index + 1);
+            $node->update(['protocol_settings' => [...$node->protocol_settings, 'reality_settings' => [
+                ...$node->protocol_settings['reality_settings'], 'dest' => $dest]]]);
+            $nodes[] = $node;
+        }
+        $settings = [...$this->settings(), 'server_name' => 'new.example.test', 'server_port' => 9443];
+
+        $this->postJson('/_tests/batch-reality', $this->payload($nodes, $settings))->assertOk();
+        foreach ($nodes as $index => $node) {
+            $this->assertSame($destinations[$index], data_get($node->fresh()->protocol_settings, 'reality_settings.dest'));
+            $config = ServerService::buildNodeConfig($node->fresh());
+            $this->assertSame($destinations[$index] ?: 'new.example.test:9443', data_get($config, 'tls_settings.dest'));
+        }
+    }
+
     #[DataProvider('invalidSettings')]
     public function test_invalid_manual_settings_preserve_the_entire_batch(array $patch, string $field): void
     {
@@ -161,6 +224,8 @@ class ServerBatchRealityTest extends TestCase
     public function test_anti_abuse_conflict_never_leaves_partial_changes(): void
     {
         $a = $this->node(1); $b = $this->node(2);
+        $a->update(['protocol_settings' => [...$a->protocol_settings, 'reality_settings' => [
+            ...$a->protocol_settings['reality_settings'], 'server_name' => 'before.example.test', 'dest' => 'before.example.test:9443', 'anti_abuse' => true]]]);
         $b->update(['protocol_settings' => [...$b->protocol_settings, 'reality_settings' => [
             ...$b->protocol_settings['reality_settings'], 'anti_abuse' => true, 'dest' => 'old.example.test:443']]]);
         $before = [$a->fresh()->getAttributes(), $b->fresh()->getAttributes()];
@@ -171,6 +236,10 @@ class ServerBatchRealityTest extends TestCase
     public function test_second_write_failure_rolls_back_and_does_not_log_keys(): void
     {
         $a = $this->node(1); $b = $this->node(2);
+        foreach ([$a, $b] as $node) {
+            $node->update(['protocol_settings' => [...$node->protocol_settings, 'reality_settings' => [
+                ...$node->protocol_settings['reality_settings'], 'server_name' => 'before.example.test', 'dest' => 'before.example.test:9443']]]);
+        }
         $before = [$a->getAttributes(), $b->getAttributes()];
         $settings = $this->settings();
         $writes = 0;

@@ -122,6 +122,41 @@ class PoolRealitySyncTest extends TestCase
         $this->assertSame($original['private_key'], data_get($pool->fresh()->template_config, 'protocol_settings.reality_settings.private_key'));
     }
 
+    #[DataProvider('kernels')]
+    public function test_pool_save_edit_and_sync_follow_domain_destinations_and_keep_actual_ports(string $kernel): void
+    {
+        $a = $this->node(1, $kernel); $b = $this->node(2, $kernel);
+        foreach ([$a, $b] as $index => $node) {
+            $name = $node->protocol_settings['reality_settings']['server_name'];
+            $node->update(['protocol_settings' => [...$node->protocol_settings, 'reality_settings' => [
+                ...$node->protocol_settings['reality_settings'], 'dest' => $name . ':' . (9444 + $index), 'anti_abuse' => true]]]);
+        }
+        $settings = $this->reality();
+        $response = $this->postJson('/_tests/pool-reality/save', $this->payload([$a, $b], ['reality_settings' => $settings]))->assertOk();
+        $pool = BalancerPool::findOrFail($response->json('data.id'));
+        foreach ([$a, $b] as $index => $node) {
+            $this->assertSame($settings['server_name'] . ':' . (9444 + $index), data_get($node->fresh()->protocol_settings, 'reality_settings.dest'));
+            $this->assertTrue(data_get($node->fresh()->protocol_settings, 'reality_settings.anti_abuse'));
+        }
+        $replacement = [...$settings, 'server_name' => 'new.example.test', 'server_port' => 8443];
+        $this->postJson('/_tests/pool-reality/save', $this->payload([$a, $b], ['id' => $pool->id, 'reality_settings' => $replacement]))->assertOk();
+        foreach ([$a, $b] as $index => $node) {
+            $config = ServerService::buildNodeConfig($node->fresh());
+            $this->assertSame('new.example.test:' . (9444 + $index), data_get($config, 'tls_settings.dest'));
+            $this->assertSame('new.example.test', data_get($config, 'tls_settings.server_name'));
+            $this->assertSame('8443', data_get($node->fresh()->protocol_settings, 'reality_settings.server_port'));
+        }
+        $b->refresh();
+        $b->update(['protocol_settings' => [...$b->protocol_settings, 'reality_settings' => [
+            ...$b->protocol_settings['reality_settings'], 'server_name' => 'drift.example.test', 'dest' => 'drift.example.test:9445']]]);
+
+        $this->postJson('/_tests/pool-reality/sync', ['id' => $pool->id])->assertOk();
+        $this->assertSame('new.example.test:9445', data_get($b->fresh()->protocol_settings, 'reality_settings.dest'));
+        $saved = [$a->fresh()->getAttributes(), $b->fresh()->getAttributes()];
+        $this->postJson('/_tests/pool-reality/sync', ['id' => $pool->id])->assertOk();
+        $this->assertSame($saved, [$a->fresh()->getAttributes(), $b->fresh()->getAttributes()]);
+    }
+
     public function test_explicit_key_rotation_derives_public_key_and_updates_all_nodes(): void
     {
         $a = $this->node(1); $b = $this->node(2);
@@ -168,6 +203,11 @@ class PoolRealitySyncTest extends TestCase
     public function test_database_failure_rolls_back_pool_and_all_node_updates(): void
     {
         $a = $this->node(1); $b = $this->node(2);
+        foreach ([$a, $b] as $node) {
+            $name = $node->protocol_settings['reality_settings']['server_name'];
+            $node->update(['protocol_settings' => [...$node->protocol_settings, 'reality_settings' => [
+                ...$node->protocol_settings['reality_settings'], 'dest' => $name . ':9443']]]);
+        }
         $before = [$a->fresh()->getAttributes(), $b->fresh()->getAttributes()];
         Log::spy();
         config(['app.debug' => true]);

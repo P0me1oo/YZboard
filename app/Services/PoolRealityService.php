@@ -74,6 +74,13 @@ class PoolRealityService
     {
         $protocol = (array) $node->protocol_settings;
         $reality = (array) ($protocol['reality_settings'] ?? []);
+        // 回源仍沿用旧握手域名时联动，保留独立回源及回源的实际端口。
+        $previousName = strtolower(trim((string) ($reality['server_name'] ?? '')));
+        $dest = trim((string) ($reality['dest'] ?? ''));
+        if ($previousName !== $settings['server_name'] && preg_match('/\A([^:]+):([0-9]+)\z/', $dest, $address)
+            && strtolower($address[1]) === $previousName && !filter_var($address[1], FILTER_VALIDATE_IP)) {
+            $reality['dest'] = $settings['server_name'] . ':' . $address[2];
+        }
         $reality = array_replace($reality, $settings);
         if (!empty($reality['anti_abuse']) && trim((string) ($reality['dest'] ?? '')) !== '') {
             $host = parse_url('tcp://' . $reality['dest'], PHP_URL_HOST);

@@ -1,0 +1,42 @@
+{
+  "date": "2026-11-17",
+  "version": "2.23.0",
+  "source_commit": "0beec26a0e04f94c69e23d800e74ff143ea32d27",
+  "php": "8.4.27",
+  "phpunit": "11.5.57",
+  "sqlite": {
+    "tests": 1969,
+    "assertions": 36287,
+    "skipped": 12,
+    "skip_reason": "MariaDB 专项",
+    "failures": 0,
+    "errors": 0
+  },
+  "mariadb": {
+    "version": "12.3.3",
+    "strict_group_by": true,
+    "tests": 1969,
+    "assertions": 36301,
+    "skipped": 0,
+    "failures": 0,
+    "errors": 0
+  },
+  "isolated_redis": "8.0.2",
+  "admin_behavior_tests": 179,
+  "admin_resource_tests": 5,
+  "admin_source_checks_reused": 3126,
+  "admin_source": "7ae4f93a4e6397cc904a8d99b25bceb0deaf6c0a",
+  "admin_version": "0.105.0",
+  "admin_build_files_matched": 274,
+  "admin_gzip_files": 125,
+  "admin_main_script_sha256": "c5eb42aedec5b5c49b3751819e3aa40757b1ee5e4bca157d8e0a49c56a53e6d9",
+  "validation_note": "复用同一源码和产物的源码、构建、相关页面浏览器检查。首轮 SQLite 的子进程未继承临时 Redis 扩展导致并发屏障超时；改用继承的 PHP_INI_SCAN_DIR 后该项与完整矩阵通过。MariaDB 启动阶段连接未就绪不计为测试执行；在与测试同一受控会话内运行专用实例后完整通过。",
+  "github_actions": {
+    "panel_run": 44090776628,
+    "admin_runs": [
+      44090772365,
+      44090772240
+    ],
+    "test_steps_executed": false
+  }
+}

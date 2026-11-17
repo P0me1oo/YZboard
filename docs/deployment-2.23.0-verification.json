@@ -1,0 +1,68 @@
+{
+  "runtime_files_verified": 1194,
+  "services": {
+    "yzboard-web.service": "active",
+    "yzboard-horizon.service": "active",
+    "yzboard-websocket.service": "active",
+    "nginx": "active",
+    "mariadb": "active",
+    "redis-server": "active"
+  },
+  "restarts": {
+    "yzboard-web.service": "0",
+    "yzboard-horizon.service": "0",
+    "yzboard-websocket.service": "0"
+  },
+  "version": "2.23.0",
+  "http": {
+    "home": 200,
+    "admin": 200,
+    "public-config": 200,
+    "websocket": 401,
+    "asset": 200,
+    "asset-gzip": 200
+  },
+  "main_script_sha256": "c5eb42aedec5b5c49b3751819e3aa40757b1ee5e4bca157d8e0a49c56a53e6d9",
+  "persistent_state": {
+    "database_version": "12.3.3-MariaDB-deb13",
+    "machine_count": 48,
+    "migrations": 148,
+    "plugin_rows": 8,
+    "failed_jobs": 714
+  },
+  "source": "0beec26a0e04f94c69e23d800e74ff143ea32d27",
+  "admin_source": "7ae4f93a4e6397cc904a8d99b25bceb0deaf6c0a",
+  "switch_seconds": 6.75,
+  "health": {
+    "active_machines": 48,
+    "recent_machine_heartbeats": 46,
+    "agent_versions": {
+      "v2.39.0": 46,
+      "v2.10.1": 1,
+      "v2.38.0": 1
+    },
+    "fresh_runtime_nodes": 109,
+    "failed_runtime_node_ids": [],
+    "health_status_counts": {
+      "ok": 108,
+      "failed": 1
+    },
+    "failed_jobs": 714,
+    "active_direct_pools": 0
+  },
+  "failed_jobs_delta": 0,
+  "persistent_files_unchanged": true,
+  "fixed_source_environment": true,
+  "established_websocket_connections": 92,
+  "fatal_journal_matches": 0,
+  "observed_at": "2026-11-17T13:21:27.079033+00:00",
+  "server": "Solid-US LA",
+  "deployment_directory": "/root/yzboard",
+  "run_user": "www-data",
+  "changed_files": 22,
+  "archive_sha256": "9ee7dae4fd5c23cd2656a3d438866e5568e7385bff6d2c873c03c8e9386042e9",
+  "rollback_version": "2.22.2",
+  "rollback_source": "8e0d1661530c070b9af4fac139e6bbac79b61b05",
+  "rollback_directory": "/root/yzboard-deployments/2.23.0",
+  "database_migrations_changed": 0
+}

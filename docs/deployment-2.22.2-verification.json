@@ -1,0 +1,53 @@
+{
+  "date": "2026-11-17",
+  "server": "Solid-US LA",
+  "directory": "/root/yzboard",
+  "user": "www-data",
+  "version": "2.22.2",
+  "source": "8e0d1661530c070b9af4fac139e6bbac79b61b05",
+  "admin_source": "5b9c9a692cca3c7f1ed3c392d5ccc198ab890407",
+  "runtime_files_verified": 1190,
+  "changed_files": 55,
+  "migration_changes": 0,
+  "composer_lock_unchanged": true,
+  "switch_seconds": 9.04,
+  "services": {
+    "yzboard-web.service": "active",
+    "yzboard-horizon.service": "active",
+    "yzboard-websocket.service": "active",
+    "nginx": "active",
+    "mariadb": "active",
+    "redis-server": "active"
+  },
+  "service_restart_count": 0,
+  "http": {
+    "home": 200,
+    "admin": 200,
+    "public-config": 200,
+    "websocket": 401,
+    "asset": 200,
+    "asset-gzip": 200
+  },
+  "main_script_sha256": "81c841fe43485f51f6c45de1c13728b80436721713f73a692b85208c3f3ceb07",
+  "persistent_files_unchanged": true,
+  "fixed_source_environment": true,
+  "failed_jobs_delta": 0,
+  "fatal_journal_matches": 0,
+  "horizon_status_exit": 0,
+  "node_health": {
+    "fresh_nodes": 113,
+    "failed_kernel_nodes": [],
+    "source_ip_snapshots": 113
+  },
+  "established_websocket_connections": 92,
+  "persistent_state": {
+    "database_version": "12.3.3-MariaDB-deb13",
+    "machine_count": 49,
+    "migrations": 148,
+    "plugin_rows": 8,
+    "failed_jobs": 714
+  },
+  "rollback_version": "2.20.0",
+  "rollback_source": "727feac07c8bfae7b139f6a7c5bf827bcdd01f80",
+  "retained_directory": "/root/yzboard-deployments/2.22.2"
+}

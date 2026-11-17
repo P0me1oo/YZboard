@@ -1,0 +1,14 @@
+{
+  "tag": "v2.22.2",
+  "url": "https://github.com/P0me1oo/YZboard/releases/tag/v2.22.2",
+  "assets_verified": 3,
+  "source_commit": "8e0d1661530c070b9af4fac139e6bbac79b61b05",
+  "files": {
+    "release.json": "29a34b5752dee45f6bc519eb1951cb83e43e0018cee3547a28560cbbb4edcf3c",
+    "SHA256SUMS": "da89100651fdc1651d7b865ab1f324cb4d78d4e70756950036ab50a4a4113550",
+    "yzboard-2.22.2.tar.gz": "361a3af8e6bf52e5fb42a5696bac5094800b91032ebf11809f569bdfb9407ad2"
+  },
+  "date": "2026-11-17",
+  "docker_published": false,
+  "github_actions": "启动阶段失败，未执行测试步骤；使用已完成的本机检查"
+}

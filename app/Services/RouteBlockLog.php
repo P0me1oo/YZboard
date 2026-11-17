@@ -64,8 +64,8 @@ class RouteBlockLog
                 'occurred_at' => (int) $record['connected_at'], 'batch_id' => $data['batch_id'], 'position' => $position,
             ];
         }
-        // 默认记录，不读取通用日志开关；隐私保护期间仍确认合法批次，避免阻塞节点队列。
-        if (!AgentLogPolicy::disabled(node: $node) && $rows !== []) {
+        // 默认记录，使用独立保存期限；机器隐私模式只影响节点本地存储。
+        if ($rows !== []) {
             DB::table('v2_route_block_log')->upsert($rows, ['node_id', 'batch_id', 'position'], ['batch_id']);
         }
         return ['batch_id' => $data['batch_id']];

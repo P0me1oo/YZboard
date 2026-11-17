@@ -135,7 +135,66 @@ class LogSettingsTest extends TestCase
         ServerMachine::findOrFail($node->machine_id)->update(['agent_log_disabled' => true]);
         $this->change('agent', ['enabled' => false]); $this->change('agent', ['enabled' => true]);
         $agent->accept($node, null, $this->agentBatch(now()->timestamp, 'e'));
-        $this->assertDatabaseCount('v2_agent_log', 1);
+        $this->assertDatabaseCount('v2_agent_log', 2);
+    }
+
+    public function test_access_generation_changes_only_when_disabling_and_survives_settings_reload(): void
+    {
+        $this->assertSame('', ProxyAccessLog::policy()['generation']);
+        $this->change('access', ['enabled' => false]);
+        $first = ProxyAccessLog::policy()['generation'];
+        $this->assertMatchesRegularExpression('/\A[a-f0-9]{32}\z/', $first);
+        $this->change('access', ['enabled' => false, 'retention_days' => 30]);
+        $this->assertSame($first, ProxyAccessLog::policy()['generation']);
+        $this->change('access', ['enabled' => true]);
+        $this->change('agent', ['retention_days' => 14]);
+        app()->forgetScopedInstances();
+        Cache::store('redis')->forget(\App\Support\Setting::CACHE_KEY);
+        $this->assertSame($first, ProxyAccessLog::policy()['generation']);
+        $this->change('access', ['enabled' => false]);
+        $second = ProxyAccessLog::policy()['generation'];
+        $this->assertNotSame($first, $second);
+        $this->change('access', ['enabled' => true]);
+        $this->assertSame($second, ProxyAccessLog::policy()['generation']);
+        $this->assertArrayNotHasKey('generation', LogSettings::view()['access']);
+    }
+
+    public function test_access_generation_and_switch_are_unchanged_when_database_save_fails(): void
+    {
+        $this->change('access', ['enabled' => false]);
+        $this->change('access', ['enabled' => true]);
+        $before = ProxyAccessLog::policy();
+        $this->failNextQueryMatching('/update ["`]?v2_settings/i');
+        try {
+            $this->change('access', ['enabled' => false]);
+            $this->fail('数据库故障必须阻止保存');
+        } catch (\Illuminate\Database\QueryException) {
+            $this->assertSame($before, ProxyAccessLog::policy());
+        }
+        $this->change('access', ['enabled' => false]);
+        $this->assertFalse(ProxyAccessLog::policy()['enabled']);
+        $this->assertNotSame($before['generation'], ProxyAccessLog::policy()['generation']);
+    }
+
+    public function test_access_generation_rejects_old_batches_after_switching_in_the_same_second(): void
+    {
+        $node = $this->node();
+        $access = app(ProxyAccessLog::class);
+        $at = now()->timestamp;
+        $first = ProxyAccessLog::policy()['generation'];
+        $this->change('access', ['enabled' => false]);
+        $this->change('access', ['enabled' => true]);
+        $current = ProxyAccessLog::policy()['generation'];
+        $old = $this->accessBatch($node, $at) + ['generation' => $first];
+        $this->assertSame(['batch_id' => $old['batch_id']], $access->accept($node, $old));
+        $this->assertDatabaseCount('v2_proxy_access_log', 0);
+        $fresh = $this->accessBatch($node, $at, 'c') + ['generation' => $current];
+        $access->accept($node, $fresh);
+        $access->accept($node, $fresh);
+        $this->assertDatabaseCount('v2_proxy_access_log', 1);
+        // 旧 Agent 没有代次字段，继续沿用原时间边界和能力兼容。
+        $access->accept($node, $this->accessBatch($node, $at, 'd'));
+        $this->assertDatabaseCount('v2_proxy_access_log', 2);
     }
 
     public function test_disabling_user_logs_preserves_limit_receipts_and_retry_deduplication(): void

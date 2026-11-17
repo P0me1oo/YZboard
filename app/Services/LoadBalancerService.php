@@ -101,7 +101,9 @@ class LoadBalancerService
 
     public static function memberCompatibility(BalancerPool $pool, Server $node): array
     {
-        return self::dnsCompatibility($node, self::dnsReference($pool));
+        $reasons = self::dnsCompatibility($node, self::dnsReference($pool));
+        if ($pool->mode === 'direct' && ServerRelayService::childrenQuery($node)->exists()) $reasons[] = '直出池成员不能绑定落地';
+        return $reasons;
     }
 
     public static function memberOnline(BalancerPool $pool, BalancerMember $member): bool
@@ -114,7 +116,7 @@ class LoadBalancerService
 
     public function save(array $data): BalancerPool
     {
-        if (($data['mode'] ?? 'dns') !== 'dns') $this->invalid('mode', '前置池仅支持 DNS 用户分配');
+        if (!in_array($data['mode'] ?? 'dns', ['dns', 'direct'], true)) $this->invalid('mode', '请选择前置中转或直接出网');
         if (empty($data['id'])) return $this->persist($data);
         [$pool, $dnsChanged] = Cache::lock('balancer:dns:' . $data['id'], 120)->block(2, function () use ($data) {
             $previous = BalancerPool::findOrFail($data['id']);
@@ -138,7 +140,7 @@ class LoadBalancerService
         return Cache::lock('balancer:dns:' . $poolId, 120)->block(2, function () use ($poolId) {
             $pool = BalancerPool::with('members')->findOrFail($poolId);
             if (!PoolRealityService::enabled($pool)) $this->invalid('reality_sync_enabled', '请先在前置池开启自动统一 Reality 配置');
-            return $this->persist([...$pool->only(['name', 'domain', 'dns_preset_id', 'dns_ttl', 'enabled', 'follow_user_status', 'scheduling_config']),
+            return $this->persist([...$pool->only(['mode', 'name', 'domain', 'dns_preset_id', 'dns_ttl', 'enabled', 'follow_user_status', 'scheduling_config']),
                 'id' => $pool->id, 'reality_sync_enabled' => true, '_sync_reality' => true,
                 'members' => $pool->members->map(fn ($member) => ['node_id' => $member->source_node_id, 'priority' => $member->priority, 'weight' => $member->weight,
                     'bandwidth_mbps' => $member->bandwidth_mbps, 'carriers' => $member->carriers ?: ['default']])->all()]);
@@ -160,8 +162,9 @@ class LoadBalancerService
     {
         return DB::transaction(function () use ($data) {
             $pool = isset($data['id']) ? BalancerPool::query()->lockForUpdate()->findOrFail($data['id']) : new BalancerPool();
-            if ($pool->exists && $pool->mode !== 'dns') $this->invalid('mode', '请先在旧版本转换该池');
-            $data['mode'] = 'dns';
+            if ($pool->exists && !in_array($pool->mode, ['dns', 'direct'], true)) $this->invalid('mode', '请先在旧版本转换该池');
+            $data['mode'] ??= $pool->mode ?? 'dns';
+            if ($pool->exists && $pool->mode !== $data['mode']) $this->invalid('mode', '已有池不能更改用途，请新建对应模式的池');
             $data['personal_domain_enabled'] = true;
             // 兼容旧管理端传入的开关；池始终跟随节点配置的连接地址。
             unset($data['ddns_enabled']);
@@ -191,6 +194,7 @@ class LoadBalancerService
                     === $stored->map(fn ($m) => [(int) $m->source_node_id, (int) $m->priority, (int) $m->weight])->values()->all();
             foreach (collect($data)->except(['id', 'members', 'enabled', 'reality_sync_enabled', 'reality_settings', '_sync_reality']) as $key => $value) {
                 $current = $pool->{$key};
+                if ($key === 'direct_settings') $current = DirectPoolService::settings($pool);
                 if ($key === 'scheduling_config') {
                     $current = array_replace(FrontPoolScheduler::DEFAULTS, $current ?? []);
                     $value = array_replace(FrontPoolScheduler::DEFAULTS, $value ?? []);
@@ -199,6 +203,7 @@ class LoadBalancerService
             }
             if ($statusOnly) {
                 $pool->update(['enabled' => false]);
+                if ($pool->mode === 'direct') DirectPoolService::node($pool)?->updateQuietly(['enabled' => false]);
                 DB::afterCommit(fn () => $this->notify($pool));
                 return $pool->fresh(['members.sourceNode', 'members.runtimeNode']);
             }
@@ -225,6 +230,9 @@ class LoadBalancerService
             foreach ($members as $member) {
                 $source = $sources->get((int) $member['node_id']);
                 if (!$source) $this->invalid('members', '前置节点不存在');
+                $other = BalancerMember::with('pool')->where('source_node_id', $source->id)->where('pool_id', '!=', $pool->id ?? 0)->first();
+                if ($other && ($data['mode'] === 'direct' || $other->pool?->mode === 'direct')) $this->invalid('members', $source->name . '：直出成员不能同时加入其他负载池');
+                if ($data['mode'] === 'direct' && ServerRelayService::childrenQuery($source)->exists()) $this->invalid('members', $source->name . '：直出池成员不能绑定落地');
                 $reasons = [...self::dnsCompatibility($source, $first), ...self::topologyCompatibility($source, $pool)];
                 if ($reasons) $this->invalid('members', $source->name . '：' . implode('；', $reasons));
                 if ($starting && !self::agentCompatible($source->machine)) $this->invalid('members', '前置需要先运行 Agent v2.25.0 或更新版本');
@@ -233,6 +241,7 @@ class LoadBalancerService
             $hosts = $sources->map(fn ($source) => strtolower(rtrim(trim($source->host, '[] '), '.')));
             if ($hosts->unique()->count() !== $hosts->count() || $hosts->contains(strtolower(rtrim($data['domain'], '.')))) $this->invalid('members', '节点连接地址必须分别直达各自服务器');
             $policy = array_replace(FrontPoolScheduler::DEFAULTS, $data['scheduling_config'] ?? $pool->scheduling_config ?? []);
+            if ($data['mode'] === 'direct' && in_array($policy['strategy'], ['latency', 'latency_balanced'], true)) $this->invalid('scheduling_config.strategy', '直出池没有测速落地，请使用权重或流量重置周期策略');
             foreach (['bandwidth_threshold' => [10, 100], 'connection_threshold' => [1, 10000000], 'source_ip_threshold' => [1, 10000000],
                 'load_confirm_seconds' => [30, 600], 'load_cooldown_seconds' => [60, 3600]] as $field => [$min, $max]) {
                 if (!is_numeric($policy[$field]) || $policy[$field] < $min || $policy[$field] > $max) $this->invalid('scheduling_config.' . $field, '调度阈值超出允许范围');
@@ -246,7 +255,7 @@ class LoadBalancerService
                 if ($starting && !($pool->scheduling_config['carrier_enabled'] ?? false)) app(CarrierDns::class)->assertReady();
                 if (!$members->contains(fn ($m) => in_array('default', $m['carriers'], true))) $this->invalid('members', '运营商分流至少需要一条默认线路');
             }
-            if ($starting && $policy['health_enabled'] && $sources->contains(fn ($source) => !LandingPoolService::compatibleAgent($source))) $this->invalid('members', '链路健康探测需要前置运行 Agent v2.30.0 或更新版本');
+            if ($data['mode'] !== 'direct' && $starting && $policy['health_enabled'] && $sources->contains(fn ($source) => !LandingPoolService::compatibleAgent($source))) $this->invalid('members', '链路健康探测需要前置运行 Agent v2.30.0 或更新版本');
             if (!in_array($policy['strategy'], ['priority', 'latency', 'latency_balanced', 'cycle'], true)) $this->invalid('scheduling_config', '请选择有效的前置选择方式');
             if (!$policy['health_enabled'] && !$policy['dynamic_enabled'] && !$policy['source_ip_enabled'] && in_array($policy['strategy'], ['latency', 'latency_balanced'], true)) {
                 $target = Server::find($policy['latency_node_id']);
@@ -266,11 +275,19 @@ class LoadBalancerService
                 $cleanupPreset = \App\Models\BalancerDnsPreset::whereKey($pool->dns_preset_id)->lockForUpdate()->first();
                 if (!$cleanupPreset || $cleanupPreset->provider !== 'powerdns') $this->invalid('domain', '找不到旧 PowerDNS 配置，无法清理旧解析');
             }
-            $pool->fill(collect($data)->except(['id', 'members', 'reality_sync_enabled', 'reality_settings', '_sync_reality'])->all());
+            $directSettings = [];
+            if ($data['mode'] === 'direct') {
+                $directSettings = array_replace(['group_ids' => $first->group_ids ?? [], 'rate' => $first->getCurrentRate(), 'show' => true, 'sort' => 0], DirectPoolService::settings($pool), $data['direct_settings'] ?? []);
+                $groups = array_values(array_unique(array_map('intval', $directSettings['group_ids'])));
+                if (!$groups || \App\Models\ServerGroup::whereIn('id', $groups)->count() !== count($groups)) $this->invalid('direct_settings.group_ids', '请选择有效的权限组');
+                if (!is_numeric($directSettings['rate']) || $directSettings['rate'] < 0 || $directSettings['rate'] > 1000) $this->invalid('direct_settings.rate', '直出池倍率范围为 0–1000');
+                $directSettings = ['group_ids' => $groups, 'rate' => (float) $directSettings['rate'], 'show' => (bool) $directSettings['show'], 'sort' => (int) $directSettings['sort']];
+            }
+            $pool->fill(collect($data)->except(['id', 'members', 'direct_settings', 'reality_sync_enabled', 'reality_settings', '_sync_reality'])->all());
             $pool->protocol = $first->type;
             $pool->template_node_id = $first->id;
             $pool->template_config = [...collect($first->toArray())->only(['type', 'kernel_type', 'rate', 'group_ids', 'protocol_settings', 'route_ids', 'source_policy', 'rate_time_enable', 'rate_time_ranges'])->all(),
-                'reality_sync_enabled' => $syncReality];
+                'reality_sync_enabled' => $syncReality, ...($pool->mode === 'direct' ? ['direct_settings' => $directSettings] : [])];
             // 沿用数据库中的公网端口字段；不再创建转发入口或专用监听。
             $pool->gateway_port = self::publicPort($first);
             $pool->backend_port = $pool->gateway_port;
@@ -278,9 +295,11 @@ class LoadBalancerService
             $pool->gateway_address = '';
             $pool->gateway_source_ips = [];
             $pool->save();
+            if ($pool->mode === 'direct') DirectPoolService::saveNode($pool);
             if ($reality !== null) foreach ($sources as $source) if ($source->isDirty('protocol_settings')) $source->save();
             foreach ($members->values() as $position => $values) {
                 $source = $sources[(int) $values['node_id']];
+                if ($pool->mode === 'direct' && (int) $source->balancer_pool_id !== (int) $pool->id) $source->update(['balancer_pool_id' => $pool->id]);
                 $member = $stored->pull($source->id) ?? new BalancerMember(['pool_id' => $pool->id, 'source_node_id' => $source->id]);
                 $member->runtime_node_id = $source->id;
                 $member->priority = (int) $values['priority'];
@@ -295,6 +314,7 @@ class LoadBalancerService
             }
             foreach ($stored as $member) {
                 $id = (int) $member->source_node_id;
+                if ($pool->mode === 'direct') Server::whereKey($id)->where('balancer_pool_id', $pool->id)->update(['balancer_pool_id' => null]);
                 $member->delete();
                 DB::afterCommit(fn () => NodeSyncService::notifyFullSync($id));
             }
@@ -317,7 +337,7 @@ class LoadBalancerService
     public static function entryForPool(int $poolId): ?Server
     {
         $pool = BalancerPool::with('members.runtimeNode.machine')->find($poolId);
-        if (!$pool || !$pool->enabled) return null;
+        if (!$pool || !$pool->enabled || $pool->mode !== 'dns') return null;
         $entry = $pool->members->pluck('runtimeNode')->filter(fn ($node) => $node && $node->enabled !== false
             && !MachineTrafficService::nodeBlocked($node)
             && self::memberCompatibility($pool, $node) === [])->first();

@@ -51,7 +51,8 @@ class DnsPoolService
 
     private function users(BalancerPool $pool): Collection
     {
-        $groups = Server::where('relay_pool_id', $pool->id)->where(fn ($q) => $q->where('enabled', true)->orWhereNull('enabled'))->get()->flatMap(fn ($s) => $s->group_ids ?? [])
+        $nodes = $pool->mode === 'direct' ? Server::whereKey($pool->gateway_node_id) : Server::where('relay_pool_id', $pool->id);
+        $groups = $nodes->where(fn ($q) => $q->where('enabled', true)->orWhereNull('enabled'))->get()->flatMap(fn ($s) => $s->group_ids ?? [])
             ->map(fn ($id) => (int) $id)->unique()->values()->all();
         if (!$groups) return collect();
         return User::query()->when($pool->follow_user_status, fn ($q) => $q->where('banned', false)->whereRaw('u + d < transfer_enable')
@@ -75,7 +76,7 @@ class DnsPoolService
         $names = [];
         $available = $config['health_enabled'] || $config['carrier_enabled'] || $config['source_ip_enabled']
             ? $state['available_candidates'] : $state['candidates'];
-        $routes = $config['health_enabled'] ? Server::with('machine')->where('relay_pool_id', $pool->id)->get() : collect();
+        $routes = $config['health_enabled'] && $pool->mode !== 'direct' ? Server::with('machine')->where('relay_pool_id', $pool->id)->get() : collect();
         $scopes = [0 => $state['candidates']];
         foreach ($routes as $route) $scopes[$route->id] = FrontRouteHealth::select($pool, $route, $available);
         if ($config['health_enabled'] && $routes->isNotEmpty()) {
@@ -178,7 +179,7 @@ class DnsPoolService
             || ($current->expired_at !== null && $current->expired_at <= time())))) {
             throw new HttpResponseException(response('当前用户没有该节点的使用权限', 403, ['Cache-Control' => 'private, no-store']));
         }
-        if (!($pool->scheduling_config['health_enabled'] ?? false)) $routeId = 0;
+        if ($pool->mode === 'direct' || !($pool->scheduling_config['health_enabled'] ?? false)) $routeId = 0;
         $name = $alias ? self::label($alias, $routeId) . '.' . $pool->domain : null;
         $memberId = $routeId ? ($alias?->assignment_state[$routeId]['default']['member_id'] ?? null) : $alias?->member_id;
         $member = $memberId ? $pool->members()->find($memberId) : null;

@@ -14,10 +14,18 @@ class ProxyAccessLog
     public const RETENTION_DAYS = 7;
     public const MAX_BATCH = 256;
 
+    public static function policy(): array
+    {
+        $settings = LogSettings::all()['access'];
+        return ['version' => 2, 'enabled' => $settings['enabled'], 'retention_days' => $settings['retention_days'],
+            'generation' => $settings['generation']];
+    }
+
     public function accept(Server $node, array $payload): array
     {
         $data = Validator::make($payload, [
             'batch_id' => ['required', 'string', 'regex:/\A[a-f0-9]{32}\z/'],
+            'generation' => ['sometimes', 'nullable', 'string', 'regex:/\A[a-f0-9]{32}\z/'],
             'records' => 'required|array|min:1|max:' . self::MAX_BATCH,
             'records.*' => 'required|array:node_id,user_id,connected_at,destination,port',
             'records.*.node_id' => 'sometimes|required|integer|min:1|max:4294967295',
@@ -29,8 +37,10 @@ class ProxyAccessLog
         if (!array_is_list($data['records'])) {
             throw ValidationException::withMessages(['records' => '访问记录必须为列表。']);
         }
-        [$enabled, $cutoff] = LogSettings::recording('access');
-        if (!$enabled) return ['batch_id' => $data['batch_id']];
+        $settings = LogSettings::all()['access'];
+        $cutoff = max(now()->timestamp - $settings['retention_days'] * 86400, $settings['record_from']);
+        $stale = array_key_exists('generation', $data) && (string) ($data['generation'] ?? '') !== $settings['generation'];
+        if (!$settings['enabled'] || $stale) return ['batch_id' => $data['batch_id']];
         $now = now()->timestamp;
         // 认证仍属于上报入口，只允许归属本节点或它自己的中转落地。
         $children = ServerRelayService::childrenQuery($node)->pluck('name', 'id');

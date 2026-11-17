@@ -112,6 +112,7 @@ class DdnsService
     /** 这里计算客户端入口，落地和池成员的内部地址不参与用户解析。 */
     public static function endpoint(array $server): array
     {
+        if (($server['balancer_role'] ?? null) === DirectPoolService::ROLE) return ['pool', (int) $server['balancer_pool_id']];
         if (!empty($server['relay_pool_id'])) return ['pool', (int) $server['relay_pool_id']];
         return ['node', (int) (($server['relay_entry_id'] ?? null) ?: ($server['id'] ?? 0))];
     }

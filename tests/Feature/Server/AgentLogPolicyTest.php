@@ -90,14 +90,17 @@ class AgentLogPolicyTest extends TestCase
         }
     }
 
-    public function test_disabled_machine_acknowledges_old_runtime_logs_without_storing_or_notifying(): void
+    public function test_private_machine_records_runtime_logs_and_deduplicates_retries(): void
     {
         $machine = $this->machine(true);
         $payload = ['batch_id' => str_repeat('a', 32), 'records' => [[
             'source' => 'xray', 'level' => 'error', 'event' => 'xray.crash',
-            'message' => '运行日志不应保存', 'occurred_at' => now()->timestamp,
+            'message' => '隐私模式运行日志正常保存', 'occurred_at' => now()->timestamp,
         ]]];
         $this->assertSame(['batch_id' => $payload['batch_id']], app(AgentLog::class)->accept(null, $machine, $payload));
-        $this->assertSame(0, DB::table('v2_agent_log')->count());
+        $this->assertSame(['batch_id' => $payload['batch_id']], app(AgentLog::class)->accept(null, $machine, $payload));
+        $this->assertDatabaseCount('v2_agent_log', 1);
+        $this->assertDatabaseHas('v2_agent_log', ['machine_id' => $machine->id, 'event' => 'xray.crash',
+            'message' => '隐私模式运行日志正常保存']);
     }
 }

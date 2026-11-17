@@ -72,6 +72,25 @@ class TelegramXrayCrashTest extends TestCase
         return $notification->fresh();
     }
 
+    public function test_private_machine_keeps_crash_notifications_and_log_recording_switch(): void
+    {
+        $this->admin();
+        $machine = ServerMachine::create(['name' => '隐私机器', 'token' => Str::random(32),
+            'is_active' => true, 'agent_log_disabled' => true]);
+        $node = $this->node(['machine_id' => $machine->id]);
+        $logs = app(AgentLog::class);
+        $logs->accept($node, $machine, $this->batch());
+        $logs->accept($node, $machine, $this->batch());
+        $this->assertDatabaseCount('v2_agent_log', 1);
+        $this->assertDatabaseCount('v2_telegram_business_notifications', 1);
+        $settings = \App\Services\LogSettings::view();
+        $settings['agent']['enabled'] = false;
+        \App\Services\LogSettings::save($settings);
+        $logs->accept($node, $machine, $this->batch([], 'b'));
+        $this->assertDatabaseCount('v2_agent_log', 1);
+        $this->assertDatabaseCount('v2_telegram_business_notifications', 1);
+    }
+
     public function test_only_bound_active_admin_receives_crash_and_retries_do_not_repeat(): void
     {
         $this->admin();

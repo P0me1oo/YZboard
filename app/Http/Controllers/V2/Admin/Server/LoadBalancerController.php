@@ -28,6 +28,11 @@ class LoadBalancerController extends Controller
             $view['reality_sync_enabled'] = \App\Services\PoolRealityService::enabled($pool);
             $view['reality_settings'] = \App\Services\PoolRealityService::view($pool);
             $view['effective_rate'] = $pool->members->first()?->runtimeNode?->getCurrentRate();
+            if ($pool->mode === 'direct') {
+                $view['direct_settings'] = \App\Services\DirectPoolService::settings($pool);
+                $view['subscription_node_id'] = $pool->gateway_node_id;
+                $view['effective_rate'] = $view['direct_settings']['rate'] ?? 1;
+            }
             $view['members'] = $pool->members->map(fn ($member) => [
                 'node_id' => $member->source_node_id, 'name' => $member->sourceNode?->name, 'priority' => $member->priority, 'weight' => $member->weight, 'assigned_users' => (int) ($counts[$member->id] ?? 0),
                 'runtime_node_id' => $member->runtime_node_id, 'online' => LoadBalancerService::memberOnline($pool, $member),
@@ -107,12 +112,17 @@ class LoadBalancerController extends Controller
     {
         $request->merge(['domain' => strtolower(trim((string) $request->input('domain')))]);
         $id = (int) $request->input('id', 0);
-        $mode = $request->input('mode', 'dns');
+        $mode = $request->input('mode', $id ? BalancerPool::find($id)?->mode ?? 'dns' : 'dns');
         $request->merge(['mode' => $mode]);
         $data = $request->validate(['id' => 'nullable|integer|exists:v2_balancer_pool,id', 'name' => 'required|string|max:100',
             'domain' => ['required', 'string', 'max:253', 'regex:/\A(?=.{1,253}\z)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}\z/', Rule::unique('v2_balancer_pool')->ignore($id)],
             'dns_preset_id' => 'required|integer|exists:v2_balancer_dns_preset,id',
-            'mode' => 'required|in:dns', 'dns_ttl' => 'sometimes|integer|min:30|max:86400',
+            'mode' => 'required|in:dns,direct', 'dns_ttl' => 'sometimes|integer|min:30|max:86400',
+            'direct_settings' => 'sometimes|array:group_ids,rate,show,sort',
+            'direct_settings.group_ids' => 'sometimes|required|array|min:1',
+            'direct_settings.group_ids.*' => 'required|integer|distinct|exists:v2_server_group,id',
+            'direct_settings.rate' => 'sometimes|required|numeric|min:0|max:1000',
+            'direct_settings.show' => 'sometimes|boolean', 'direct_settings.sort' => 'sometimes|integer|min:0|max:2147483647',
             'ddns_enabled' => 'sometimes|boolean', 'personal_domain_enabled' => 'sometimes|boolean', 'follow_user_status' => 'sometimes|boolean',
             'reality_sync_enabled' => 'sometimes|boolean',
             'reality_settings' => 'sometimes|nullable|array:private_key,public_key,short_id,server_name,server_port',
@@ -146,7 +156,7 @@ class LoadBalancerController extends Controller
             'members.*.carriers.*' => 'required|in:default,telecom,unicom,mobile']);
         if (!empty($data['dns_preset_id'])) {
             $preset = BalancerDnsPreset::findOrFail($data['dns_preset_id']);
-            if (!(($mode === 'dns' && $data['domain'] === $preset->domain) || str_ends_with(strtolower($data['domain']), '.' . $preset->domain))) {
+            if (!($data['domain'] === $preset->domain || str_ends_with(strtolower($data['domain']), '.' . $preset->domain))) {
                 throw ValidationException::withMessages(['domain' => '入口域名必须是所选配置域名下的子域名']);
             }
         }
@@ -179,6 +189,7 @@ class LoadBalancerController extends Controller
                 $pool = BalancerPool::query()->lockForUpdate()->findOrFail($data['id']);
                 if (Server::where('relay_pool_id', $pool->id)->exists()) throw ValidationException::withMessages(['id' => '请先解除落地节点对该池的引用']);
                 $pool->update(['enabled' => false]);
+                if ($pool->mode === 'direct') \App\Services\DirectPoolService::node($pool)?->updateQuietly(['enabled' => false]);
                 DB::afterCommit(fn () => app(LoadBalancerService::class)->notify($pool));
                 return $pool;
             });
@@ -193,6 +204,13 @@ class LoadBalancerController extends Controller
             if (Server::where('relay_pool_id', $pool->id)->exists()) throw ValidationException::withMessages(['id' => '请先解除落地节点对该池的引用']);
             if ($pool->enabled || \App\Models\PowerDnsRecord::where('owner_type', 'pool')->where('owner_id', $pool->id)->exists()) throw ValidationException::withMessages(['id' => '池状态已改变，未删除配置，请刷新后重试']);
             $originalIds = $pool->members()->whereColumn('runtime_node_id', 'source_node_id')->pluck('source_node_id')->all();
+            if ($pool->mode === 'direct') {
+                Server::whereIn('id', $originalIds)->where('balancer_pool_id', $pool->id)->update(['balancer_pool_id' => null]);
+                if ($node = \App\Services\DirectPoolService::node($pool)) {
+                    \App\Services\ServerNameHistory::remember(collect([$node]));
+                    $node->delete();
+                }
+            }
             $pool->members()->delete();
             \App\Models\PoolDnsAlias::where('pool_id', $pool->id)->delete();
             $pool->delete();

@@ -60,7 +60,7 @@ class RealtimeSnapshotService
                 }
             })->get(['id', 'type', 'parent_id', 'relay_entry_id', 'relay_pool_id', 'group_ids', 'enabled', 'u', 'd', 'usage_u', 'usage_d']);
             $displayNodes = $allNodes->whereIn('id', $subscription['nodes']);
-            $nodes = $allNodes->filter(fn ($node) => !$node->relay_entry_id && !$node->relay_pool_id);
+            $nodes = DirectPoolService::runtimeNodes($allNodes->filter(fn ($node) => !$node->relay_entry_id && !$node->relay_pool_id));
             $runtime->readMany(array_merge(
                 $userIds === [] ? [] : $nodes->map(fn ($node) => 'node:' . $node->id)->all(),
                 $displayNodes->map(fn ($node) => 'node:' . ($node->parent_id ?: $node->id))->all(),

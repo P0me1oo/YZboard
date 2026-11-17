@@ -256,6 +256,7 @@ class ServerRelayService
     /** 入口按实际内核校验，且自身不能再连接其它前置入口。 */
     public static function isSupportedEntry(Server $entry): bool
     {
+        if (DirectPoolService::poolFor($entry) || $entry->balancer_role === DirectPoolService::ROLE) return false;
         return $entry->relayEntryId() === null && !$entry->relay_pool_id
             && self::validateEntrySettings(
                 $entry->type,
@@ -714,6 +715,8 @@ class ServerRelayService
         if (!$entry) {
             return '前置入口节点不存在';
         }
+        if (DirectPoolService::poolFor($entry) || $entry->balancer_role === DirectPoolService::ROLE) return '直出池成员不能作为中转入口';
+        if ($selfId && ($self = Server::find($selfId)) && DirectPoolService::poolFor($self)) return '直出池成员不能绑定前置入口';
 
         if ($error = self::validateEntrySettings(
             $entry->type,

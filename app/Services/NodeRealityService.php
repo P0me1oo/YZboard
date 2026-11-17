@@ -71,7 +71,7 @@ class NodeRealityService
 
             $missing = [];
             foreach ($pools as $pool) {
-                if ($pool->mode !== 'dns') {
+                if (!in_array($pool->mode, ['dns', 'direct'], true)) {
                     throw ValidationException::withMessages(['pool_ids' => $pool->name . '：旧转发模式暂不支持此联动']);
                 }
                 foreach ($members->where('pool_id', $pool->id) as $member) {

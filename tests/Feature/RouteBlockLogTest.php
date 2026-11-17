@@ -126,7 +126,7 @@ class RouteBlockLogTest extends TestCase
         $this->push($batch, $auth)->assertUnprocessable();
     }
 
-    public function test_default_recording_ignores_log_switches_and_preserves_privacy_and_retention(): void
+    public function test_default_recording_in_privacy_mode_ignores_general_log_switches_and_preserves_retention(): void
     {
         $old = $this->batch();
         $settings = LogSettings::view();
@@ -147,7 +147,7 @@ class RouteBlockLogTest extends TestCase
         $machine = ServerMachine::create(['name' => '隐私机器', 'token' => Str::random(32), 'is_active' => true, 'agent_log_disabled' => true]);
         $this->node->update(['machine_id' => $machine->id]);
         $this->push($this->batch(['connected_at' => now()->timestamp]))->assertOk();
-        $this->assertDatabaseCount('v2_route_block_log', 2);
+        $this->assertDatabaseCount('v2_route_block_log', 3);
         $this->travel(8)->days();
         $this->fetch()->assertJsonPath('data.total', 0);
         $this->push($old)->assertOk();

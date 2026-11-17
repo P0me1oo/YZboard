@@ -84,7 +84,7 @@ class NodeSyncService
             if (!self::isNodeOnline($server->id))
                 continue;
 
-            if (ServerRelayService::hasRelayChildren($server) || $server->type === Server::TYPE_WIREGUARD) {
+            if (\App\Services\DirectPoolService::poolFor($server) || ServerRelayService::hasRelayChildren($server) || $server->type === Server::TYPE_WIREGUARD) {
                 self::push($server->id, 'sync.users', ['users' => ServerService::getUsersForSync($server)->toArray()]);
                 continue;
             }
@@ -134,7 +134,7 @@ class NodeSyncService
                 continue;
 
             // 旧组撤权可能只移除一条线路，不能误删该用户仍有权使用的其他线路。
-            if (ServerRelayService::hasRelayChildren($server) || $server->type === Server::TYPE_WIREGUARD) {
+            if (\App\Services\DirectPoolService::poolFor($server) || ServerRelayService::hasRelayChildren($server) || $server->type === Server::TYPE_WIREGUARD) {
                 self::push($server->id, 'sync.users', ['users' => ServerService::getUsersForSync($server)->toArray()]);
                 continue;
             }
@@ -159,7 +159,7 @@ class NodeSyncService
         })->get();
         // 落地不保存面板用户，线路权限变化必须通知承载认证的前置入口。
         $entryIds = $servers->pluck('relay_entry_id')->filter()->unique();
-        $poolIds = $servers->pluck('relay_pool_id')->filter()->unique();
+        $poolIds = $servers->pluck('relay_pool_id')->concat($servers->where('balancer_role', DirectPoolService::ROLE)->pluck('balancer_pool_id'))->filter()->unique();
         return $servers->concat(Server::whereIn('id', $entryIds)->get())
             ->concat(Server::whereIn('id', \App\Models\BalancerMember::whereIn('pool_id', $poolIds)->pluck('runtime_node_id'))->get())->unique('id')->values();
     }

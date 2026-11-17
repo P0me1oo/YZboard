@@ -13,6 +13,7 @@ class UserSpeedService
         $nodes ??= Server::query()->where(function ($query) {
             $query->whereNull('relay_entry_id')->orWhere('relay_entry_id', 0);
         })->whereNull('relay_pool_id')->get(['id', 'group_ids', 'enabled']);
+        $nodes = DirectPoolService::runtimeNodes(collect($nodes));
         $operations = [];
         try {
             $runtime ??= app(RealtimeStateStore::class)->readMany(

@@ -33,7 +33,7 @@ class ServerService
      */
     public static function getAllServers(): Collection
     {
-        $query = Server::whereNull('balancer_role')->orderBy('sort', 'ASC')->orderBy('id');
+        $query = Server::whereNull('balancer_role')->withCount('relayChildren')->orderBy('sort', 'ASC')->orderBy('id');
 
         return $query->get()->append([
             'last_check_at',
@@ -81,6 +81,7 @@ class ServerService
                         ->orWhereJsonContains('group_ids', (int) $groupId);
                 }
             })
+            ->whereNotIn('id', \App\Models\BalancerMember::whereIn('pool_id', \App\Models\BalancerPool::where('mode', 'direct')->select('id'))->select('source_node_id'))
             ->where('show', true)
             ->orderBy('sort', 'ASC')
             ->get()
@@ -88,6 +89,12 @@ class ServerService
 
         $landingPools = \App\Models\LandingPool::where('enabled', true)->whereIn('node_id', $servers->pluck('id'))->get()->keyBy('node_id');
         $servers = collect($servers)->map(function ($server) use ($user, $landingPools) {
+            if ($server->balancer_role === DirectPoolService::ROLE) {
+                $server = DirectPoolService::project($server);
+                if (!$server) return null;
+                $server->password = $user->uuid;
+                return $server;
+            }
             $landingPool = $landingPools->get($server->id);
             if (!$landingPool && MachineTrafficService::nodeBlocked($server)) {
                 return null;
@@ -128,7 +135,8 @@ class ServerService
             }
             $server->rate = $server->getCurrentRate();
             return $server;
-        })->filter()->values()->toArray();
+        })->filter()->values()->map(fn (Server $server) => $server->balancer_role === DirectPoolService::ROLE
+            ? DirectPoolService::clientArray($server) : $server->toArray())->all();
 
         return $servers;
     }
@@ -206,6 +214,9 @@ class ServerService
 
     private static function usersForNode(Server $node, ?int $userId, bool $settlement, array $ids = [], bool $onlyIds = false)
     {
+        if ($node->balancer_role === DirectPoolService::ROLE) return collect();
+        $directPool = DirectPoolService::poolFor($node);
+        if ($directPool && !$directPool->enabled) return collect();
         if (!$settlement && MachineTrafficService::nodeBlocked($node)) {
             return collect();
         }
@@ -220,8 +231,8 @@ class ServerService
         }
 
         $routeGroups = self::relayRouteGroups($node);
-        $groupIds = $routeGroups === null ? ($node->group_ids ?? [])
-            : array_values(array_unique(array_merge(...array_values($routeGroups))));
+        $groupIds = $directPool ? (DirectPoolService::settings($directPool)['group_ids'] ?? []) : ($routeGroups === null ? ($node->group_ids ?? [])
+            : array_values(array_unique(array_merge(...array_values($routeGroups)))));
         if (empty($groupIds)) {
             return collect();
         }

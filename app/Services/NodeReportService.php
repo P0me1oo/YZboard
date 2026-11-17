@@ -67,6 +67,7 @@ class NodeReportService
             ];
             $traffic = TrafficPayload::normalize((array) $traffic);
         }
+        if ($directNodeId = DirectPoolService::poolFor($node)?->gateway_node_id) $serverSnapshot['direct_node_id'] = (int) $directNodeId;
         TrafficPayload::validateRate($traffic, $serverSnapshot['rate']);
 
         $relayTraffic = ServerService::normalizeRelayTraffic($node, $relayTraffic);

@@ -127,6 +127,7 @@ class MachineController extends Controller
         }
         $scan = ($report['reality_scan_supported'] ?? false) ? \App\Services\RealityScanService::exchange($machine, $report) : null;
         return response()->json(['command' => $command, 'reality_scan' => $scan,
+            'access_log' => \App\Services\ProxyAccessLog::policy(),
             'host_monitoring' => \App\Services\HostMonitoring::enabled($machine),
             'log_policy' => \App\Services\AgentLogPolicy::view($machine)]);
     }
@@ -157,6 +158,7 @@ class MachineController extends Controller
 
         return response()->json([
             'nodes' => $nodes,
+            'access_log' => \App\Services\ProxyAccessLog::policy(),
             'host_monitoring' => \App\Services\HostMonitoring::enabled($machine),
             'log_policy' => \App\Services\AgentLogPolicy::view($machine),
             'traffic' => \App\Services\MachineTrafficService::view($machine),

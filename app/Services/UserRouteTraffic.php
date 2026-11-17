@@ -30,7 +30,7 @@ class UserRouteTraffic
         $entry = (int) $batch->server_id;
         foreach ((array) $batch->traffic as $uid => $traffic) {
             $u = max(0, (int) $traffic[0]); $d = max(0, (int) $traffic[1]);
-            $items[] = [(int) $uid, $entry, (int) ($snapshot['id'] ?? $entry), 'entry', $rate,
+            $items[] = [(int) $uid, $entry, (int) ($snapshot['direct_node_id'] ?? $snapshot['id'] ?? $entry), 'entry', $rate,
                 (int) $batch->record_at, $u, $d, (int) ($u * $rate), (int) ($d * $rate), $batch->created_at?->timestamp];
         }
         foreach ((array) $batch->relay_user_traffic as $uid => $nodes) {

@@ -1,0 +1,31 @@
+{
+  "date": "2026-11-17",
+  "version": "2.22.2",
+  "php": "8.4.27",
+  "phpunit": "11.5.57",
+  "sqlite": {
+    "tests": 1962,
+    "assertions": 36189,
+    "skipped": 12,
+    "skip_reason": "MariaDB 专项",
+    "failures": 0,
+    "errors": 0
+  },
+  "mariadb": {
+    "version": "12.3.3",
+    "strict_group_by": true,
+    "tests": 1962,
+    "assertions": 36203,
+    "skipped": 0,
+    "failures": 0,
+    "errors": 0
+  },
+  "isolated_redis": "8.0.2",
+  "admin_behavior_tests": 179,
+  "admin_resource_tests": 5,
+  "admin_source_checks": 3126,
+  "admin_source": "5b9c9a692cca3c7f1ed3c392d5ccc198ab890407",
+  "admin_version": "0.104.2",
+  "admin_main_script_sha256": "81c841fe43485f51f6c45de1c13728b80436721713f73a692b85208c3f3ceb07",
+  "validation_note": "复用同一源码与产物的相关页面浏览器检查；未再次运行前端全站 verify。首次本机检查缺少 Redis 扩展配套加载，补齐任务临时配置后完整重跑通过。"
+}

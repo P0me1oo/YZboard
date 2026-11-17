@@ -41,7 +41,8 @@ class MachineStateService
         $source = 'machine:' . $machine->id;
         $receipt = $this->store->accept($source, $validated['epoch'], (int) $validated['sequence'], $state);
         if ($state !== []) $this->persistLatest($machine);
-        return $receipt + ['host_monitoring' => $enabled, 'telemetry' => app(TelemetryDemand::class)->forSource($source)];
+        return $receipt + ['host_monitoring' => $enabled, 'access_log' => ProxyAccessLog::policy(),
+            'telemetry' => app(TelemetryDemand::class)->forSource($source)];
     }
 
     /** 当前显示直接读取缓存；历史曲线和机器表最多每分钟保存一次，避免每秒写数据库。 */

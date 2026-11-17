@@ -27,7 +27,7 @@ class ManageController extends Controller
 
         // 前置入口一定也在这份全量列表里，用内存映射解析名称，避免逐行再查一次库。
         $nameById = $servers->pluck('name', 'id');
-        $rateById = $servers->mapWithKeys(fn (Server $server) => [$server->id => $server->getCurrentRate()]);
+        $rateById = $servers->mapWithKeys(fn (Server $server) => [$server->id => $server->getEffectiveRate()]);
 
         $servers = $servers->map(function ($item) use ($nameById, $rateById, $portConflicts) {
             $item['port_conflict'] = $portConflicts[$item->id] ?? null;
@@ -40,10 +40,9 @@ class ManageController extends Controller
             $item['relay_entry_name'] = $entryId === null ? null : $nameById->get($entryId);
             if ($item->relay_pool_id) $item['relay_entry_name'] = \App\Models\BalancerPool::find($item->relay_pool_id)?->name;
             $item['relay_entry_supported'] = ServerRelayService::isSupportedEntry($item);
+            $item['pool_entry_supported'] = ServerRelayService::validateEntrySettings($item->type, (array) $item->protocol_settings, $item->host, $item->kernel_type) === null;
             $item['ddns'] = \App\Services\DdnsService::view('node', $item->id);
-            $item['effective_rate'] = $item->relay_pool_id ? $item->getEffectiveRate() : ($item->isRelayChild() && !$item->relay_rate_override
-                ? $rateById->get($entryId, $rateById->get($item->id))
-                : $rateById->get($item->id));
+            $item['effective_rate'] = $rateById->get($item->id);
             return $item;
         });
 
@@ -212,6 +211,7 @@ class ManageController extends Controller
             'id' => 'required|integer',
         ]);
         if (\App\Models\BalancerMember::where('source_node_id', $request->id)->exists()) throw ValidationException::withMessages(['id' => '节点被前置池引用，请先移除对应成员']);
+        if (Server::whereKey($request->id)->where('balancer_role', \App\Services\DirectPoolService::ROLE)->exists()) throw ValidationException::withMessages(['id' => '直出订阅线路请在负载池中删除']);
         try {
             return DB::transaction(function () use ($request) {
                 $server = Server::whereKey($request->id)->lockForUpdate()->first();
@@ -244,6 +244,7 @@ class ManageController extends Controller
 
         $ids = $request->input('ids');
         if (\App\Models\BalancerMember::whereIn('source_node_id', $ids)->exists()) throw ValidationException::withMessages(['ids' => '选中的节点被前置池引用，请先移除对应成员']);
+        if (Server::whereIn('id', $ids)->where('balancer_role', \App\Services\DirectPoolService::ROLE)->exists()) throw ValidationException::withMessages(['ids' => '直出订阅线路请在负载池中删除']);
         if (empty($ids)) {
             return $this->fail([400, '请选择要删除的节点']);
         }

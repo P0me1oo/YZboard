@@ -634,6 +634,9 @@ class Server extends Model
      */
     public function getEffectiveRate(): float
     {
+        if ($this->exists && ($pool = \App\Services\DirectPoolService::poolFor($this))) {
+            return (float) (\App\Services\DirectPoolService::settings($pool)['rate'] ?? $this->getCurrentRate());
+        }
         if ($this->relay_pool_id && !$this->relay_rate_override) {
             return \App\Services\LoadBalancerService::entryForPool((int) $this->relay_pool_id)?->getCurrentRate() ?? $this->getCurrentRate();
         }

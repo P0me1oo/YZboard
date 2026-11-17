@@ -160,7 +160,8 @@ class ProxyAccessLogTest extends TestCase
     public function test_permissions_machine_scope_and_handshake(): void
     {
         $this->postJson('/api/v2/server/access-log', $this->batch() + ['node_id' => $this->node->id])->assertUnprocessable();
-        $this->postJson('/api/v2/server/handshake', ['token' => $this->credential])->assertOk()->assertJsonPath('access_log.version', 2);
+        $this->postJson('/api/v2/server/handshake', ['token' => $this->credential])->assertOk()
+            ->assertJsonPath('access_log.version', 2)->assertJsonPath('access_log.enabled', true);
         $machine = ServerMachine::create(['name' => '测试机', 'token' => Str::random(32), 'is_active' => true]);
         $payload = $this->batch() + ['machine_id' => $machine->id, 'node_id' => $this->node->id, 'token' => $machine->token];
         $this->postJson('/api/v2/server/access-log', $payload)->assertStatus(400);

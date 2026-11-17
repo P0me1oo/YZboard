@@ -49,7 +49,7 @@ class ServerController extends Controller
         return response()->json([
             'host_monitoring' => \App\Services\HostMonitoring::enabled($request->attributes->get('machine_info'), $node),
             'log_policy' => \App\Services\AgentLogPolicy::view($request->attributes->get('machine_info'), $node),
-            'access_log' => ['version' => 2, 'retention_days' => \App\Services\LogSettings::days('access')],
+            'access_log' => \App\Services\ProxyAccessLog::policy(),
             'block_log' => ['version' => 1, 'retention_days' => \App\Services\RouteBlockLog::days()],
             'agent_log' => ['version' => 1, 'retention_days' => \App\Services\LogSettings::days('agent'), 'events' => ['xray.crash']],
             'websocket' => $websocket,

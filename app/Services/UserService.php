@@ -118,8 +118,10 @@ class UserService
     {
         // 不改写模型的基础倍率，避免同一模型再次使用时把动态倍率当作基础值。
         $rate = $server->getEffectiveRate();
+        $directNodeId = \App\Services\DirectPoolService::poolFor($server)?->gateway_node_id;
         $server = $server->toArray();
         $server['rate'] = $rate;
+        if ($directNodeId) $server['direct_node_id'] = (int) $directNodeId;
 
         list($server, $protocol, $data) = HookManager::filter('traffic.process.before', [$server, $protocol, $data]);
         // Compatible with legacy hook

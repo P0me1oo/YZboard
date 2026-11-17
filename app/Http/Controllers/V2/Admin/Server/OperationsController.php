@@ -122,7 +122,7 @@ class OperationsController extends Controller
     }
     public function topology(Request $r, NodeOperations $service)
     {
-        $nodes = Server::get(['id', 'parent_id', 'health_check', 'name', 'type', 'machine_id', 'enabled', 'relay_entry_id', 'relay_pool_id']);
+        $nodes = Server::whereNull('balancer_role')->get(['id', 'parent_id', 'health_check', 'name', 'type', 'machine_id', 'enabled', 'relay_entry_id', 'relay_pool_id']);
         $views = $service->views($nodes);
         $pools = BalancerPool::with('members')->get();
         $landings = LandingPool::get();

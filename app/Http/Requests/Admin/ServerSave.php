@@ -378,6 +378,10 @@ class ServerSave extends FormRequest
             }
             $selfId = $this->input('id') !== null ? (int) $this->input('id') : null;
             $existing = $selfId !== null ? Server::find($selfId) : null;
+            if ($existing?->balancer_role === \App\Services\DirectPoolService::ROLE) {
+                $validator->errors()->add('id', '直出订阅线路请在负载池中编辑');
+                return;
+            }
             if ($validator->errors()->isEmpty()
                 && $this->input('type') === Server::TYPE_VLESS
                 && (int) $this->input('protocol_settings.tls') === 2
@@ -405,7 +409,7 @@ class ServerSave extends FormRequest
             if ($poolId > 0) {
                 if ($entryId > 0) $validator->errors()->add('relay_pool_id', '前置节点与前置池只能选择一种');
                 $pool = \App\Models\BalancerPool::with('members.runtimeNode')->find($poolId);
-                if (!$pool || !$pool->enabled || $pool->members->isEmpty()) {
+                if (!$pool || $pool->mode !== 'dns' || !$pool->enabled || $pool->members->isEmpty()) {
                     $validator->errors()->add('relay_pool_id', '请选择已启用且有成员的前置池');
                 } else {
                     if ($this->input('type') === 'wireguard') {

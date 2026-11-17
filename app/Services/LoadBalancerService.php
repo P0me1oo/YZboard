@@ -101,9 +101,7 @@ class LoadBalancerService
 
     public static function memberCompatibility(BalancerPool $pool, Server $node): array
     {
-        $reasons = self::dnsCompatibility($node, self::dnsReference($pool));
-        if ($pool->mode === 'direct' && ServerRelayService::childrenQuery($node)->exists()) $reasons[] = '直出池成员不能绑定落地';
-        return $reasons;
+        return self::dnsCompatibility($node, self::dnsReference($pool));
     }
 
     public static function memberOnline(BalancerPool $pool, BalancerMember $member): bool
@@ -232,7 +230,6 @@ class LoadBalancerService
                 if (!$source) $this->invalid('members', '前置节点不存在');
                 $other = BalancerMember::with('pool')->where('source_node_id', $source->id)->where('pool_id', '!=', $pool->id ?? 0)->first();
                 if ($other && ($data['mode'] === 'direct' || $other->pool?->mode === 'direct')) $this->invalid('members', $source->name . '：直出成员不能同时加入其他负载池');
-                if ($data['mode'] === 'direct' && ServerRelayService::childrenQuery($source)->exists()) $this->invalid('members', $source->name . '：直出池成员不能绑定落地');
                 $reasons = [...self::dnsCompatibility($source, $first), ...self::topologyCompatibility($source, $pool)];
                 if ($reasons) $this->invalid('members', $source->name . '：' . implode('；', $reasons));
                 if ($starting && !self::agentCompatible($source->machine)) $this->invalid('members', '前置需要先运行 Agent v2.25.0 或更新版本');

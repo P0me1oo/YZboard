@@ -20,10 +20,12 @@ class RelayTrafficBilling
             return [];
         }
         $rates = [];
-        foreach (ServerRelayService::childrenQuery($entry)->whereIn('id', array_keys($ids))
-            ->where('relay_rate_override', true)->get() as $child) {
+        $children = ServerRelayService::childrenQuery($entry)->whereIn('id', array_keys($ids));
+        // 池倍率只用于直出；成员原有中转继续使用入口原倍率或落地独立倍率。
+        if (!DirectPoolService::poolFor($entry)) $children->where('relay_rate_override', true);
+        foreach ($children->get() as $child) {
             if ($child->isRelayChild()) {
-                $rates[$child->id] = $child->getCurrentRate();
+                $rates[$child->id] = $child->getEffectiveRate();
             }
         }
         return $rates;
@@ -54,7 +56,7 @@ class RelayTrafficBilling
                     'u' => max(0, (int) $values[0]), 'd' => max(0, (int) $values[1]),
                     'billed_u' => 0, 'billed_d' => 0];
             }
-            $direct = ['server_id' => (int) ($snapshot['id'] ?? $batch->server_id), 'kind' => 'direct',
+            $direct = ['server_id' => (int) ($snapshot['direct_node_id'] ?? $snapshot['id'] ?? $batch->server_id), 'kind' => 'direct',
                 'rate' => $entryRate, 'u' => 0, 'd' => 0, 'billed_u' => 0, 'billed_d' => 0];
             foreach (['u' => 0, 'd' => 1] as $direction => $index) {
                 $total = max(0, (int) ($traffic[$uid][$index] ?? 0));

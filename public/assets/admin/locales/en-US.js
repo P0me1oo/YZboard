@@ -63,7 +63,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     "directSort": "Subscription order",
     "directShow": "Show subscription node",
     "directHealthCheck": "Entry port check",
-    "directRule": "Members connect directly to the internet and share one subscription node. User access and billing follow this pool; removing a member restores its original settings.",
+    "directRule": "Members connect directly to the internet and share one subscription node. Direct access and billing follow this pool; relay routes keep their own settings. Removing a member restores its original settings.",
     "dynamicLoad": "Dynamic load allocation",
     "sourceIpScheduling": "Online source IP scheduling",
     "sourceIpThreshold": "Online source IP threshold",

@@ -152,6 +152,14 @@ class ServerRelayService
         return $routeId;
     }
 
+    /** 直出池使用统一线路编号，DNS 切换成员后客户端仍能选择同一条直出线路。 */
+    public static function entryRouteId(Server $entry): int
+    {
+        $pool = DirectPoolService::poolFor($entry);
+        $direct = $pool ? DirectPoolService::node($pool) : null;
+        return self::ensureRouteId($direct ?? $entry);
+    }
+
     /**
      * 取得逻辑节点对应的真实入口节点；不是合法的中转逻辑节点时返回 null。
      */
@@ -256,7 +264,7 @@ class ServerRelayService
     /** 入口按实际内核校验，且自身不能再连接其它前置入口。 */
     public static function isSupportedEntry(Server $entry): bool
     {
-        if (DirectPoolService::poolFor($entry) || $entry->balancer_role === DirectPoolService::ROLE) return false;
+        if ($entry->balancer_role === DirectPoolService::ROLE) return false;
         return $entry->relayEntryId() === null && !$entry->relay_pool_id
             && self::validateEntrySettings(
                 $entry->type,
@@ -715,7 +723,7 @@ class ServerRelayService
         if (!$entry) {
             return '前置入口节点不存在';
         }
-        if (DirectPoolService::poolFor($entry) || $entry->balancer_role === DirectPoolService::ROLE) return '直出池成员不能作为中转入口';
+        if ($entry->balancer_role === DirectPoolService::ROLE) return '直出订阅线路不能作为中转入口，请选择实际成员节点';
         if ($selfId && ($self = Server::find($selfId)) && DirectPoolService::poolFor($self)) return '直出池成员不能绑定前置入口';
 
         if ($error = self::validateEntrySettings(

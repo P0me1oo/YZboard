@@ -10,6 +10,13 @@ use Illuminate\Support\Facades\Validator;
 class AgentLog
 {
     public const RETENTION_DAYS = 7;
+    public const RECORDED_LEVELS = ['warn', 'error', 'fatal'];
+
+    public static function policy(): array
+    {
+        return ['version' => 1, 'retention_days' => LogSettings::days('agent'),
+            'events' => ['xray.crash'], 'min_level' => self::RECORDED_LEVELS[0]];
+    }
 
     public function accept(?Server $node, ?ServerMachine $machine, array $payload): array
     {
@@ -48,7 +55,7 @@ class AgentLog
             }
             if ($record['occurred_at'] < $cutoff) continue;
             // 保留原批次下标参与防重；普通日志也正常确认，避免节点反复补报。
-            if (!in_array($record['level'], ['warn', 'error', 'fatal'], true)) continue;
+            if (!in_array($record['level'], self::RECORDED_LEVELS, true)) continue;
             $rows[] = [
                 'event_key' => hash('sha256', $owner . '|' . $data['batch_id'] . '|' . $index),
                 'machine_id' => $machine?->id, 'machine_name' => $machine?->name,

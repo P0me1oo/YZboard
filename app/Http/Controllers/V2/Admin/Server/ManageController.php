@@ -40,6 +40,7 @@ class ManageController extends Controller
             $item['relay_entry_name'] = $entryId === null ? null : $nameById->get($entryId);
             if ($item->relay_pool_id) $item['relay_entry_name'] = \App\Models\BalancerPool::find($item->relay_pool_id)?->name;
             $item['relay_entry_supported'] = ServerRelayService::isSupportedEntry($item);
+            $item['relay_entry_rate'] = $item->getCurrentRate();
             $item['pool_entry_supported'] = ServerRelayService::validateEntrySettings($item->type, (array) $item->protocol_settings, $item->host, $item->kernel_type) === null;
             $item['ddns'] = \App\Services\DdnsService::view('node', $item->id);
             $item['effective_rate'] = $rateById->get($item->id);

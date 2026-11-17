@@ -51,7 +51,7 @@ class ServerController extends Controller
             'log_policy' => \App\Services\AgentLogPolicy::view($request->attributes->get('machine_info'), $node),
             'access_log' => \App\Services\ProxyAccessLog::policy(),
             'block_log' => ['version' => 1, 'retention_days' => \App\Services\RouteBlockLog::days()],
-            'agent_log' => ['version' => 1, 'retention_days' => \App\Services\LogSettings::days('agent'), 'events' => ['xray.crash']],
+            'agent_log' => \App\Services\AgentLog::policy(),
             'websocket' => $websocket,
             'settings' => [
                 'push_interval' => (int) admin_setting('server_push_interval', 60),

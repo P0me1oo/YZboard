@@ -92,7 +92,7 @@ class ServerService
             if ($server->balancer_role === DirectPoolService::ROLE) {
                 $server = DirectPoolService::project($server);
                 if (!$server) return null;
-                $server->password = $user->uuid;
+                $server->password = Helper::applyVlessRoute($user->uuid, ServerRelayService::ensureRouteId($server));
                 return $server;
             }
             $landingPool = $landingPools->get($server->id);
@@ -215,8 +215,6 @@ class ServerService
     private static function usersForNode(Server $node, ?int $userId, bool $settlement, array $ids = [], bool $onlyIds = false)
     {
         if ($node->balancer_role === DirectPoolService::ROLE) return collect();
-        $directPool = DirectPoolService::poolFor($node);
-        if ($directPool && !$directPool->enabled) return collect();
         if (!$settlement && MachineTrafficService::nodeBlocked($node)) {
             return collect();
         }
@@ -231,8 +229,8 @@ class ServerService
         }
 
         $routeGroups = self::relayRouteGroups($node);
-        $groupIds = $directPool ? (DirectPoolService::settings($directPool)['group_ids'] ?? []) : ($routeGroups === null ? ($node->group_ids ?? [])
-            : array_values(array_unique(array_merge(...array_values($routeGroups)))));
+        $groupIds = $routeGroups === null ? ($node->group_ids ?? [])
+            : array_values(array_unique(array_merge(...array_values($routeGroups))));
         if (empty($groupIds)) {
             return collect();
         }
@@ -286,10 +284,14 @@ class ServerService
     private static function relayRouteGroups(Server $node): ?array
     {
         $children = ServerRelayService::childrenOf($node);
-        if ($children->isEmpty() && ServerRelayService::blockedWireGuardRoutes($node) === []) {
+        $directPool = DirectPoolService::poolFor($node);
+        if (!$directPool && $children->isEmpty() && ServerRelayService::blockedWireGuardRoutes($node) === []) {
             return null;
         }
-        $routes = [ServerRelayService::ensureRouteId($node) => $node->group_ids ?? []];
+        $directGroups = $directPool
+            ? ($directPool->enabled ? (DirectPoolService::settings($directPool)['group_ids'] ?? []) : [])
+            : ($node->group_ids ?? []);
+        $routes = [ServerRelayService::entryRouteId($node) => $directGroups];
         foreach ($children as $child) {
             $routes[ServerRelayService::ensureRouteId($child)] = $child->group_ids ?? [];
         }
@@ -939,7 +941,7 @@ class ServerService
 
         $children = ServerRelayService::childrenOf($node);
         $blockedRoutes = ServerRelayService::blockedWireGuardRoutes($node);
-        if ($children->isEmpty() && $blockedRoutes === []) {
+        if ($children->isEmpty() && $blockedRoutes === [] && !DirectPoolService::poolFor($node)) {
             return null;
         }
 
@@ -970,7 +972,7 @@ class ServerService
 
         return [
             'mode' => 'entry',
-            'route_id' => ServerRelayService::ensureRouteId($node),
+            'route_id' => ServerRelayService::entryRouteId($node),
             'children' => $outbounds,
             ...($blockedRoutes !== [] ? ['blocked_route_ids' => $blockedRoutes] : []),
         ];

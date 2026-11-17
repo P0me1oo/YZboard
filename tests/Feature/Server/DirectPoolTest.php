@@ -23,6 +23,7 @@ use App\Services\ServerRelayService;
 use App\Services\ServerService;
 use App\Services\UserRouteTraffic;
 use App\Utils\CacheKey;
+use App\Utils\Helper;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -103,6 +104,191 @@ class DirectPoolTest extends TestCase
         $this->assertTrue(app(BalancerDnsService::class)->sync($pool->fresh()));
     }
 
+    private function landing(Server $entry, array $extra = []): Server
+    {
+        return Server::create(array_replace(['name' => '落地 ' . $entry->name, 'type' => 'shadowsocks',
+            'host' => '203.0.113.10', 'port' => '10080', 'server_port' => 10080, 'kernel_type' => 'xray',
+            'relay_entry_id' => $entry->id, 'enabled' => true, 'show' => true,
+            'group_ids' => [$this->originalGroup], 'rate' => 7,
+            'protocol_settings' => ['cipher' => 'aes-128-gcm']], $extra));
+    }
+
+    private function relayUser(): User
+    {
+        $user = $this->user->replicate();
+        $user->fill(['email' => 'relay-test-' . Str::random(8) . '@example.invalid',
+            'uuid' => Str::uuid(), 'token' => Str::random(32), 'group_id' => $this->originalGroup]);
+        $user->save();
+        return $user;
+    }
+
+    public function test_mixed_members_keep_existing_landings_and_share_one_direct_route(): void
+    {
+        $landings = [$this->landing($this->a), $this->landing($this->b)];
+        $pool = $this->pool();
+        $this->sync($pool);
+        $direct = DirectPoolService::node($pool);
+        $route = ServerRelayService::ensureRouteId($direct);
+        $relayUser = $this->relayUser();
+        foreach ([$this->a, $this->b] as $index => $node) {
+            $child = $landings[$index];
+            $this->assertTrue(ServerRelayService::isSupportedEntry($node));
+            $this->assertNull(ServerRelayService::validateEntry($child->id, $node->id, $child->type,
+                $child->protocol_settings, $child->host, $child->kernel_type));
+            $config = ServerService::buildNodeConfig($node);
+            $this->assertSame($route, $config['relay']['route_id']);
+            $this->assertSame([$child->id], array_column($config['relay']['children'], 'node_id'));
+            $this->assertEquals(3, $child->getEffectiveRate());
+        }
+        $directNodes = ServerService::getAvailableServers($this->user);
+        $this->assertCount(1, $directNodes);
+        $this->assertSame(Helper::applyVlessRoute($this->user->uuid, $route), $directNodes[0]['password']);
+        $relayNodes = collect(ServerService::getAvailableServers($relayUser))->keyBy('id');
+        $this->assertCount(2, $relayNodes);
+        foreach ($landings as $index => $child) {
+            $this->assertSame(($index === 0 ? $this->a : $this->b)->host, $relayNodes[$child->id]['host']);
+            $this->assertSame(Helper::applyVlessRoute($relayUser->uuid, ServerRelayService::ensureRouteId($child)), $relayNodes[$child->id]['password']);
+            $this->assertEquals(3, $relayNodes[$child->id]['rate']);
+        }
+    }
+
+    public function test_mixed_members_authorize_direct_and_transit_independently(): void
+    {
+        $pool = $this->pool();
+        foreach ([$this->a, $this->b] as $node) {
+            $child = $this->landing($node);
+            $relayUser = $this->relayUser();
+            $both = $this->relayUser();
+            $both->update(['group_ids' => [$this->originalGroup, $this->poolGroup]]);
+            $users = ServerService::getUsersForSync($node)->keyBy('id');
+            $directRoute = ServerRelayService::ensureRouteId(DirectPoolService::node($pool));
+            $childRoute = ServerRelayService::ensureRouteId($child);
+            $this->assertSame([$directRoute], $users[$this->user->id]->relay_routes);
+            $this->assertSame([$childRoute], $users[$relayUser->id]->relay_routes);
+            $expected = [$directRoute, $childRoute]; sort($expected);
+            $this->assertSame($expected, $users[$both->id]->relay_routes);
+            $this->assertSame([], LoadBalancerService::memberCompatibility($pool, $node));
+        }
+    }
+
+    public function test_mixed_permission_changes_revoke_one_route_and_preserve_the_other(): void
+    {
+        $pool = $this->pool();
+        $child = $this->landing($this->a);
+        $directRoute = ServerRelayService::ensureRouteId(DirectPoolService::node($pool));
+        $childRoute = ServerRelayService::ensureRouteId($child);
+        $this->user->update(['group_ids' => [$this->poolGroup, $this->originalGroup]]);
+        Cache::put('node_ws_alive:' . $this->a->id, true);
+        $sent = [];
+        $redis = \Mockery::mock();
+        Redis::swap($redis);
+        $redis->shouldReceive('publish')->andReturnUsing(function ($channel, $json) use (&$sent) {
+            $sent[] = json_decode($json, true);
+            return 0;
+        });
+        foreach ([[$this->originalGroup, $this->poolGroup, $childRoute],
+            [$this->poolGroup, $this->originalGroup, $directRoute]] as [$keptGroup, $removedGroup, $keptRoute]) {
+            $this->user->update(['group_id' => $keptGroup, 'group_ids' => [$keptGroup]]);
+            $sent = [];
+            NodeSyncService::notifyUserRemovedFromGroups($this->user->id, [$removedGroup]);
+            $sync = collect($sent)->firstWhere('event', 'sync.users');
+            $this->assertSame($this->a->id, $sync['node_id']);
+            $this->assertSame($this->user->id, $sync['data']['users'][0]['id']);
+            $this->assertSame([$keptRoute], $sync['data']['users'][0]['relay_routes']);
+            $this->assertFalse(collect($sent)->contains('event', 'sync.user.delta'));
+        }
+    }
+
+    public function test_disabling_direct_pool_keeps_transit_users_and_runtime_counts(): void
+    {
+        $pool = $this->pool();
+        $child = $this->landing($this->a);
+        $relayUser = $this->relayUser();
+        $this->sync($pool);
+        $this->postJson('/_tests/direct-pool/save', [...$this->payload, 'id' => $pool->id, 'enabled' => false])->assertOk();
+        $this->sync($pool);
+        $users = ServerService::getAvailableUsers($this->a->fresh());
+        $this->assertSame([$relayUser->id], $users->pluck('id')->all());
+        $this->assertSame([ServerRelayService::ensureRouteId($child)], $users->first()->relay_routes);
+        $this->assertCount(0, ServerService::getAvailableUsers($this->b->fresh()));
+        $this->assertCount(0, ServerService::getAvailableServers($this->user));
+        $this->assertSame([$child->id], array_column(ServerService::getAvailableServers($relayUser), 'id'));
+        $this->assertSame([$child->id], array_column(ServerService::buildNodeConfig($this->a->fresh())['relay']['children'], 'node_id'));
+        $nodes = DirectPoolService::runtimeNodes(Server::whereNull('relay_entry_id')->get(['id', 'group_ids', 'enabled']));
+        $this->assertTrue($nodes->firstWhere('id', $this->a->id)->enabled);
+        $this->assertSame([$this->originalGroup], $nodes->firstWhere('id', $this->a->id)->group_ids);
+        $this->assertFalse($nodes->firstWhere('id', $this->b->id)->enabled);
+        $this->assertSame([], $this->remote);
+    }
+
+    public function test_disabled_or_removed_landing_keeps_direct_route_and_rejects_transit(): void
+    {
+        $pool = $this->pool();
+        $child = $this->landing($this->b);
+        $relayUser = $this->relayUser();
+        $route = ServerRelayService::ensureRouteId($child);
+        $child->update(['enabled' => false]);
+        $config = ServerService::buildNodeConfig($this->b->fresh());
+        $this->assertContains($route, $config['relay']['blocked_route_ids']);
+        $this->assertSame([], $config['relay']['children']);
+        $this->assertSame([$this->user->id], ServerService::getAvailableUserIds($this->b->fresh()));
+        $this->assertCount(0, ServerService::getAvailableServers($relayUser));
+        $child->delete();
+        $directRoute = ServerRelayService::ensureRouteId(DirectPoolService::node($pool));
+        foreach ([$this->a, $this->b] as $node) {
+            $this->assertSame($directRoute, ServerService::buildNodeConfig($node->fresh())['relay']['route_id']);
+            $this->assertSame([$directRoute], ServerService::getAvailableUsers($node->fresh())->first()->relay_routes);
+        }
+    }
+
+    public function test_mixed_billing_preserves_transit_rates_and_freezes_direct_attribution(): void
+    {
+        $pool = $this->pool();
+        $follow = $this->landing($this->a);
+        $override = $this->landing($this->a, ['rate' => 5, 'relay_rate_override' => true]);
+        $this->user->update(['group_ids' => [$this->poolGroup, $this->originalGroup]]);
+        DB::table('v2_settings')->where('name', 'user_route_statistics_started_at')->update(['value' => (string) (time() - 60)]);
+        ServerService::getUsersForSync($this->a);
+        $traffic = [$this->user->id => [1000, 2000]];
+        $relay = [$follow->id => [300, 600], $override->id => [200, 400]];
+        $relayUsers = [$this->user->id => $relay];
+        $batch = app(NodeReportService::class)->accept($this->a, 'mixed-report', $traffic, $relay, $relayUsers);
+        $this->assertEquals([$follow->id => 3, $override->id => 5], $batch->server_snapshot['relay_rates']);
+        $this->postJson('/_tests/direct-pool/save', [...$this->payload, 'id' => $pool->id,
+            'direct_settings' => [...$this->payload['direct_settings'], 'rate' => 9]])->assertOk();
+        $follow->update(['relay_rate_override' => true, 'rate' => 8]);
+        $job = new ProcessNodeReportBatch($batch->id); $job->handle(); $job->handle();
+        $this->assertSame($batch->id, app(NodeReportService::class)->accept($this->a->fresh(), 'mixed-report', $traffic, $relay, $relayUsers)->id);
+        $this->assertSame(2900, (int) $this->user->fresh()->u);
+        $this->assertSame(5800, (int) $this->user->fresh()->d);
+        $rows = DB::table(UserRouteTraffic::TABLE)->where('user_id', $this->user->id)->get()->keyBy('server_id');
+        $this->assertCount(3, $rows);
+        $this->assertSame(500, (int) $rows[$pool->gateway_node_id]->u);
+        $this->assertSame(1000, (int) $rows[$pool->gateway_node_id]->billed_u);
+        $this->assertSame(300, (int) $rows[$follow->id]->u);
+        $this->assertSame(900, (int) $rows[$follow->id]->billed_u);
+        $this->assertSame(1000, (int) $rows[$override->id]->billed_u);
+        $this->assertSame(500, (int) $this->a->fresh()->usage_u);
+        $this->assertSame(300, (int) $follow->fresh()->usage_u);
+    }
+
+    public function test_deleting_mixed_pool_keeps_landings_and_restores_original_direct_permissions(): void
+    {
+        $pool = $this->pool();
+        $child = $this->landing($this->a);
+        $relayUser = $this->relayUser();
+        $childRoute = ServerRelayService::ensureRouteId($child);
+        (new LoadBalancerController())->delete(Request::create('/', 'POST', ['id' => $pool->id]));
+        $this->a->refresh();
+        $this->assertNull($this->a->balancer_pool_id);
+        $this->assertSame($this->a->id, $child->fresh()->relay_entry_id);
+        $routes = ServerService::getAvailableUsers($this->a)->keyBy('id')[$relayUser->id]->relay_routes;
+        $this->assertContains($childRoute, $routes);
+        $this->assertContains(ServerRelayService::ensureRouteId($this->a), $routes);
+        $this->assertSame($childRoute, ServerService::buildNodeConfig($this->a)['relay']['children'][0]['route_id']);
+        $this->assertCount(0, ServerService::getAvailableServers($this->user));
+    }
+
     public function test_pool_creates_one_subscription_and_reuses_both_original_listeners(): void
     {
         $before = [$this->a->protocol_settings, $this->b->protocol_settings];
@@ -112,7 +298,8 @@ class DirectPoolTest extends TestCase
         $this->assertCount(1, $nodes);
         $this->assertSame($pool->gateway_node_id, $nodes[0]['id']);
         $this->assertSame('美国直出', $nodes[0]['name']);
-        $this->assertSame($this->user->uuid, $nodes[0]['password']);
+        $directRoute = ServerRelayService::ensureRouteId(DirectPoolService::node($pool));
+        $this->assertSame(Helper::applyVlessRoute($this->user->uuid, $directRoute), $nodes[0]['password']);
         $this->assertSame(30443, $nodes[0]['port']);
         $this->assertEquals(2, $nodes[0]['rate']);
         $this->assertSame(1, $nodes[0]['is_online']);
@@ -127,7 +314,9 @@ class DirectPoolTest extends TestCase
         foreach ([$this->a, $this->b] as $index => $node) {
             $config = ServerService::buildNodeConfig($node);
             $this->assertSame($index === 0 ? 443 : 8443, $config['server_port']);
-            $this->assertArrayNotHasKey('relay', $config);
+            $this->assertSame('entry', $config['relay']['mode']);
+            $this->assertSame($directRoute, $config['relay']['route_id']);
+            $this->assertSame([], $config['relay']['children']);
             $this->assertSame($before[$index], $node->protocol_settings);
             $this->assertSame([$this->originalGroup], $node->group_ids);
             $this->assertEquals(3, $node->rate);
@@ -235,11 +424,13 @@ class DirectPoolTest extends TestCase
         $this->assertSame(1, BalancerPool::count());
     }
 
-    public function test_direct_members_cannot_be_relay_entries_or_latency_targets(): void
+    public function test_direct_members_support_relay_but_virtual_node_and_latency_targets_do_not(): void
     {
-        $this->pool();
-        $this->assertFalse(ServerRelayService::isSupportedEntry($this->a));
-        $this->assertStringContainsString('直出', ServerRelayService::validateEntry(null, $this->a->id, 'shadowsocks', ['cipher' => 'aes-128-gcm'], '192.0.2.20', 'xray'));
+        $pool = $this->pool();
+        $this->assertTrue(ServerRelayService::isSupportedEntry($this->a));
+        $this->assertNull(ServerRelayService::validateEntry(null, $this->a->id, 'shadowsocks', ['cipher' => 'aes-128-gcm'], '192.0.2.20', 'xray'));
+        $this->assertStringContainsString('直出订阅线路', ServerRelayService::validateEntry(null, $pool->gateway_node_id, 'shadowsocks', ['cipher' => 'aes-128-gcm'], '192.0.2.20', 'xray'));
+        $this->assertNotNull(ServerRelayService::validateEntry($this->a->id, $this->b->id, 'vless', $this->a->protocol_settings, $this->a->host, 'xray'));
         $this->postJson('/_tests/direct-pool/save', [...$this->payload, 'id' => BalancerPool::first()->id,
             'scheduling_config' => ['strategy' => 'latency']])->assertUnprocessable()->assertJsonValidationErrors('scheduling_config.strategy');
     }
@@ -309,10 +500,11 @@ class DirectPoolTest extends TestCase
         $this->pool();
         $response = (new \App\Http\Controllers\V2\Admin\Server\ManageController())->getNodes(Request::create('/'));
         $node = collect($response->getData(true)['data'])->firstWhere('id', $this->a->id);
-        $this->assertFalse($node['relay_entry_supported']);
+        $this->assertTrue($node['relay_entry_supported']);
         $this->assertTrue($node['pool_entry_supported']);
         $this->assertNotEmpty($node['balancer_pool_id']);
         $this->assertEquals(2, $node['effective_rate']);
+        $this->assertEquals(3, $node['relay_entry_rate']);
         $this->assertEquals(3, $node['rate']);
     }
 

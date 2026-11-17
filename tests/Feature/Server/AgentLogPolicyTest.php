@@ -78,7 +78,13 @@ class AgentLogPolicyTest extends TestCase
             $machine = $this->machine($disabled);
             $auth = ['machine_id' => $machine->id, 'token' => $machine->token];
             foreach (['/api/v2/server/handshake', '/api/v2/server/machine/nodes'] as $url) {
-                $this->postJson($url, $auth)->assertOk()->assertJsonPath('log_policy', ['version' => 1, 'disabled' => $disabled]);
+                $response = $this->postJson($url, $auth)->assertOk()
+                    ->assertJsonPath('log_policy', ['version' => 1, 'disabled' => $disabled]);
+                if ($url === '/api/v2/server/handshake') {
+                    $response->assertJsonPath('agent_log.min_level', 'warn')
+                        ->assertJsonPath('agent_log.version', 1)
+                        ->assertJsonPath('agent_log.events', ['xray.crash']);
+                }
             }
             $this->postJson('/api/v2/server/machine/control', $auth + ['version' => 'v2.26.0', 'boot_id' => 'test-only', 'manageable' => false])
                 ->assertOk()->assertJsonPath('log_policy.disabled', $disabled);
@@ -86,7 +92,8 @@ class AgentLogPolicyTest extends TestCase
                 'type' => 'shadowsocks', 'host' => 'test.invalid', 'port' => '10001', 'server_port' => 10001,
                 'rate' => 1, 'group_ids' => [], 'enabled' => true]);
             $this->postJson('/api/v2/server/handshake', ['node_id' => $node->id, 'token' => 'log-policy-test-only', 'device_handover' => 1])
-                ->assertOk()->assertJsonPath('log_policy.disabled', $disabled);
+                ->assertOk()->assertJsonPath('log_policy.disabled', $disabled)
+                ->assertJsonPath('agent_log.min_level', 'warn');
         }
     }
 

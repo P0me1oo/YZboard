@@ -63,7 +63,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     "directSort": "订阅排序",
     "directShow": "显示订阅节点",
     "directHealthCheck": "入口端口检查",
-    "directRule": "多台成员直接出网，订阅统一显示为一个节点。成员的用户权限和扣费倍率跟随本池；移出成员后恢复原节点配置。",
+    "directRule": "多台成员直接出网，订阅统一显示为一个节点。直出权限和倍率跟随本池，中转沿用原线路配置；移出成员后恢复原节点配置。",
     "dynamicLoad": "动态负载分配",
     "sourceIpScheduling": "在线 IP 数调度",
     "sourceIpThreshold": "在线来源 IP 阈值",

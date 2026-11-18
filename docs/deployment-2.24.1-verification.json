@@ -1,0 +1,73 @@
+{
+  "runtime_files_verified": 1220,
+  "services": {
+    "yzboard-web.service": "active",
+    "yzboard-horizon.service": "active",
+    "yzboard-websocket.service": "active",
+    "nginx": "active",
+    "mariadb": "active",
+    "redis-server": "active"
+  },
+  "restarts": {
+    "yzboard-web.service": "0",
+    "yzboard-horizon.service": "0",
+    "yzboard-websocket.service": "0"
+  },
+  "version": "2.24.1",
+  "http": {
+    "home": 200,
+    "admin": 200,
+    "public-config": 200,
+    "websocket": 401,
+    "asset": 200,
+    "asset-gzip": 200
+  },
+  "main_script_sha256": "77887384830e7736950e3dffc94b2472ab880ba13b8e340e2f8f5b0ea2db7ba4",
+  "persistent_state": {
+    "database_version": "12.3.3-MariaDB-deb13",
+    "machine_count": 47,
+    "migrations": 152,
+    "plugin_rows": 7,
+    "failed_jobs": 714
+  },
+  "source": "7e37271f2eb6f8a9a7f7a11000fdb4f9b1b255f9",
+  "admin_workspace_sha256": "6aae642cbdbcdc8e3c78c9ebf56d1663abce67deb6dcc4d22c32c1bad0bd218a",
+  "admin_version": "0.106.1",
+  "active_machines": 47,
+  "recent_machine_heartbeats": 45,
+  "agent_versions": {
+    "v2.40.1": 44,
+    "v2.10.1": 1,
+    "v2.38.0": 1,
+    "v2.39.0": 1
+  },
+  "fresh_runtime_nodes": 104,
+  "failed_runtime_node_ids": [],
+  "health_status_counts": {
+    "ok": 78,
+    "failed": 26
+  },
+  "health_failure_baseline": 26,
+  "failed_jobs": 714,
+  "active_direct_pools": 0,
+  "fatal_journal_matches": 0,
+  "switch_seconds": 6.86,
+  "changed_files": 133,
+  "database_migrations_changed": 4,
+  "rollback_version": "2.23.0",
+  "rollback_source": "0beec26a0e04f94c69e23d800e74ff143ea32d27",
+  "archive_sha256": "51f8071d19f13aeb51c3a86bee985ee0570fdc28166efd94f794a334ad2ae595",
+  "persistent_files_unchanged": true,
+  "failed_jobs_delta": 0,
+  "server": "Solid-US LA",
+  "deployment_directory": "/root/yzboard",
+  "run_user": "www-data",
+  "observed_at": "2026-11-18T16:48:08.301439+00:00",
+  "established_websocket_connections": 45,
+  "legacy_settings_remaining": 0,
+  "legacy_plugins_remaining": 0,
+  "targeted_recovery_directory": "/root/yzboard-deployments/2.24.1",
+  "targeted_database_recovery_file_mode": "0600",
+  "theme_recovery_directory_mode": "0700",
+  "runtime_reference": "/root/yzboard-deployments/2.24.1/runtime-git.git"
+}

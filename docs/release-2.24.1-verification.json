@@ -1,0 +1,28 @@
+{
+  "repository": "YZboard",
+  "tag": "v2.24.1",
+  "url": "https://github.com/P0me1oo/YZboard/releases/tag/v2.24.1",
+  "assets": [
+    {
+      "name": "release.json",
+      "bytes": 684,
+      "sha256": "d27ced6ada364d778d7d5d2de7c82a3721dd5ebc505e7371bc448b4f2eb37b7f",
+      "anonymous_download_verified": true,
+      "github_digest_verified": true
+    },
+    {
+      "name": "SHA256SUMS",
+      "bytes": 167,
+      "sha256": "8d97826dca50963f9628f0126de66de9e3def9dbd397f5b7327049c3a674fc89",
+      "anonymous_download_verified": true,
+      "github_digest_verified": true
+    },
+    {
+      "name": "yzboard-2.24.1.tar.gz",
+      "bytes": 148840822,
+      "sha256": "51f8071d19f13aeb51c3a86bee985ee0570fdc28166efd94f794a334ad2ae595",
+      "anonymous_download_verified": true,
+      "github_digest_verified": true
+    }
+  ]
+}

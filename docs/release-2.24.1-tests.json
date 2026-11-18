@@ -1,0 +1,42 @@
+{
+  "date": "2026-11-19",
+  "version": "2.24.1",
+  "source_commit": "7e37271f2eb6f8a9a7f7a11000fdb4f9b1b255f9",
+  "php": "8.4.27",
+  "phpunit": "11.5.57",
+  "isolated_redis": "8.0.2",
+  "admin_version": "0.106.1",
+  "admin_behavior_tests": 179,
+  "admin_resource_tests": 5,
+  "admin_source_checks": 3123,
+  "integrated_files": 274,
+  "admin_workspace": {
+    "head": "538c2131fad6968b51e580606362bd6b9f4b8a20",
+    "version": "0.106.1",
+    "workspace_sha256": "6aae642cbdbcdc8e3c78c9ebf56d1663abce67deb6dcc4d22c32c1bad0bd218a",
+    "files": 3566,
+    "note": "管理端当前未提交工作区；面板发布包包含此工作区的已验证构建，本次不单独发布管理端仓库。"
+  },
+  "sqlite": {
+    "tests": 1973,
+    "assertions": 36323,
+    "errors": 0,
+    "failures": 0,
+    "skipped": 12
+  },
+  "mariadb_11_4_8": {
+    "tests": 1973,
+    "assertions": 36337,
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0
+  },
+  "mariadb_12_3_3": {
+    "tests": 1973,
+    "assertions": 36337,
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0
+  },
+  "mariadb_environment_note": "两套 MariaDB 均开启严格分组；11.4.8 显式开启快照隔离以满足现有并发测试前提。首轮11.4.8两项失败来自该前提未开启，修正专用测试实例后完整复验通过。"
+}

@@ -294,8 +294,8 @@ class StatisticalService
                     ->where('record_type', 'd');
             }
         )
-            ->withSum('stats as u', 'u') // 预加载 u 的总和
-            ->withSum('stats as d', 'd') // 预加载 d 的总和
+            ->withSum(['stats as u' => fn ($query) => $query->where('record_at', '>=', $startAt)->where('record_at', '<', $endAt)->where('record_type', 'd')], 'u')
+            ->withSum(['stats as d' => fn ($query) => $query->where('record_at', '>=', $startAt)->where('record_at', '<', $endAt)->where('record_type', 'd')], 'd')
             ->get()
             ->map(function ($item) {
                 return [

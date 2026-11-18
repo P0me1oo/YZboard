@@ -49,6 +49,9 @@ class Plugin extends AbstractPlugin implements PaymentInterface
 
     public function pay($order): array
     {
+        if ($this->getConfig('coinpayments_currency') !== 'CNY' || !$this->getConfig('coinpayments_ipn_secret') || !$this->getConfig('coinpayments_merchant_id')) {
+            throw new ApiException('CoinPayments 需要配置人民币、商户编号和通知密钥', 422);
+        }
         $parseUrl = parse_url($order['return_url']);
         $port = isset($parseUrl['port']) ? ":{$parseUrl['port']}" : '';
         $successUrl = "{$parseUrl['scheme']}://{$parseUrl['host']}{$port}";
@@ -77,36 +80,21 @@ class Plugin extends AbstractPlugin implements PaymentInterface
 
     public function notify($params): array|string
     {
-        if (!isset($params['merchant']) || $params['merchant'] != trim($this->getConfig('coinpayments_merchant_id'))) {
-            throw new ApiException('No or incorrect Merchant ID passed');
-        }
-
-        $headers = getallheaders();
-
-        ksort($params);
-        reset($params);
-        $request = stripslashes(http_build_query($params));
-
-        $headerName = 'Hmac';
-        $signHeader = isset($headers[$headerName]) ? $headers[$headerName] : '';
-
-        $hmac = hash_hmac("sha512", $request, trim($this->getConfig('coinpayments_ipn_secret')));
-
-        if (!hash_equals($hmac, $signHeader)) {
+        $key = (string) $this->getConfig('coinpayments_ipn_secret', '');
+        $merchant = (string) $this->getConfig('coinpayments_merchant_id', '');
+        $raw = request()->getContent();
+        if ($key === '' || $merchant === '' || !hash_equals(hash_hmac('sha512', $raw, $key), request()->header('Hmac', ''))) {
             throw new ApiException('HMAC signature does not match', 400);
         }
-
-        $status = $params['status'];
-        if ($status >= 100 || $status == 2) {
-            return [
-                'trade_no' => $params['item_number'],
-                'callback_no' => $params['txn_id'],
-                'custom_result' => 'IPN OK'
-            ];
-        } else if ($status < 0) {
-            throw new ApiException('Payment Timed Out or Error');
-        } else {
-            return 'IPN OK: pending';
-        }
+        parse_str($raw, $params);
+        if (($params['merchant'] ?? null) !== $merchant || ($params['ipn_mode'] ?? null) !== 'hmac') throw new ApiException('Invalid payment merchant', 422);
+        $status = filter_var($params['status'] ?? null, FILTER_VALIDATE_INT);
+        if ($status === false) throw new ApiException('Invalid payment status', 422);
+        if ($status < 100 && $status !== 2) return 'IPN OK: pending';
+        return [
+            'paid' => true, 'trade_no' => $params['item_number'] ?? null, 'callback_no' => $params['txn_id'] ?? null,
+            'amount_cents' => \App\Services\PaymentReceipt::cents($params['amount1'] ?? null),
+            'currency' => $params['currency1'] ?? null, 'custom_result' => 'IPN OK',
+        ];
     }
-} 
+}

@@ -8,7 +8,7 @@ class MailLog extends Model
 {
     protected $table = 'v2_mail_log';
     protected $dateFormat = 'U';
-    protected $guarded = ['id'];
+    protected $fillable = ['email', 'subject', 'template_name', 'error'];
     protected $casts = [
         'created_at' => 'timestamp',
         'updated_at' => 'timestamp'

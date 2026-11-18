@@ -55,6 +55,9 @@ class Plugin extends AbstractPlugin implements PaymentInterface
 
     public function pay($order): array
     {
+        if (!$this->getConfig('btcpay_webhook_key') || !$this->getConfig('btcpay_api_key') || !$this->getConfig('btcpay_storeId')) {
+            throw new ApiException('BTCPay 需要配置商店编号、API 密钥和通知密钥', 422);
+        }
         $params = [
             'jsonResponse' => true,
             'amount' => sprintf('%.2f', $order['total_amount'] / 100),
@@ -65,7 +68,7 @@ class Plugin extends AbstractPlugin implements PaymentInterface
         ];
 
         $params_string = @json_encode($params);
-        $ret_raw = $this->curlPost($this->getConfig('btcpay_url') . 'api/v1/stores/' . $this->getConfig('btcpay_storeId') . '/invoices', $params_string);
+        $ret_raw = $this->curlPost(rtrim($this->getConfig('btcpay_url'), '/') . '/api/v1/stores/' . rawurlencode($this->getConfig('btcpay_storeId')) . '/invoices', $params_string);
         $ret = @json_decode($ret_raw, true);
 
         if (empty($ret['checkoutLink'])) {
@@ -80,34 +83,28 @@ class Plugin extends AbstractPlugin implements PaymentInterface
 
     public function notify($params): array|bool
     {
-        $payload = trim(request()->getContent());
-        $headers = getallheaders();
-        $headerName = 'Btcpay-Sig';
-        $signraturHeader = isset($headers[$headerName]) ? $headers[$headerName] : '';
-        $json_param = json_decode($payload, true);
-
-        $computedSignature = "sha256=" . \hash_hmac('sha256', $payload, $this->getConfig('btcpay_webhook_key'));
-
-        if (!$this->hashEqual($signraturHeader, $computedSignature)) {
+        $payload = request()->getContent();
+        $key = (string) $this->getConfig('btcpay_webhook_key', '');
+        $signature = request()->header('Btcpay-Sig', '');
+        if ($key === '' || !hash_equals('sha256=' . hash_hmac('sha256', $payload, $key), $signature)) {
             throw new ApiException('HMAC signature does not match', 400);
         }
-
-        $context = stream_context_create(array(
-            'http' => array(
-                'method' => 'GET',
-                'header' => "Authorization:" . "token " . $this->getConfig('btcpay_api_key') . "\r\n"
-            )
-        ));
-
-        $invoiceDetail = file_get_contents($this->getConfig('btcpay_url') . 'api/v1/stores/' . $this->getConfig('btcpay_storeId') . '/invoices/' . $json_param['invoiceId'], false, $context);
-        $invoiceDetail = json_decode($invoiceDetail, true);
-
-        $out_trade_no = $invoiceDetail['metadata']["orderId"];
-        $pay_trade_no = $json_param['invoiceId'];
-        
+        $event = json_decode($payload, true, 64, JSON_THROW_ON_ERROR);
+        if (($event['type'] ?? null) !== 'InvoiceSettled') return ['paid' => false];
+        $id = $event['invoiceId'] ?? null;
+        if (!is_string($id) || !preg_match('/\A[A-Za-z0-9_-]{1,128}\z/', $id)) throw new ApiException('Invalid invoice', 422);
+        $apiKey = (string) $this->getConfig('btcpay_api_key', '');
+        $store = (string) $this->getConfig('btcpay_storeId', '');
+        if ($apiKey === '' || $store === '') throw new ApiException('Payment gateway is not configured', 422);
+        $invoice = \Illuminate\Support\Facades\Http::withToken($apiKey, 'token')->connectTimeout(5)->timeout(15)
+            ->withOptions(['allow_redirects' => false])
+            ->get(rtrim($this->getConfig('btcpay_url'), '/') . '/api/v1/stores/' . rawurlencode($store) . '/invoices/' . rawurlencode($id))
+            ->throw()->json();
+        if (($invoice['id'] ?? null) !== $id || ($invoice['status'] ?? null) !== 'Settled') throw new ApiException('Invoice is not settled', 422);
         return [
-            'trade_no' => $out_trade_no,
-            'callback_no' => $pay_trade_no
+            'paid' => true, 'trade_no' => $invoice['metadata']['orderId'] ?? null, 'callback_no' => $id,
+            'amount_cents' => \App\Services\PaymentReceipt::cents($invoice['amount'] ?? null),
+            'currency' => $invoice['currency'] ?? null, 'exact_amount' => true,
         ];
     }
 
@@ -117,7 +114,7 @@ class Plugin extends AbstractPlugin implements PaymentInterface
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_HEADER, false);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 300);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $params);
         curl_setopt(
             $ch,
@@ -129,22 +126,4 @@ class Plugin extends AbstractPlugin implements PaymentInterface
         return $result;
     }
 
-    private function hashEqual($str1, $str2)
-    {
-        if (function_exists('hash_equals')) {
-            return \hash_equals($str1, $str2);
-        }
-
-        if (strlen($str1) != strlen($str2)) {
-            return false;
-        } else {
-            $res = $str1 ^ $str2;
-            $ret = 0;
-
-            for ($i = strlen($res) - 1; $i >= 0; $i--) {
-                $ret |= ord($res[$i]);
-            }
-            return !$ret;
-        }
-    }
-} 
+}

@@ -22,7 +22,13 @@ class NodeRegistry
     public static function add(int $nodeId, TcpConnection $conn): void
     {
         if (isset(self::$connections[$nodeId]) && self::$connections[$nodeId] !== $conn) {
-            self::$connections[$nodeId]->close();
+            $previous = self::$connections[$nodeId];
+            if (!empty($previous->machineId) || !empty($previous->machineNodeIds)) {
+                self::remove($nodeId, $previous);
+                $previous->machineNodeIds = array_values(array_diff($previous->machineNodeIds ?? [], [$nodeId]));
+            } else {
+                $previous->close();
+            }
         }
         self::$connections[$nodeId] = $conn;
     }

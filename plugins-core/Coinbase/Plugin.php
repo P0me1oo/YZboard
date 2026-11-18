@@ -108,6 +108,7 @@ class Plugin extends AbstractPlugin implements PaymentInterface
             $amount += PaymentReceipt::cents($payment['value']['local']['amount'] ?? null);
         }
         return [
+            'paid' => true,
             'trade_no' => $charge['metadata']['outTradeNo'] ?? null,
             'callback_no' => $event['id'] ?? null,
             'amount_cents' => $amount, 'currency' => $currency,

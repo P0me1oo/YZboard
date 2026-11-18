@@ -191,6 +191,7 @@ class OrderService
     public function setOrderType(User $user)
     {
         $order = $this->order;
+        if ($order->total_amount < 0) throw new ApiException('Order amount is invalid', 422);
         if ($order->period === Plan::PERIOD_RESET_TRAFFIC) {
             $order->type = Order::TYPE_RESET_TRAFFIC;
         } else if ($user->plan_id !== NULL && $order->plan_id !== $user->plan_id && ($user->expired_at > time() || $user->expired_at === NULL)) {
@@ -215,10 +216,11 @@ class OrderService
     public function setVipDiscount(User $user)
     {
         $order = $this->order;
-        if ($user->discount) {
-            $order->discount_amount = $order->discount_amount + ($order->total_amount * ($user->discount / 100));
-        }
-        $order->total_amount = $order->total_amount - $order->discount_amount;
+        $price = max(0, (int) $order->total_amount);
+        $coupon = max(0, (int) $order->discount_amount);
+        $vip = (int) round($price * max(0, min(100, (float) $user->discount)) / 100);
+        $order->discount_amount = min($price, $coupon + $vip);
+        $order->total_amount = $price - $order->discount_amount;
     }
 
     public function setInvite(User $user): void
@@ -356,6 +358,9 @@ class OrderService
 
             if ($shouldDispatch) {
                 OrderHandleJob::dispatchSync($order->trade_no);
+                if ($notifyPayment) {
+                    HookManager::call('payment.notify.success', $order);
+                }
             }
         } catch (\Exception $e) {
             Log::warning('订单付款处理失败', ['order_id' => $this->order->id,
@@ -369,6 +374,7 @@ class OrderService
     {
         try {
             $cancelledOrder = DB::transaction(function () {
+                User::whereKey($this->order->user_id)->lockForUpdate()->first();
                 $order = $this->lockCurrentOrderWhenStatus(Order::STATUS_PENDING);
                 if (!$order) {
                     return null;
@@ -376,6 +382,11 @@ class OrderService
 
                 HookManager::call('order.cancel.before', $order);
 
+                if ($order->coupon_reserved && $order->coupon_id) {
+                    $coupon = \App\Models\Coupon::whereKey($order->coupon_id)->lockForUpdate()->first();
+                    if ($coupon && $coupon->limit_use !== null) $coupon->increment('limit_use');
+                    $order->coupon_reserved = false;
+                }
                 $order->status = Order::STATUS_CANCELLED;
                 if (!$order->save()) {
                     throw new \RuntimeException('Failed to save order status.');
@@ -491,7 +502,7 @@ class OrderService
 
     protected function applyCoupon(string $couponCode): void
     {
-        $couponService = new CouponService($couponCode);
+        $couponService = new CouponService($couponCode, true);
         if (!$couponService->use($this->order)) {
             throw new ApiException(__('Coupon failed'));
         }

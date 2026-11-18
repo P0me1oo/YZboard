@@ -16,69 +16,40 @@ class CheckTrafficExceeded extends Command
 
     public function handle()
     {
-        $count = Redis::scard('traffic:pending_check');
-        if ($count <= 0) {
-            return;
-        }
-
-        $pendingUserIds = array_map('intval', Redis::spop('traffic:pending_check', $count));
-
-        $exceededUsers = User::query()
-            ->whereIn('id', $pendingUserIds)
-            ->whereRaw('u + d >= transfer_enable')
-            ->where('transfer_enable', '>', 0)
-            ->where('banned', 0)
-            ->select(['id', 'group_id', 'group_ids'])
-            ->get();
-
-        if ($exceededUsers->isEmpty()) {
-            return;
-        }
-
-        $usersByGroup = [];
-        foreach ($exceededUsers as $user) {
-            foreach ($user->effectiveGroupIds() as $groupId) {
-                $usersByGroup[$groupId][$user->id] = ['id' => $user->id];
+        $checked = 0;
+        $remaining = min(1000, (int) Redis::scard('traffic:pending_check'));
+        while ($remaining > 0) {
+            $size = min(100, $remaining);
+            $remaining -= $size;
+            $ids = array_map('intval', Redis::spop('traffic:pending_check', $size) ?: []);
+            if ($ids === []) break;
+            try {
+                $users = User::whereIn('id', $ids)->whereRaw('u + d >= transfer_enable')->where('banned', 0)
+                    ->get(['id', 'group_id', 'group_ids']);
+                $byGroup = [];
+                foreach ($users as $user) foreach ($user->effectiveGroupIds() as $group) $byGroup[$group][$user->id] = ['id' => $user->id];
+                foreach (NodeSyncService::serversInGroups(array_keys($byGroup)) as $node) {
+                    if ($node->isRelayChild() || $node->balancer_role === \App\Services\DirectPoolService::ROLE
+                        || $node->enabled === false || !NodeSyncService::isNodeOnline($node->id)) continue;
+                    if (\App\Services\DirectPoolService::poolFor($node) || \App\Services\ServerRelayService::hasRelayChildren($node)
+                        || $node->type === Server::TYPE_WIREGUARD) {
+                        $sent = NodeSyncService::push($node->id, 'sync.users', ['users' => ServerService::getUsersForSync($node)->toArray()]);
+                    } else {
+                        $removals = [];
+                        foreach ($node->group_ids ?? [] as $group) $removals += $byGroup[(int) $group] ?? [];
+                        if ($removals === []) continue;
+                        $sent = NodeSyncService::push($node->id, 'sync.user.delta', ['action' => 'remove', 'users' => array_values($removals)]);
+                    }
+                    if (!$sent) throw new \RuntimeException('流量超额通知未送达');
+                }
+                $checked += count($ids);
+            } catch (\Throwable $exception) {
+                Redis::sadd('traffic:pending_check', ...$ids);
+                \App\Services\FailureLog::record('流量超额检查失败，保留待检用户', $exception);
+                return self::FAILURE;
             }
         }
-        if ($usersByGroup === []) return;
-
-        $servers = Server::where(function ($query) use ($usersByGroup) {
-            foreach (array_keys($usersByGroup) as $groupId) {
-                $query->orWhereJsonContains('group_ids', (string) $groupId)
-                    ->orWhereJsonContains('group_ids', (int) $groupId);
-            }
-        })->get(['id', 'type', 'group_ids', 'relay_entry_id', 'relay_pool_id']);
-        $entryIds = $servers->filter(fn (Server $server) => $server->isRelayChild())
-            ->pluck('relay_entry_id')->filter()->unique()->values()->all();
-        $poolIds = $servers->pluck('relay_pool_id')->filter()->unique();
-        $entryIds = array_values(array_unique(array_merge($entryIds,
-            Server::whereIn('balancer_pool_id', $poolIds)->where('balancer_role', 'member')->pluck('id')->all())));
-        $notifiedCount = 0;
-        foreach ($servers as $server) {
-            if ($server->isRelayChild() || in_array($server->id, $entryIds)) continue;
-            if (!NodeSyncService::isNodeOnline($server->id)) continue;
-            $users = [];
-            foreach ($server->group_ids ?? [] as $groupId) {
-                $users += $usersByGroup[(int) $groupId] ?? [];
-            }
-            if ($users === []) continue;
-            NodeSyncService::push($server->id, 'sync.user.delta', [
-                'action' => 'remove',
-                'users' => array_values($users),
-            ]);
-            $notifiedCount++;
-        }
-
-        // 只拥有落地权限的用户也在入口认证；流量耗尽必须从入口完整授权中移除。
-        foreach (Server::whereIn('id', $entryIds)->get() as $entry) {
-            if (!NodeSyncService::isNodeOnline($entry->id)) continue;
-            NodeSyncService::push($entry->id, 'sync.users', [
-                'users' => ServerService::getAvailableUsers($entry)->toArray(),
-            ]);
-            $notifiedCount++;
-        }
-
-        $this->info("Checked " . count($pendingUserIds) . " users, notified {$notifiedCount} nodes for " . $exceededUsers->count() . " exceeded users.");
+        $this->info("已检查 {$checked} 个待检用户。");
+        return self::SUCCESS;
     }
 }

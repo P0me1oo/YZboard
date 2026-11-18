@@ -83,6 +83,7 @@ class ServerService
             })
             ->whereNotIn('id', \App\Models\BalancerMember::whereIn('pool_id', \App\Models\BalancerPool::where('mode', 'direct')->select('id'))->select('source_node_id'))
             ->where('show', true)
+            ->where(fn ($query) => $query->where('enabled', true)->orWhereNull('enabled'))
             ->orderBy('sort', 'ASC')
             ->get()
             ->append(['last_check_at', 'last_push_at', 'online', 'is_online', 'available_status', 'cache_key', 'server_key']);
@@ -95,6 +96,7 @@ class ServerService
                 $server->password = Helper::applyVlessRoute($user->uuid, ServerRelayService::ensureRouteId($server));
                 return $server;
             }
+            if ($server->parent_id && !$server->parent) return null;
             $landingPool = $landingPools->get($server->id);
             if (!$landingPool && MachineTrafficService::nodeBlocked($server)) {
                 return null;
@@ -242,9 +244,9 @@ class ServerService
             ->when($userId !== null, fn ($query) => $query->where('id', $userId))
             ->when($settlement && !isset(HookManager::getFilters()['server.users.get']), fn ($query) => $query->whereIn('id', $ids))
             ->where(function ($query) use ($groupIds) {
-                $query->whereIn('group_id', $groupIds);
+                $query->where(fn ($legacy) => $legacy->whereNull('group_ids')->whereIn('group_id', $groupIds));
                 foreach ($groupIds as $groupId) {
-                    $query->orWhereJsonContains('group_ids', (int) $groupId);
+                    $query->orWhereJsonContains('group_ids', (int) $groupId)->orWhereJsonContains('group_ids', (string) $groupId);
                 }
             })
             ->when(!$settlement, function ($query) {
@@ -738,8 +740,8 @@ class ServerService
                 'plugin' => $protocolSettings['plugin'],
                 'plugin_opts' => $protocolSettings['plugin_opts'],
                 'server_key' => match ($protocolSettings['cipher']) {
-                        '2022-blake3-aes-128-gcm' => Helper::getServerKey($node->created_at, 16),
-                        '2022-blake3-aes-256-gcm' => Helper::getServerKey($node->created_at, 32),
+                        '2022-blake3-aes-128-gcm' => Helper::getServerKey($node->parent?->created_at ?? $node->created_at, 16),
+                        '2022-blake3-aes-256-gcm', '2022-blake3-chacha20-poly1305' => Helper::getServerKey($node->parent?->created_at ?? $node->created_at, 32),
                         default => null,
                     },
             ],
@@ -1116,8 +1118,10 @@ class ServerService
                 $query->where('type', Server::normalizeType($serverType));
             })
             ->where(function ($query) use ($serverId) {
-                $query->where('code', $serverId)
-                    ->orWhere('id', $serverId);
+                $query->where('code', (string) $serverId);
+                if ((is_int($serverId) || (is_string($serverId) && ctype_digit($serverId))) && (int) $serverId > 0) {
+                    $query->orWhere('id', (int) $serverId);
+                }
             })
             ->orderByRaw('CASE WHEN code = ? THEN 0 ELSE 1 END', [$serverId])
             ->first();

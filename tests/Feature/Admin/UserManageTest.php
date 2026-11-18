@@ -3,10 +3,12 @@
 namespace Tests\Feature\Admin;
 
 use App\Http\Controllers\V2\Admin\UserController;
+use App\Jobs\SendEmailJob;
 use App\Models\Plan;
 use App\Models\User;
 use App\Utils\Helper;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
@@ -87,6 +89,80 @@ class UserManageTest extends TestCase
         ])->assertOk()->assertJsonPath('total', 0)->assertJsonCount(0, 'data');
         $this->postJson('/_tests/admin-user/fetch', ['filter' => []])
             ->assertOk()->assertJsonPath('total', 7)->assertJsonPath('data.0.id', $withoutPlan->id);
+    }
+
+    public function test_keyword_search_matches_email_or_remarks_with_other_filters_before_pagination(): void
+    {
+        Route::post('/_tests/admin-user/fetch', [UserController::class, 'fetch']);
+        Route::post('/_tests/admin-user/dumpCSV', [UserController::class, 'dumpCSV']);
+        $plan = $this->plan('搜索套餐');
+        $byEmail = $this->user(['email' => 'keyword@example.invalid', 'plan_id' => $plan->id]);
+        $byRemark = $this->user(['email' => 'note@example.invalid', 'remarks' => 'keyword: 50%_!', 'plan_id' => $plan->id]);
+        $excluded = $this->user(['email' => 'excluded@example.invalid', 'remarks' => 'keyword: 50XA!']);
+        $this->user(['email' => 'different@example.invalid', 'remarks' => '无关', 'plan_id' => $plan->id]);
+        $filters = [
+            ['id' => 'plan_id', 'value' => [$plan->id]],
+            ['id' => 'email_or_remarks', 'value' => ' keyword '],
+        ];
+
+        foreach ([1 => $byRemark->id, 2 => $byEmail->id] as $page => $expected) {
+            $this->postJson('/_tests/admin-user/fetch', ['filter' => $filters, 'current' => $page, 'pageSize' => 1])
+                ->assertOk()->assertJsonPath('total', 2)->assertJsonPath('data.0.id', $expected);
+        }
+
+        $csv = $this->postJson('/_tests/admin-user/dumpCSV', ['scope' => 'filtered', 'filter' => $filters])
+            ->assertOk()->streamedContent();
+        $this->assertStringContainsString($byEmail->email, $csv);
+        $this->assertStringContainsString($byRemark->email, $csv);
+        $this->assertStringNotContainsString($excluded->email, $csv);
+
+        $this->postJson('/_tests/admin-user/fetch', ['filter' => [['id' => 'email_or_remarks', 'value' => 'keyword: 50%_!']]])
+            ->assertOk()->assertJsonPath('total', 1)->assertJsonPath('data.0.id', $byRemark->id);
+        $this->postJson('/_tests/admin-user/fetch', ['filter' => [['id' => 'email_or_remarks', 'value' => ['keyword']]]])
+            ->assertUnprocessable()->assertJsonValidationErrors('filter');
+        $this->postJson('/_tests/admin-user/fetch', ['sort' => [['id' => 'email_or_remarks', 'desc' => false]]])
+            ->assertUnprocessable()->assertJsonValidationErrors('sort.0.id');
+    }
+
+    public function test_advanced_remark_filter_supports_contains_and_equals(): void
+    {
+        Route::post('/_tests/admin-user/fetch', [UserController::class, 'fetch']);
+        $byExactRemark = $this->user(['email' => 'exact@example.invalid', 'remarks' => '0012']);
+        $this->user(['email' => 'short@example.invalid', 'remarks' => '12']);
+        $byPartialRemark = $this->user(['email' => 'partial@example.invalid', 'remarks' => '识别码:0012']);
+
+        foreach (['eq:0012' => $byExactRemark->id, 'like:码:0012' => $byPartialRemark->id] as $value => $expected) {
+            $this->postJson('/_tests/admin-user/fetch', ['filter' => [['id' => 'remarks', 'value' => $value]]])
+                ->assertOk()->assertJsonPath('total', 1)->assertJsonPath('data.0.id', $expected);
+        }
+    }
+
+    public function test_filtered_email_and_ban_use_the_same_keyword_search(): void
+    {
+        Route::post('/_tests/admin-user/sendMail', [UserController::class, 'sendMail']);
+        Route::post('/_tests/admin-user/ban', [UserController::class, 'ban']);
+        Queue::fake([SendEmailJob::class]);
+        $admin = $this->user(['email' => 'admin@example.invalid', 'is_admin' => true]);
+        $plan = $this->plan('筛选套餐');
+        $byEmail = $this->user(['email' => 'keyword@example.invalid', 'plan_id' => $plan->id]);
+        $byRemark = $this->user(['email' => 'note@example.invalid', 'remarks' => 'keyword', 'plan_id' => $plan->id]);
+        $excluded = $this->user(['email' => 'different@example.invalid', 'remarks' => 'keyword']);
+        $filters = [
+            ['id' => 'plan_id', 'value' => [$plan->id]],
+            ['id' => 'email_or_remarks', 'value' => 'keyword'],
+        ];
+
+        $this->actingAs($admin)->postJson('/_tests/admin-user/sendMail', [
+            'scope' => 'filtered', 'filter' => $filters,
+            'sort' => [['id' => 'email', 'desc' => false]],
+            'subject' => '测试主题', 'content' => '测试正文',
+        ])->assertOk();
+        Queue::assertPushed(SendEmailJob::class, 2);
+
+        $this->postJson('/_tests/admin-user/ban', ['scope' => 'filtered', 'filter' => $filters])->assertOk();
+        $this->assertTrue((bool) $byEmail->refresh()->banned);
+        $this->assertTrue((bool) $byRemark->refresh()->banned);
+        $this->assertFalse((bool) $excluded->refresh()->banned);
     }
 
     public function test_expiry_sort_keeps_permanent_users_last_before_pagination(): void
@@ -194,11 +270,12 @@ class UserManageTest extends TestCase
         $this->assertSame(7, (int) $user->conn_limit);
         $this->assertSame(5 * 1073741824, (int) $user->transfer_enable);
 
-        // 改成“无套餐”保留原有权限组和额度，与此前行为一致。
+        // 清空套餐时收回套餐权限组，保留独立设置的额度。
         $this->postJson('/_tests/admin-user/update', ['id' => $user->id, 'plan_id' => null, 'remarks' => '清空套餐'])->assertOk();
         $user->refresh();
         $this->assertNull($user->plan_id);
-        $this->assertSame(2, (int) $user->group_id);
+        $this->assertNull($user->group_id);
+        $this->assertNull($user->group_ids);
         $this->assertSame(1, (int) $user->device_limit);
         $this->assertSame('清空套餐', $user->remarks);
     }

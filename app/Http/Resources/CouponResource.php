@@ -24,7 +24,7 @@ class CouponResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            ...$this->resource->toArray(),
+            ...collect($this->resource->toArray())->except('code')->all(),
             'limit_plan_ids' => empty($this->limit_plan_ids) ? null : collect($this->limit_plan_ids)
                 ->map(fn(mixed $id): string => (string) $id)
                 ->values()

@@ -23,9 +23,9 @@ class UserIpConnectionService
     /** 仅对已打开详情的用户读取；每个实际入口只汇总一次，中转落地不重复计入。 */
     public function forUsers(iterable $users, array $legacyIPs, ?array $runtime = null, ?iterable $nodes = null): array
     {
-        $nodes ??= Server::query()->where(fn ($query) => $query->whereNull('relay_entry_id')->orWhere('relay_entry_id', 0))
-            ->whereNull('relay_pool_id')->get(['id', 'group_ids', 'enabled']);
-        $nodes = DirectPoolService::runtimeNodes(collect($nodes));
+        $nodes = $nodes === null ? DirectPoolService::runtimeNodes(Server::query()
+            ->where(fn ($query) => $query->whereNull('relay_entry_id')->orWhere('relay_entry_id', 0))
+            ->whereNull('relay_pool_id')->get(['id', 'group_ids', 'enabled'])) : collect($nodes);
         try {
             $runtime ??= app(RealtimeStateStore::class)->readMany($nodes->map(fn ($node) => 'node:' . $node->id)->all());
             $keys = $nodes->filter(fn ($node) => ($runtime['node:' . $node->id] ?? null) === null)

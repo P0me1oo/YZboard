@@ -177,12 +177,10 @@ class AgentLogOwnershipTest extends TestCase
         $machine = $this->machine();
         $node = $this->node($machine);
         $other = $this->node($machine);
-        $token = Str::random(32);
-        admin_setting(['server_token' => $token]);
         $batch = ['batch_id' => str_repeat('f', 32), 'records' => [
             $this->record($node, '本节点日志'), $this->record($other, '另一个节点日志'),
         ]];
-        $this->postJson('/api/v2/server/agent-log', ['node_id' => $node->id, 'token' => $token] + $batch)
+        $this->postJson('/api/v2/server/agent-log', ['node_id' => $node->id, 'machine_id' => $machine->id, 'token' => $machine->token] + $batch)
             ->assertForbidden();
         $this->assertDatabaseCount('v2_agent_log', 0);
     }

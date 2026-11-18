@@ -91,7 +91,7 @@ class PlanGroupAccessTest extends TestCase
             return $channel === 'node:push'
                 && $message['data']['action'] === 'remove'
                 && $message['data']['users'] === [['id' => $user->id]];
-        });
+        })->andReturn(1);
         $this->artisan('check:traffic-exceeded')->assertSuccessful();
         $this->assertEqualsCanonicalizing([$nodes[1]->id, $nodes[2]->id], $notified);
     }

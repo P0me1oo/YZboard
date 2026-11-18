@@ -79,6 +79,7 @@ class PluginController extends Controller
                 }
                 $code = $config['code'];
 
+                if (strtolower($code) === 'telegram') continue;
                 if (isset($seenCodes[$code])) {
                     continue;
                 }

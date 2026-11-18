@@ -35,6 +35,7 @@ class PluginManager
 
     public function resolvePluginPath(string $pluginCode): ?string
     {
+        if (strtolower($pluginCode) === 'telegram') return null;
         $dirName = Str::studly($pluginCode);
         $corePath = $this->corePluginPath . '/' . $dirName;
         if (File::isDirectory($corePath)) {
@@ -74,6 +75,7 @@ class PluginManager
      */
     protected function loadPlugin(string $pluginCode): ?AbstractPlugin
     {
+        if (strtolower($pluginCode) === 'telegram') return null;
         if (isset($this->loadedPlugins[$pluginCode])) {
             return $this->loadedPlugins[$pluginCode];
         }
@@ -169,6 +171,7 @@ class PluginManager
      */
     public function install(string $pluginCode): bool
     {
+        if (strtolower($pluginCode) === 'telegram') throw new \Exception('旧 Telegram 插件已移除，请使用独立机器人');
         $configFile = $this->getPluginPath($pluginCode) . '/config.json';
 
         if (!File::exists($configFile)) {
@@ -306,6 +309,7 @@ class PluginManager
      */
     protected function validateConfig(array $config): bool
     {
+        if (strtolower((string) ($config['code'] ?? '')) === 'telegram') return false;
         $requiredFields = [
             'name',
             'code',
@@ -537,8 +541,15 @@ class PluginManager
             throw new \Exception('无法打开插件包文件');
         }
 
-        $zip->extractTo($extractPath);
-        $zip->close();
+        try {
+            \App\Services\SafeArchive::validate($zip);
+            if (!$zip->extractTo($extractPath)) throw new \Exception('插件包解压失败');
+        } catch (\Throwable $exception) {
+            File::deleteDirectory($extractPath);
+            throw $exception;
+        } finally {
+            $zip->close();
+        }
 
         $configFile = File::glob($extractPath . '/*/config.json');
         if (empty($configFile)) {
@@ -723,7 +734,7 @@ class PluginManager
             }
             $config = json_decode(File::get($configFile), true);
             $code = $config['code'] ?? null;
-            if (!$code) {
+            if (!$code || strtolower($code) === 'telegram') {
                 continue;
             }
             if (!Plugin::where('code', $code)->exists()) {

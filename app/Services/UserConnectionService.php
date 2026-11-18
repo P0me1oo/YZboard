@@ -35,10 +35,9 @@ class UserConnectionService
 
     public function forUsersWithNodes(iterable $users, ?array $runtime = null, ?iterable $nodes = null): array
     {
-        $nodes ??= Server::query()->where(function ($query) {
+        $nodes = $nodes === null ? DirectPoolService::runtimeNodes(Server::query()->where(function ($query) {
             $query->whereNull('relay_entry_id')->orWhere('relay_entry_id', 0);
-        })->whereNull('relay_pool_id')->get(['id', 'group_ids', 'enabled']);
-        $nodes = DirectPoolService::runtimeNodes(collect($nodes));
+        })->whereNull('relay_pool_id')->get(['id', 'group_ids', 'enabled'])) : collect($nodes);
         try {
             $runtime ??= app(RealtimeStateStore::class)->readMany($nodes->map(fn ($node) => 'node:' . $node->id)->all());
             $legacyKeys = $nodes->filter(fn ($node) => ($runtime['node:' . $node->id] ?? null) === null)

@@ -190,9 +190,10 @@ class TelegramXrayCrashTest extends TestCase
         \Illuminate\Support\Facades\Route::post('/_tests/server/handshake', [\App\Http\Controllers\V2\Server\ServerController::class, 'handshake'])->middleware('server.v2');
         \Illuminate\Support\Facades\Route::post('/_tests/crash/node', [\App\Http\Controllers\V2\Server\AgentLogController::class, 'report'])->middleware('server.v2');
         \Illuminate\Support\Facades\Route::post('/_tests/crash/machine', [\App\Http\Controllers\V2\Server\MachineController::class, 'agentLog']);
-        $this->postJson('/_tests/server/handshake', ['node_id' => $node->id, 'token' => $token])->assertOk()
+        $auth = ['node_id' => $node->id, 'machine_id' => $machine->id, 'token' => $machine->token];
+        $this->postJson('/_tests/server/handshake', $auth)->assertOk()
             ->assertJsonPath('agent_log.version', 1)->assertJsonPath('agent_log.events.0', 'xray.crash');
-        $this->postJson('/_tests/crash/node', $this->batch() + ['node_id' => $node->id, 'token' => $token])->assertOk()
+        $this->postJson('/_tests/crash/node', $this->batch() + $auth)->assertOk()
             ->assertJsonPath('data.batch_id', str_repeat('a', 32));
         $this->postJson('/_tests/crash/machine', $this->batch(['node_id' => $node->id], 'b')
             + ['machine_id' => $machine->id, 'token' => $machine->token])->assertOk();

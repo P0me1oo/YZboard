@@ -10,6 +10,7 @@ class NodeReportBatch extends Model
     public const STATUS_PROCESSING = 'processing';
     public const STATUS_PROCESSED = 'processed';
     public const STATUS_FAILED = 'failed';
+    public const MAX_ATTEMPTS = 20;
 
     public const PAYLOAD_RETENTION_DAYS = 7;
 

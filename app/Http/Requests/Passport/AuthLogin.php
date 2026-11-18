@@ -11,11 +11,16 @@ class AuthLogin extends FormRequest
      *
      * @return array
      */
+    protected function prepareForValidation(): void
+    {
+        if (is_string($this->input('email'))) $this->merge(['email' => strtolower(trim($this->input('email')))]);
+    }
+
     public function rules()
     {
         return [
-            'email' => 'required|email:strict',
-            'password' => 'required|min:8'
+            'email' => 'required|string|email:strict|max:255',
+            'password' => 'required|string|min:8|max:1024'
         ];
     }
 

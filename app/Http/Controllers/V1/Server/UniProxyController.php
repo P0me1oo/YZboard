@@ -49,7 +49,17 @@ class UniProxyController extends Controller
 
         // 兼容把认证字段放在 JSON 顶层的旧节点。
         unset($res['token'], $res['node_id'], $res['node_type'], $res['machine_id']);
-        ServerService::processTraffic($node, $res);
+        $reportId = $res['report_id'] ?? $request->header('Idempotency-Key');
+        unset($res['report_id']);
+        if ($reportId !== null && (!is_string($reportId) || trim($reportId) === '' || strlen($reportId) > 128)) {
+            return $this->fail([422, 'Invalid report identifier']);
+        }
+        if ($reportId === null) {
+            ServerService::processTraffic($node, $res);
+        } else {
+            app(\App\Services\NodeReportService::class)->accept($node, $reportId, $res, []);
+            ServerService::touchPush($node);
+        }
 
         return $this->success(true);
     }

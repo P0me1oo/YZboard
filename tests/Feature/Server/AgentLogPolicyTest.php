@@ -72,7 +72,7 @@ class AgentLogPolicyTest extends TestCase
         }
     }
 
-    public function test_policy_is_available_before_node_discovery_and_for_legacy_node_binding(): void
+    public function test_policy_is_available_before_node_discovery_and_for_authenticated_machine_nodes(): void
     {
         foreach ([false, true] as $disabled) {
             $machine = $this->machine($disabled);
@@ -92,6 +92,8 @@ class AgentLogPolicyTest extends TestCase
                 'type' => 'shadowsocks', 'host' => 'test.invalid', 'port' => '10001', 'server_port' => 10001,
                 'rate' => 1, 'group_ids' => [], 'enabled' => true]);
             $this->postJson('/api/v2/server/handshake', ['node_id' => $node->id, 'token' => 'log-policy-test-only', 'device_handover' => 1])
+                ->assertForbidden();
+            $this->postJson('/api/v2/server/handshake', $auth + ['node_id' => $node->id, 'device_handover' => 1])
                 ->assertOk()->assertJsonPath('log_policy.disabled', $disabled)
                 ->assertJsonPath('agent_log.min_level', 'warn');
         }

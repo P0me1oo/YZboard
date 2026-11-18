@@ -146,7 +146,7 @@ class NodeSyncService
         }
     }
 
-    private static function serversInGroups(array $groupIds)
+    public static function serversInGroups(array $groupIds)
     {
         if (array_filter($groupIds, fn ($id) => (int) $id > 0) === []) {
             return collect();
@@ -209,20 +209,21 @@ class NodeSyncService
     /**
      * Publish a push command to Redis — picked up by the Workerman WS server
      */
-    public static function push(int $nodeId, string $event, array $data): void
+    public static function push(int $nodeId, string $event, array $data): bool
     {
         try {
-            Redis::publish('node:push', json_encode([
+            return Redis::publish('node:push', json_encode([
                 'node_id' => $nodeId,
                 'event' => $event,
                 'data' => $data,
-            ]));
+            ])) > 0;
         } catch (\Throwable $e) {
             Log::warning("[NodePush] Redis publish failed: {$e->getMessage()}", [
                 'node_id' => $nodeId,
                 'event' => $event,
             ]);
         }
+        return false;
     }
 
     /**

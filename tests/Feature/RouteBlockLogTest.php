@@ -146,11 +146,12 @@ class RouteBlockLogTest extends TestCase
         $this->getJson($this->url('settings'))->assertOk()->assertJsonMissingPath('data.block');
         $machine = ServerMachine::create(['name' => '隐私机器', 'token' => Str::random(32), 'is_active' => true, 'agent_log_disabled' => true]);
         $this->node->update(['machine_id' => $machine->id]);
-        $this->push($this->batch(['connected_at' => now()->timestamp]))->assertOk();
+        $auth = ['machine_id' => $machine->id, 'token' => $machine->token];
+        $this->push($this->batch(['connected_at' => now()->timestamp]), $auth)->assertOk();
         $this->assertDatabaseCount('v2_route_block_log', 3);
         $this->travel(8)->days();
         $this->fetch()->assertJsonPath('data.total', 0);
-        $this->push($old)->assertOk();
+        $this->push($old, $auth)->assertOk();
         $this->artisan('management-log:prune')->assertSuccessful();
         $this->assertDatabaseCount('v2_route_block_log', 0);
     }

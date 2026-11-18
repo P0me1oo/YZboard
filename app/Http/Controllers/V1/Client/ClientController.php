@@ -45,7 +45,7 @@ class ClientController extends Controller
         $user = $request->user();
         $userService = new UserService();
 
-        if (!$userService->isAvailable($user)) {
+        if (!$userService->isAvailable($user) || $user->u + $user->d >= $user->transfer_enable) {
             HookManager::call('client.subscribe.unavailable');
             return response('', 403, ['Content-Type' => 'text/plain']);
         }

@@ -24,6 +24,7 @@ class RequestLog
             }
 
             $action = $this->resolveAction($request->path());
+            if ($action === 'system.getAuditLog') return $response;
             $isTelegramBot = $request->route()?->getControllerClass()
                 === \App\Http\Controllers\V2\Admin\TelegramBotController::class;
             // 独立机器人只审计操作与配置变更标志，不能记录密钥或任意嵌套输入。

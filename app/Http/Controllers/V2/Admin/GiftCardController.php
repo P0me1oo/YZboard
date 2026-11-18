@@ -65,7 +65,8 @@ class GiftCardController extends Controller
             ];
         })->values();
 
-        return $this->paginate( $templates);
+        $templates->setCollection($data);
+        return $this->paginate($templates);
     }
 
     /**
@@ -383,6 +384,7 @@ class GiftCardController extends Controller
             ];
         })->values();
 
+        $codes->setCollection($data);
         return $this->paginate($codes);
     }
 

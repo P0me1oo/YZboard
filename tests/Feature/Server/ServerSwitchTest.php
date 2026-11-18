@@ -359,7 +359,7 @@ class ServerSwitchTest extends TestCase
             $this->assertFalse($stopped->fresh()->enabled);
             $this->assertSame($peerAttributes, $peer->fresh()->getAttributes());
             $this->assertDiscovered($machine, [$running, $peer]);
-            $this->assertVisible($show ? [$running, $stopped, $peer] : [$peer]);
+            $this->assertVisible($show ? [$running, $peer] : [$peer]);
         }
 
         $this->assertSame([], $this->pushes);

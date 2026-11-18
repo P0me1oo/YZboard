@@ -33,12 +33,16 @@ class ServerV2
             'token' => [
                 'string', 'required',
                 function ($attribute, $value, $fail) {
-                    if ($value !== admin_setting('server_token')) {
+                    $expected = admin_setting('server_token');
+                    if (!is_string($expected) || $expected === '' || !hash_equals($expected, $value)) {
                         $fail("Invalid {$attribute}");
                     }
                 },
             ],
-            'node_id' => $isHandshake ? 'nullable' : 'required',
+            'node_id' => [$isHandshake ? 'nullable' : 'required', function ($attribute, $value, $fail) {
+                if ((!is_string($value) && !is_int($value)) || !preg_match('/\A[A-Za-z0-9_-]{1,64}\z/', (string) $value)
+                    || (ctype_digit((string) $value) && (int) $value < 1)) $fail('Invalid node identifier');
+            }],
         ]);
 
         $nodeId = $request->input('node_id');
@@ -50,6 +54,9 @@ class ServerV2
         if (!$serverInfo) {
             throw new ApiException('Server does not exist');
         }
+        if ($serverInfo->machine_id || $serverInfo->enabled === false) {
+            throw new ApiException('This node requires machine authentication or is disabled', 403);
+        }
 
         $request->attributes->set('node_info', $serverInfo);
     }
@@ -59,16 +66,14 @@ class ServerV2
         $isHandshake = $request->is('*/server/handshake') || $request->is('api/v2/server/handshake');
 
         $request->validate([
-            'machine_id' => 'required|integer',
-            'token' => 'required|string',
-            'node_id' => $isHandshake ? 'nullable|integer' : 'required|integer',
+            'machine_id' => 'required|integer|min:1',
+            'token' => 'required|string|max:255',
+            'node_id' => $isHandshake ? 'nullable|integer|min:1' : 'required|integer|min:1',
         ]);
 
-        $machine = ServerMachine::where('id', $request->input('machine_id'))
-            ->where('token', $request->input('token'))
-            ->first();
+        $machine = ServerMachine::find($request->input('machine_id'));
 
-        if (!$machine) {
+        if (!$machine || !hash_equals((string) $machine->token, $request->input('token'))) {
             throw new ApiException('Machine not found or invalid token', 401);
         }
 

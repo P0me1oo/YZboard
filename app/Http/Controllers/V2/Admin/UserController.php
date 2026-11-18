@@ -10,6 +10,7 @@ use App\Http\Requests\Admin\UserUpdate;
 use App\Jobs\SendEmailJob;
 use App\Models\Plan;
 use App\Models\User;
+use App\Services\AdminQueryFields;
 use App\Services\Plugin\HookManager;
 use App\Services\UserService;
 use App\Services\DeviceStateService;
@@ -23,6 +24,7 @@ use Illuminate\Http\JsonResponse;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 class UserController extends Controller
 {
@@ -50,6 +52,13 @@ class UserController extends Controller
     // Apply filters and sorts to the query builder.
     private function applyFiltersAndSorts(Request $request, Builder|QueryBuilder $builder): void
     {
+        AdminQueryFields::validate($request, [
+            'id', 'email', 'remarks', 'uuid', 'token', 'is_admin', 'is_staff', 'banned', 'balance', 'commission_balance', 'commission_rate',
+            'group_id', 'group_ids', 'plan_id', 'expired_at', 'u', 'd', 't', 'total_used', 'transfer_enable', 'discount',
+            'speed_limit', 'device_limit', 'conn_limit', 'conn_rate_limit', 'online_count', 'last_login_at', 'created_at', 'updated_at',
+            'invite_user_id', 'invite_user.email', 'invite_user.id', 'plan.name', 'plan.id', 'group.name', 'group.id',
+            'connection_count', 'upload_speed', 'download_speed', 'remind_expire', 'remind_traffic',
+        ], filterOnlyFields: ['email_or_remarks']);
         $this->applyFilters($request, $builder);
         $this->applySorting($request, $builder);
     }
@@ -81,6 +90,17 @@ class UserController extends Controller
     // Build one filter query condition.
     private function buildFilterQuery(Builder|QueryBuilder $query, string $field, mixed $value): void
     {
+        if ($field === 'email_or_remarks') {
+            if (!is_string($value) || trim($value) === '') {
+                throw ValidationException::withMessages(['filter' => '请输入搜索关键词']);
+            }
+
+            $pattern = '%' . strtr(trim($value), ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
+            $query->whereRaw("email LIKE ? ESCAPE '!'", [$pattern])
+                ->orWhereRaw("remarks LIKE ? ESCAPE '!'", [$pattern]);
+            return;
+        }
+
         // 处理关联查询
         if (str_contains($field, '.')) {
             if (!method_exists($query, 'whereHas')) {
@@ -124,7 +144,7 @@ class UserController extends Controller
         [$operator, $filterValue] = explode(':', $value, 2);
 
         // 转换数字字符串为适当的类型
-        if (is_numeric($filterValue)) {
+        if ($field !== 'remarks' && is_numeric($filterValue)) {
             $filterValue = strpos($filterValue, '.') !== false
                 ? (float) $filterValue
                 : (int) $filterValue;
@@ -321,7 +341,10 @@ class UserController extends Controller
             unset($params['password']);
         }
         // 处理订阅计划
-        if (isset($params['plan_id'])) {
+        if (array_key_exists('plan_id', $params) && $params['plan_id'] === null) {
+            $params['group_id'] = null;
+            $params['group_ids'] = null;
+        } elseif (isset($params['plan_id'])) {
             $plan = Plan::find($params['plan_id']);
             if (!$plan) {
                 return $this->fail([400202, '订阅计划不存在']);
@@ -341,10 +364,14 @@ class UserController extends Controller
             }
         }
         // 处理邀请用户
-        if ($request->input('invite_user_email') && $inviteUser = User::byEmail($request->input('invite_user_email'))->first()) {
-            $params['invite_user_id'] = $inviteUser->id;
-        } else {
-            $params['invite_user_id'] = null;
+        if ($request->exists('invite_user_email')) {
+            if ($request->filled('invite_user_email')) {
+                $inviteUser = User::byEmail($request->input('invite_user_email'))->first();
+                if (!$inviteUser || $inviteUser->id === $user->id) throw \Illuminate\Validation\ValidationException::withMessages(['invite_user_email' => '邀请人不正确']);
+                $params['invite_user_id'] = $inviteUser->id;
+            } else {
+                $params['invite_user_id'] = null;
+            }
         }
 
         if (isset($params['balance'])) {
@@ -592,16 +619,11 @@ class UserController extends Controller
             }
         }
 
-        $sortType = in_array($request->input('sort_type'), ['ASC', 'DESC']) ? $request->input('sort_type') : 'DESC';
-        $sort = $request->input('sort') ? $request->input('sort') : 'created_at';
-
         $builder = User::query()
             ->with('plan:id,name')
             ->orderBy('id', 'desc');
 
         if ($scope === 'filtered') {
-            // filtered: apply filters/sort
-            $builder->orderBy($sort, $sortType);
             $this->applyFiltersAndSorts($request, $builder);
         } elseif ($scope === 'selected') {
             $builder->whereIn('id', $userIds);
@@ -652,6 +674,7 @@ class UserController extends Controller
 
     public function ban(Request $request)
     {
+        $request->validate(['scope' => 'required|in:selected,filtered,all']);
         $scopeInfo = $this->resolveScope($request);
         $scope = $scopeInfo['scope'];
         $userIds = $scopeInfo['user_ids'];
@@ -662,22 +685,18 @@ class UserController extends Controller
             }
         }
 
-        $sortType = in_array($request->input('sort_type'), ['ASC', 'DESC']) ? $request->input('sort_type') : 'DESC';
-        $sort = $request->input('sort') ? $request->input('sort') : 'created_at';
-
-        $builder = User::query()->orderBy('id', 'desc');
+        $builder = User::query()->where('id', '!=', $request->user()->id)->where('is_admin', false);
 
         if ($scope === 'filtered') {
-            // filtered: keep current semantics
-            $builder->orderBy($sort, $sortType);
-            $this->applyFiltersAndSorts($request, $builder);
+            if (empty($request->input('filter'))) return $this->fail([422, '请选择筛选条件']);
+            $builder->where(fn (Builder $query) => $this->applyFiltersAndSorts($request, $query));
         } elseif ($scope === 'selected') {
             $builder->whereIn('id', $userIds);
         } // all: ignore filter/sort
 
         try {
             $groupIds = DB::transaction(function () use ($builder) {
-                $users = (clone $builder)->reorder()->orderBy('id')->lockForUpdate()->get(['id', 'group_id', 'group_ids']);
+                $users = (clone $builder)->orderBy('id')->lockForUpdate()->get(['id', 'group_id', 'group_ids']);
                 $groups = $users->flatMap(fn (User $user) => $user->effectiveGroupIds())->unique()->all();
                 foreach ($users->chunk(500) as $chunk) {
                     $ids = $chunk->pluck('id');

@@ -89,7 +89,7 @@ class OrderController extends Controller
 
     protected function applyCoupon(Order $order, string $couponCode): void
     {
-        $couponService = new CouponService($couponCode);
+        $couponService = new CouponService($couponCode, true);
         if (!$couponService->use($order)) {
             throw new ApiException(__('Coupon failed'));
         }
@@ -117,18 +117,31 @@ class OrderController extends Controller
 
     public function checkout(Request $request)
     {
-        $tradeNo = $request->input('trade_no');
-        $method = $request->input('method');
-        $order = Order::where('trade_no', $tradeNo)
-            ->where('user_id', $request->user()->id)
-            ->where('status', 0)
-            ->first();
-        if (!$order) {
-            return $this->fail([400, __('Order does not exist or has been paid')]);
-        }
-        if ($order->total_amount < 0) {
-            return $this->fail([400, __('Order amount is invalid')]);
-        }
+        $input = $request->validate([
+            'trade_no' => 'required|string|max:64',
+            'method' => 'nullable|integer|min:0',
+            'token' => 'nullable|string|max:255',
+        ]);
+        $tradeNo = $input['trade_no'];
+        [$order, $paymentService] = DB::transaction(function () use ($request, $input, $tradeNo) {
+            $order = Order::where('trade_no', $tradeNo)->where('user_id', $request->user()->id)
+                ->where('status', Order::STATUS_PENDING)->lockForUpdate()->first();
+            if (!$order) throw new ApiException(__('Order does not exist or has been paid'));
+            if ($order->total_amount < 0) throw new ApiException(__('Order amount is invalid'));
+            if ($order->total_amount == 0) return [$order, null];
+
+            $payment = Payment::find($input['method'] ?? 0);
+            if (!$payment || !$payment->enable || $payment->payment === 'MGate') {
+                throw new ApiException(__('Payment method is not available'));
+            }
+            $paymentService = new PaymentService($payment->payment, $payment->id);
+            $order->handling_amount = $payment->handling_fee_fixed || $payment->handling_fee_percent
+                ? (int) round(($order->total_amount * ($payment->handling_fee_percent / 100)) + $payment->handling_fee_fixed)
+                : null;
+            $order->payment_id = $payment->id;
+            $order->saveOrFail();
+            return [$order, $paymentService];
+        }, 3);
         // free process
         if ($order->total_amount <= 0) {
             $orderService = new OrderService($order);
@@ -139,18 +152,6 @@ class OrderController extends Controller
                 'data' => true
             ]);
         }
-        $payment = Payment::find($method);
-        if (!$payment || !$payment->enable) {
-            return $this->fail([400, __('Payment method is not available')]);
-        }
-        $paymentService = new PaymentService($payment->payment, $payment->id);
-        $order->handling_amount = NULL;
-        if ($payment->handling_fee_fixed || $payment->handling_fee_percent) {
-            $order->handling_amount = (int) round(($order->total_amount * ($payment->handling_fee_percent / 100)) + $payment->handling_fee_fixed);
-        }
-        $order->payment_id = $method;
-        if (!$order->save())
-            return $this->fail([400, __('Request failed, please try again later')]);
         $result = $paymentService->pay([
             'trade_no' => $tradeNo,
             'total_amount' => isset($order->handling_amount) ? ($order->total_amount + $order->handling_amount) : $order->total_amount,
@@ -186,6 +187,7 @@ class OrderController extends Controller
             'handling_fee_percent'
         ])
             ->where('enable', 1)
+            ->where('payment', '!=', 'MGate')
             ->orderBy('sort', 'ASC')
             ->get();
 

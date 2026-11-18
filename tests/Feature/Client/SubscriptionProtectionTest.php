@@ -217,8 +217,7 @@ class SubscriptionProtectionTest extends TestCase
         $user = $this->user();
         $this->download($user, headers: ['User-Agent' => 'Mozilla/5.0'])->assertNotFound();
         $this->download($user)->assertOk();
-        // 原订阅接口允许已用完流量的有效账号下载，保留此行为。
-        $this->download($this->user(['u' => 1024]))->assertOk();
+        $this->download($this->user(['u' => 1024]))->assertForbidden();
     }
 
     public static function invalidTokens(): array

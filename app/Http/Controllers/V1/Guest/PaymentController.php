@@ -53,7 +53,6 @@ class PaymentController extends Controller
             return false;
         }
 
-        HookManager::call('payment.notify.success', $order);
         return true;
     }
 }

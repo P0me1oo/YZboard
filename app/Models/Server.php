@@ -472,7 +472,8 @@ class Server extends Model
 
         $config = self::CIPHER_CONFIGURATIONS[$cipher];
         // Use parent's created_at if this is a child node
-        $serverCreatedAt = $this->parent_id ? $this->parent->created_at : $this->created_at;
+        if ($this->parent_id && !$this->parent) throw new \App\Exceptions\ApiException('共享节点的父节点不存在', 422);
+        $serverCreatedAt = ($this->parent_id ? $this->parent->created_at : $this->created_at);
         $serverKey = Helper::getServerKey($serverCreatedAt, $config['serverKeySize']);
         $userKey = Helper::uuidToBase64($user->uuid, $config['userKeySize']);
         return "{$serverKey}:{$userKey}";

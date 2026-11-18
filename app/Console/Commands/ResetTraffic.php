@@ -170,8 +170,8 @@ class ResetTraffic extends Command
     foreach ($nullUsers as $user) {
       try {
         $nextResetTime = $this->trafficResetService->calculateNextResetTime($user);
-        if ($nextResetTime) {
-          $user->next_reset_at = $nextResetTime->timestamp;
+        if ($nextResetTime || $user->next_reset_at !== null) {
+          $user->next_reset_at = $nextResetTime?->timestamp;
           $user->save();
           $fixedCount++;
         }

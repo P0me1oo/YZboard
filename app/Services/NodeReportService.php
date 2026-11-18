@@ -45,7 +45,7 @@ class NodeReportService
         if ($reportId !== '') {
             $existing = NodeReportBatch::where('server_id', $node->id)->where('report_key', hash('sha256', $reportId))->first();
             if ($existing) {
-                if ($existing->status === NodeReportBatch::STATUS_FAILED) DB::afterCommit(fn () => ProcessNodeReportBatch::dispatch((int) $existing->id));
+                if ($existing->status === NodeReportBatch::STATUS_FAILED && $existing->attempts < NodeReportBatch::MAX_ATTEMPTS) DB::afterCommit(fn () => ProcessNodeReportBatch::dispatch((int) $existing->id));
                 return $existing;
             }
         }

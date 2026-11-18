@@ -139,6 +139,10 @@ class PanelBugFixTest extends TestCase
             'pricing' => ['local' => ['amount' => '10.00', 'currency' => $currency]],
             'payments' => [['status' => $status, 'value' => ['local' => ['amount' => $amount, 'currency' => $currency]]]],
         ]];
+        $notifications = 0;
+        HookManager::register('payment.notify.success', function () use (&$notifications): void {
+            $notifications++;
+        });
         $response = $this->coinbase($payment, $key, $event);
         $response->assertStatus($paid ? 200 : 400);
         $this->assertSame($paid ? Order::STATUS_COMPLETED : Order::STATUS_PENDING, $order->fresh()->status);
@@ -148,6 +152,7 @@ class PanelBugFixTest extends TestCase
             $this->coinbase($payment, $key, $event)->assertOk();
             $this->assertSame($expiry, $user->fresh()->expired_at);
         }
+        $this->assertSame($paid ? 1 : 0, $notifications);
     }
 
     public static function epayPayments(): array
@@ -174,9 +179,36 @@ class PanelBugFixTest extends TestCase
         $key = Str::random(24); $payment = $this->gateway('epay', 'EPay', ['pid' => 'test-only', 'key' => $key]);
         $other = Payment::create(['name' => '其他网关', 'payment' => 'EPay', 'uuid' => Str::random(8), 'config' => []]);
         $order = $this->order($this->user(), $this->plan(), ['payment_id' => $other->id]);
-        $receipt = ['payment_id' => $payment->id, 'amount_cents' => 1000, 'currency' => 'CNY', 'exact_amount' => true];
+        $receipt = ['payment_id' => $payment->id, 'paid' => true, 'amount_cents' => 1000, 'currency' => 'CNY', 'exact_amount' => true];
         $this->assertFalse((new OrderService($order))->paid('test-only', true, $receipt));
         $this->assertSame(Order::STATUS_PENDING, $order->fresh()->status);
+    }
+
+    public function test_withdrawal_reserves_commission_and_refunds_only_once(): void
+    {
+        admin_setting(['commission_withdraw_limit' => 10, 'commission_withdraw_method' => ['test']]);
+        $user = $this->user(['commission_balance' => 2500]);
+        Sanctum::actingAs($user);
+        $this->postJson('/api/v1/user/ticket/withdraw', ['withdraw_method' => 'test', 'withdraw_account' => 'test-account'])->assertOk();
+        $ticket = \App\Models\Ticket::where('user_id', $user->id)->sole();
+        $this->assertSame(0, (int) $user->fresh()->commission_balance);
+        $this->assertSame(2500, $ticket->withdraw_amount);
+        \App\Models\Ticket::whereKey($ticket->id)->update([
+            'updated_at' => time() - 2 * 86400,
+            'reply_status' => \App\Models\Ticket::REPLY_STATUS_REPLIED,
+            'last_reply_user_id' => $this->user(['is_admin' => true])->id,
+        ]);
+        $this->artisan('check:ticket')->assertSuccessful();
+        $this->assertSame(\App\Models\Ticket::STATUS_OPENING, (int) $ticket->fresh()->status);
+        $this->postJson('/api/v1/user/ticket/close', ['id' => $ticket->id])->assertUnprocessable();
+
+        Sanctum::actingAs($this->user(['is_admin' => true]));
+        $this->postJson($this->adminUrl('ticket/close'), ['id' => $ticket->id])->assertUnprocessable();
+        for ($i = 0; $i < 2; $i++) {
+            $this->postJson($this->adminUrl('ticket/close'), ['id' => $ticket->id, 'settlement' => 'cancelled'])->assertOk();
+        }
+        $this->assertSame('cancelled', $ticket->fresh()->withdraw_status);
+        $this->assertSame(2500, (int) $user->fresh()->commission_balance);
     }
 
     public function test_coinbase_rejects_invalid_signature_without_updating_order(): void

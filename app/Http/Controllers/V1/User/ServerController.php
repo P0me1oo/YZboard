@@ -13,10 +13,10 @@ class ServerController extends Controller
 {
     public function fetch(Request $request)
     {
-        $user = User::find($request->user()->id);
+        $user = $request->user();
         $servers = [];
         $userService = new UserService();
-        if ($userService->isAvailable($user)) {
+        if ($userService->isAvailable($user) && $user->u + $user->d < $user->transfer_enable) {
             $servers = ServerService::getAvailableServers($user);
         }
         $eTag = sha1(json_encode(array_column($servers, 'cache_key')));

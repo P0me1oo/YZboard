@@ -65,6 +65,9 @@ class OrderController extends Controller
 
     private function applyFiltersAndSorts(Request $request, Builder $builder): void
     {
+        \App\Services\AdminQueryFields::validate($request, ['id', 'user_id', 'trade_no', 'status', 'plan_id', 'type', 'period', 'total_amount',
+            'handling_amount', 'balance_amount', 'discount_amount', 'coupon_id', 'surplus_amount', 'commission_status', 'commission_balance',
+            'created_at', 'updated_at', 'paid_at', 'invite_user_id', 'payment_id']);
         $this->applyFilters($request, $builder);
         $this->applySorting($request, $builder);
     }
@@ -100,6 +103,8 @@ class OrderController extends Controller
         }
 
         [$operator, $filterValue] = explode(':', $value, 2);
+        if (strtolower($operator) === 'null') { $query->whereNull($field); return; }
+        if (strtolower($operator) === 'notnull') { $query->whereNotNull($field); return; }
 
         // Convert numeric strings to appropriate type
         if (is_numeric($filterValue)) {

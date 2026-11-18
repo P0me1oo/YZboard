@@ -15,6 +15,7 @@ class OrderSave extends FormRequest
     {
         return [
             'plan_id' => 'required',
+            'coupon_code' => 'nullable|string|max:255',
             'period' => 'required|in:month_price,quarter_price,half_year_price,year_price,two_year_price,three_year_price,onetime_price,reset_price'
         ];
     }

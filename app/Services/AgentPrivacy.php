@@ -11,8 +11,7 @@ class AgentPrivacy
     /** 文件密钥与机器身份绑定，不把面板主密钥交给节点。 */
     public static function view(?ServerMachine $machine = null, ?Server $node = null, bool $includeKeys = true): array
     {
-        $machine ??= $node?->machine_id ? ServerMachine::find($node->machine_id) : null;
-        $result = ['version' => 1, 'enabled' => AgentLogPolicy::disabled($machine), 'keys' => []];
+        $result = ['version' => 1, 'enabled' => AgentLogPolicy::disabled($machine, $node), 'keys' => []];
         // 关闭后仍允许已认证的机器领取原密钥，完成解密及冷启动恢复。
         if (!$machine || !$includeKeys) {
             return $result;

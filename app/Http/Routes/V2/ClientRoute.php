@@ -13,8 +13,8 @@ class ClientRoute
             'middleware' => 'client'
         ], function ($router) {
             // App
-            $router->get('/app/getConfig', [AppController::class, 'getConfig']);
-            $router->get('/app/getVersion', [AppController::class, 'getVersion']);
+            $router->get('/app/getConfig', [AppController::class, 'getConfig'])->middleware('throttle:60,1');
+            $router->get('/app/getVersion', [AppController::class, 'getVersion'])->middleware('throttle:60,1');
         });
     }
 }

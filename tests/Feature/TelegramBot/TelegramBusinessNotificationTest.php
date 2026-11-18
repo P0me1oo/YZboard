@@ -403,26 +403,14 @@ class TelegramBusinessNotificationTest extends TestCase
         $this->assertDatabaseHas('v2_telegram_bot_updates', ['update_id' => 2, 'action' => 'menu']);
     }
 
-    public function test_legacy_plugin_and_queued_jobs_yield_only_the_enabled_features(): void
+    public function test_retired_notifications_never_use_the_old_bot(): void
     {
-        require_once base_path('plugins-core/Telegram/Plugin.php');
-        $plugin = new \Plugin\Telegram\Plugin('telegram');
-        $plugin->boot();
         $this->enable();
-        $plugin->sendTicketNotify($this->ticket());
-        $plugin->sendPaymentNotify(new Order());
-        Queue::assertNotPushed(SendTelegramJob::class);
-        (new SendTelegramJob(900000001, '旧通知', 'ticket'))->handle();
-        (new SendTelegramJob(900000001, "\u{1F4EE} *工单提醒* #1"))->handle();
-        (new SendTelegramJob(900000001, "\u{1F4B0}成功收款10元"))->handle();
-        Http::assertNothingSent();
+        foreach ([null, 'ticket', 'payment', 'node_offline'] as $kind) {
+            (new SendTelegramJob(900000001, '升级前通知', $kind))->handle();
+        }
         TelegramBotConfig::firstOrFail()->update(['enabled' => false]);
-        $this->assertTrue(BusinessNotificationService::owns('ticket'));
-        $this->enable(['notify_ticket' => false, 'allow_ticket_reply' => true, 'notify_payment' => false]);
-        $this->assertFalse(BusinessNotificationService::owns('ticket'));
-        $this->assertTrue(BusinessNotificationService::owns('ticket_reply'));
-        $this->assertFalse(BusinessNotificationService::owns('payment'));
-        (new SendTelegramJob(900000001, '其他通知'))->handle();
-        Http::assertSentCount(1);
+        (new SendTelegramJob(900000001, '升级前通知'))->handle();
+        Http::assertNothingSent();
     }
 }

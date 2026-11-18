@@ -1033,7 +1033,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "no_results": "No results found.",
       "clear": "Clear filters",
       "search_placeholder": "Search...",
-      "email_search": "Search user email...",
+      "keyword_search": "Search email or notes...",
       "plan": "Plan",
       "advanced": "Advanced Filter",
       "reset": "Reset Filter",

@@ -24,15 +24,12 @@ class PaymentReceipt
         if ((int) $order->payment_id !== (int) ($receipt['payment_id'] ?? 0) || !$order->payment_id) {
             throw new ApiException('Payment method does not match order', 422);
         }
-        if (array_key_exists('amount_cents', $receipt)) {
-            $expected = (int) $order->total_amount + (int) $order->handling_amount;
-            if (($receipt['currency'] ?? null) !== 'CNY' || !is_int($receipt['amount_cents'])
-                || $expected <= 0 || $receipt['amount_cents'] < $expected) {
-                throw new ApiException('Payment amount or currency does not match order', 422);
-            }
-            if (!empty($receipt['exact_amount']) && $receipt['amount_cents'] !== $expected) {
-                throw new ApiException('Payment amount does not match order', 422);
-            }
+        $expected = (int) $order->total_amount + (int) $order->handling_amount;
+        $amount = $receipt['amount_cents'] ?? null;
+        if (($receipt['paid'] ?? null) !== true || ($receipt['currency'] ?? null) !== 'CNY'
+            || !is_int($amount) || $expected <= 0 || $amount < $expected
+            || (!empty($receipt['exact_amount']) && $amount !== $expected)) {
+            throw new ApiException('Payment settlement, amount or currency does not match order', 422);
         }
     }
 }

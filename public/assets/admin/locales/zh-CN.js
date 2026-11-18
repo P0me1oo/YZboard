@@ -1033,7 +1033,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
       "no_results": "未找到结果",
       "clear": "清除筛选",
       "search_placeholder": "搜索...",
-      "email_search": "搜索用户邮箱...",
+      "keyword_search": "搜索邮箱或备注...",
       "plan": "套餐",
       "advanced": "高级筛选",
       "reset": "重置筛选",

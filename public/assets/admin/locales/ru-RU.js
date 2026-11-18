@@ -975,7 +975,7 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
       "no_results": "Результатов не найдено.",
       "clear": "Очистить фильтры",
       "search_placeholder": "Поиск...",
-      "email_search": "Поиск по email...",
+      "keyword_search": "Поиск по email или примечанию...",
       "plan": "Тариф",
       "advanced": "Расширенный фильтр",
       "reset": "Сбросить фильтр",

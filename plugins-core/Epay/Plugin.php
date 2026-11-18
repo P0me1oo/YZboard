@@ -96,6 +96,7 @@ class Plugin extends AbstractPlugin implements PaymentInterface
         }
 
         return [
+            'paid' => true,
             'trade_no' => $params['out_trade_no'] ?? null,
             'callback_no' => $params['trade_no'] ?? null,
             'amount_cents' => PaymentReceipt::cents($params['money'] ?? null),

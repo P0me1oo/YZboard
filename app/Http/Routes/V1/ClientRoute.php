@@ -17,7 +17,7 @@ class ClientRoute
             $router->get('/subscribe', [ClientController::class, 'subscribe'])->name('client.subscribe.legacy');
             // App
             $router->get('/app/getConfig', [AppController::class, 'getConfig'])->name('client.subscribe.app');
-            $router->get('/app/getVersion', [AppController::class, 'getVersion']);
+            $router->get('/app/getVersion', [AppController::class, 'getVersion'])->middleware('throttle:60,1');
         });
     }
 }

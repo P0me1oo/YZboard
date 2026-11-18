@@ -155,6 +155,8 @@ class LiteHostMonitoringTest extends TestCase
         $assertPolicy(false);
         $this->postJson('/api/v2/server/handshake', $this->auth())->assertOk()->assertJsonPath('host_monitoring', false);
         $this->postJson('/api/v2/server/handshake', ['node_id' => $this->node->id, 'token' => 'lite-host-test-only'])
+            ->assertForbidden();
+        $this->postJson('/api/v2/server/handshake', $this->auth() + ['node_id' => $this->node->id])
             ->assertOk()->assertJsonPath('host_monitoring', false);
         $other = ServerMachine::create(['name' => '未绑定', 'token' => 'other-test-only', 'is_active' => true]);
         $this->assertTrue(HostMonitoring::enabled($other));

@@ -13,7 +13,7 @@ final class TrafficReconciliation
     {
         $range = app(TrafficStatisticsService::class)->range($r, 30);
         $filter = $r->validate(['only_issues' => 'sometimes|boolean']);
-        $query = Server::query()->when($r->filled('search'), fn ($q) => $q->where('name', 'like', '%'.$r->input('search').'%'));
+        $query = Server::query()->where(fn ($q) => $q->whereNull('balancer_role')->orWhere('balancer_role', '!=', DirectPoolService::ROLE))->when($r->filled('search'), fn ($q) => $q->where('name', 'like', '%'.$r->input('search').'%'));
         // 异常筛选和全页摘要需要所有匹配节点，但只读取展示所需字段和一批状态缓存。
         $nodes = (clone $query)->orderBy('id')->get(['id', 'name', 'type', 'machine_id', 'parent_id', 'enabled', 'health_check', 'relay_entry_id', 'relay_pool_id']);
         $batches = NodeReportBatch::query()->whereIn('server_id', (clone $query)->select('id'))

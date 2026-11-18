@@ -32,6 +32,12 @@ class SystemController extends Controller
         return $this->success(collect($workload->get())->sortBy('name')->values()->toArray());
     }
 
+    public function getQueueMasters(MasterSupervisorRepository $masters, SupervisorRepository $supervisors)
+    {
+        $data = (new \Laravel\Horizon\Http\Controllers\MasterSupervisorController())->index($masters, $supervisors);
+        return response()->json($data->values());
+    }
+
     protected function getScheduleStatus(): bool
     {
         return (time() - 120) < Cache::get(CacheKey::get('SCHEDULE_LAST_CHECK_AT', null));
@@ -101,7 +107,7 @@ class SystemController extends Controller
     public function getAuditLog(Request $request)
     {
         $current = max(1, (int) $request->input('current', 1));
-        $pageSize = max(10, (int) $request->input('page_size', 10));
+        $pageSize = max(10, min(200, (int) $request->input('page_size', 10)));
 
         $builder = AdminAuditLog::with('admin:id,email')
             ->orderBy('id', 'DESC')
@@ -123,12 +129,12 @@ class SystemController extends Controller
     public function getHorizonFailedJobs(Request $request, JobRepository $jobRepository)
     {
         $current = max(1, (int) $request->input('current', 1));
-        $pageSize = max(10, (int) $request->input('page_size', 20));
+        $pageSize = max(10, min(50, (int) $request->input('page_size', 20)));
         $offset = ($current - 1) * $pageSize;
 
-        $failedJobs = collect($jobRepository->getFailed())
+        $failedJobs = collect($jobRepository->getFailed($offset > 0 ? $offset - 1 : null))
             ->sortByDesc('failed_at')
-            ->slice($offset, $pageSize)
+            ->take($pageSize)
             ->values();
 
         $total = $jobRepository->countFailed();

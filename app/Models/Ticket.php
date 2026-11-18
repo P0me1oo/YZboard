@@ -28,6 +28,7 @@ class Ticket extends Model
     protected $dateFormat = 'U';
     protected $guarded = ['id'];
     protected $casts = [
+        'withdraw_amount' => 'integer',
         'created_at' => 'timestamp',
         'updated_at' => 'timestamp'
     ];

@@ -73,7 +73,7 @@ class Plugin extends AbstractPlugin implements PaymentInterface
                 'type' => 0,
                 'data' => $gateway->getQrCodeUrl()
             ];
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error($e);
             throw new ApiException($e->getMessage());
         }
@@ -81,7 +81,7 @@ class Plugin extends AbstractPlugin implements PaymentInterface
 
     public function notify($params): array|bool
     {
-        if ($params['trade_status'] !== 'TRADE_SUCCESS')
+        if (($params['app_id'] ?? null) !== (string) $this->getConfig('app_id') || !in_array($params['trade_status'] ?? null, ['TRADE_SUCCESS', 'TRADE_FINISHED'], true))
             return false;
 
         $gateway = new AlipayF2F();
@@ -93,12 +93,13 @@ class Plugin extends AbstractPlugin implements PaymentInterface
             if ($gateway->verify($params)) {
                 return [
                     'trade_no' => $params['out_trade_no'],
-                    'callback_no' => $params['trade_no']
+                    'paid' => true, 'callback_no' => $params['trade_no'],
+                    'amount_cents' => \App\Services\PaymentReceipt::cents($params['total_amount'] ?? null), 'currency' => 'CNY', 'exact_amount' => true
                 ];
             } else {
                 return false;
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return false;
         }
     }

@@ -50,7 +50,7 @@ class SyncNodeUsers extends Command
             }
 
             try {
-                $users = ServerService::getAvailableUsers($node)->toArray();
+                $users = ServerService::getUsersForSync($node)->toArray();
                 NodeSyncService::push($node->id, 'sync.users', ['users' => $users]);
 
                 $synced++;

@@ -11,7 +11,6 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
 class StatUserJob implements ShouldQueue
 {
@@ -54,9 +53,11 @@ class StatUserJob implements ShouldQueue
         $received = \Carbon\CarbonImmutable::createFromTimestamp($this->receivedAt ?? now()->timestamp, config('app.timezone'));
         $recordAt = ($this->recordType === 'm' ? $received->startOfMonth() : $received->startOfDay())->timestamp;
 
-        foreach ($this->data as $uid => $v) {
-            try {
-                DB::transaction(function () use ($uid, $v, $recordAt): void {
+        $data = $this->data;
+        ksort($data, SORT_NUMERIC);
+        try {
+            DB::transaction(function () use ($data, $recordAt): void {
+                foreach ($data as $uid => $v) {
                     $this->processUserStat($uid, $v, $recordAt);
                     if ($this->recordType === 'd') {
                         app(TrafficStatisticsRecorder::class)->add(
@@ -70,11 +71,11 @@ class StatUserJob implements ShouldQueue
                             (int) ($v[0] * $this->server['rate']), (int) ($v[1] * $this->server['rate']), $this->receivedAt
                         );
                     }
-                }, 3);
-            } catch (\Exception $e) {
-                Log::error('StatUserJob failed for user ' . $uid . ': ' . $e->getMessage());
-                throw $e;
-            }
+                }
+            }, 3);
+        } catch (\Exception $e) {
+            \App\Services\FailureLog::record('用户流量统计写入失败', $e);
+            throw $e;
         }
     }
 

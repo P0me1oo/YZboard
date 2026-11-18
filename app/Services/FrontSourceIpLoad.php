@@ -29,8 +29,12 @@ class FrontSourceIpLoad
     {
         if (!$machineIds) return [];
         $rows = [];
-        $nodes = Server::whereIn('machine_id', $machineIds)->whereNull('parent_id')
-            ->whereNull('relay_entry_id')->whereNull('relay_pool_id')->get(['id', 'machine_id', 'type']);
+        $nodes = Server::whereIn('machine_id', $machineIds)->where(fn ($q) => $q->whereNull('parent_id')->orWhere('parent_id', 0))
+            ->where(fn ($q) => $q->whereNull('relay_entry_id')->orWhere('relay_entry_id', 0))
+            ->where(fn ($q) => $q->whereNull('relay_pool_id')->orWhere('relay_pool_id', 0))
+            ->where(fn ($q) => $q->where('enabled', true)->orWhereNull('enabled'))
+            ->where(fn ($q) => $q->whereNull('balancer_role')->orWhere('balancer_role', '!=', DirectPoolService::ROLE))
+            ->get(['id', 'machine_id', 'type']);
         foreach ($nodes as $node) {
             $heartbeat = LoadBalancerService::heartbeat($node);
             if ($heartbeat === null || $heartbeat < now()->timestamp - self::freshSeconds()) continue;

@@ -66,6 +66,8 @@ class CheckCommission extends Command
         foreach ($orders as $order) {
             try{
                 DB::beginTransaction();
+                $order = Order::whereKey($order->id)->where('commission_status', 1)->lockForUpdate()->first();
+                if (!$order) { DB::rollBack(); continue; }
                 if (!$this->payHandle($order->invite_user_id, $order)) {
                     DB::rollBack();
                     continue;
@@ -97,7 +99,10 @@ class CheckCommission extends Command
                 0 => 100
             ];
         }
+        $seen = [(int) $order->user_id => true];
         for ($l = 0; $l < $level; $l++) {
+            if (isset($seen[(int) $inviteUserId])) break;
+            $seen[(int) $inviteUserId] = true;
             $inviter = User::find($inviteUserId);
             if (!$inviter) continue;
             if (!isset($commissionShareLevels[$l])) continue;

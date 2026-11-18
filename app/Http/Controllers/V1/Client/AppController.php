@@ -17,7 +17,10 @@ class AppController extends Controller
         $servers = [];
         $user = $request->user();
         $userService = new UserService();
-        if ($userService->isAvailable($user)) {
+        if (!app(\App\Services\SubscriptionClientControl::class)->allows($user, $request->userAgent() ?? '')) {
+            return response('该客户端暂时不在支持范围内，请联系管理员', 403, ['Cache-Control' => 'private, no-store']);
+        }
+        if ($userService->isAvailable($user) && $user->u + $user->d < $user->transfer_enable) {
             $servers = ServerService::getAvailableServers($user);
             $servers = app(\App\Services\DdnsService::class)->project($servers, $user);
         }

@@ -12,7 +12,6 @@ use App\Services\NodeSyncService;
 use App\Services\RealityScanService;
 use App\Services\SubscriptionClientControl;
 use App\Services\SubscriptionProtection;
-use App\Services\TelegramService;
 use App\Services\ThemeService;
 use App\Utils\Dict;
 use App\Support\AdminAppearance;
@@ -56,26 +55,6 @@ class ConfigController extends Controller
             'data' => $mailLog,
         ]);
     }
-    public function setTelegramWebhook(Request $request)
-    {
-        $hookUrl = $this->resolveTelegramWebhookUrl();
-        if (blank($hookUrl)) {
-            return $this->fail([422, 'Telegram Webhook地址未配置']);
-        }
-        $hookUrl .= '?' . http_build_query([
-            'access_token' => md5(admin_setting('telegram_bot_token', $request->input('telegram_bot_token')))
-        ]);
-        $telegramService = new TelegramService($request->input('telegram_bot_token'));
-        $telegramService->getMe();
-        $telegramService->setWebhook(url: $hookUrl);
-        $telegramService->registerBotCommands();
-        return $this->success([
-            'success' => true,
-            'webhook_url' => $hookUrl,
-            'webhook_base_url' => $this->getTelegramWebhookBaseUrl(),
-        ]);
-    }
-
     public function fetch(Request $request)
     {
         $key = $request->input('key');
@@ -173,12 +152,6 @@ class ConfigController extends Controller
                 'email_encryption' => admin_setting('email_encryption'),
                 'email_from_address' => admin_setting('email_from_address'),
                 'remind_mail_enable' => (bool) admin_setting('remind_mail_enable', false),
-            ],
-            'telegram' => [
-                'telegram_bot_enable' => (bool) admin_setting('telegram_bot_enable', 0),
-                'telegram_bot_token' => admin_setting('telegram_bot_token'),
-                'telegram_webhook_url' => admin_setting('telegram_webhook_url'),
-                'telegram_discuss_link' => admin_setting('telegram_discuss_link')
             ],
             'app' => [
                 'windows_version' => admin_setting('windows_version', ''),
@@ -325,32 +298,4 @@ class ConfigController extends Controller
         };
     }
 
-    private function getTelegramWebhookBaseUrl(): ?string
-    {
-        $customUrl = trim((string) admin_setting('telegram_webhook_url', ''));
-        if ($customUrl !== '') {
-            return rtrim($customUrl, '/');
-        }
-
-        $appUrl = trim((string) admin_setting('app_url', ''));
-        if ($appUrl !== '') {
-            return rtrim($appUrl, '/');
-        }
-
-        return null;
-    }
-
-    private function resolveTelegramWebhookUrl(): ?string
-    {
-        $baseUrl = $this->getTelegramWebhookBaseUrl();
-        if (!$baseUrl) {
-            return null;
-        }
-
-        if (str_contains($baseUrl, '/api/v1/guest/telegram/webhook')) {
-            return $baseUrl;
-        }
-
-        return $baseUrl . '/api/v1/guest/telegram/webhook';
-    }
 }

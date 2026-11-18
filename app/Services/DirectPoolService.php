@@ -74,21 +74,29 @@ class DirectPoolService
     }
 
     /** 运行监测只计算真实成员，合并池直出及成员落地权限；一次读取供整批节点复用。 */
-    public static function runtimeNodes(Collection $nodes): Collection
+    public static function runtimeNodes(Collection $nodes, ?Collection $landings = null): Collection
     {
+        $landings ??= Server::whereIn('relay_entry_id', $nodes->pluck('id'))
+            ->where(fn ($query) => $query->where('enabled', true)->orWhereNull('enabled'))
+            ->get(['relay_entry_id', 'group_ids']);
+        $relayGroups = $landings->groupBy('relay_entry_id');
+        $nodes = $nodes->map(function ($node) use ($relayGroups) {
+            $children = $relayGroups->get($node->id, collect());
+            if ($children->isEmpty()) return $node;
+            $node = clone $node;
+            $node->group_ids = array_values(array_unique([...(array) $node->group_ids, ...$children->flatMap(fn ($child) => $child->group_ids ?? [])->all()]));
+            return $node;
+        });
         $pools = BalancerPool::with('members')->where('mode', 'direct')->get();
         if ($pools->isEmpty()) return $nodes;
         $virtualIds = $pools->pluck('gateway_node_id')->all();
         $members = [];
         foreach ($pools as $pool) foreach ($pool->members as $member) $members[$member->source_node_id] = $pool;
-        $children = Server::whereIn('relay_entry_id', array_keys($members))
-            ->where(fn ($query) => $query->where('enabled', true)->orWhereNull('enabled'))
-            ->get(['relay_entry_id', 'group_ids'])->groupBy('relay_entry_id');
-        return $nodes->reject(fn ($node) => in_array($node->id, $virtualIds))->map(function ($node) use ($members, $children) {
+        return $nodes->reject(fn ($node) => in_array($node->id, $virtualIds))->map(function ($node) use ($members, $relayGroups) {
             if (!isset($members[$node->id])) return $node;
             $node = clone $node;
             $pool = $members[$node->id];
-            $landings = $children->get($node->id, collect());
+            $landings = $relayGroups->get($node->id, collect());
             $groups = $pool->enabled ? (self::settings($pool)['group_ids'] ?? []) : [];
             $node->group_ids = array_values(array_unique([...$groups, ...$landings->flatMap(fn ($child) => $child->group_ids ?? [])->all()]));
             $node->enabled = $node->enabled !== false && ($pool->enabled || $landings->isNotEmpty());

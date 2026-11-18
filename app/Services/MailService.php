@@ -304,15 +304,14 @@ class MailService
             }
             $error = null;
         } catch (\Exception $e) {
-            Log::error($e);
-            $error = $e->getMessage();
+            FailureLog::record('邮件发送失败', $e);
+            $error = LogSanitizer::text($e->getMessage());
         }
         $log = [
             'email' => $params['email'],
             'subject' => $params['subject'],
             'template_name' => $params['template_name'],
             'error' => $error,
-            'config' => config('mail')
         ];
         MailLog::create($log);
         return $log;

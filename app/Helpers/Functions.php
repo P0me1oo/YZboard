@@ -52,29 +52,16 @@ if (!function_exists('admin_settings_batch')) {
 
 if (!function_exists('source_base_url')) {
     /**
-     * 获取来源基础URL，优先Referer，其次Host
+     * 生成站点链接，优先使用管理端配置的站点地址。
      * @param string $path
      * @return string
      */
     function source_base_url(string $path = ''): string
     {
-        $baseUrl = '';
-        $referer = request()->header('Referer');
-
-        if ($referer) {
-            $parsedUrl = parse_url($referer);
-            if (isset($parsedUrl['scheme']) && isset($parsedUrl['host'])) {
-                $baseUrl = $parsedUrl['scheme'] . '://' . $parsedUrl['host'];
-                if (isset($parsedUrl['port'])) {
-                    $baseUrl .= ':' . $parsedUrl['port'];
-                }
-            }
-        }
-
-        if (!$baseUrl) {
-            $baseUrl = request()->getSchemeAndHttpHost();
-        }
-
+        $configured = admin_setting('app_url');
+        $parsed = is_string($configured) ? parse_url($configured) : false;
+        $baseUrl = $parsed && isset($parsed['host']) && in_array($parsed['scheme'] ?? '', ['http', 'https'], true)
+            ? $configured : request()->getSchemeAndHttpHost();
         $baseUrl = rtrim($baseUrl, '/');
         $path = ltrim($path, '/');
         return $baseUrl . '/' . $path;

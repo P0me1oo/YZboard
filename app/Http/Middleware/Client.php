@@ -29,7 +29,7 @@ class Client
         }
 
         $token = $request->input('token', $request->route('token'));
-        if (empty($token)) {
+        if (!is_string($token) || $token === '' || strlen($token) > 255) {
             throw new ApiException('token is null',403);
         }
         $user = User::where('token', $token)->first();

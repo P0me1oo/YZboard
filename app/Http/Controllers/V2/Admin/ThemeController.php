@@ -51,7 +51,8 @@ class ThemeController extends Controller
             }
 
             // 检查主题目录权限
-            $themePath = base_path('theme');
+            $themePath = storage_path('theme');
+            if (!File::isDirectory($themePath)) File::makeDirectory($themePath, 0755, true);
             if (!is_writable($themePath)) {
                 throw new ApiException('主题目录无写入权限');
             }

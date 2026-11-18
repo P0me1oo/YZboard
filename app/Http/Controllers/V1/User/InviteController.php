@@ -17,13 +17,13 @@ class InviteController extends Controller
 {
     public function save(Request $request)
     {
-        if (InviteCode::where('user_id', $request->user()->id)->where('status', 0)->count() >= admin_setting('invite_gen_limit', 5)) {
-            return $this->fail([400,__('The maximum number of creations has been reached')]);
-        }
-        $inviteCode = new InviteCode();
-        $inviteCode->user_id = $request->user()->id;
-        $inviteCode->code = Helper::randomChar(8);
-        return $this->success($inviteCode->save());
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($request) {
+            User::whereKey($request->user()->id)->lockForUpdate()->firstOrFail();
+            if (InviteCode::where('user_id', $request->user()->id)->where('status', 0)->count() >= admin_setting('invite_gen_limit', 5)) {
+                return $this->fail([400, __('The maximum number of creations has been reached')]);
+            }
+            return $this->success(InviteCode::create(['user_id' => $request->user()->id, 'code' => Helper::randomChar(8)])->exists);
+        }, 3);
     }
 
     public function details(Request $request)

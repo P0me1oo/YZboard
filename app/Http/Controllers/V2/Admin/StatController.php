@@ -247,6 +247,15 @@ class StatController extends Controller
 
     public function getStatRecord(Request $request)
     {
+        $input = $request->validate([
+            'type' => 'required|in:paid_total,commission_total,register_count',
+            'start_at' => 'nullable|integer|min:0', 'end_at' => 'nullable|integer|min:1|gt:start_at',
+        ]);
+        $start = (int) ($input['start_at'] ?? now()->subDays(29)->startOfDay()->timestamp);
+        $end = (int) ($input['end_at'] ?? now()->addDay()->startOfDay()->timestamp);
+        if ($end <= $start || $end - $start > 366 * 86400) throw new \App\Exceptions\ApiException('统计时间范围不正确', 422);
+        $this->service->setStartAt($start);
+        $this->service->setEndAt($end);
         return [
             'data' => $this->service->getStatRecord($request->input('type'))
         ];

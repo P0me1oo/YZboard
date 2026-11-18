@@ -37,15 +37,17 @@ class ProcessNodeReportBatch implements ShouldQueue
 
     public function handle(): void
     {
-        NodeReportBatch::query()
+        $started = NodeReportBatch::query()
             ->whereKey($this->batchId)
             ->where('status', '!=', NodeReportBatch::STATUS_PROCESSED)
+            ->where('attempts', '<', NodeReportBatch::MAX_ATTEMPTS)
             ->update([
                 'status' => NodeReportBatch::STATUS_PROCESSING,
                 'last_error' => null,
                 'attempts' => DB::raw('attempts + 1'),
                 'updated_at' => now(),
             ]);
+        if (!$started) return;
 
         DB::transaction(function (): void {
             $batch = NodeReportBatch::query()->lockForUpdate()->find($this->batchId);
@@ -130,6 +132,7 @@ class ProcessNodeReportBatch implements ShouldQueue
         $batchStatistics = $this->canBatchStatistics();
         $atomicDaily = $batchStatistics && $this->supportsAtomicDailyStats();
 
+        ksort($traffic, SORT_NUMERIC);
         foreach ($traffic as $userId => $value) {
             if (!is_numeric($userId) || !is_array($value) || count($value) !== 2) {
                 continue;
@@ -168,6 +171,7 @@ class ProcessNodeReportBatch implements ShouldQueue
 
             DB::table('v2_user')
                 ->where('id', $userId)
+                ->where(fn ($query) => $query->whereNull('last_reset_at')->orWhere('last_reset_at', '<=', $batch->created_at->timestamp))
                 ->incrementEach(['u' => $ratedU, 'd' => $ratedD], ['t' => $now]);
 
             $item = [$userId, $serverId, 'entry', $recordAt, $u, $d, $ratedU, $ratedD, $batch->created_at?->timestamp];

@@ -90,7 +90,6 @@ $router->post('/realtime/ticket', [\App\Http\Controllers\V2\Admin\RealtimeContro
                 $router->post('/subscription-protection/release', [\App\Http\Controllers\V2\Admin\SubscriptionProtectionController::class, 'release']);
                 $router->get('/getEmailTemplate', [ConfigController::class, 'getEmailTemplate']);
                 $router->get('/getThemeTemplate', [ConfigController::class, 'getThemeTemplate']);
-                $router->post('/setTelegramWebhook', [ConfigController::class, 'setTelegramWebhook']);
                 $router->post('/testSendMail', [ConfigController::class, 'testSendMail']);
             });
 
@@ -219,7 +218,6 @@ $router->post('/realtime/ticket', [\App\Http\Controllers\V2\Admin\RealtimeContro
                 $router->post('/sendMail', [UserController::class, 'sendMail']);
                 $router->post('/ban', [UserController::class, 'ban']);
                 $router->post('/resetSecret', [UserController::class, 'resetSecret']);
-                $router->post('/setInviteUser', [UserController::class, 'setInviteUser']);
                 $router->post('/destroy', [UserController::class, 'destroy']);
             });
 
@@ -249,7 +247,6 @@ $router->post('/realtime/ticket', [\App\Http\Controllers\V2\Admin\RealtimeContro
                 $router->get('/getServerYesterdayRank', [StatController::class, 'getServerYesterdayRank']);
                 $router->get('/getOrder', [StatController::class, 'getOrder']);
                 $router->any('/getStatUser', [StatController::class, 'getStatUser']);
-                $router->get('/getRanking', [StatController::class, 'getRanking']);
                 $router->get('/getStatRecord', [StatController::class, 'getStatRecord']);
                 $router->get('/getTrafficRank', [StatController::class, 'getTrafficRank']);
             });
@@ -260,7 +257,6 @@ $router->post('/realtime/ticket', [\App\Http\Controllers\V2\Admin\RealtimeContro
             ], function ($router) {
                 $router->get('/fetch', [NoticeController::class, 'fetch']);
                 $router->post('/save', [NoticeController::class, 'save']);
-                $router->post('/update', [NoticeController::class, 'update']);
                 $router->post('/drop', [NoticeController::class, 'drop']);
                 $router->post('/show', [NoticeController::class, 'show']);
                 $router->post('/sort', [NoticeController::class, 'sort']);
@@ -344,7 +340,7 @@ $router->post('/realtime/ticket', [\App\Http\Controllers\V2\Admin\RealtimeContro
                 $router->get('/getSystemStatus', [SystemController::class, 'getSystemStatus']);
                 $router->get('/getQueueStats', [SystemController::class, 'getQueueStats']);
                 $router->get('/getQueueWorkload', [SystemController::class, 'getQueueWorkload']);
-                $router->get('/getQueueMasters', '\\Laravel\\Horizon\\Http\\Controllers\\MasterSupervisorController@index');
+                $router->get('/getQueueMasters', [SystemController::class, 'getQueueMasters']);
                 $router->get('/getHorizonFailedJobs', [SystemController::class, 'getHorizonFailedJobs']);
                 $router->any('/getAuditLog', [SystemController::class, 'getAuditLog']);
             });

@@ -12,9 +12,7 @@ class CouponController extends Controller
 {
     public function check(Request $request)
     {
-        if (empty($request->input('code'))) {
-            return $this->fail([422, __('Coupon cannot be empty')]);
-        }
+        $request->validate(['code' => 'required|string|max:255', 'plan_id' => 'nullable|integer|min:1', 'period' => 'nullable|string|max:32']);
         $couponService = new CouponService($request->input('code'));
         $couponService->setPlanId($request->input('plan_id'));
         $couponService->setUserId($request->user()->id);

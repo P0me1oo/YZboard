@@ -129,6 +129,7 @@ class Setting
                 if (is_string($value)) {
                     $decoded = json_decode($value, true);
                     if (json_last_error() === JSON_ERROR_NONE) {
+                        if (preg_match('/(?:token|password|secret|key)\z/i', $key) && !is_string($decoded)) continue;
                         $settings[$key] = $decoded;
                     }
                 }

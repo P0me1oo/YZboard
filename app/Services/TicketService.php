@@ -13,6 +13,28 @@ use App\Services\Plugin\HookManager;
 
 class TicketService
 {
+    public function closeTicket(Ticket $ticket, User $actor, ?string $settlement = null): void
+    {
+        DB::transaction(function () use ($ticket, $actor, $settlement) {
+            $user = User::whereKey($ticket->user_id)->lockForUpdate()->firstOrFail();
+            $ticket = Ticket::whereKey($ticket->id)->lockForUpdate()->firstOrFail();
+            $admin = $actor->is_admin;
+            if (!$admin && (int) $actor->id !== (int) $ticket->user_id) throw new ApiException('无权关闭该工单', 403);
+            if ((int) $ticket->status === Ticket::STATUS_CLOSED) return;
+            if ($ticket->withdraw_status === 'pending') {
+                if (!$admin) throw new ApiException('提现工单由管理员确认处理结果', 422);
+                if (!in_array($settlement, ['paid', 'cancelled'], true)) throw new ApiException('请确认提现已付款或退回', 422);
+                if ($settlement === 'cancelled') {
+                    $user->commission_balance += $ticket->withdraw_amount;
+                    if (!$user->save()) throw new \RuntimeException('退回佣金失败');
+                }
+                $ticket->withdraw_status = $settlement;
+            }
+            $ticket->status = Ticket::STATUS_CLOSED;
+            if (!$ticket->save()) throw new \RuntimeException('关闭工单失败');
+        }, 3);
+    }
+
     public function reply($ticket, $message, $userId)
     {
         try {
@@ -61,10 +83,9 @@ class TicketService
 
     public function createTicket($userId, $subject, $level, $message)
     {
-        try {
-            DB::beginTransaction();
+        return DB::transaction(function () use ($userId, $subject, $level, $message) {
+            User::whereKey($userId)->lockForUpdate()->firstOrFail();
             if (Ticket::where('status', 0)->where('user_id', $userId)->lockForUpdate()->first()) {
-                DB::rollBack();
                 throw new ApiException('存在未关闭的工单');
             }
             $ticket = Ticket::create([
@@ -83,16 +104,11 @@ class TicketService
                 'message' => $message
             ]);
             if (!$ticketMessage) {
-                DB::rollBack();
                 throw new ApiException('工单消息创建失败');
             }
             app(\App\Services\TelegramBot\BusinessNotificationService::class)->recordTicket($ticketMessage);
-            DB::commit();
             return $ticket;
-        } catch (\Exception $e) {
-            DB::rollBack();
-            throw $e;
-        }
+        }, 3);
     }
 
     // 半小时内不再重复通知
@@ -107,6 +123,7 @@ class TicketService
                 'subject' => '您在' . admin_setting('app_name', 'XBoard') . '的工单得到了回复',
                 'template_name' => 'notify',
                 'template_value' => [
+                    'content_mode' => 'text',
                     'name' => admin_setting('app_name', 'XBoard'),
                     'url' => admin_setting('app_url'),
                     'content' => "主题：{$ticket->subject}\r\n回复内容：{$ticketMessage->message}"

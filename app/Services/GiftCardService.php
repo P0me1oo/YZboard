@@ -170,14 +170,6 @@ class GiftCardService
             }
         }
 
-        if (isset($rewards['transfer_enable']) && $rewards['transfer_enable'] > 0) {
-            $this->user->transfer_enable = ($this->user->transfer_enable ?? 0) + $rewards['transfer_enable'];
-        }
-
-        if (isset($rewards['device_limit']) && $rewards['device_limit'] > 0) {
-            $this->user->device_limit = ($this->user->device_limit ?? 0) + $rewards['device_limit'];
-        }
-
         if (isset($rewards['reset_package']) && $rewards['reset_package']) {
             if ($this->user->plan_id) {
                 if (!app(TrafficResetService::class)->performReset($this->user, TrafficResetLog::SOURCE_GIFT_CARD)) {
@@ -201,6 +193,14 @@ class GiftCardService
             if (isset($rewards['expire_days']) && $rewards['expire_days'] > 0) {
                 $userService->extendSubscription($this->user, $rewards['expire_days']);
             }
+        }
+
+        if (isset($rewards['transfer_enable']) && $rewards['transfer_enable'] > 0) {
+            $this->user->transfer_enable = ($this->user->transfer_enable ?? 0) + $rewards['transfer_enable'];
+        }
+
+        if (isset($rewards['device_limit']) && $rewards['device_limit'] > 0) {
+            $this->user->device_limit = ($this->user->device_limit ?? 0) + $rewards['device_limit'];
         }
 
         // 保存用户更改

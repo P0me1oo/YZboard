@@ -17,6 +17,9 @@ class ServerSave extends FormRequest
 {
     protected function prepareForValidation(): void
     {
+        foreach (['parent_id', 'relay_entry_id'] as $field) {
+            if ($this->exists($field) && in_array($this->input($field), [0, '0', '', null], true)) $this->merge([$field => null]);
+        }
         $settings = $this->input('protocol_settings');
         if (is_array($settings) && XhttpSettings::isXhttp($settings['network'] ?? null)) {
             try {

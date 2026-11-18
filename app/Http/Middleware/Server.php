@@ -19,12 +19,16 @@ class Server
             'token' => [
                 'string', 'required',
                 function ($attribute, $value, $fail) {
-                    if ($value !== admin_setting('server_token')) {
+                    $expected = admin_setting('server_token');
+                    if (!is_string($expected) || $expected === '' || !hash_equals($expected, $value)) {
                         $fail("Invalid {$attribute}");
                     }
                 },
             ],
-            'node_id' => 'required',
+            'node_id' => ['required', function ($attribute, $value, $fail) {
+                if ((!is_string($value) && !is_int($value)) || !preg_match('/\A[A-Za-z0-9_-]{1,64}\z/', (string) $value)
+                    || (ctype_digit((string) $value) && (int) $value < 1)) $fail('Invalid node identifier');
+            }],
             'node_type' => [
                 'nullable',
                 function ($attribute, $value, $fail) use ($request) {
@@ -48,6 +52,9 @@ class Server
         );
         if (!$serverInfo) {
             throw new ApiException('Server does not exist');
+        }
+        if ($serverInfo->machine_id || $serverInfo->enabled === false) {
+            throw new ApiException('This node requires machine authentication or is disabled', 403);
         }
 
         $request->attributes->set('node_info', $serverInfo);

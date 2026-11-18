@@ -120,7 +120,7 @@ class RelayPermissionTest extends TestCase
             $message = json_decode($payload, true);
             return $channel === 'node:push' && $message['node_id'] === $entry->id
                 && $message['event'] === 'sync.users' && $message['data']['users'] === [];
-        });
+        })->andReturn(1);
         $this->artisan('check:traffic-exceeded')->assertSuccessful();
     }
 

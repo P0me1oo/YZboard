@@ -39,13 +39,16 @@ class CheckTicket extends Command
     public function handle()
     {
         Ticket::where('status', 0)
+            ->whereNull('withdraw_status')
             ->where('updated_at', '<=', time() - 24 * 3600)
             ->where('reply_status', Ticket::REPLY_STATUS_REPLIED)
             ->lazyById(200)
             ->each(function ($ticket) {
                 if ($ticket->user_id === $ticket->last_reply_user_id) return;
-                $ticket->status = Ticket::STATUS_CLOSED;
-                $ticket->save();
+                Ticket::whereKey($ticket->id)->whereNull('withdraw_status')
+                    ->where('status', Ticket::STATUS_OPENING)
+                    ->where('updated_at', $ticket->getRawOriginal('updated_at'))
+                    ->update(['status' => Ticket::STATUS_CLOSED, 'updated_at' => time()]);
             });
     }
 }

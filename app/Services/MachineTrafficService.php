@@ -215,6 +215,7 @@ class MachineTrafficService
             NodeSyncService::notifyFullSync((int) $entryId);
         }
         $poolIds = Server::where('machine_id', $machineId)->whereNotNull('relay_pool_id')->pluck('relay_pool_id')->unique();
-        foreach (Server::whereIn('balancer_pool_id', $poolIds)->get() as $node) NodeSyncService::notifyFullSync((int) $node->id);
+        $ids = \App\Models\BalancerMember::whereIn('pool_id', $poolIds)->pluck('runtime_node_id')->filter()->unique();
+        foreach ($ids as $id) NodeSyncService::notifyFullSync((int) $id);
     }
 }

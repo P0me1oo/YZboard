@@ -120,10 +120,12 @@ class ServerKernelDefaultsTest extends TestCase
                 $this->getJson('/api/v2/server/config?' . http_build_query($auth + ['node_id' => $id]))
                     ->assertOk()->assertJsonPath('kernel_type', $kernel);
                 $this->getJson('/api/v1/server/UniProxy/config?' . http_build_query(['token' => $credential, 'node_id' => $id]))
-                    ->assertOk()->assertJsonPath('kernel_type', $kernel)
-                    ->assertJsonPath('protocol', Server::findOrFail($id)->type);
+                    ->assertForbidden();
             }
         }
+        $legacy->update(['machine_id' => null]);
+        $this->getJson('/api/v1/server/UniProxy/config?' . http_build_query(['token' => $credential, 'node_id' => $legacy->id]))
+            ->assertOk()->assertJsonPath('kernel_type', 'xray')->assertJsonPath('protocol', $legacy->type);
         $this->assertNull($legacy->fresh()->kernel_type);
     }
 }

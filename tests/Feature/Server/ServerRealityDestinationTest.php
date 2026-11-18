@@ -134,9 +134,13 @@ class ServerRealityDestinationTest extends TestCase
             $mock->shouldReceive('get')->andReturnUsing(fn (string $key) => $key === 'server_token' ? $credential : null);
         });
         foreach (['/api/v2/server/config', '/api/v1/server/UniProxy/config'] as $endpoint) {
-            $this->getJson($endpoint . '?' . http_build_query([
-                'machine_id' => $machine->id, 'node_id' => $server->id, 'token' => $credential,
-            ]))->assertOk()->assertJsonPath('tls_settings.dest', '127.0.0.1:8443')
+            $auth = ['node_id' => $server->id, 'token' => $credential];
+            if (str_contains($endpoint, '/v1/')) {
+                $server->update(['machine_id' => null]);
+            } else {
+                $auth['machine_id'] = $machine->id;
+            }
+            $this->getJson($endpoint . '?' . http_build_query($auth))->assertOk()->assertJsonPath('tls_settings.dest', '127.0.0.1:8443')
                 ->assertJsonPath('tls_settings.server_name', 'sni.example.com');
         }
     }

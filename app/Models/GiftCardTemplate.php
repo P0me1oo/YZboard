@@ -205,7 +205,7 @@ class GiftCardTemplate extends Model
                     $bonus = data_get($festivalConfig, 'festival_bonus', 1.0);
                     if ($bonus > 1.0) {
                         foreach ($actualRewards as $key => &$value) {
-                            if (is_numeric($value)) {
+                            if (in_array($key, ['balance', 'transfer_enable', 'device_limit', 'expire_days', 'plan_validity_days'], true) && is_numeric($value)) {
                                 $value = intval($value * $bonus);
                             }
                         }

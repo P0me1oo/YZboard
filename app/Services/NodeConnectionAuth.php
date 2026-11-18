@@ -25,7 +25,11 @@ class NodeConnectionAuth
                 if (!$machine->is_active || !hash_equals($hash, hash('sha256', $machine->token))) return self::reject($conn);
                 if ($nodeId !== null) {
                     $node = $metadata->node($nodeId);
-                    if (!$node || !$node->enabled || (int) $node->machine_id !== (int) $machine->id) return self::reject($conn);
+                    if (!$node || !$node->enabled || (int) $node->machine_id !== (int) $machine->id) {
+                        NodeRegistry::remove($nodeId, $conn);
+                        $conn->machineNodeIds = array_values(array_diff($conn->machineNodeIds ?? [], [$nodeId]));
+                        return false;
+                    }
                 }
             } else {
                 // Setting 是常驻实例，不能使用握手时留下的旧全局令牌。
@@ -33,7 +37,7 @@ class NodeConnectionAuth
                 $token = app(Setting::class)->getOrFail('server_token', '');
                 if (!is_string($token) || $token === '' || !hash_equals($hash, hash('sha256', $token))) return self::reject($conn);
                 $node = $metadata->node((int) ($conn->nodeId ?? 0));
-                if (!$node || !$node->enabled || ($nodeId !== null && $nodeId !== (int) $node->id)) return self::reject($conn);
+                if (!$node || !$node->enabled || $node->machine_id || ($nodeId !== null && $nodeId !== (int) $node->id)) return self::reject($conn);
             }
             return true;
         } catch (\Throwable $exception) {

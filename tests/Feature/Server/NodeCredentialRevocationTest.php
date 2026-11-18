@@ -93,6 +93,7 @@ class NodeCredentialRevocationTest extends TestCase
 
     public function test_legacy_connection_rechecks_global_token_and_handles_read_failure(): void
     {
+        $this->node->update(['machine_id' => null]);
         unset($this->conn->machineId);
         $this->conn->nodeId = (int) $this->node->id;
         admin_setting(['server_token' => 'old-test-token']);

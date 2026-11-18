@@ -14,10 +14,10 @@
   <script @if(!empty($cspNonce)) nonce="{{ $cspNonce }}" @endif>
     window.settings = {
       base_url: "/",
-      title: "{{ $title }}",
-      version: "{{ $version }}",
-      logo: "{{ $logo }}",
-      secure_path: "{{ $secure_path }}",
+      title: @json($title),
+      version: @json($version),
+      logo: @json($logo),
+      secure_path: @json($secure_path),
       appearance: @json($appearance),
     };
   </script>

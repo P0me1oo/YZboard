@@ -94,6 +94,7 @@ class ManageController extends Controller
                 }
                 unset($params['ddns']);
                 $server->fill($params);
+                \App\Services\ServerTopologyGuard::parent($server);
                 if (!$server->parent_id && $server->enabled !== false && NodeHealthConfig::effective($server)['enabled']) {
                     $server->health_check = array_merge($server->health_check ?? [], ['request' => bin2hex(random_bytes(16))]);
                 }
@@ -220,6 +221,7 @@ class ManageController extends Controller
                     return $this->fail([400202, '服务器不存在']);
                 }
                 ServerNameHistory::remember(collect([$server]));
+                \App\Services\ServerTopologyGuard::deletion([$server->id]);
                 if ($server->delete() === false) {
                     throw new \RuntimeException('删除失败');
                 }
@@ -254,9 +256,8 @@ class ManageController extends Controller
             DB::transaction(function () use ($ids) {
                 $servers = Server::whereIn('id', $ids)->orderBy('id')->lockForUpdate()->get();
                 ServerNameHistory::remember($servers);
-                if (Server::whereIn('id', $servers->modelKeys())->delete() === false) {
-                    throw new \RuntimeException('批量删除失败');
-                }
+                \App\Services\ServerTopologyGuard::deletion($servers->modelKeys());
+                foreach ($servers as $server) if ($server->delete() === false) throw new \RuntimeException('批量删除失败');
             }, 3);
             \App\Services\NodeRuntimeMetadata::invalidate(Server::class);
             return $this->success(true);
@@ -399,6 +400,11 @@ class ManageController extends Controller
                     }
 
                     if ($server->isDirty()) {
+                        $server->unsetRelation('machine');
+                        $reasons = \App\Services\LoadBalancerService::topologyCompatibility($server);
+                        $error = ServerRelayService::validateEntry($server->id, $server->relayEntryId(), $server->type,
+                            (array) $server->protocol_settings, (string) $server->host, $server->kernel_type);
+                        if ($reasons || $error !== null) throw ValidationException::withMessages(['ids' => implode('；', [...$reasons, ...($error === null ? [] : [$error])])]);
                         $server->save();
                     }
                 }
@@ -462,6 +468,9 @@ class ManageController extends Controller
      */
     public function copy(Request $request)
     {
+        if (Server::whereKey($request->input('id'))->where('balancer_role', \App\Services\DirectPoolService::ROLE)->exists()) {
+            throw ValidationException::withMessages(['id' => '直出订阅线路请在负载池中管理']);
+        }
         $server = Server::find($request->input('id'));
         if (!$server) {
             return $this->fail([400202, '服务器不存在']);

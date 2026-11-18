@@ -10,6 +10,7 @@ use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 class RealtimeStateStore
 {
     public const FRESH_SECONDS = 35;
+    public const RETIRED_SECONDS = 30 * 86400;
 
     public function begin(string $source, string $run): array
     {
@@ -26,7 +27,7 @@ class RealtimeStateStore
                 throw new ConflictHttpException('Runtime has been superseded');
             }
             if (is_array($current)) {
-                Cache::forever($this->retiredKey($source, $current['run']), true);
+                Cache::put($this->retiredKey($source, $current['run']), true, self::RETIRED_SECONDS);
             }
             $current = [
                 'run' => $run,

@@ -70,7 +70,7 @@ class AgentPrivacyTest extends TestCase
         $this->assertSame($old, $keys[1]);
     }
 
-    public function test_legacy_node_binding_can_only_get_its_own_machine_keys(): void
+    public function test_machine_keys_require_machine_authentication(): void
     {
         $token = Str::random(32);
         admin_setting(['server_token' => $token]);
@@ -79,6 +79,8 @@ class AgentPrivacyTest extends TestCase
             'type' => 'shadowsocks', 'host' => 'test.invalid', 'port' => '10001', 'server_port' => 10001,
             'rate' => 1, 'group_ids' => [], 'enabled' => true]);
         $this->postJson('/api/v2/server/privacy', ['node_id' => $node->id, 'token' => $token])
+            ->assertForbidden()->assertJsonMissingPath('data.keys');
+        $this->postJson('/api/v2/server/privacy', ['node_id' => $node->id, 'machine_id' => $machine->id, 'token' => $machine->token])
             ->assertOk()->assertJsonPath('data.keys', AgentPrivacy::view($machine)['keys']);
         $this->postJson('/api/v2/server/privacy', ['node_id' => $node->id, 'token' => Str::random(32)])
             ->assertUnprocessable();

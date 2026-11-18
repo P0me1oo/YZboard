@@ -264,15 +264,13 @@ class MachineController extends Controller
     private function authenticateMachine(Request $request, bool $allowDisabled = false, bool $recordHeartbeat = true): ServerMachine
     {
         $request->validate([
-            'machine_id' => 'required|integer',
-            'token' => 'required|string',
+            'machine_id' => 'required|integer|min:1',
+            'token' => 'required|string|max:255',
         ]);
 
-        $machine = ServerMachine::where('id', $request->input('machine_id'))
-            ->where('token', $request->input('token'))
-            ->first();
+        $machine = ServerMachine::find($request->input('machine_id'));
 
-        if (!$machine || (!$machine->is_active && !$allowDisabled)) {
+        if (!$machine || !hash_equals((string) $machine->token, $request->input('token')) || (!$machine->is_active && !$allowDisabled)) {
             abort(403, 'Machine not found or disabled');
         }
 

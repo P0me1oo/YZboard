@@ -220,7 +220,8 @@ class LogManagementTest extends TestCase
         $payload = ['batch_id' => str_repeat('b', 32), 'records' => [['source' => 'agent', 'level' => 'warn', 'message' => '测试运行日志', 'occurred_at' => now()->timestamp]]];
         $this->postJson('/_tests/machine/agent-log', $payload + ['machine_id' => $machine->id, 'token' => 'invalid-test'])->assertForbidden();
         $this->postJson('/_tests/machine/agent-log', $payload + ['machine_id' => $machine->id, 'token' => $machine->token])->assertOk()->assertJsonPath('data.batch_id', $payload['batch_id']);
-        $this->postJson('/_tests/server/agent-log', $payload + ['node_id' => $node->id, 'token' => admin_setting('server_token')])->assertOk();
+        $this->postJson('/_tests/server/agent-log', $payload + ['node_id' => $node->id, 'token' => admin_setting('server_token')])->assertForbidden();
+        $this->postJson('/_tests/server/agent-log', $payload + ['node_id' => $node->id, 'machine_id' => $machine->id, 'token' => $machine->token])->assertOk();
         $this->assertDatabaseCount('v2_agent_log', 2);
         $this->assertDatabaseCount('v2_admin_audit_log', 0);
     }

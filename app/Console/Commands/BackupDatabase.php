@@ -27,6 +27,8 @@ class BackupDatabase extends Command
             }
         }
 
+        $compressedBackupPath = null;
+        File::ensureDirectoryExists(storage_path('backup'), 0700);
         // 数据库备份逻辑
         try{
             if (config('database.default') === 'mysql'){
@@ -54,20 +56,17 @@ class BackupDatabase extends Command
             $this->info('3️⃣：开始压缩备份文件');
             // 使用 gzip 压缩备份文件
             $compressedBackupPath = $databaseBackupPath . '.gz';
-            $gzipCommand = new Process(["gzip", "-c", $databaseBackupPath]);
+            $gzipCommand = new Process(["gzip", "-f", "--", $databaseBackupPath]);
             $gzipCommand->run();
 
             // 检查压缩是否成功
             if ($gzipCommand->isSuccessful()) {
                 // 压缩成功，你可以删除原始备份文件
-                file_put_contents($compressedBackupPath, $gzipCommand->getOutput());
                 $this->info('4️⃣：文件压缩成功');
-                unlink($databaseBackupPath);
             } else {
                 // 压缩失败，处理错误
                 echo $gzipCommand->getErrorOutput();
                 $this->error('😔：文件压缩失败');
-                unlink($databaseBackupPath);
                 return;
             }
             if (!$isUpload){
@@ -89,12 +88,12 @@ class BackupDatabase extends Command
                 // 输出文件链接
                 Log::channel('backup')->info("🎉：数据库备份已上传到 Google Cloud Storage: $objectName");
                 $this->info("🎉：数据库备份已上传到 Google Cloud Storage: $objectName");
-                File::delete($compressedBackupPath);
+                if ($compressedBackupPath !== null) File::delete($compressedBackupPath);
             }
         }catch(\Exception $e){
             Log::channel('backup')->error("😔：数据库备份失败 \n" . $e);
             $this->error("😔：数据库备份失败\n" . $e);
-            File::delete($compressedBackupPath);
+            if ($compressedBackupPath !== null) File::delete($compressedBackupPath);
         }
     }
 }

@@ -15,10 +15,11 @@ class RetryNodeReports extends Command
     public function handle(): int
     {
         $limit = max(1, min(1000, (int) $this->option('limit')));
-        $pendingBefore = now()->subMinutes(2);
+        $pendingBefore = now()->subMinutes(10);
         $failedBefore = now()->subMinutes(5);
 
         $ids = NodeReportBatch::query()
+            ->where('attempts', '<', NodeReportBatch::MAX_ATTEMPTS)
             ->where(function ($query) use ($pendingBefore, $failedBefore): void {
                 $query->where(function ($query) use ($pendingBefore): void {
                     $query->whereIn('status', [
@@ -32,13 +33,19 @@ class RetryNodeReports extends Command
             })
             ->orderBy('id')
             ->limit($limit)
-            ->pluck('id');
+            ->get(['id', 'updated_at']);
 
-        foreach ($ids as $id) {
-            ProcessNodeReportBatch::dispatch((int) $id);
+        $dispatched = 0;
+        foreach ($ids as $batch) {
+            $claimed = NodeReportBatch::whereKey($batch->id)->where('updated_at', $batch->updated_at)
+                ->where('status', '!=', NodeReportBatch::STATUS_PROCESSED)
+                ->where('attempts', '<', NodeReportBatch::MAX_ATTEMPTS)->update(['updated_at' => now()]);
+            if (!$claimed) continue;
+            ProcessNodeReportBatch::dispatch((int) $batch->id);
+            $dispatched++;
         }
 
-        $this->info("已重新派发 {$ids->count()} 个节点报告批次。");
+        $this->info("已重新派发 {$dispatched} 个节点报告批次。");
         return self::SUCCESS;
     }
 }

@@ -62,8 +62,8 @@ class RegisterService
 
         // 检查Gmail限制
         if ((int) admin_setting('email_gmail_limit_enable', 0)) {
-            $prefix = explode('@', $request->input('email'))[0];
-            if (strpos($prefix, '.') !== false || strpos($prefix, '+') !== false) {
+            [$prefix, $domain] = explode('@', strtolower($request->input('email')), 2);
+            if (in_array($domain, ['gmail.com', 'googlemail.com'], true) && (strpos($prefix, '.') !== false || strpos($prefix, '+') !== false)) {
                 return [false, [400, __('Gmail alias is not supported')]];
             }
         }
@@ -87,8 +87,12 @@ class RegisterService
                 return [false, [422, __('Email verification code cannot be empty')]];
             }
 
+            $errorKey = 'register:email-code:' . hash('sha256', $request->input('email'));
+            if ((int) Cache::get($errorKey, 0) >= 5) return [false, [429, __('Incorrect email verification code')]];
             $cachedEmailCode = Cache::get(CacheKey::get('EMAIL_VERIFY_CODE', $request->input('email')));
             if ($cachedEmailCode === null || !hash_equals((string) $cachedEmailCode, (string) $emailCode)) {
+                Cache::add($errorKey, 0, 300);
+                if (Cache::increment($errorKey) >= 5) Cache::forget(CacheKey::get('EMAIL_VERIFY_CODE', $request->input('email')));
                 return [false, [400, __('Incorrect email verification code')]];
             }
         }
@@ -112,7 +116,7 @@ class RegisterService
     {
         $inviteCodeModel = InviteCode::where('code', $inviteCode)
             ->where('status', InviteCode::STATUS_UNUSED)
-            ->first();
+            ->lockForUpdate()->first();
 
         if (!$inviteCodeModel) {
             if ((int) admin_setting('invite_force', 0)) {
@@ -122,8 +126,9 @@ class RegisterService
         }
 
         if (!(int) admin_setting('invite_never_expire', 0)) {
-            $inviteCodeModel->status = InviteCode::STATUS_USED;
-            $inviteCodeModel->save();
+            if (!InviteCode::whereKey($inviteCodeModel->id)->where('status', InviteCode::STATUS_UNUSED)->update(['status' => InviteCode::STATUS_USED])) {
+                throw new ApiException(__('Invalid invitation code'));
+            }
         }
 
         return $inviteCodeModel->user_id;
@@ -139,12 +144,14 @@ class RegisterService
      */
     public function register(Request $request): array
     {
+        if (is_string($request->input('email'))) $request->merge(['email' => strtolower(trim($request->input('email')))]);
         // 验证注册数据
         [$valid, $error] = $this->validateRegister($request);
         if (!$valid) {
             return [false, $error];
         }
 
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($request) {
         HookManager::call('user.register.before', $request);
 
         $email = $request->input('email');
@@ -167,7 +174,7 @@ class RegisterService
 
         // 保存用户
         if (!$user->save()) {
-            return [false, [500, __('Register failed')]];
+            throw new ApiException(__('Register failed'), 500);
         }
 
         HookManager::call('user.register.after', $user);
@@ -192,5 +199,6 @@ class RegisterService
         }
 
         return [true, $user];
+        }, 3);
     }
 }

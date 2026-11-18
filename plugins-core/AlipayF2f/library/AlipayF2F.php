@@ -23,6 +23,7 @@ class AlipayF2F
         if (is_string($data)) {
             parse_str($data, $data);
         }
+        if (!is_array($data) || !is_string($data['sign'] ?? null)) return false;
         $sign = $data['sign'];
         unset($data['sign']);
         unset($data['sign_type']);
@@ -36,7 +37,6 @@ class AlipayF2F
         } else {
             $result = (openssl_verify($data, base64_decode($sign), $res) === 1);
         }
-        openssl_free_key(openssl_get_publickey($res));
         return $result;
     }
 

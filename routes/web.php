@@ -49,7 +49,7 @@ Route::get('/', function (Request $request) {
         $publicThemePath = public_path('theme/' . $theme);
         if (!File::exists($publicThemePath)) {
             $themePath = $themeService->getThemePath($theme);
-            if (!$themePath || !File::copyDirectory($themePath, $publicThemePath)) {
+            if (!$themePath || !$themeService->publish($theme)) {
                 throw new Exception('主题初始化失败');
             }
             Log::info('Theme initialized in public directory', ['theme' => $theme]);

@@ -15,6 +15,7 @@ class CouponController extends Controller
 {
     private function applyFiltersAndSorts(Request $request, $builder)
     {
+        \App\Services\AdminQueryFields::validate($request, ['id', 'name', 'code', 'type', 'value', 'limit_use', 'limit_use_with_user', 'show', 'started_at', 'ended_at', 'created_at', 'updated_at']);
         if ($request->has('filter')) {
             collect($request->input('filter'))->each(function ($filter) use ($builder) {
                 $key = $filter['id'];
@@ -111,7 +112,7 @@ class CouponController extends Controller
             }
         } else {
             try {
-                Coupon::find($request->input('id'))->update($params);
+                Coupon::findOrFail($request->input('id'))->update($params);
             } catch (\Exception $e) {
                 \Log::error($e);
                 return $this->fail([500, '保存失败']);

@@ -80,6 +80,11 @@ class NodeWorker
 
     public function onWorkerStart(Worker $worker): void
     {
+        \Illuminate\Support\Facades\DB::purge();
+        Redis::purge('default');
+        Redis::purge('cache');
+        Cache::forgetDriver();
+        self::refreshSettings();
         Log::info("[WS] Worker started, pid={$worker->id}");
         $this->subscribeRedis();
         $this->setupTimers();
@@ -96,13 +101,13 @@ class NodeWorker
 
     private function setupTimers(): void
     {
-        Timer::add(0.1, function () { $this->admin?->tick(); });
+        $this->every(0.1, function () { $this->admin?->tick(); });
         Cache::put(self::HEARTBEAT_CACHE_KEY, time(), self::HEARTBEAT_TTL);
-        Timer::add(self::HEARTBEAT_INTERVAL, function () {
+        $this->every(self::HEARTBEAT_INTERVAL, function () {
             Cache::put(self::HEARTBEAT_CACHE_KEY, time(), self::HEARTBEAT_TTL);
         });
 
-        Timer::add(self::PING_INTERVAL, function () {
+        $this->every(self::PING_INTERVAL, function () {
             $this->revalidateConnections();
             $seen = [];
 
@@ -135,7 +140,7 @@ class NodeWorker
         });
 
         $deviceSync = new DeviceSyncScheduler();
-        Timer::add(1, function () use ($deviceSync) {
+        $this->every(1, function () use ($deviceSync) {
             self::refreshSettings();
             $pendingNodeIds = $deviceSync->targets(
                 Redis::spop('device:push_pending_nodes', 100) ?: [],
@@ -158,8 +163,17 @@ class NodeWorker
         });
     }
 
+    private function every(float $interval, callable $callback): void
+    {
+        Timer::add($interval, function () use ($callback): void {
+            try { $callback(); }
+            catch (\Throwable $exception) { \App\Services\FailureLog::record('[WS] 定时同步失败', $exception); }
+        });
+    }
+
     public function onConnect(TcpConnection $conn): void
     {
+        $conn->maxPackageSize = 16 * 1024;
         $conn->authTimer = Timer::add(self::AUTH_TIMEOUT, function () use ($conn) {
             if (empty($conn->nodeId) && empty($conn->machineNodeIds)) {
                 if (empty($conn->context->websocketHandshake)) {
@@ -218,6 +232,7 @@ class NodeWorker
         $conn->lastMessageAt = time();
         if (($params['client'] ?? '') === 'admin') {
             $conn->adminPending = true;
+            $conn->maxPackageSize = 64 * 1024;
             $conn->realtime = false;
             $conn->maxSendBufferSize = 2 * 1024 * 1024;
             $conn->onBufferFull = function ($connection) { $connection->close(); };
@@ -278,7 +293,7 @@ class NodeWorker
         $nodeId = filter_var($params['node_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
 
         $serverToken = admin_setting('server_token', '');
-        if (!is_string($token) || $token === '' || $serverToken === '' || !hash_equals($serverToken, $token)) {
+        if (!is_string($token) || $token === '' || !is_string($serverToken) || $serverToken === '' || !hash_equals($serverToken, $token)) {
             $this->rejectHandshake($conn, 401, 'invalid_credentials');
             return;
         }
@@ -288,12 +303,13 @@ class NodeWorker
             return;
         }
         $node = ServerService::getServer($nodeId, null);
-        if (!$node || !$node->enabled) {
+        if (!$node || !$node->enabled || $node->machine_id) {
             $this->rejectHandshake($conn, 403, 'node_unavailable');
             return;
         }
 
         $conn->nodeId = $nodeId;
+        $conn->maxPackageSize = 8 * 1024 * 1024;
         NodeConnectionAuth::bind($conn, $token);
         NodeRegistry::add($nodeId, $conn);
         Cache::put("node_ws_alive:{$nodeId}", true, 86400);
@@ -329,11 +345,9 @@ class NodeWorker
             return;
         }
 
-        $machine = ServerMachine::where('id', $machineId)
-            ->where('token', $token)
-            ->first();
+        $machine = ServerMachine::find($machineId);
 
-        if (!$machine) {
+        if (!$machine || !is_string($token) || $token === '' || !hash_equals((string) $machine->token, $token)) {
             $this->rejectHandshake($conn, 401, 'invalid_credentials');
             return;
         }
@@ -346,6 +360,7 @@ class NodeWorker
 
         $machine->recordHeartbeat();
         $conn->machineId = $machineId;
+        $conn->maxPackageSize = 8 * 1024 * 1024;
         NodeConnectionAuth::bind($conn, $token);
         NodeRegistry::addMachine($machineId, $conn);
 
@@ -458,14 +473,17 @@ class NodeWorker
 
     public function onClose(TcpConnection $conn): void
     {
+        if (isset($conn->authTimer)) { Timer::del($conn->authTimer); unset($conn->authTimer); }
         unset($conn->authorizeSend, $conn->authTokenHash);
-        $this->admin?->close($conn);
+        try { $this->admin?->close($conn); }
+        catch (\Throwable $exception) { \App\Services\FailureLog::record('[WS] 管理连接清理失败', $exception); }
         // 只移除通道登记。代理连接仍可能存在，设备状态由新快照或有效期管理。
         if (!empty($conn->machineId)) {
             foreach ($conn->machineNodeIds ?? [] as $nodeId) {
                 if (NodeRegistry::get($nodeId) !== $conn) continue;
                 NodeRegistry::remove($nodeId, $conn);
-                Cache::forget("node_ws_alive:{$nodeId}");
+                try { Cache::forget("node_ws_alive:{$nodeId}"); }
+                catch (\Throwable $exception) { \App\Services\FailureLog::record('[WS] 连接缓存清理失败', $exception); }
             }
             NodeRegistry::removeMachine((int) $conn->machineId, $conn);
             return;
@@ -499,6 +517,7 @@ class NodeWorker
         $stateChannel = $prefix . 'realtime:changed';
 
         $redis->subscribe([$channel, $stateChannel], function ($chan, $message) use ($stateChannel) {
+            try {
             if ($chan === $stateChannel) {
                 $this->admin?->changed();
                 return;
@@ -546,6 +565,9 @@ class NodeWorker
             $sent = NodeRegistry::send((int) $nodeId, $event, $data);
             if ($sent) {
                 Log::debug("[WS] Pushed {$event} to node#{$nodeId}");
+            }
+            } catch (\Throwable $exception) {
+                \App\Services\FailureLog::record('[WS] 推送处理失败', $exception);
             }
         });
 

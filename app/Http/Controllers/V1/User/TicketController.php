@@ -98,10 +98,7 @@ class TicketController extends Controller
         if (!$ticket) {
             return $this->fail([400, __('Ticket does not exist')]);
         }
-        $ticket->status = Ticket::STATUS_CLOSED;
-        if (!$ticket->save()) {
-            return $this->fail([500, __('Close failed')]);
-        }
+        app(TicketService::class)->closeTicket($ticket, $request->user());
         return $this->success(true);
     }
 
@@ -125,28 +122,23 @@ class TicketController extends Controller
         ) {
             return $this->fail([422, __('Unsupported withdrawal method')]);
         }
-        $user = User::find($request->user()->id);
-        $limit = admin_setting('commission_withdraw_limit', 100);
-        if ($limit > ($user->commission_balance / 100)) {
-            return $this->fail([422, __('The current required minimum withdrawal commission is :limit', ['limit' => $limit])]);
-        }
-        try {
-            $ticketService = new TicketService();
-            $subject = __('[Commission Withdrawal Request] This ticket is opened by the system');
-            $message = sprintf(
-                "%s\r\n%s",
-                __('Withdrawal method') . "：" . $request->input('withdraw_method'),
-                __('Withdrawal account') . "：" . $request->input('withdraw_account')
-            );
-            $ticket = $ticketService->createTicket(
-                $request->user()->id,
-                $subject,
-                2,
-                $message
-            );
-        } catch (\Exception $e) {
-            throw $e;
-        }
+        $ticket = \Illuminate\Support\Facades\DB::transaction(function () use ($request) {
+            $user = User::whereKey($request->user()->id)->lockForUpdate()->firstOrFail();
+            $amount = (int) $user->commission_balance;
+            $limit = (int) round((float) admin_setting('commission_withdraw_limit', 100) * 100);
+            if ($amount <= 0 || $amount < $limit) throw new \App\Exceptions\ApiException('佣金余额不足以提现', 422);
+            $ticket = app(TicketService::class)->createTicket($user->id,
+                __('[Commission Withdrawal Request] This ticket is opened by the system'), 2,
+                __('Withdrawal method') . '：' . $request->input('withdraw_method') . "\n"
+                . __('Withdrawal account') . '：' . $request->input('withdraw_account') . "\n"
+                . '提现金额：' . number_format($amount / 100, 2, '.', '') . ' 元');
+            $user->commission_balance -= $amount;
+            if (!$user->save()) throw new \RuntimeException('预留佣金失败');
+            $ticket->withdraw_amount = $amount;
+            $ticket->withdraw_status = 'pending';
+            if (!$ticket->save()) throw new \RuntimeException('保存提现工单失败');
+            return $ticket;
+        }, 3);
         HookManager::call('ticket.create.after', $ticket);
         return $this->success(true);
     }

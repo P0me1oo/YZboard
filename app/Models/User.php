@@ -91,7 +91,7 @@ class User extends Authenticatable
         'totp_enabled_at' => 'timestamp',
     ];
     // 两步验证密钥和恢复码不得随任何接口响应返回
-    protected $hidden = ['password', 'totp_secret', 'totp_recovery_codes'];
+    protected $hidden = ['password', 'password_salt', 'password_algo', 'totp_secret', 'totp_recovery_codes'];
 
     public const COMMISSION_TYPE_SYSTEM = 0;
     public const COMMISSION_TYPE_PERIOD = 1;

@@ -12,6 +12,7 @@ class TicketController extends Controller
 {
     private function applyFiltersAndSorts(Request $request, $builder)
     {
+        \App\Services\AdminQueryFields::validate($request, ['id', 'user_id', 'subject', 'level', 'status', 'reply_status', 'created_at', 'updated_at', 'last_reply_user_id']);
         if ($request->has('filter')) {
             collect($request->input('filter'))->each(function ($filter) use ($builder) {
                 $key = $filter['id'];
@@ -124,15 +125,16 @@ class TicketController extends Controller
     public function close(Request $request)
     {
         $request->validate([
-            'id' => 'required|numeric'
+            'id' => 'required|integer|min:1', 'settlement' => 'nullable|in:paid,cancelled'
         ], [
             'id.required' => '工单ID不能为空'
         ]);
         try {
             $ticket = Ticket::findOrFail($request->input('id'));
-            $ticket->status = Ticket::STATUS_CLOSED;
-            $ticket->save();
+            app(TicketService::class)->closeTicket($ticket, $request->user(), $request->input('settlement'));
             return $this->success(true);
+        } catch (\App\Exceptions\ApiException $e) {
+            throw $e;
         } catch (ModelNotFoundException $e) {
             return $this->fail([400202, '工单不存在']);
         } catch (\Exception $e) {

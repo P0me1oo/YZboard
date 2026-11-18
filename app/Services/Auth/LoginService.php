@@ -19,6 +19,7 @@ class LoginService
      */
     public function login(string $email, string $password): array
     {
+        $email = strtolower(trim($email));
         $passwordErrorKey = $this->passwordErrorKey($email);
 
         // 检查密码错误限制
@@ -108,6 +109,7 @@ class LoginService
      */
     public function resetPassword(string $email, string $emailCode, string $password): array
     {
+        $email = strtolower(trim($email));
         // 检查重置请求限制
         $forgetRequestLimitKey = CacheKey::get('FORGET_REQUEST_LIMIT', $email);
         $forgetRequestLimit = (int) Cache::get($forgetRequestLimitKey);

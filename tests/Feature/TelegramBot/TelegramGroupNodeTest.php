@@ -418,7 +418,6 @@ class TelegramGroupNodeTest extends TestCase
         TelegramBotConfig::firstOrFail()->update(['enabled' => false]);
         $this->send($notification);
         (new SendTelegramJob(900000001, '节点掉线通知'))->handle();
-        $this->artisan('check:server')->assertSuccessful();
         Http::assertNothingSent();
         $this->assertSame('pending', $notification->fresh()->status);
         TelegramBotConfig::firstOrFail()->update(['enabled' => true]);
@@ -434,14 +433,10 @@ class TelegramGroupNodeTest extends TestCase
         Http::assertSentCount(2);
     }
 
-    public function test_legacy_join_yields_only_configured_groups_even_while_new_bot_paused(): void
+    public function test_retired_join_callback_is_unreachable_even_while_new_bot_paused(): void
     {
         $this->configure(['auto_approve_join' => true, 'join_group_ids' => ['-1001234567890'], 'enabled' => false]);
-        $this->assertTrue(\App\Services\TelegramBot\JoinRequestService::ownsGroup(-1001234567890));
-        $this->assertFalse(\App\Services\TelegramBot\JoinRequestService::ownsGroup(-1009999999999));
-        $controller = app(\App\Http\Controllers\V1\Guest\TelegramController::class);
-        $method = new \ReflectionMethod($controller, 'formatChatJoinRequest');
-        $method->invoke($controller, $this->join());
+        $this->postJson('/api/v1/guest/telegram/webhook', $this->join())->assertNotFound();
         Http::assertNothingSent();
     }
 }

@@ -14,10 +14,10 @@ class CouponService
     public $userId;
     public $period;
 
-    public function __construct($code)
+    public function __construct(string $code, bool $lock = false)
     {
         $this->coupon = Coupon::where('code', $code)
-            ->lockForUpdate()
+            ->when($lock, fn ($query) => $query->lockForUpdate())
             ->first();
     }
 
@@ -42,6 +42,7 @@ class CouponService
             if ($this->coupon->limit_use <= 0)
                 return false;
             $this->coupon->limit_use = $this->coupon->limit_use - 1;
+            $order->coupon_reserved = true;
             if (!$this->coupon->save()) {
                 return false;
             }

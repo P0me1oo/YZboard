@@ -127,6 +127,7 @@ class ServerRealityAntiAbuseTest extends TestCase
             'node_id' => $server->id,
         ]))->assertOk()->assertJsonPath('tls_settings.anti_abuse', true);
 
+        $server->update(['machine_id' => null]);
         $this->getJson('/api/v1/server/UniProxy/config?' . http_build_query([
             'token' => $credential,
             'node_id' => $server->id,

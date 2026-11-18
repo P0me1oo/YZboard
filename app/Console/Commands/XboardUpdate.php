@@ -42,15 +42,17 @@ class XboardUpdate extends Command
     public function handle()
     {
         $this->info('正在导入数据库请稍等...');
-        Artisan::call("migrate", ['--force' => true]);
+        $status = Artisan::call('migrate', ['--force' => true]);
         $this->info(Artisan::output());
+        if ($status !== self::SUCCESS) return $status;
         $this->info('正在检查并安装默认插件...');
         PluginManager::installDefaultPlugins();
         $this->info('默认插件检查完成');
         $updateService = new UpdateService();
         $updateService->updateVersionCache();
         $themeService = app(ThemeService::class);
-        $themeService->refreshCurrentTheme();
+        $themeService->removeLegacyPublicScripts();
+        if (!$themeService->refreshCurrentTheme()) return self::FAILURE;
         if (config('queue.default') === 'sync') {
             $this->info('horizon:terminate skipped (sync queue, no workers to terminate).');
         } else {

@@ -29,13 +29,13 @@ class SubscriptionProtectionConcurrencyTest extends TestCase
         File::makeDirectory($directory, 0755, true);
         config()->set('cache.stores.protection_concurrency', ['driver' => 'file', 'path' => $directory]);
         $store = Cache::store('protection_concurrency');
-        $store->put(Setting::CACHE_KEY, [SubscriptionProtection::SETTING => array_replace(SubscriptionProtection::defaults(), $rules)], 120);
         $workers = [];
         $makeWorker = fn () => new Process([PHP_BINARY, base_path('tests/Fixtures/subscription-protection-worker.php'), $directory], base_path(), ['APP_ENV' => 'testing'], timeout: 60);
         try {
             touch($directory . '/test.sqlite');
             (new Process([PHP_BINARY, base_path('tests/Fixtures/subscription-protection-worker.php'), $directory, '--prepare'],
                 base_path(), ['APP_ENV' => 'testing'], timeout: 60))->mustRun();
+            $store->put(Setting::CACHE_KEY, [SubscriptionProtection::SETTING => array_replace(SubscriptionProtection::defaults(), $rules)], 120);
             for ($index = 0; $index < 8; $index++) {
                 $worker = $makeWorker();
                 $worker->start();

@@ -40,7 +40,10 @@ final class NodeOperations
             if(($current['sequence']??0)>=$data['sequence'])return;
         } else {
             if(Cache::has($key.':retired:'.$data['run']))return;
-            if(isset($current['run']))Cache::forever($key.':retired:'.$current['run'],true);
+            if (isset($current['run'])) {
+                if ($data['sampled_at'] < $current['sampled_at']) return;
+                Cache::put($key . ':retired:' . $current['run'], true, RealtimeStateStore::RETIRED_SECONDS);
+            }
         }
         $data['received_at'] = now()->timestamp;
         if (isset($data['error'])) {

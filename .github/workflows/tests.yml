@@ -65,6 +65,10 @@ jobs:
           YZ_TEST_DEVICE_REDIS_PORT: '6379'
         run: php vendor/bin/phpunit --do-not-cache-result
 
+      - name: 配置 MariaDB 并发测试前提
+        run: |
+          php -r '$db = new PDO("mysql:host=127.0.0.1;port=3306;dbname=yzboard_mariadb_test", "root", ""); $db->exec("SET GLOBAL innodb_snapshot_isolation=ON"); if ((int) $db->query("SELECT @@global.innodb_snapshot_isolation")->fetchColumn() !== 1) exit(1);'
+
       - name: MariaDB 严格分组完整回归
         env:
           LOG_CHANNEL: stderr

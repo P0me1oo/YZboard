@@ -208,6 +208,48 @@ class ServerRouteTest extends TestCase
         $this->assertArrayNotHasKey('routes', $pushed->last()['data']['config']);
     }
 
+    public function test_presets_round_trip_and_share_classifications_between_kernels(): void
+    {
+        $nodes = [$this->node(['kernel_type' => 'xray']), $this->node(['kernel_type' => 'singbox'])];
+        $cases = [
+            ['禁止 BT', [], ['bittorrent'], 'block', ''],
+            ['禁止大陆 IP', ['geoip:cn'], [], 'block', ''],
+            ['禁止内网', ['geoip:private'], [], 'block', ''],
+            ['OpenAI 直连', ['geosite:openai'], [], 'direct', ''],
+            ['RFC EMBY', ['rfc.uhdnow.com'], [], 'proxy', 'emby-exit'],
+            ['TikTok 解锁', ['geosite:tiktok'], [], 'proxy', 'unlock'],
+            ['AI 分流', ['geosite:category-ai-!cn'], [], 'proxy', 'ai-exit'],
+            ['Google/Meta 走 WARP', ['geosite:google', 'geosite:meta'], [], 'proxy', 'warp'],
+            ['金融支付走 WARP', ['geosite:category-finance', 'geosite:paypal', 'geosite:stripe'], [], 'proxy', 'warp'],
+            ['测速走 WARP', ['fast.com', 'speedtest.net'], [], 'proxy', 'warp-v4'],
+            ['屏蔽测速网站', ['fast.com', 'speedtest.net'], [], 'block', ''],
+        ];
+        foreach ($cases as [$name, $match, $protocol, $action, $target]) {
+            $this->postJson('/_tests/route/save', [
+                'remarks' => $name, 'match' => $match, 'protocol' => $protocol,
+                'action' => $action, 'action_value' => $target, 'node_ids' => array_column($nodes, 'id'),
+                'apply_to_new_nodes' => false,
+            ])->assertOk();
+        }
+        $configs = array_map(fn ($node) => ServerService::buildNodeConfig($node->fresh()), $nodes);
+        $this->assertSame($configs[0]['routes']->all(), $configs[1]['routes']->all());
+        $this->assertCount(11, $configs[0]['routes']);
+        foreach ($cases as $index => [$name, $match, $protocol, $action, $target]) {
+            $route = $configs[0]['routes'][$index];
+            $this->assertSame($match, $route['match']);
+            $this->assertSame($protocol, $route['protocol'] ?? []);
+            $this->assertSame($action, $route['action']);
+            $this->assertSame($target ?: null, $route['action_value']);
+        }
+        $this->getJson('/_tests/route/fetch')->assertOk()->assertJsonCount(11, 'data');
+        foreach (['', '   ', null, []] as $target) {
+            $this->postJson('/_tests/route/save', [
+                'remarks' => '缺少出口', 'match' => ['geosite:openai'], 'action' => 'proxy', 'action_value' => $target,
+            ])->assertUnprocessable()->assertJsonValidationErrors('action_value');
+        }
+        $this->assertSame(11, ServerRoute::count());
+    }
+
     private function node(array $overrides = []): Server
     {
         static $port = 30000;

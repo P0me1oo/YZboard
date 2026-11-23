@@ -52,6 +52,11 @@ class RouteController extends Controller
             'node_ids.*.integer' => '节点参数有误',
         ]);
 
+        if ($params['action'] === 'proxy'
+            && (!is_string($params['action_value'] ?? null) || trim($params['action_value']) === '')) {
+            throw ValidationException::withMessages(['action_value' => '请填写节点上已有的转发出口标签']);
+        }
+
         $params['match'] = ServerRoute::normalizeMatch($params['match'] ?? []);
         $params['protocol'] = ServerRoute::normalizeProtocol($params['protocol'] ?? []) ?: null;
         [$params['port'], $portError] = ServerRouteService::normalizePort($params['port'] ?? null);

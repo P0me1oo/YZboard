@@ -8,7 +8,8 @@
       "bytes": 316,
       "sha256": "ff7cfec9f9bd63c307b2cf0f7c1214edcc6be8917ded539fb89898c69901e570",
       "download_verified": true,
-      "github_digest_verified": true
+      "github_digest_verified": true,
+      "anonymous_download_verified": true
     },
     {
       "name": "SHA256SUMS",
@@ -22,7 +23,8 @@
       "bytes": 152596737,
       "sha256": "8da2958fd02293c520a2bb2b2ee0604b9d2917323ca67e989efa35fcc8103103",
       "download_verified": true,
-      "github_digest_verified": true
+      "github_digest_verified": true,
+      "anonymous_download_verified": true
     }
   ],
   "source_commit": "b556551f5256c71493c8358f1e07f60c90d7bc93",

@@ -1,0 +1,53 @@
+{
+  "version": "2.25.0",
+  "admin_version": "0.107.0",
+  "source": "b556551f5256c71493c8358f1e07f60c90d7bc93",
+  "server": "Solid-US LA (Lite: Solid-US)",
+  "runtime_files_verified": 1224,
+  "changed_files": 15,
+  "switch_seconds": 7.43,
+  "started_at": "2026-11-23T10:38:16.346312+00:00",
+  "services": {
+    "yzboard-web": "active",
+    "yzboard-horizon": "active",
+    "yzboard-websocket": "active",
+    "nginx": "active",
+    "mariadb": "active",
+    "redis-server": "active"
+  },
+  "restarts": {
+    "yzboard-web": 0,
+    "yzboard-horizon": 0,
+    "yzboard-websocket": 0
+  },
+  "http": {
+    "home": 200,
+    "admin": 200,
+    "public-config": 200,
+    "websocket": 401,
+    "asset": 200,
+    "asset-gzip": 200
+  },
+  "main_script_sha256": "db784a3b18b108d14c6a3d833658fb9121848057d92ac874da3ab87271ed2437",
+  "persistent_changed": [],
+  "migrations": 152,
+  "failed_jobs": 714,
+  "active_machines": 49,
+  "recent_machine_heartbeats": 47,
+  "fresh_runtime_nodes": 109,
+  "failed_runtime_node_ids": [],
+  "health_status_counts": {
+    "ok": 106,
+    "failed": 2,
+    "unchecked": 1
+  },
+  "agent_versions": {
+    "v2.42.0": 45,
+    "v2.41.0": 3,
+    "v2.38.0": 1
+  },
+  "agent_nodes_upgraded": false,
+  "service_log_errors": 0,
+  "rollback_version": "2.24.1",
+  "rollback_source": "7e37271f2eb6f8a9a7f7a11000fdb4f9b1b255f9"
+}

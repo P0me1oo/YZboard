@@ -1,0 +1,36 @@
+{
+  "version": "2.25.0",
+  "source_commit": "b556551f5256c71493c8358f1e07f60c90d7bc93",
+  "php": "8.4.27",
+  "phpunit": "11.5.57",
+  "admin_version": "0.107.0",
+  "admin_source": "b04fce5b890a39387d98fde0c02926cf5114fd5f",
+  "behavior_tests": 180,
+  "browser_supplement": 63,
+  "reused_route_browser_tests": 11,
+  "resources": 5,
+  "sqlite": {
+    "tests": "1974",
+    "assertions": "36395",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "12",
+    "time": "129.306673"
+  },
+  "mariadb": {
+    "tests": "1974",
+    "assertions": "36409",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "0",
+    "time": "563.815922"
+  },
+  "mariadb12": {
+    "tests": "1974",
+    "assertions": "36409",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "0",
+    "time": "469.430157"
+  }
+}

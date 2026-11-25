@@ -1,6 +1,6 @@
 # YZboard 兼容矩阵
 
-面板 **2.29.0** / Dash **0.111.0** / 前置 Agent **v2.50.0** 为落地独立 DDNS 的本地开发版本，尚未发布或部署。包含一项兼容迁移；Agent 改动保留在独立工作树，未合入原目录。使用见[节点 DDNS](docs/node-ddns.md)，范围与结果见[验证记录](docs/landing-ddns-validation.md)。
+面板 **2.29.0** / 前置 Agent **v2.50.0** 已发布，内置 Dash **0.111.0**，未部署。固定来源、完整 CI 与附件见[发布记录](docs/release-2.29.0.md)；新增一项兼容迁移，旧配置保持手动来源。
 
 面板 **2.28.0** / Dash **0.110.0** / Agent **v2.48.0** 已正式发布，未部署、未升级运行节点。固定来源与附件见[发布记录](docs/release-2.28.0.md)。新增按中转绑定核对完整前置池双栈出口并限制落地端口；无数据库迁移或核心依赖升级。范围见[说明](docs/relay-firewall.md)，验证见[记录](docs/relay-firewall-validation.md)。
 

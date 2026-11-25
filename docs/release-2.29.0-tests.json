@@ -1,0 +1,20 @@
+{
+  "php": "8.2.36",
+  "sqlite": {
+    "tests": 1989,
+    "assertions": 36491,
+    "skipped": 12,
+    "failures": 0
+  },
+  "mariadb": {
+    "version": "11.4.8",
+    "tests": 1989,
+    "assertions": 36505,
+    "skipped": 0,
+    "failures": 0
+  },
+  "admin_assets": {
+    "tests": 5,
+    "passed": 5
+  }
+}

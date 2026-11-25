@@ -1,0 +1,32 @@
+{
+  "repository": "P0me1oo/YZboard",
+  "tag": "v2.29.0",
+  "url": "https://github.com/P0me1oo/YZboard/releases/tag/v2.29.0",
+  "source_commit": "9af18473e67d095b3b31fb8d5e140b579a3a8fba",
+  "published_at": "2026-11-25T15:41:06Z",
+  "visibility": "public",
+  "docker_published": false,
+  "assets": [
+    {
+      "name": "release.json",
+      "size": 385,
+      "sha256": "2aea032551497177640bd39d277853a298b1799bf59e68714d449f3612e8879e",
+      "github_digest": "sha256:2aea032551497177640bd39d277853a298b1799bf59e68714d449f3612e8879e",
+      "download": "anonymous"
+    },
+    {
+      "name": "SHA256SUMS",
+      "size": 167,
+      "sha256": "3b6c31aeb43a97b5336b439c62bd41e369bf0fe73911391b309b7d9f57d05f64",
+      "github_digest": "sha256:3b6c31aeb43a97b5336b439c62bd41e369bf0fe73911391b309b7d9f57d05f64",
+      "download": "anonymous"
+    },
+    {
+      "name": "yzboard-2.29.0.tar.gz",
+      "size": 167728805,
+      "sha256": "b2111d1a0b60f9afb0d5e40e6c816be68b2670d49fa5245981179ea7807ce940",
+      "github_digest": "sha256:b2111d1a0b60f9afb0d5e40e6c816be68b2670d49fa5245981179ea7807ce940",
+      "download": "anonymous"
+    }
+  ]
+}

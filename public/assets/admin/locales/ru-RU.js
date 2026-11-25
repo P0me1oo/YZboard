@@ -1,6 +1,12 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['ru-RU'] = {
   "ddns": {
+    "landing": "Домен выходного узла используется входным узлом; подписки используют домен входа",
+    "addressSource": "Источник IP",
+    "manualSource": "IP, указанный вручную",
+    "machineIpv4": "Публичный IPv4 сервера",
+    "machineIpv6": "Публичный IPv6 сервера",
+    "confirmedAddress": "Синхронизированный IP",
     "selfHosted": "Собственный сервер",
     "serverId": "ID сервера",
     "apiUrl": "Адрес API PowerDNS",

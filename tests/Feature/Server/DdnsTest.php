@@ -92,6 +92,135 @@ class DdnsTest extends TestCase
         return app(DdnsService::class)->project([$node->fresh()->toArray()], $user->fresh())[0];
     }
 
+    private function landingTopology(): array
+    {
+        $machine = \App\Models\ServerMachine::create(['name' => 'DDNS 前置测试机', 'token' => Str::random(32), 'is_active' => true,
+            'agent_runtime' => ['version' => 'v2.50.0']]);
+        $entry = $this->node('192.0.2.10', ['machine_id' => $machine->id, 'protocol_settings' => ['network' => 'tcp', 'tls' => 1,
+            'tls_settings' => ['server_name' => 'entry.example.test']]]);
+        $landingMachine = \App\Models\ServerMachine::create(['name' => 'DDNS 落地测试机', 'token' => Str::random(32), 'is_active' => true,
+            'agent_runtime' => ['public_ipv4' => '8.8.8.8', 'public_ipv4_at' => time(), 'public_ipv6' => '2606:4700:4700::1111', 'public_ipv6_at' => time()]]);
+        $landing = $this->node('192.0.2.20', ['machine_id' => $landingMachine->id, 'relay_entry_id' => $entry->id,
+            'type' => 'shadowsocks', 'protocol_settings' => ['cipher' => 'aes-128-gcm']]);
+        return [$entry, $landing, $landingMachine];
+    }
+
+    public function test_landing_ddns_is_separate_from_subscription_and_updates_all_internal_targets(): void
+    {
+        [$entry, $landing] = $this->landingTopology();
+        $user = $this->user(); $this->configure($entry, 'front'); $binding = $this->configure($landing, 'landing');
+        $this->assertFalse($binding->personal_enabled);
+        $this->assertFalse($binding->follow_user_status);
+        $this->assertSame(['address' => $landing->host], DdnsService::landingEndpoint($landing));
+        $this->assertTrue($this->sync());
+        $this->assertStringEndsWith('.front.ddns.example.com', $this->projected($landing, $user)['host']);
+        $this->assertSame('192.0.2.20', $binding->fresh()->confirmed_address);
+        $children = collect(data_get(\App\Services\ServerService::buildNodeConfig($entry), 'relay.children'))->keyBy('node_id');
+        $this->assertSame('landing.ddns.example.com', $children[$landing->id]['address']);
+        $this->assertSame('192.0.2.20', $children[$landing->id]['resolved_address']);
+        $this->assertSame('192.0.2.20', \App\Services\SchedulingProbeService::target($landing)['address']);
+        $this->assertSame('192.0.2.20', \App\Services\RelayFirewallService::targets($entry)[0]['address']);
+        $this->assertSame(0, DdnsAlias::where('binding_id', $binding->id)->count());
+        $landing->update(['host' => '192.0.2.21']); $this->assertTrue($this->sync());
+        $this->assertSame('192.0.2.21', DdnsService::landingEndpoint($landing)['resolved_address']);
+        app(DdnsService::class)->configure('node', $landing, ['enabled' => false]);
+        $this->assertTrue($this->sync());
+        $this->assertSame(['address' => '192.0.2.21'], DdnsService::landingEndpoint($landing));
+        $this->assertSame('192.0.2.21', DdnsRecord::where('binding_id', $binding->id)->whereNull('alias_id')->value('content'));
+    }
+
+    public function test_landing_tracks_selected_machine_family_and_retains_confirmed_ip_on_stale_or_failed_sync(): void
+    {
+        [, $landing, $machine] = $this->landingTopology();
+        $binding = $this->configure($landing, 'auto');
+        $binding->update(['address_source' => 'machine_ipv4']);
+        $this->assertTrue($this->sync());
+        $this->assertSame('8.8.8.8', $binding->fresh()->confirmed_address);
+        $this->assertSame('192.0.2.20', $landing->fresh()->host);
+        $machine->update(['agent_runtime' => ['public_ipv4' => '8.8.4.4', 'public_ipv4_at' => time() - 901]]);
+        $this->assertFalse($this->sync());
+        $this->assertSame('8.8.8.8', DdnsService::landingEndpoint($landing)['resolved_address']);
+        \App\Services\MachineAgentService::recordAddress($machine, '8.8.4.4');
+        $this->failAfterWrite = true;
+        $this->assertFalse($this->sync());
+        $this->assertSame('8.8.8.8', DdnsService::landingEndpoint($landing)['resolved_address']);
+        $this->assertTrue($this->sync());
+        $this->assertSame('8.8.4.4', DdnsService::landingEndpoint($landing)['resolved_address']);
+        $binding->update(['address_source' => 'machine_ipv6']);
+        $this->assertFalse($this->sync());
+        \App\Services\MachineAgentService::recordAddress($machine, '2606:4700:4700::1111');
+        $this->assertTrue($this->sync());
+        $this->assertSame('2606:4700:4700::1111', DdnsService::landingEndpoint($landing)['resolved_address']);
+        $this->assertSame('AAAA', DdnsRecord::where('binding_id', $binding->id)->value('type'));
+        $machine->update(['is_active' => false]);
+        $this->assertFalse($this->sync());
+        $this->assertSame('2606:4700:4700::1111', $binding->fresh()->confirmed_address);
+    }
+
+    public function test_landing_save_api_accepts_ddns_and_rejects_old_entry_agent_without_partial_changes(): void
+    {
+        [$entry, $landing] = $this->landingTopology();
+        $binding = $this->configure($landing, 'saved');
+        $payload = $landing->only(['id', 'name', 'type', 'host', 'port', 'server_port', 'rate', 'group_ids', 'protocol_settings', 'relay_entry_id', 'machine_id']);
+        $payload['ddns'] = ['enabled' => true, 'preset_id' => $binding->preset_id, 'prefix' => 'saved', 'address_source' => 'machine_ipv4'];
+        $this->postJson('/_tests/ddns/node/save', $payload)->assertOk();
+        $this->assertSame('machine_ipv4', $binding->fresh()->address_source);
+        $entry->machine->update(['agent_runtime' => ['version' => 'v2.48.0']]);
+        $payload['name'] = '不应保存';
+        $this->postJson('/_tests/ddns/node/save', $payload)->assertUnprocessable()->assertJsonValidationErrors('ddns.enabled');
+        $this->assertNotSame('不应保存', $landing->fresh()->name);
+    }
+
+    public function test_landing_powerdns_confirms_only_after_success_and_does_not_create_personal_records(): void
+    {
+        [, $landing] = $this->landingTopology();
+        $binding = $this->configure($landing, 'pdns');
+        $binding->preset->update(['provider' => 'powerdns']);
+        $dns = $this->mock(\App\Services\PowerDnsService::class);
+        $dns->shouldReceive('reconcile')->once()->andThrow(new \App\Exceptions\DdnsSyncException('临时测试错误'));
+        $this->assertFalse($this->sync());
+        $this->assertNull($binding->fresh()->confirmed_address);
+        $dns->shouldReceive('reconcile')->once()->withArgs(fn ($preset, $type, $id, $records, $ttl) => $type === 'binding'
+            && $id === $binding->id && count($records) === 1 && $records[0]['contents'] === ['192.0.2.20'])->andReturnNull();
+        $this->assertTrue($this->sync());
+        $this->assertSame('192.0.2.20', $binding->fresh()->confirmed_address);
+        $this->assertSame(0, DdnsAlias::where('binding_id', $binding->id)->count());
+    }
+
+    public function test_pool_landing_requires_every_front_agent_and_keeps_its_own_dns(): void
+    {
+        [$entry, $landing] = $this->landingTopology();
+        $second = $this->node('192.0.2.11', ['machine_id' => $entry->machine_id]);
+        $pool = BalancerPool::create(['name' => '落地 DDNS 前置池', 'mode' => 'dns', 'domain' => 'pool.example.com',
+            'protocol' => 'vless', 'enabled' => true, 'template_node_id' => $entry->id, 'gateway_machine_id' => 0,
+            'gateway_address' => '', 'gateway_port' => 443, 'backend_port' => 443, 'template_config' => $entry->toArray()]);
+        foreach ([$entry, $second] as $node) \App\Models\BalancerMember::create(['pool_id' => $pool->id, 'source_node_id' => $node->id, 'runtime_node_id' => $node->id, 'priority' => 1, 'weight' => 1]);
+        $landing->update(['relay_entry_id' => null, 'relay_pool_id' => $pool->id]);
+        $binding = $this->configure($landing, 'pool-landing');
+        $this->assertTrue($this->sync());
+        $this->assertSame('pool-landing.ddns.example.com', DdnsService::landingEndpoint($landing)['address']);
+        $this->assertSame(['pool', $pool->id], DdnsService::endpoint($landing->toArray()));
+        $second->update(['machine_id' => null]);
+        $this->assertNotEmpty(\App\Services\LoadBalancerService::topologyCompatibility($second->fresh(), $pool));
+        try { $this->configure($landing, 'pool-landing'); $this->fail('必须检查全部前置成员'); }
+        catch (ValidationException $error) { $this->assertArrayHasKey('ddns.enabled', $error->errors()); }
+        $this->assertSame('192.0.2.20', $binding->fresh()->confirmed_address);
+    }
+
+    public function test_automatic_landing_ip_requires_machine_and_public_transport_security(): void
+    {
+        [, $landing] = $this->landingTopology();
+        $binding = $this->configure($landing, 'secure');
+        $data = ['enabled' => true, 'preset_id' => $binding->preset_id, 'prefix' => 'secure', 'address_source' => 'machine_ipv4'];
+        $landing->update(['type' => 'vless', 'host' => '10.0.0.20', 'protocol_settings' => ['network' => 'tcp', 'tls' => 0]]);
+        try { app(DdnsService::class)->configure('node', $landing, $data); $this->fail('不能把允许内网明文的地址自动切到公网'); }
+        catch (ValidationException $error) { $this->assertArrayHasKey('ddns.address_source', $error->errors()); }
+        $landing->update(['machine_id' => null, 'type' => 'shadowsocks', 'protocol_settings' => ['cipher' => 'aes-128-gcm']]);
+        try { app(DdnsService::class)->configure('node', $landing->fresh(), $data); $this->fail('自动跟随必须绑定服务器'); }
+        catch (ValidationException $error) { $this->assertArrayHasKey('ddns.address_source', $error->errors()); }
+    }
+
+
     public function test_new_ddns_and_personal_domain_switches_do_not_implicitly_follow_user_status(): void
     {
         $node = $this->node(); $user = $this->user();

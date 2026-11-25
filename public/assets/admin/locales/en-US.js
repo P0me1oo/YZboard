@@ -1,6 +1,12 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['en-US'] = {
   "ddns": {
+    "landing": "Landing domain connects the entry to this node; subscriptions use the entry domain",
+    "addressSource": "IP source",
+    "manualSource": "Manually entered IP",
+    "machineIpv4": "Follow server public IPv4",
+    "machineIpv6": "Follow server public IPv6",
+    "confirmedAddress": "Synced IP",
     "selfHosted": "Self-hosted",
     "serverId": "Server ID",
     "apiUrl": "PowerDNS API URL",

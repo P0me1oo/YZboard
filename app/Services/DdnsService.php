@@ -43,9 +43,10 @@ class DdnsService
     {
         $binding = self::current($type, $id);
         return $binding ? ['enabled' => $binding->enabled, 'personal_enabled' => $binding->personal_enabled, 'follow_user_status' => $binding->follow_user_status, 'ttl' => $binding->ttl, 'preset_id' => $binding->preset_id, 'prefix' => $binding->prefix,
+            'address_source' => $binding->address_source, 'confirmed_address' => $binding->confirmed_address,
             'domain' => $binding->domain, 'status' => $binding->error ? 'error' : ($binding->synced_at && $binding->fingerprint ? 'synced' : 'pending'),
             'error' => $binding->error, 'synced_at' => $binding->synced_at?->toIso8601String()]
-            : ['enabled' => false, 'personal_enabled' => false, 'follow_user_status' => false, 'ttl' => 60, 'preset_id' => null, 'prefix' => ''];
+            : ['enabled' => false, 'personal_enabled' => false, 'follow_user_status' => false, 'address_source' => 'manual', 'ttl' => 60, 'preset_id' => null, 'prefix' => ''];
     }
 
     /** 绑定单独保存，节点复制不会继承域名或远端记录编号。 */
@@ -54,15 +55,34 @@ class DdnsService
         if ($type === 'pool') $this->invalid('owner_type', '前置池域名请在前置池中配置');
         if ($data === null) return;
         $current = self::current($type, $owner->id);
-        $personal = (bool) ($data['personal_enabled'] ?? $current?->personal_enabled ?? false);
-        $follow = (bool) ($data['follow_user_status'] ?? $current?->follow_user_status ?? false);
+        $landing = $owner instanceof Server && $owner->isRelayChild();
+        $personal = !$landing && (bool) ($data['personal_enabled'] ?? $current?->personal_enabled ?? false);
+        $follow = !$landing && (bool) ($data['follow_user_status'] ?? $current?->follow_user_status ?? false);
+        $source = $data['address_source'] ?? $current?->address_source ?? 'manual';
+        if (!in_array($source, ['manual', 'machine_ipv4', 'machine_ipv6'], true)) $this->invalid('address_source', '请选择有效的 IP 来源');
         if (!($data['enabled'] ?? false) && !$personal) {
             $current?->update(['enabled' => false, 'personal_enabled' => false, 'follow_user_status' => $follow, 'fingerprint' => null]);
+            if ($landing) self::notifyLanding($owner);
             self::notify();
             return;
         }
-        if ($type === 'node' && ($owner->isRelayChild() || $owner->balancer_pool_id)) {
+        if ($type === 'node' && $owner->balancer_pool_id) {
             $this->invalid('enabled', '请在前置入口或统一调度入口设置 DDNS');
+        }
+        if ($landing) {
+            $entries = LandingPoolService::entries($owner);
+            if ($entries->isEmpty() || $entries->contains(fn ($entry) => !self::landingAgentCompatible($entry))) {
+                $this->invalid('enabled', '落地 DDNS 需要所有前置服务器运行 Agent v2.50.0 或更新版本');
+            }
+        }
+        if ($source !== 'manual') {
+            if (!$landing) $this->invalid('address_source', '自动跟随服务器公网 IP 仅用于落地 DDNS');
+            if (!$owner->machine_id || !$owner->machine?->is_active) $this->invalid('address_source', '请先绑定已启用的落地服务器');
+            foreach ($entries as $entry) {
+                if ($error = ServerRelayService::validateTransitSettings($owner->type, (array) $owner->protocol_settings, '1.1.1.1', $entry->kernel_type)) {
+                    $this->invalid('address_source', $error);
+                }
+            }
         }
         $address = $type === 'node' ? $owner->host : $owner->gateway_address;
         if (!filter_var($address, FILTER_VALIDATE_IP)) $this->invalid('enabled', '开启 DDNS 时，连接地址必须手工填写 IPv4 或 IPv6');
@@ -89,8 +109,67 @@ class DdnsService
         if ($current && $current->id !== $existing?->id) $current->update(['enabled' => false, 'retired' => true, 'fingerprint' => null]);
         $binding = $existing ?? new DdnsBinding(['owner_type' => $type, 'owner_id' => $owner->id,
             'preset_id' => $preset->id, 'prefix' => $prefix, 'domain' => $domain]);
-        $binding->fill(['enabled' => (bool) ($data['enabled'] ?? false), 'personal_enabled' => $personal, 'follow_user_status' => $follow, 'ttl' => (int) ($data['ttl'] ?? $current?->ttl ?? 60), 'retired' => false, 'fingerprint' => null, 'error' => null])->save();
+        if ($binding->scope !== ($landing ? 'landing' : 'entry')) $binding->confirmed_address = null;
+        $binding->fill(['enabled' => (bool) ($data['enabled'] ?? false), 'personal_enabled' => $personal, 'follow_user_status' => $follow,
+            'scope' => $landing ? 'landing' : 'entry', 'address_source' => $source,
+            'ttl' => (int) ($data['ttl'] ?? $current?->ttl ?? 60), 'retired' => false, 'fingerprint' => null, 'error' => null])->save();
+        if ($landing) self::notifyLanding($owner);
         self::notify();
+    }
+
+    public static function landingAgentCompatible(Server $entry): bool
+    {
+        $version = ltrim((string) data_get($entry->machine?->agent_runtime, 'version', ''), 'v');
+        return preg_match('/\A\d+\.\d+\.\d+\z/', $version) && version_compare($version, '2.50.0', '>=');
+    }
+
+    /** 中转连接与订阅使用不同的域名；未准备好时继续使用原连接地址。 */
+    public static function landingEndpoint(Server $node): array
+    {
+        $binding = $node->isRelayChild() ? self::current('node', $node->id) : null;
+        if (!$binding || $binding->scope !== 'landing' || !$binding->enabled || $binding->cleanup_requested
+            || !filter_var($binding->confirmed_address, FILTER_VALIDATE_IP)) return ['address' => $node->host];
+        return ['address' => $binding->domain, 'resolved_address' => $binding->confirmed_address];
+    }
+
+    private static function notifyLanding(Server $node): void
+    {
+        DB::afterCommit(function () use ($node) {
+            foreach (LandingPoolService::entries($node) as $entry) NodeSyncService::notifyConfigUpdated((int) $entry->id);
+        });
+    }
+
+    public static function machineAddressChanged(int $machineId, array $before, array $after): void
+    {
+        if (($before['public_ipv4'] ?? null) === ($after['public_ipv4'] ?? null)
+            && ($before['public_ipv6'] ?? null) === ($after['public_ipv6'] ?? null)) return;
+        if (self::installed() && DdnsBinding::where('scope', 'landing')->where('enabled', true)->where('retired', false)
+            ->whereIn('address_source', ['machine_ipv4', 'machine_ipv6'])
+            ->whereIn('owner_id', Server::where('machine_id', $machineId)->select('id'))->exists()) self::notify();
+    }
+
+    private function bindingAddress(DdnsBinding $binding, Server|BalancerPool $owner): string
+    {
+        if ($binding->scope !== 'landing' || $binding->address_source === 'manual') return (string) ($owner instanceof Server ? $owner->host : $owner->gateway_address);
+        $family = $binding->address_source === 'machine_ipv6' ? 'ipv6' : 'ipv4';
+        $runtime = $owner->machine?->agent_runtime ?? [];
+        $address = $runtime['public_' . $family] ?? null;
+        $at = (int) ($runtime['public_' . $family . '_at'] ?? 0);
+        $flags = FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE | ($family === 'ipv6' ? FILTER_FLAG_IPV6 : FILTER_FLAG_IPV4);
+        if (!$owner->machine?->is_active || $at < time() - MachineAgentService::ADDRESS_STALE_SECONDS || $at > time() + 10
+            || !filter_var($address, FILTER_VALIDATE_IP, $flags)) {
+            throw new DdnsSyncException('落地服务器暂无有效的 ' . strtoupper($family) . ' 公网 IP 上报，保留已有解析');
+        }
+        return inet_ntop(inet_pton($address));
+    }
+
+    private function completeSync(DdnsBinding $binding, Server|BalancerPool|null $owner, array $desired, string $fingerprint): void
+    {
+        $address = $desired[$binding->domain]['content'] ?? null;
+        $changed = $binding->confirmed_address !== $address;
+        // 确认地址与同步标记一起落库，进程中断后不会被相同指纹提前跳过。
+        $binding->update(['confirmed_address' => $address, 'fingerprint' => $fingerprint, 'synced_at' => now(), 'error' => null]);
+        if ($changed && $binding->scope === 'landing' && $owner instanceof Server) self::notifyLanding($owner);
     }
 
     private function validateTls(array $server): void
@@ -201,6 +280,7 @@ class DdnsService
     {
         $owner = $this->owner($binding);
         if (!$owner || $owner->enabled === false || $binding->cleanup_requested) return 0;
+        if ($binding->scope === 'landing') return $owner instanceof Server && $owner->isRelayChild() ? 1 : 0;
         if ($binding->owner_type === 'node' && ($owner->isRelayChild() || $owner->balancer_pool_id)) return 0;
         $ids = $this->eligibleUsers($binding)->pluck('id')->all();
         return 1 + ($binding->personal_enabled && !$binding->retired ? count($ids)
@@ -256,12 +336,12 @@ class DdnsService
         $users = $this->eligibleUsers($binding);
         $desired = [];
         $addressError = false;
-        $publicEntry = $owner && ($binding->owner_type === 'pool' || (!$owner->isRelayChild() && !$owner->balancer_pool_id));
+        $publicEntry = $owner && ($binding->owner_type === 'pool' || ($binding->scope === 'landing'
+            ? $owner->isRelayChild() : (!$owner->isRelayChild() && !$owner->balancer_pool_id)));
         if (!$cleanup && $owner->enabled !== false && $publicEntry) {
-            $address = $binding->owner_type === 'node' ? $owner->host : $owner->gateway_address;
-            if (!$binding->enabled) {
-                $address = DdnsRecord::where('binding_id', $binding->id)->whereNull('alias_id')->value('content') ?: $address;
-            }
+            $address = !$binding->enabled ? (($binding->scope === 'landing' ? $binding->confirmed_address : null)
+                ?: DdnsRecord::where('binding_id', $binding->id)->whereNull('alias_id')->value('content') ?: $this->bindingAddress($binding, $owner))
+                : $this->bindingAddress($binding, $owner);
             $addressError = !filter_var($address, FILTER_VALIDATE_IP);
             $desired[$binding->domain] = ['alias_id' => null, 'type' => str_contains($address, ':') ? 'AAAA' : 'A', 'content' => $address];
             $aliases = DdnsAlias::where('binding_id', $binding->id)->get()->keyBy('user_id');
@@ -298,8 +378,12 @@ class DdnsService
             DdnsRecord::where('binding_id', $binding->id)->whereNotIn('name', array_keys($desired))->delete();
             foreach ($desired as $name => $value) DdnsRecord::updateOrCreate(['binding_id' => $binding->id, 'name' => $name],
                 [...$value, 'record_id' => hash('sha256', $name), 'marker' => 'powerdns']);
-            if ($cleanup) { DdnsAlias::where('binding_id', $binding->id)->delete(); $binding->delete(); return; }
-            $binding->update(['fingerprint' => $fingerprint, 'synced_at' => now(), 'error' => null]);
+            if ($cleanup) {
+                DdnsAlias::where('binding_id', $binding->id)->delete(); $binding->delete();
+                if ($binding->scope === 'landing' && $owner instanceof Server) self::notifyLanding($owner);
+                return;
+            }
+            $this->completeSync($binding, $owner, $desired, $fingerprint);
             return;
         }
 
@@ -343,6 +427,7 @@ class DdnsService
         if ($cleanup) {
             DdnsAlias::where('binding_id', $binding->id)->delete();
             $binding->delete();
+            if ($binding->scope === 'landing' && $owner instanceof Server) self::notifyLanding($owner);
             return;
         }
         // 保留旧解析期间允许原节点改用域名，但失效用户的撤销必须先执行。
@@ -405,7 +490,7 @@ class DdnsService
             }
         }
         $this->applyActions($preset, $creates);
-        $binding->update(['fingerprint' => $fingerprint, 'synced_at' => now(), 'error' => null]);
+        $this->completeSync($binding, $owner, $desired, $fingerprint);
     }
 
     private function applyActions(BalancerDnsPreset $preset, array $actions): void

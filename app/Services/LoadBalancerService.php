@@ -80,6 +80,10 @@ class LoadBalancerService
         $children = Server::whereIn('relay_pool_id', $poolIds)->get();
         $reasons = [];
         foreach ($children as $child) {
+            $ddns = DdnsService::current('node', $child->id);
+            if ($ddns?->scope === 'landing' && $ddns->enabled && !DdnsService::landingAgentCompatible($entry)) {
+                $reasons[] = $child->name . '：落地 DDNS 需要前置运行 Agent v2.50.0 或更新版本';
+            }
             $error = ServerRelayService::validateTransitSettings($child->type, (array) $child->protocol_settings, $child->host, $entry->kernel_type);
             if ($error !== null) $reasons[] = $child->name . '：' . $error;
         }

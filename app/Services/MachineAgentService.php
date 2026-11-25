@@ -101,6 +101,7 @@ class MachineAgentService
                 'agent_runtime' => $runtime, 'agent_operation' => $operation,
                 'last_seen_at' => max((int) $machine->last_seen_at, time()),
             ])->saveQuietly();
+            DdnsService::machineAddressChanged((int) $machine->id, $previous, $runtime);
             return $operation && in_array($operation['status'], ['pending', 'running'], true) ? $operation : null;
         });
     }
@@ -116,7 +117,10 @@ class MachineAgentService
         }
         DB::transaction(function () use ($authenticated, $ip) {
             $machine = ServerMachine::whereKey($authenticated->id)->lockForUpdate()->firstOrFail();
-            $machine->forceFill(['agent_runtime' => self::withAddress($machine->agent_runtime ?? [], $ip)])->saveQuietly();
+            $before = $machine->agent_runtime ?? [];
+            $runtime = self::withAddress($before, $ip);
+            $machine->forceFill(['agent_runtime' => $runtime])->saveQuietly();
+            DdnsService::machineAddressChanged((int) $machine->id, $before, $runtime);
         });
         return $ip;
     }

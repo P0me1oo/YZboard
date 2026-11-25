@@ -15,7 +15,8 @@ class SchedulingProbeService
         $port = LoadBalancerService::publicPort($node);
         if (!$port || !in_array($node->type, ['shadowsocks', 'vless'], true)) return null;
         if ($node->type === 'vless' && in_array(ServerRelayService::normalizeVlessNetwork(data_get($node->protocol_settings, 'network', 'tcp')), ['kcp', 'hysteria'], true)) return null;
-        $address = trim($node->host, '[] ');
+        $endpoint = DdnsService::landingEndpoint($node);
+        $address = trim($endpoint['resolved_address'] ?? $endpoint['address'], '[] ');
         if ($address === '' || str_contains($address, '/')) return null;
         return ['node_id' => (int) $node->id, 'address' => $address, 'port' => $port,
             'token' => hash('sha256', $node->id . '|' . $address . '|' . $port)];

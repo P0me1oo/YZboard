@@ -1,6 +1,12 @@
 window.XBOARD_TRANSLATIONS = window.XBOARD_TRANSLATIONS || {};
 window.XBOARD_TRANSLATIONS['zh-CN'] = {
   "ddns": {
+    "landing": "落地域名用于前置连接，订阅沿用前置域名",
+    "addressSource": "IP 来源",
+    "manualSource": "手填连接 IP",
+    "machineIpv4": "跟随服务器公网 IPv4",
+    "machineIpv6": "跟随服务器公网 IPv6",
+    "confirmedAddress": "已同步 IP",
     "selfHosted": "自建服务",
     "serverId": "服务器 ID",
     "apiUrl": "PowerDNS API 地址",

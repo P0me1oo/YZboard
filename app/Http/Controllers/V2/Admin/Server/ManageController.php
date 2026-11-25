@@ -90,7 +90,7 @@ class ManageController extends Controller
                 $ddns = $params['ddns'] ?? null;
                 if ($ddns === null && $server->exists) {
                     $binding = \App\Services\DdnsService::current('node', $server->id);
-                    if ($binding && ($binding->enabled || $binding->personal_enabled)) $ddns = $binding->only(['enabled', 'personal_enabled', 'follow_user_status', 'ttl', 'preset_id', 'prefix']);
+                    if ($binding && ($binding->enabled || $binding->personal_enabled)) $ddns = $binding->only(['enabled', 'personal_enabled', 'follow_user_status', 'ttl', 'preset_id', 'prefix', 'address_source']);
                 }
                 unset($params['ddns']);
                 $server->fill($params);

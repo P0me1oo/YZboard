@@ -961,7 +961,7 @@ class ServerService
                 'tag' => ServerRelayService::outboundTag((int) $child->id),
                 'route_id' => ServerRelayService::ensureRouteId($child),
                 'protocol' => $target->type,
-                'address' => $target->host,
+                ...DdnsService::landingEndpoint($target),
                 'port' => (int) $target->port,
             ];
 

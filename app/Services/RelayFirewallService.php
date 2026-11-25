@@ -22,7 +22,8 @@ final class RelayFirewallService
 
     private static function target(Server $entry, Server $landing): array
     {
-        $address = trim((string) $landing->host, '[] ');
+        $endpoint = DdnsService::landingEndpoint($landing);
+        $address = trim((string) ($endpoint['resolved_address'] ?? $endpoint['address']), '[] ');
         $port = (int) $landing->port;
         $identity = [$entry->id, $entry->machine_id, data_get($entry->machine?->agent_runtime, 'boot_id'),
             $landing->id, $landing->machine_id, $landing->relay_entry_id, $landing->relay_pool_id,

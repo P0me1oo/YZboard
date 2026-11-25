@@ -8,4 +8,4 @@
 
 三份正式附件均已匿名下载，大小、SHA-256、GitHub 摘要及校验清单匹配，源码包包含 composer.lock 和现有管理端，不含部署凭据、本地规则或 vendor。见[附件核验](release-2.30.0-verification.json)。
 
-用户已授权部署，但本次授权 Lite MCP 入口被 Cloudflare 返回 HTTP 403 / Error 1010（browser signature banned），远程写操作未开始；Solid-US LA 与运行 Agent 尚未更新。入口恢复后，从已发布固定来源按原生 PHP 流程继续部署面板，再通过服务器管理升级 Agent。程序回退来源为 v2.29.0，隐私保护开关和持久数据保持。
+Solid-US LA 已完成部署，45 台可管理 Agent 已通过面板升级 v2.51.0，版本、任务结果和心跳正常，隐私保护状态保持。最初本机 Lite 转接入口被 Cloudflare 拒绝，随后原生 Lite MCP 访问成功，全部远程操作经该授权通道完成。详细状态、例外及回退见[部署记录](deployment-2.30.0.md)。

@@ -43,6 +43,7 @@ class RelayFirewallTest extends TestCase
             'children' => array_map(fn ($target) => $target + ['sources' => $sources, 'complete' => $complete], $targets)]]);
     }
 
+    // 只模拟认证回报，不建立网络连接；PHP 8.2 将文档 IPv6 网段视为保留地址。
     private function address(ServerMachine $machine, string ...$ips): void
     {
         foreach ($ips as $ip) MachineAgentService::recordAddress($machine, $ip);
@@ -52,17 +53,17 @@ class RelayFirewallTest extends TestCase
     {
         [$entry, $landing, $machine] = $this->topology();
         $this->assertSame('pending', RelayFirewallService::policy($landing)['status']);
-        $this->address($machine, '198.51.100.1', '2001:db8::1');
-        $this->report($entry, ['198.51.100.1', '2001:db8::1']);
+        $this->address($machine, '198.51.100.1', '2001:4860:4860::1');
+        $this->report($entry, ['198.51.100.1', '2001:4860:4860::1']);
         $policy = ServerService::buildNodeConfig($landing)['relay']['firewall'];
         $this->assertSame('ready', $policy['status']);
-        $this->assertSame(['198.51.100.1', '2001:db8::1'], $policy['sources']);
+        $this->assertSame(['198.51.100.1', '2001:4860:4860::1'], $policy['sources']);
         $this->assertSame(now()->timestamp + 120, $policy['valid_until']);
         $this->address($machine, '198.51.100.2');
         $this->assertSame('pending', RelayFirewallService::policy($landing)['status']);
         $this->travel(1)->seconds();
-        $this->report($entry, ['198.51.100.2', '2001:db8::1']);
-        $this->assertSame(['198.51.100.2', '2001:db8::1'], RelayFirewallService::policy($landing)['sources']);
+        $this->report($entry, ['198.51.100.2', '2001:4860:4860::1']);
+        $this->assertSame(['198.51.100.2', '2001:4860:4860::1'], RelayFirewallService::policy($landing)['sources']);
     }
 
     public function test_all_pool_members_required_and_removal_recomputes_union(): void
@@ -76,23 +77,23 @@ class RelayFirewallTest extends TestCase
         foreach ([$first, $second] as $entry) BalancerMember::create(['pool_id' => $pool->id,
             'source_node_id' => $entry->id, 'runtime_node_id' => $entry->id, 'priority' => 1, 'weight' => 1]);
         $landing->update(['relay_entry_id' => null, 'relay_pool_id' => $pool->id]);
-        $this->address($machine, '198.51.100.1', '2001:db8::1');
-        $this->address($otherMachine, '198.51.100.2', '2001:db8::2');
-        $this->report($first, ['198.51.100.1', '2001:db8::1']);
+        $this->address($machine, '198.51.100.1', '2001:4860:4860::1');
+        $this->address($otherMachine, '198.51.100.2', '2001:4860:4860::2');
+        $this->report($first, ['198.51.100.1', '2001:4860:4860::1']);
         $this->assertSame('pending', RelayFirewallService::policy($landing)['status']);
-        $this->report($second, ['198.51.100.2', '2001:db8::2']);
-        $this->assertSame(['198.51.100.1', '198.51.100.2', '2001:db8::1', '2001:db8::2'], RelayFirewallService::policy($landing)['sources']);
+        $this->report($second, ['198.51.100.2', '2001:4860:4860::2']);
+        $this->assertSame(['198.51.100.1', '198.51.100.2', '2001:4860:4860::1', '2001:4860:4860::2'], RelayFirewallService::policy($landing)['sources']);
         // DNS 未发布及健康未知的成员仍在名单；显式移除成员才缩小。
         BalancerMember::where('pool_id', $pool->id)->where('runtime_node_id', $second->id)->delete();
-        $this->assertSame(['198.51.100.1', '2001:db8::1'], RelayFirewallService::policy($landing)['sources']);
+        $this->assertSame(['198.51.100.1', '2001:4860:4860::1'], RelayFirewallService::policy($landing)['sources']);
     }
 
     public function test_partial_nat_invalid_or_stale_reports_never_publish_partial_allowlist(): void
     {
         [$entry, $landing, $machine] = $this->topology();
-        $this->address($machine, '198.51.100.1', '2001:db8::1');
+        $this->address($machine, '198.51.100.1', '2001:4860:4860::1');
         foreach ([[['198.51.100.1'], false], [['198.51.100.1', '10.0.0.1'], true],
-            [['198.51.100.1', '2001:db8::9'], true], [['198.51.100.0/24'], true], [[], true]] as [$sources, $complete]) {
+            [['198.51.100.1', '2001:4860:4860::9'], true], [['198.51.100.0/24'], true], [[], true]] as [$sources, $complete]) {
             $this->travel(1)->seconds();
             $this->report($entry, $sources, $complete);
             $this->assertSame('pending', RelayFirewallService::policy($landing)['status']);

@@ -1,0 +1,29 @@
+{
+  "repository": "P0me1oo/YZboard",
+  "tag": "v2.30.0",
+  "url": "https://github.com/P0me1oo/YZboard/releases/tag/v2.30.0",
+  "source_target": "master",
+  "draft": false,
+  "prerelease": false,
+  "assets": [
+    {
+      "name": "release.json",
+      "size": 385,
+      "sha256": "d4b8b55a7dd8275d7683c97727796b11433fc88f0092f2d61813016b6061d55d",
+      "download_verified": true
+    },
+    {
+      "name": "SHA256SUMS",
+      "size": 167,
+      "sha256": "d693d7bf86423f13712622440a1047768802bde86c679163f162f59ba513f50c",
+      "download_verified": true
+    },
+    {
+      "name": "yzboard-2.30.0.tar.gz",
+      "size": 167728465,
+      "sha256": "36512accb77de680e698036b1db37a11f21d8ea0142b22ce8806bc9e3a88f7ee",
+      "download_verified": true
+    }
+  ],
+  "anonymous_download": true
+}

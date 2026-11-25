@@ -1,0 +1,22 @@
+{
+  "conclusion": "success",
+  "headSha": "a972353baefe2a00165c9c2ab1ee659e82f45060",
+  "status": "completed",
+  "url": "https://github.com/P0me1oo/YZboard/actions/runs/45673659735",
+  "results": {
+    "sqlite": {
+      "tests": 1989,
+      "assertions": 36491,
+      "skipped": 12
+    },
+    "mariadb_11_4": {
+      "tests": 1989,
+      "assertions": 36505,
+      "skipped": 0
+    },
+    "admin_resources": {
+      "tests": 5,
+      "passed": 5
+    }
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "date": "2026-11-25",
+  "published": false,
+  "deployed": false,
+  "versions": {
+    "YZboard": "2.28.0",
+    "YZ-Agent": "2.47.0",
+    "YZboard-Dash": "0.110.0"
+  },
+  "sources": {
+    "YZboard": {
+      "base_commit": "6832877e8adda8d5b00212027bf9de3f849c5cbb",
+      "working_tree_modified": true,
+      "sha256": {
+        "app/Services/RelayFirewallService.php": "410ee5f4557f35415abe76320fae30b4725bd9eb1b33e80b2505b5d9ec4fac4a",
+        "app/Services/ServerService.php": "4142a9d6a76665a5e3d6562aa0b1c5e2f99fee52c6606d5038b2c443e1a4a2ad",
+        "app/Services/NodeOperations.php": "a8701b7c746e7030f0845f65a278d3738ac98fe8a427d15da2fe9b1cb905300d",
+        "app/Console/Commands/SyncRelayFirewall.php": "a32047987157a4886b4cc7cb03040aa50cc4ff05084f34f883f513c4efa439fc",
+        "app/Console/Kernel.php": "5131c7e6d96c06724509a4c8fd0b07593aac0f0e7fd3e7d262d13933f51becc3",
+        "tests/Feature/Server/RelayFirewallTest.php": "ee2702180705a57fffb34e9bc10891179c1cdbe9bd5d068b0b8e3ef1ad40d62c",
+        "tests/Feature/Server/NodeOperationsTest.php": "559a337cf1b0eba8be8032a1af7d308a1916366bef945004c96aea395663be57"
+      }
+    },
+    "YZ-Agent": {
+      "base_commit": "8d63349e3c6bb8783fd409bb72a932d86baea05f",
+      "working_tree_modified": true,
+      "sha256": {
+        "internal/firewall/plan.go": "7a485cea2e667ba4d0735d060119083d8215a30bacf359c1adda2bd55dfeae70",
+        "internal/firewall/manager.go": "e124a24af89200096fd523450ce979636a147526e9cc07804b7825225975bfa7",
+        "internal/firewall/source_filter.go": "c8d29a200e6793a8cee2d24075be90bad09399383ff4acea1e5fa6ead3e6c904",
+        "internal/firewall/source_dependencies.go": "4ac5aba4a9ca314490ccbeda634de720c8cf96c6db9f370a788df8ac2379a2d9",
+        "internal/firewall/source_nft.go": "90676fb0435ab67a0c7d48a0da55a3d7dcf64030b96e88d8efa84eea00f97b70",
+        "internal/firewall/source_iptables.go": "e70add3908bb158cc2cd7cd7f1f90628e827363381f689ee009559769448731e",
+        "internal/firewall/relay_test.go": "1dc3c861e259c8c35ba32ad0c00659d399aadeda357ac0d89a6f446ff2357a89",
+        "internal/firewall/relay_native_linux_test.go": "7a8918820972fc2c9185944b35979c55510a4fbaf15bc71806deb4c7d8c0fa0e",
+        "internal/service/relay_egress.go": "afe13f263f65ec8bd31c49a2853db9b6d10eba7dad76e169e2beb06b8a2553e7",
+        "internal/service/relay_egress_test.go": "73a51649495b4ddfb426519da719382146de0d0b13e36ae04a1c49a72c3b7df7",
+        "internal/service/firewall.go": "d54dd0742039823b03b471946629addc683bd9c88b71f38ddfd9b01404122443",
+        "internal/service/operations.go": "6d5bb51f1f3d783980aab15fb96d9bbc9bb1491a2ae4a0091018c27b32e421eb",
+        "internal/service/service.go": "311a0ef921ca67ce501a2bee13ad3c64dbca8178eb45ef16ae1957dba06deed2",
+        "internal/model/panel.go": "9d005861fdbe3baa43499e0c256878a6b793f9fa2079371fdb75418c04914a83",
+        "internal/model/types.go": "6890d96b1167d71a60c1baa4034166271f10efc1a39d775ee1aa1c6055eb7727",
+        "internal/model/relay_firewall.go": "cb9be27a96cf9f82e5b455514880cb0baa713b70fbc14b7c6a786a75fe07f911",
+        "internal/panel/types.go": "2ecd537c70f7a0eebad899e7c9c6f5b9f23c83087a5edce1c62e7a33fb8f7184"
+      }
+    },
+    "YZboard-Dash": {
+      "base_commit": "85b5263ed4fab10b8547768e1e68e45ae8f42343",
+      "working_tree_modified": true,
+      "sha256": {
+        "src/features/operations/NodeHealth.jsx": "655196add9b7b802216ff1f590d84171444a2808f3dd723bca3e503aa92484a4",
+        "tests/browser/relay-firewall.spec.mjs": "6341b5b6cd629301e20c796cde7b1407e7fce031cf873be0764cd1c204c194b7",
+        "package.json": "9c4f0bd761e43c093c1415034160afa939b76c2d407934e5fefc3fcb1ee75041",
+        "package-lock.json": "753e0efaacd9f09a990aae6ba5d8d9144eef2e00c8cf2c5a0f37b941fae1a1a6"
+      }
+    }
+  },
+  "admin_assets": {
+    "assets/index-CjGRGXyi.js": "e180a39f782ac0179b447102845e5e30007b3848168fd9040761df96680e7d43",
+    "assets/admin-B6RFymCo.js": "a92ea90db030f4cd963a6a606ae13f3e1562bdf39d2cbe06eaa8e03c1c9ac792"
+  },
+  "validation": {
+    "php_initial_sqlite": {
+      "tests": 179,
+      "assertions": 4653
+    },
+    "php_initial_mariadb_11_4_8": {
+      "tests": 179,
+      "assertions": 4647
+    },
+    "php_final_sqlite": {
+      "tests": 25,
+      "assertions": 151
+    },
+    "php_final_mariadb_11_4_8": {
+      "tests": 25,
+      "assertions": 151
+    },
+    "go_four_packages_race": {
+      "passed_top_level": 308,
+      "skipped_native": 6
+    },
+    "native_relay_firewall": [
+      "nftables passed",
+      "iptables passed"
+    ],
+    "browser": {
+      "passed": 2,
+      "widths": [
+        1440,
+        390
+      ]
+    },
+    "admin_contract_tests": 5,
+    "integrated_files": 274,
+    "gzip_files": 125,
+    "build": "linux/amd64 full feature tags; unpublished dirty working tree"
+  }
+}

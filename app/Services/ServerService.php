@@ -503,6 +503,7 @@ class ServerService
      */
     public static function updateMetrics(Server $node, array $metrics, ?bool $hostMonitoring = null): void
     {
+        if (isset($metrics['relay_egress'])) RelayFirewallService::recordEgress($node, $metrics['relay_egress']);
         // 控制结果和调度处理可能等待或写入配置，随后仍重新读取监控开关。
         if (isset($metrics['operations']) || isset($metrics['scheduling_probes'])) $hostMonitoring = null;
         if (isset($metrics['operations']) && is_array($metrics['operations'])) app(NodeOperations::class)->accept($node, $metrics['operations']);
@@ -534,6 +535,9 @@ class ServerService
         ];
 
         if (!($hostMonitoring ?? HostMonitoring::enabled(node: $node))) unset($metricsData['cpu_per_core'], $metricsData['load']);
+        if (is_string($metrics['firewall_warning'] ?? null)) {
+            $metricsData['firewall_warning'] = mb_substr(LogSanitizer::text($metrics['firewall_warning']), 0, 300);
+        }
 
         // 缺失指标不能补成零负载，否则旧 Agent 会被误判为空闲前置。
         foreach (['active_connections', 'inbound_speed', 'outbound_speed'] as $field) {
@@ -844,6 +848,7 @@ class ServerService
             $response['relay'] = $relay;
         }
         if ($targets = SchedulingProbeService::targets($node)) $response['scheduling_targets'] = $targets;
+        $response['relay_egress_targets'] = RelayFirewallService::targets($node);
         if ($nodeType === Server::TYPE_WIREGUARD && !$node->isRelayChild()) {
             $response['wireguard'] = WireGuardService::nodeConfig($node);
         }
@@ -916,6 +921,7 @@ class ServerService
                 'protocol' => $node->type,
                 'listen_port' => (int) $node->server_port,
                 'entry_node_id' => (int) $node->relayEntryId(),
+                'firewall' => RelayFirewallService::policy($node),
             ];
 
             if ($node->type === Server::TYPE_WIREGUARD) {

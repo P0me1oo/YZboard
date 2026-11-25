@@ -75,6 +75,7 @@ class Kernel extends ConsoleKernel
         // check
         // 前置池先完成，再启动后台 DDNS，避免同一区域的两类周期任务同时争锁。
         $schedule->command('balancer:sync')->everyMinute()->onOneServer()->withoutOverlapping(2);
+        $schedule->command('relay:sync-firewall')->everyMinute()->onOneServer()->withoutOverlapping(2);
         $schedule->command('ddns:sync')->everyMinute()->onOneServer()->withoutOverlapping(10)->runInBackground();
         $schedule->command('lite:bind-machines')->everyMinute()->onOneServer()->withoutOverlapping(2)->runInBackground();
         $schedule->command('node:prune-traffic-grants')->everyMinute()->onOneServer()->withoutOverlapping(2);

@@ -950,6 +950,33 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     }
   },
   "user": {
+    "plan_details": {
+      "title": "套餐信息",
+      "view": "查看套餐：{{name}}",
+      "unlimited": "不限制",
+      "enabled": "开启",
+      "disabled": "关闭",
+      "loading": "正在读取套餐信息",
+      "failed": "套餐信息读取失败",
+      "unavailable": "套餐已删除或不可用",
+      "retry": "重试",
+      "close": "关闭",
+      "auto_speed": "自动临时限速",
+      "trigger": "触发方式",
+      "direction": "速度口径",
+      "threshold": "触发阈值",
+      "window_seconds": "统计窗口",
+      "hits": "窗口内超阈秒数",
+      "duration": "持续时长",
+      "limit": "临时上限",
+      "hold": "限速时长",
+      "seconds": "{{count}} 秒",
+      "continuous": "持续超速",
+      "window": "窗口内多次超速",
+      "download": "下载",
+      "upload": "上传",
+      "max": "上传、下载取较大值"
+    },
     "column_settings": "显示列",
     "extend_duration": {
       "title": "增加时长",

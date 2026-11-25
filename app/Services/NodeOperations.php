@@ -24,6 +24,7 @@ final class NodeOperations
             'sampled_at' => 'required|integer|min:1|max:9007199254740991','version' => 'required|integer|in:1','runtime' => 'required|in:running,stopped,failed','error' => 'nullable|string|max:300',
          'config_hash' => 'required|string|max:128','control' => 'sometimes|array:epoch,sequence','control.epoch' => 'nullable|string|max:64','control.sequence' => 'sometimes|integer|min:0',
          'pending_bytes' => 'required|integer|min:0|max:9007199254740991',
+         'firewall_warning' => 'nullable|string|max:1000',
          'auto_speed' => 'sometimes|array|max:10000','auto_speed.*' => 'array:limit_mbps,expires_at,rule','auto_speed.*.limit_mbps' => 'required|integer|min:1|max:100000','auto_speed.*.expires_at' => 'required|integer|min:0','auto_speed.*.rule' => 'required|string|size:64','auto_speed_error' => 'nullable|string|max:100',
          'health' => 'nullable|array:id,checked_at,status,config_hash,target,source,steps,routes','health.id' => 'required_with:health|string|max:64','health.checked_at' => 'required_with:health|integer|min:1','health.status' => 'required_with:health|in:ok,failed,unsupported,partial','health.config_hash' => 'sometimes|string|max:128','health.target' => 'required_with:health|string|max:500','health.source' => 'required_with:health|string|max:50','health.steps' => 'sometimes|array|max:8','health.steps.*' => 'array:name,status,latency_ms,error','health.steps.*.name' => 'required|string|max:40','health.steps.*.status' => 'required|in:ok,failed,not_supported','health.steps.*.latency_ms' => 'required|integer|min:0|max:120000','health.steps.*.error' => 'nullable|string|max:200',
          'health.routes' => 'sometimes|array|max:17','health.routes.*' => 'array:tag,node_id,status,latency_ms,error','health.routes.*.tag' => 'present|string|max:100','health.routes.*.node_id' => 'sometimes|integer|min:0','health.routes.*.status' => 'required|in:ok,failed,incomplete','health.routes.*.latency_ms' => 'required|integer|min:0|max:120000','health.routes.*.error' => 'nullable|string|max:200',
@@ -49,6 +50,7 @@ final class NodeOperations
         if (isset($data['error'])) {
             $data['error'] = LogSanitizer::text($data['error']);
         }
+        if (isset($data['firewall_warning'])) $data['firewall_warning'] = mb_substr(LogSanitizer::text($data['firewall_warning']), 0, 300);
         $health = $data['health'] ?? null;
         $healthConfig = NodeHealthConfig::effective($node);
         if ($health && ($health['checked_at'] > now()->timestamp + 30 || $health['checked_at'] < now()->timestamp - 86400 || !$healthConfig['enabled'] || ($health['target'] ?? '') !== $healthConfig['url'])) {
@@ -190,6 +192,15 @@ final class NodeOperations
     }
     public function detail(Server $node): array
     {
+        $relayFirewall = null;
+        if ($node->isRelayChild()) {
+            $relayFirewall = RelayFirewallService::policy($node);
+            $version = ltrim((string) data_get($node->machine?->agent_runtime, 'version', ''), 'v');
+            if ($relayFirewall['status'] === 'ready' && (!preg_match('/\A\d+\.\d+\.\d+\z/', $version)
+                || version_compare($version, '2.47.0', '<'))) {
+                $relayFirewall['message'] = '落地 Agent 需要升级至 v2.47.0 或更新版本，来源限制尚未确认生效';
+            }
+        }
         $rows = DB::table('v2_node_health_sample')->where('server_id', $node->parent_id ?: $node->id)->where('checked_at', '>=', now()->timestamp - 86400)->orderBy('checked_at')->limit(2880)->get(['checked_at','status','latency_ms','detail']);
         foreach ($rows as $row) {
             $raw = json_decode($row->detail ?? '', true);
@@ -201,6 +212,6 @@ final class NodeOperations
             unset($row->detail);
         }
         $count = $rows->whereIn('status', ['ok','failed'])->count();
-        return $this->view($node) + ['node_id' => (int)$node->id,'name' => $node->name,'history' => $rows,'availability' => $count ? round(100 * $rows->where('status', 'ok')->count() / $count, 2) : null,'samples' => $count];
+        return $this->view($node) + ['relay_firewall' => $relayFirewall, 'node_id' => (int)$node->id,'name' => $node->name,'history' => $rows,'availability' => $count ? round(100 * $rows->where('status', 'ok')->count() / $count, 2) : null,'samples' => $count];
     }
 }

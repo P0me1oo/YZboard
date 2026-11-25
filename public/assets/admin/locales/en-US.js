@@ -950,6 +950,33 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     }
   },
   "user": {
+    "plan_details": {
+      "title": "Plan details",
+      "view": "View plan: {{name}}",
+      "unlimited": "Unlimited",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "loading": "Loading plan details",
+      "failed": "Unable to load plan details",
+      "unavailable": "This plan has been deleted or is unavailable",
+      "retry": "Retry",
+      "close": "Close",
+      "auto_speed": "Automatic temporary speed limit",
+      "trigger": "Trigger mode",
+      "direction": "Speed direction",
+      "threshold": "Threshold",
+      "window_seconds": "Measurement window",
+      "hits": "Seconds over threshold",
+      "duration": "Required duration",
+      "limit": "Temporary limit",
+      "hold": "Limit duration",
+      "seconds": "{{count}} s",
+      "continuous": "Continuous excess speed",
+      "window": "Repeated excess speed within a window",
+      "download": "Download",
+      "upload": "Upload",
+      "max": "Higher of upload and download"
+    },
     "column_settings": "Columns",
     "extend_duration": {
       "title": "Extend duration",

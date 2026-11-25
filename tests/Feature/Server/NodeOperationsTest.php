@@ -57,6 +57,20 @@ class NodeOperationsTest extends TestCase
     {
         return ['run'=>str_repeat('a',32),'sequence'=>2,'version' => 1,'sampled_at' => now()->getTimestampMs(),'runtime' => 'running','config_hash' => str_repeat('a', 64),'pending_bytes' => 120,'health' => ['id' => 'sample-1','checked_at' => now()->timestamp,'status' => 'ok','target' => 'https://example.com/','source' => '节点本机','steps' => [],'routes' => [['tag' => '','status' => 'ok','latency_ms' => 11]]],'certificate' => ['domain' => 'example.com','present' => true,'applied' => true,'mode' => 'dns','fingerprint' => str_repeat('b', 64),'not_after' => now()->addDays(20)->timestamp]];
     }
+    public function test_firewall_warning_is_reported_without_stopping_runtime_and_clears_on_recovery(): void
+    {
+        $node = $this->node();
+        $operations = app(NodeOperations::class);
+        $state = $this->state();
+        $state['firewall_warning'] = '中转出口核对失败，保留原规则';
+        $operations->accept($node, $state);
+        $this->assertSame('running', $operations->detail($node)['state']['runtime']);
+        $this->assertSame($state['firewall_warning'], $operations->detail($node)['state']['firewall_warning']);
+        unset($state['firewall_warning']);
+        $state['sequence']++;
+        $operations->accept($node, $state);
+        $this->assertArrayNotHasKey('firewall_warning', $operations->detail($node)['state']);
+    }
     public function test_admin_only_and_health_config_validation(): void
     {
         $n = $this->node();

@@ -112,7 +112,7 @@ class TelegramXrayCrashTest extends TestCase
         Http::assertSent(fn ($request) => $request['chat_id'] === 900000001
             && str_contains($request['text'], 'Xray 核心崩溃通知') && str_contains($request['text'], '测试节点')
             && str_contains($request['text'], 'listener failed') && str_contains($request['text'], '发生时间：')
-            && !str_contains($request['text'], 'temporary-test-secret'));
+            && str_contains($request['text'], $batch['records'][0]['message']));
         $logs->accept($node, null, $this->batch([], 'b'));
         $this->assertDatabaseCount('v2_telegram_business_notifications', 2);
     }

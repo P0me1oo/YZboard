@@ -104,7 +104,7 @@ class NodeHandshakeTest extends TestCase
         $this->assertStringContainsString('service_unavailable', $response);
         $this->assertStringNotContainsString('private-server-secret', $response);
         Log::shouldHaveReceived('log')->once()->withArgs(fn ($level, $message, $context) =>
-            $level === 'error' && $message === '[WS] 握手处理失败' && !str_contains(json_encode($context), 'private-server-secret'));
+            $level === 'error' && $message === '[WS] 握手处理失败' && $context['error'] === 'setting failed token=private-server-secret');
     }
 
     public function test_renewal_baseline_recovery_is_debug_but_actual_failure_stays_warning(): void

@@ -129,7 +129,7 @@ class LogManagementTest extends TestCase
         $this->artisan('management-log:prune')->assertSuccessful();
         $this->assertDatabaseCount('v2_user_event_log', 0);
     }
-    public function test_agent_ingestion_redacts_retries_and_discards_other_machine_nodes(): void
+    public function test_agent_ingestion_preserves_text_deduplicates_and_discards_other_machine_nodes(): void
     {
         $machine = ServerMachine::create(['name' => '测试机器', 'token' => Str::random(32), 'is_active' => true]); $node = $this->node($machine);
         $batch = ['batch_id' => str_repeat('a', 32), 'records' => [['node_id' => $node->id, 'source' => 'singbox', 'level' => 'error',
@@ -137,9 +137,10 @@ class LogManagementTest extends TestCase
         $logs = app(AgentLog::class);
         $logs->accept(null, $machine, $batch); $logs->accept(null, $machine, $batch);
         $this->assertDatabaseCount('v2_agent_log', 1);
-        $this->assertStringNotContainsString('temporary-test-secret', DB::table('v2_agent_log')->value('message'));
+        $this->assertSame($batch['records'][0]['message'], DB::table('v2_agent_log')->value('message'));
         Sanctum::actingAs($this->user(true));
-        $this->getJson(self::URL . 'agent?source=singbox&machine_id=' . $machine->id)->assertOk()->assertJsonPath('data.total', 1);
+        $this->getJson(self::URL . 'agent?source=singbox&machine_id=' . $machine->id)->assertOk()->assertJsonPath('data.total', 1)
+            ->assertJsonPath('data.list.0.message', $batch['records'][0]['message']);
         $other = ServerMachine::create(['name' => '其他机器', 'token' => Str::random(32), 'is_active' => true]);
         $this->assertSame(['batch_id' => $batch['batch_id']], $logs->accept(null, $other, $batch));
         $this->assertDatabaseCount('v2_agent_log', 1);
@@ -178,7 +179,7 @@ class LogManagementTest extends TestCase
         $this->assertArrayHasKey('auth_data', $auth->generateAuthData());
         $this->assertDatabaseCount('v2_user_event_log', 1);
     }
-    public function test_system_logs_use_bounded_local_files_and_hide_credentials(): void
+    public function test_system_logs_use_bounded_local_files_and_preserve_diagnostics(): void
     {
         $path = sys_get_temp_dir() . '/yz-logs-' . Str::random(12);
         mkdir($path . '/logs', 0700, true);
@@ -188,7 +189,7 @@ class LogManagementTest extends TestCase
             file_put_contents($path . '/logs/laravel-' . now()->toDateString() . '.log', str_repeat('x', 2 * 1024 * 1024) . "\n" . $line);
             Sanctum::actingAs($this->user(true));
             $response = $this->getJson(self::URL . 'system')->assertOk()->assertJsonPath('data.total', 1)->assertJsonPath('data.limited', true);
-            $this->assertStringNotContainsString('temporary-test-secret', $response->getContent());
+            $response->assertJsonPath('data.list.0.message', 'failed token=temporary-test-secret {"config":"temporary-test-secret"}');
             $this->getJson(self::URL . 'system?date=../../secret')->assertUnprocessable();
             $this->getJson(self::URL . 'system?date=' . now()->subDays(15)->toDateString())->assertUnprocessable();
         } finally {
@@ -197,11 +198,16 @@ class LogManagementTest extends TestCase
             rmdir($path . '/logs'); rmdir($path);
         }
     }
-    public function test_redaction_covers_nested_and_mixed_case_secrets(): void
+    public function test_log_text_preserves_addresses_credentials_config_and_identifiers(): void
     {
-        $text = LogSanitizer::text('Authorization=Bearer temporary-test-secret OLD_PASSWORD="temporary-test-secret" uuid=00000000-0000-0000-0000-000000000000');
-        $this->assertStringNotContainsString('temporary-test-secret', $text);
-        $this->assertStringNotContainsString('00000000-', $text);
+        $message = 'Authorization=Bearer temporary-test-secret OLD_PASSWORD="temporary-test-secret" uuid=00000000-0000-0000-0000-000000000000'
+            . ' https://test.invalid/path?token=fixture-value ' . str_repeat('diagnostic', 12)
+            . ' {"config":{"password":"fixture-value"}} [stacktrace] (Connection: test)';
+        $this->assertSame($message, LogSanitizer::text($message));
+        $pem = "-----BEGIN PRIVATE KEY-----\nfixture-only\n-----END PRIVATE KEY-----";
+        $this->assertSame($pem, LogSanitizer::text($pem));
+        $this->assertSame("错误\n\t下一行", LogSanitizer::text("\x1b[31m错误\x1b[0m\x00\n\t下一行"));
+        $this->assertSame(str_repeat('字', 4096), LogSanitizer::text(str_repeat('字', 5000)));
     }
     public function test_password_change_records_result_and_preserves_password_policy(): void
     {

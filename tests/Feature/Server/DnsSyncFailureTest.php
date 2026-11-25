@@ -28,7 +28,7 @@ class DnsSyncFailureTest extends TestCase
             'gateway_port' => 0, 'backend_port' => 0, 'protocol' => 'vless', 'template_node_id' => 0, 'template_config' => []]);
     }
 
-    public function test_failures_keep_pool_attribution_and_redact_credentials_and_query_values(): void
+    public function test_failures_keep_pool_attribution_and_query_diagnostics(): void
     {
         $records = [];
         Log::shouldReceive('log')->andReturnUsing(function ($level, $message, $context) use (&$records) {
@@ -53,8 +53,7 @@ class DnsSyncFailureTest extends TestCase
             $this->assertArrayHasKey('sql_state', $context);
             $this->assertNotEmpty($context['file']);
         }
-        $text = json_encode($records);
-        foreach (['private_table', 'private-value', 'update '] as $secret) $this->assertStringNotContainsString($secret, $text);
+        foreach ($records as $record) $this->assertSame($failure->getMessage(), $record[2]['error']);
     }
 
     public function test_lock_contention_is_identified_and_only_success_marks_recovery(): void

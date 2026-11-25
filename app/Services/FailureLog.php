@@ -9,7 +9,7 @@ use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Throwable;
 
-/** 已处理异常的诊断出口；不保存请求、SQL 参数、堆栈参数或异常对象。 */
+/** 已处理异常的诊断出口；保留异常正文，不额外采集请求或堆栈参数。 */
 class FailureLog
 {
     private static array $last = [];
@@ -36,8 +36,7 @@ class FailureLog
             }
             $context = $safe;
             $context['exception_class'] = get_class($error);
-            // 数据库原始错误正文也可能包含冲突字段值；只保留状态码与驱动码。
-            $context['error'] = $error instanceof QueryException ? 'Database query failed' : LogSanitizer::text($error->getMessage());
+            $context['error'] = LogSanitizer::text($error->getMessage());
             if ($error instanceof QueryException) {
                 $context['sql_state'] = $error->errorInfo[0] ?? (string) $error->getCode();
                 $context['driver_code'] = $error->errorInfo[1] ?? null;

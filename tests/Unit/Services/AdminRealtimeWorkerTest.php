@@ -19,7 +19,7 @@ class AdminRealtimeWorkerTest extends TestCase
         \Illuminate\Support\Facades\Log::shouldReceive('log')->once()->withArgs(function ($level, $message, $context): bool {
             $this->assertSame('warning', $level);
             $this->assertStringContainsString('snapshot failed', $context['error']);
-            $this->assertStringNotContainsString('test-secret', $context['error']);
+            $this->assertSame('snapshot failed token=test-secret', $context['error']);
             return true;
         })->andThrow(new \RuntimeException('disk failed'));
         $worker = new AdminRealtimeWorker($snapshots, \Mockery::mock(RealtimeTicketService::class));

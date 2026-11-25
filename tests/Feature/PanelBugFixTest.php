@@ -376,15 +376,15 @@ class PanelBugFixTest extends TestCase
     }
 
     #[DataProvider('authorizationText')]
-    public function test_agent_logs_redact_full_authorization(string $text, string $secret): void
+    public function test_agent_logs_preserve_full_authorization(string $text, string $secret): void
     {
         $machine = $this->machine();
         app(AgentLog::class)->accept(null, $machine, ['batch_id' => str_repeat('a', 32), 'records' => [[
             'source' => 'agent', 'level' => 'error', 'message' => $text, 'occurred_at' => now()->timestamp,
         ]]]);
         $result = app(ManagementLogQuery::class)->fetch(Request::create('/test', 'GET'), 'agent');
-        $this->assertStringNotContainsString($secret, $result['list'][0]['message']);
-        $this->assertStringNotContainsString($secret, DB::table('v2_agent_log')->value('message'));
+        $this->assertSame($text, $result['list'][0]['message']);
+        $this->assertSame($text, DB::table('v2_agent_log')->value('message'));
     }
 
     public static function authorizationText(): array

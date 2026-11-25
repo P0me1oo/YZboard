@@ -27,7 +27,7 @@ class FailureLoggingTest extends TestCase
         (new \ReflectionProperty(FailureLog::class, 'last'))->setValue(null, []);
     }
 
-    public function test_handled_failures_keep_diagnostics_and_remove_credentials_and_query_data(): void
+    public function test_handled_failures_keep_original_errors_and_query_diagnostics(): void
     {
         $records = [];
         Log::shouldReceive('log')->andReturnUsing(function ($level, $message, $context) use (&$records) {
@@ -43,10 +43,9 @@ class FailureLoggingTest extends TestCase
         $this->assertSame(\RuntimeException::class, $records[0][2]['exception_class']);
         $this->assertArrayHasKey('file', $records[0][2]);
         $this->assertArrayHasKey('line', $records[0][2]);
-        $text = json_encode($records);
-        foreach (['test-secret', 'secret.example', 'secret-body', 'secret-value', 'secret-table'] as $secret) {
-            $this->assertStringNotContainsString($secret, $text);
-        }
+        $this->assertSame($failure->getMessage(), $records[0][2]['error']);
+        $this->assertSame($query->getMessage(), $records[1][2]['error']);
+        $this->assertArrayNotHasKey('request', $records[0][2]);
         $this->assertArrayHasKey('sql_state', $records[1][2]);
     }
 

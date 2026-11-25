@@ -1,0 +1,24 @@
+{
+  "source_commit": "c3a5dcd793ca410efffc1a7e9ba49360ffa3a529",
+  "workflow": "https://github.com/P0me1oo/YZboard/actions/runs/45602583261",
+  "php_requested": "8.2.35",
+  "php_actual": "8.2.36",
+  "sqlite": {
+    "total": 1981,
+    "assertions": 36428,
+    "skipped": 12,
+    "failures": 0
+  },
+  "mariadb": {
+    "version": "11.4.8",
+    "total": 1981,
+    "assertions": 36442,
+    "skipped": 0,
+    "failures": 0
+  },
+  "admin_resources": {
+    "passed": 5,
+    "failed": 0
+  },
+  "test_fixture_correction": "PHP 8.2 treats 2001:db8 documentation addresses as reserved. Mock reports now use public-format IPv6; no network requests or production behavior changes."
+}

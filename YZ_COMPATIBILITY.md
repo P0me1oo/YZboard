@@ -1,6 +1,6 @@
 # YZboard 兼容矩阵
 
-面板 **2.28.0** / Dash **0.110.0** / Agent **v2.47.0** 为本地开发版本，未发布、未部署。新增按中转绑定核对完整前置池双栈出口并限制落地端口；无数据库迁移或核心依赖升级。范围见[说明](docs/relay-firewall.md)，验证见[记录](docs/relay-firewall-validation.md)。
+面板 **2.28.0** / Dash **0.110.0** / Agent **v2.48.0** 已正式发布，未部署、未升级运行节点。固定来源与附件见[发布记录](docs/release-2.28.0.md)。新增按中转绑定核对完整前置池双栈出口并限制落地端口；无数据库迁移或核心依赖升级。范围见[说明](docs/relay-firewall.md)，验证见[记录](docs/relay-firewall-validation.md)。
 
 面板 **2.26.0** / Dash **0.108.0** 已发布并部署 Solid-US LA。用户列表在邮箱下方直接显示备注，支持桌面和手机展开查看；沿用已有接口，无数据库迁移、依赖或 Agent 更新。使用见[用户管理](docs/user-management.md#列表备注)，固定来源与核验见[发布](docs/release-2.26.0.md)和[部署](docs/deployment-2.26.0.md)。
 

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Jobs\ProcessNodeReportBatch;
 use App\Jobs\StatServerJob;
 use Illuminate\Foundation\Testing\DatabaseTruncation;
+use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -18,6 +19,13 @@ class TrafficHeartbeatConcurrencyTest extends TestCase
     protected function beforeTruncatingDatabase(): void
     {
         if (!defined('YZ_TEST_MARIADB')) $this->markTestSkipped('需要专用 MariaDB 和真实提交');
+    }
+
+    public static function tearDownAfterClass(): void
+    {
+        // 本类真实提交的夹具不能成为后续 RefreshDatabase 测试的基线。
+        RefreshDatabaseState::$migrated = false;
+        parent::tearDownAfterClass();
     }
 
     public static function jobs(): array

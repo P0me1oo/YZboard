@@ -1,0 +1,26 @@
+{
+  "version": "2.30.2",
+  "source": "293ccc66e0e71edce1ce773e2df4ee4904fe6a99",
+  "release": "https://github.com/P0me1oo/YZboard/releases/tag/v2.30.2",
+  "draft": false,
+  "prerelease": false,
+  "assets": [
+    {
+      "name": "release.json",
+      "size": 294,
+      "url": "https://github.com/P0me1oo/YZboard/releases/download/v2.30.2/release.json"
+    },
+    {
+      "name": "SHA256SUMS",
+      "size": 167,
+      "url": "https://github.com/P0me1oo/YZboard/releases/download/v2.30.2/SHA256SUMS"
+    },
+    {
+      "name": "yzboard-2.30.2.tar.gz",
+      "size": 167721144,
+      "url": "https://github.com/P0me1oo/YZboard/releases/download/v2.30.2/yzboard-2.30.2.tar.gz"
+    }
+  ],
+  "production_download_verified": true,
+  "source_members_verified": 1764
+}

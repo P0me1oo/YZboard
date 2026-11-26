@@ -1,0 +1,101 @@
+{
+  "conclusion": "success",
+  "headSha": "293ccc66e0e71edce1ce773e2df4ee4904fe6a99",
+  "jobs": [
+    {
+      "completedAt": "2026-11-26T06:52:01Z",
+      "conclusion": "success",
+      "databaseId": 139741845279,
+      "name": "SQLite、MariaDB 11.4 与管理端资源",
+      "startedAt": "2026-11-26T06:46:38Z",
+      "status": "completed",
+      "steps": [
+        {
+          "conclusion": "success",
+          "name": "Set up job",
+          "number": 1,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Initialize containers",
+          "number": 2,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "检出待验证源码",
+          "number": 3,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "配置与生产镜像一致的 PHP 版本",
+          "number": 4,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "安装测试依赖",
+          "number": 5,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "SQLite 完整回归",
+          "number": 6,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "配置 MariaDB 并发测试前提",
+          "number": 7,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "MariaDB 严格分组完整回归",
+          "number": 8,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "配置管理端测试环境",
+          "number": 9,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "验证管理端产物",
+          "number": 10,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post 配置管理端测试环境",
+          "number": 18,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post 检出待验证源码",
+          "number": 19,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Stop containers",
+          "number": 20,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Complete job",
+          "number": 21,
+          "status": "completed"
+        }
+      ],
+      "url": "https://github.com/P0me1oo/YZboard/actions/runs/45770541893/job/139741845279"
+    }
+  ]
+}

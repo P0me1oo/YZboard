@@ -22,6 +22,9 @@ class FailureLog
         // 内存限频不依赖 Redis/数据库，依赖故障时仍可用；常驻进程最多保留 256 项。
         $key = $operation . '|' . $level . '|' . get_class($error) . '|'
             . ($context['node_id'] ?? $context['machine_id'] ?? $context['pool_id'] ?? '');
+        if ($error instanceof \App\Exceptions\LiteReadException) {
+            $key .= '|' . ($error->diagnostics()['rpc_method'] ?? '') . '|' . ($error->diagnostics()['failure_kind'] ?? '');
+        }
         $now = microtime(true);
         if ($now - (self::$last[$key] ?? 0) < 60) return;
         if (count(self::$last) >= 256) array_shift(self::$last);
@@ -35,6 +38,7 @@ class FailureLog
                 $safe['event'] = $context['event'];
             }
             $context = $safe;
+            if ($error instanceof \App\Exceptions\LiteReadException) $context += $error->diagnostics();
             $context['exception_class'] = get_class($error);
             $context['error'] = LogSanitizer::text($error->getMessage());
             if ($error instanceof QueryException) {

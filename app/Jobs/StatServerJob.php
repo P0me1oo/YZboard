@@ -67,6 +67,9 @@ class StatServerJob implements ShouldQueue
 
         try {
             DB::transaction(function () use ($u, $d, $recordAt): void {
+                if ($this->recordType === 'd' && $this->proxySnapshot !== null) {
+                    app(\App\Services\ProxyTrafficRecorder::class)->lockMachines($this->proxySnapshot, $this->data, []);
+                }
                 $this->processServerStat($u, $d, $recordAt);
                 $this->updateServerTraffic($u, $d);
                 if ($this->recordType === 'd') {

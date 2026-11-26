@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Exceptions\ApiException;
+use App\Exceptions\LiteReadException;
 use App\Models\LiteConnection;
 use Illuminate\Support\Facades\Http;
 use Symfony\Component\HttpFoundation\IpUtils;
@@ -53,24 +54,78 @@ class LiteClient
         if (!in_array($method, ['admin:listClients', 'common:getNodes', 'common:getNodesLatestStatus', 'common:getRecords'], true)) {
             throw new \LogicException('Unsupported Lite read');
         }
+        $started = hrtime(true);
+        $details = ['rpc_method' => $method, 'failure_kind' => 'configuration'];
         try {
             $url = $this->normalizeUrl($connection->url);
             $host = parse_url($url, PHP_URL_HOST);
             $port = parse_url($url, PHP_URL_PORT) ?: 443;
             $ips = $this->resolve($host);
             $ip = str_contains($ips[0], ':') ? '[' . $ips[0] . ']' : $ips[0];
+            $details['failure_kind'] = 'transport';
             $response = Http::withToken($connection->api_key)->acceptJson()->connectTimeout(3)->timeout(10)
                 ->withOptions(['allow_redirects' => false, 'proxy' => '',
+                    'on_stats' => static function (\GuzzleHttp\TransferStats $stats) use (&$details): void {
+                        $data = $stats->getHandlerStats();
+                        foreach (['namelookup_time' => 'dns_ms', 'connect_time' => 'connect_at_ms',
+                            'appconnect_time' => 'tls_at_ms', 'starttransfer_time' => 'first_byte_at_ms'] as $from => $to) {
+                            if (isset($data[$from]) && is_numeric($data[$from])) $details[$to] = round(max(0, (float) $data[$from]) * 1000, 3);
+                        }
+                        if (is_int($stats->getHandlerErrorData())) $details['curl_errno'] = $stats->getHandlerErrorData();
+                    },
                     'curl' => [CURLOPT_RESOLVE => ["{$host}:{$port}:{$ip}"]]])
                 ->post($url . '/api/rpc2', ['jsonrpc' => '2.0', 'id' => 1, 'method' => $method, 'params' => (object) $params]);
-            if (!$response->successful() || strlen($response->body()) > 8 * 1024 * 1024) throw new \RuntimeException();
+            $details['http_status'] = $response->status();
+            $details['failure_kind'] = 'http';
+            if (!$response->successful()) throw new \RuntimeException();
+            $details['failure_kind'] = 'response_size';
+            if (strlen($response->body()) > 8 * 1024 * 1024) throw new \RuntimeException();
+            $details['failure_kind'] = 'protocol';
             $body = $response->json();
             if (!is_array($body) || ($body['jsonrpc'] ?? null) !== '2.0' || ($body['id'] ?? null) !== 1
-                || isset($body['error']) || !is_array($body['result'] ?? null)) throw new \RuntimeException();
+                || (isset($body['error']) && !is_array($body['error']))) throw new \RuntimeException();
+            if (isset($body['error'])) {
+                $details['failure_kind'] = 'rpc';
+                if (is_int($body['error']['code'] ?? null)) $details['rpc_code'] = $body['error']['code'];
+                if (is_string($body['error']['message'] ?? null)) {
+                    $details['rpc_reason'] = $this->safeReason($body['error']['message'], $connection);
+                }
+                throw new \RuntimeException();
+            }
+            if (!is_array($body['result'] ?? null)) throw new \RuntimeException();
             return $body['result'];
-        } catch (\Throwable) {
-            // 不回传上游响应、请求 URL、异常链或认证头。
-            throw new ApiException('Lite 读取失败，请检查站点地址、API 密钥、版本和网络。', 502);
+        } catch (\Throwable $error) {
+            $details['elapsed_ms'] = round((hrtime(true) - $started) / 1e6, 3);
+            $details['cause_class'] = get_class($error);
+            if ($details['failure_kind'] === 'transport') {
+                $cause = $error;
+                for ($depth = 0; $cause !== null && $depth < 8; $depth++, $cause = $cause->getPrevious()) {
+                    if ($cause instanceof \GuzzleHttp\Exception\ConnectException || $cause instanceof \GuzzleHttp\Exception\RequestException) {
+                        $handler = $cause->getHandlerContext();
+                        if (is_int($handler['errno'] ?? null)) $details['curl_errno'] = $handler['errno'];
+                    }
+                }
+                $details['transport_reason'] = match ($details['curl_errno'] ?? null) {
+                    5, 6 => 'dns_failed', 7 => 'connect_failed', 28 => 'timeout',
+                    35, 51, 58, 60, 77, 83 => 'tls_failed', default => 'request_failed',
+                };
+            } elseif ($details['failure_kind'] === 'configuration') {
+                $details['configuration_reason'] = $this->safeReason($error->getMessage(), $connection);
+            }
+            $failure = new LiteReadException($details);
+            FailureLog::record('Lite 上游读取失败', $failure);
+            throw $failure;
         }
+    }
+
+    private function safeReason(string $message, LiteConnection $connection): string
+    {
+        foreach ([$connection->api_key, $connection->url] as $secret) {
+            if (is_string($secret) && $secret !== '') $message = str_replace($secret, '[已隐藏]', $message);
+        }
+        $message = preg_replace('~https?://[^\s<>"\x27]+~i', '[地址已隐藏]', $message);
+        $message = preg_replace('/\b(?:Bearer|Basic)\s+[^\s,;]+/i', '[认证已隐藏]', $message);
+        $message = preg_replace('/\b(?:password|token|secret|authorization|cookie|api[_-]?key)\b["\x27\s]*[:=]["\x27\s]*[^\s,;"\x27}]+/i', '[凭据已隐藏]', $message);
+        return mb_substr(LogSanitizer::text($message), 0, 512);
     }
 }

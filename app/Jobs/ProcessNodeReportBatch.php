@@ -55,6 +55,11 @@ class ProcessNodeReportBatch implements ShouldQueue
                 return;
             }
 
+            app(\App\Services\ProxyTrafficRecorder::class)->lockMachines(
+                (array) ($batch->server_snapshot['proxy_traffic'] ?? []),
+                (array) $batch->traffic,
+                (array) $batch->relay_traffic,
+            );
             $userIds = $this->applyUserTraffic($batch);
             $this->applyRelayTraffic($batch);
             app(\App\Services\UserRouteTraffic::class)->recordBatch($batch);

@@ -12,6 +12,17 @@ class ProxyTrafficRecorder
 {
     public const TABLE = 'v2_stat_proxy_traffic';
 
+    /** 在事务建立读取快照前锁定机器，避免心跳使后续累计写入触发 MariaDB 1020。 */
+    public function lockMachines(array $snapshot, array $traffic, array $relayTraffic): void
+    {
+        if (($snapshot['version'] ?? null) !== 1) return;
+        foreach ($this->machineUsage($snapshot, $traffic, $relayTraffic) as $id => [$u, $d]) {
+            if ($u === 0 && $d === 0) continue;
+            // machineUsage 已按编号排序；逐主键取锁，不依赖查询执行计划的加锁顺序。
+            DB::table('v2_server_machine')->where('id', $id)->lockForUpdate()->first(['id']);
+        }
+    }
+
     /** 入口总量已包含中转，同机只记一次；跨机为实际承载的落地另记。 */
     public function machineUsage(array $snapshot, array $traffic, array $relayTraffic): array
     {

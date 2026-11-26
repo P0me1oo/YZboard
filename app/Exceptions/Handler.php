@@ -46,6 +46,8 @@ class Handler extends ExceptionHandler
     {
         // 设备协调已记录带节点归属的锁竞争诊断，不再重复记录成系统故障。
         if ($exception instanceof DeviceCoordinationBusy) return;
+        // Lite 接入层也供定时任务使用，已在失败处统一记录完整诊断。
+        if ($exception instanceof LiteReadException) return;
         // 参数校验和业务拒绝仍保持安静；显式服务端失败不能被 ApiException/HTTP 排除规则吞掉。
         $code = $exception instanceof ApiException ? (int) substr((string) $exception->getCode(), 0, 3)
             : ($this->isHttpException($exception) ? $exception->getStatusCode() : 0);

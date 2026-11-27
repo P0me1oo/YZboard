@@ -533,7 +533,7 @@ class NodeWorker
             // Machine-level events (e.g., sync.nodes)
             $machineId = $payload['machine_id'] ?? null;
             if ($machineId && $event) {
-                if ($event === 'auth.revoke') {
+                if ($event === 'auth.revoke' || $event === 'machine.deleted') {
                     if ($connection = NodeRegistry::getMachine((int) $machineId)) NodeConnectionAuth::check($connection);
                     return;
                 }

@@ -158,6 +158,7 @@ $router->post('/realtime/ticket', [\App\Http\Controllers\V2\Admin\RealtimeContro
                 $router->post('/update', [ManageController::class, 'update']);
                 $router->post('/save', [ManageController::class, 'save']);
                 $router->post('/drop', [ManageController::class, 'drop']);
+                $router->post('/deletionPreview', [ManageController::class, 'deletionPreview']);
                 $router->post('/copy', [ManageController::class, 'copy']);
                 $router->post('/sort', [ManageController::class, 'sort']);
                 $router->post('/batchDelete', [ManageController::class, 'batchDelete']);

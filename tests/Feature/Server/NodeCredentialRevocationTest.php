@@ -24,6 +24,7 @@ class NodeCredentialRevocationTest extends TestCase
     private NodeWorker $worker;
     private array $frames = [];
     private int $closed = 0;
+    private array $closeFrames = [];
 
     protected function setUp(): void
     {
@@ -38,7 +39,7 @@ class NodeCredentialRevocationTest extends TestCase
         $this->conn->machineNodeIds = [(int) $this->node->id];
         $this->conn->realtime = true;
         $this->conn->shouldReceive('send')->andReturnUsing(function ($message) { $this->frames[] = json_decode($message, true); return true; });
-        $this->conn->shouldReceive('close')->andReturnUsing(function () { $this->closed++; });
+        $this->conn->shouldReceive('close')->andReturnUsing(function ($message = null) { $this->closed++; $this->closeFrames[] = json_decode($message ?? 'null', true); });
         NodeConnectionAuth::bind($this->conn, 'old-test-token');
         NodeRegistry::addMachine((int) $this->machine->id, $this->conn);
         NodeRegistry::add((int) $this->node->id, $this->conn);
@@ -64,6 +65,19 @@ class NodeCredentialRevocationTest extends TestCase
         $this->assertSame([], $this->frames);
         $this->assertFalse(NodeRegistry::send((int) $this->node->id, 'sync.config', ['config' => []]));
         $this->assertGreaterThan(0, $this->closed);
+    }
+
+    public function test_deleted_socket_receives_one_identity_hint_and_late_revocation_cannot_notify_replacement(): void
+    {
+        \App\Services\MachineBindingService::delete($this->machine->id);
+        $this->worker->revalidateConnections();
+        $this->worker->revalidateConnections();
+        $this->assertSame([['event' => 'machine.deleted', 'data' => ['machine_id' => $this->machine->id]]], $this->closeFrames);
+        $this->assertSame([], $this->frames);
+        $this->machine->newQuery()->insert(['id' => $this->machine->id, 'name' => 'restored', 'token' => 'replacement', 'is_active' => true]);
+        NodeConnectionAuth::bind($this->conn, 'replacement');
+        $this->assertTrue(NodeConnectionAuth::check($this->conn));
+        $this->assertCount(1, $this->closeFrames);
     }
 
     public function test_periodic_check_closes_idle_revoked_session_without_redis_notification(): void

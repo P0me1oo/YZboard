@@ -59,6 +59,7 @@ class MachineAgentService
     {
         return DB::transaction(function () use ($authenticated, $report, $ip) {
             $machine = ServerMachine::whereKey($authenticated->id)->lockForUpdate()->firstOrFail();
+            abort_unless($machine->is_active && hash_equals($machine->token, $authenticated->token), 403);
             self::expire($machine);
             $ip = self::publicIp($ip);
             $previous = $machine->agent_runtime ?? [];

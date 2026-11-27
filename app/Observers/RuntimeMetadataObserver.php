@@ -27,7 +27,7 @@ class RuntimeMetadataObserver
         NodeRuntimeMetadata::invalidate($model::class);
         if ($model instanceof ServerMachine) {
             $id = (int) $model->id;
-            $model->getConnection()->afterCommit(fn () => NodeSyncService::pushMachine($id, 'auth.revoke', []));
+            $model->getConnection()->afterCommit(fn () => NodeSyncService::pushMachine($id, 'machine.deleted', []));
         }
     }
 }

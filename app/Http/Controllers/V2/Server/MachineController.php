@@ -15,18 +15,6 @@ use Illuminate\Http\Request;
  */
 class MachineController extends Controller
 {
-    public function bindingStatus(Request $request): JsonResponse
-    {
-        $data = $request->validate([
-            'machine_id' => 'required|integer|min:1',
-            'token' => 'required|string|max:256',
-            'nonce' => ['required', 'string', 'regex:/\A[a-f0-9]{64}\z/'],
-        ]);
-        return response()->json(['data' => \App\Services\MachineBindingService::status(
-            (int) $data['machine_id'], $data['token'], $data['nonce']
-        )])->header('Cache-Control', 'no-store')->header('Pragma', 'no-cache');
-    }
-
     public function traffic(Request $request): JsonResponse
     {
         $machine = $this->authenticateMachine($request, true);
@@ -112,7 +100,8 @@ class MachineController extends Controller
             'reality_scan.results.*.http.status' => 'required_with:reality_scan.results.*.http|in:received,timeout,failed,not_checked',
             'reality_scan.results.*.http.status_code' => 'required_if:reality_scan.results.*.http.status,received|prohibited_unless:reality_scan.results.*.http.status,received|integer|min:100|max:599',
         ]);
-        $machine = $this->authenticateMachine($request, recordHeartbeat: false);
+        $machine = $this->authenticateHeartbeat($request, recordHeartbeat: false);
+        if ($machine instanceof JsonResponse) return $machine;
         $authenticatedAt = now()->timestamp;
         try {
             // 控制上报本来就会保存机器行，心跳一起提交，避免先做一次独立更新。
@@ -146,7 +135,8 @@ class MachineController extends Controller
      */
     public function nodes(Request $request): JsonResponse
     {
-        $machine = $this->authenticateMachine($request);
+        $machine = $this->authenticateHeartbeat($request);
+        if ($machine instanceof JsonResponse) return $machine;
 
         $nodes = ServerService::getMachineNodes($machine)
             ->map(fn($node) => [
@@ -261,7 +251,24 @@ class MachineController extends Controller
             ->header('Cache-Control', 'no-store')->header('Pragma', 'no-cache');
     }
 
+    private function authenticateHeartbeat(Request $request, bool $recordHeartbeat = true): ServerMachine|JsonResponse
+    {
+        $request->validate(['nonce' => ['sometimes', 'required', 'string', 'regex:/\A[a-f0-9]{64}\z/']]);
+        $machine = $this->findAuthenticatedMachine($request, false, $recordHeartbeat);
+        if ($machine) return $machine;
+        abort_unless($request->filled('nonce') && in_array($request->input('node_id', 0), [0, '0'], true), 403);
+        $proof = \App\Services\MachineBindingService::deletionProof(
+            $request->integer('machine_id'), $request->input('token'), $request->input('nonce')
+        );
+        return response()->json(['binding_deletion' => $proof])->header('Cache-Control', 'no-store');
+    }
+
     private function authenticateMachine(Request $request, bool $allowDisabled = false, bool $recordHeartbeat = true): ServerMachine
+    {
+        return $this->findAuthenticatedMachine($request, $allowDisabled, $recordHeartbeat) ?? abort(403, 'Machine not found or disabled');
+    }
+
+    private function findAuthenticatedMachine(Request $request, bool $allowDisabled, bool $recordHeartbeat): ?ServerMachine
     {
         $request->validate([
             'machine_id' => 'required|integer|min:1',
@@ -270,7 +277,8 @@ class MachineController extends Controller
 
         $machine = ServerMachine::find($request->input('machine_id'));
 
-        if (!$machine || !hash_equals((string) $machine->token, $request->input('token')) || (!$machine->is_active && !$allowDisabled)) {
+        if (!$machine) return null;
+        if (!hash_equals((string) $machine->token, $request->input('token')) || (!$machine->is_active && !$allowDisabled)) {
             abort(403, 'Machine not found or disabled');
         }
 

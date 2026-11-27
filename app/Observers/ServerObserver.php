@@ -13,6 +13,7 @@ class ServerObserver
      */
     private const RELAY_ENTRY_FIELDS = [
         'relay_entry_id',
+        'parent_id',
         'relay_pool_id',
         'type',
         'host',
@@ -53,6 +54,7 @@ class ServerObserver
             'protocol_settings',
             'type',
             'relay_entry_id',
+            'parent_id',
             'relay_pool_id',
             'route_ids',
             'custom_outbounds',
@@ -66,7 +68,7 @@ class ServerObserver
             NodeSyncService::notifyConfigUpdated($server->id);
         }
 
-        if ($server->wasChanged(['machine_id', 'enabled', 'kernel_type'])) {
+        if ($server->wasChanged(['machine_id', 'enabled', 'kernel_type', 'parent_id'])) {
             $this->notifyMachineChange(
                 $server->machine_id,
                 $server->getOriginal('machine_id')

@@ -12,7 +12,7 @@ use App\Services\NodeRealityService;
 use App\Services\ServerPortService;
 use App\Services\ServerRelayService;
 use App\Services\ServerService;
-use App\Services\ServerNameHistory;
+use App\Services\ServerDeletionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -202,34 +202,24 @@ class ManageController extends Controller
         }, 3);
     }
 
-    /**
-     * 删除
-     * @param \Illuminate\Http\Request $request
-     * @return \Illuminate\Http\JsonResponse
-     */
+    /** 只预览名称和关联影响，不修改节点或历史记录。 */
+    public function deletionPreview(Request $request, ServerDeletionService $service)
+    {
+        $data = $request->validate(['ids' => 'required|array|min:1|max:1000', 'ids.*' => 'required|integer|min:1']);
+        return $this->success($service->preview(array_values(array_unique(array_map('intval', $data['ids'])))));
+    }
+
     public function drop(Request $request)
     {
-        $request->validate([
-            'id' => 'required|integer',
-        ]);
-        if (\App\Models\BalancerMember::where('source_node_id', $request->id)->exists()) throw ValidationException::withMessages(['id' => '节点被前置池引用，请先移除对应成员']);
-        if (Server::whereKey($request->id)->where('balancer_role', \App\Services\DirectPoolService::ROLE)->exists()) throw ValidationException::withMessages(['id' => '直出订阅线路请在负载池中删除']);
+        $data = $request->validate(['id' => 'required|integer|min:1', 'confirmation' => 'nullable|string|size:64']);
         try {
-            return DB::transaction(function () use ($request) {
-                $server = Server::whereKey($request->id)->lockForUpdate()->first();
-                if (!$server) {
-                    return $this->fail([400202, '服务器不存在']);
-                }
-                ServerNameHistory::remember(collect([$server]));
-                \App\Services\ServerTopologyGuard::deletion([$server->id]);
-                if ($server->delete() === false) {
-                    throw new \RuntimeException('删除失败');
-                }
-                return $this->success(true);
-            }, 3);
+            app(ServerDeletionService::class)->delete([(int) $data['id']], $data['confirmation'] ?? null, true);
+            return $this->success(true);
+        } catch (ValidationException $e) {
+            throw $e;
         } catch (\Exception $e) {
-            Log::error($e);
-            return $this->fail([500, '删除失败']);
+            \App\Services\FailureLog::record('节点删除失败', $e, ['node_id' => (int) $data['id']]);
+            return $this->fail([500, '节点删除未完成，请刷新列表核对后重试']);
         }
     }
 
@@ -240,30 +230,19 @@ class ManageController extends Controller
      */
     public function batchDelete(Request $request)
     {
-        $request->validate([
-            'ids' => 'required|array',
-            'ids.*' => 'integer',
+        $data = $request->validate([
+            'ids' => 'required|array|min:1|max:1000',
+            'ids.*' => 'required|integer|min:1',
+            'confirmation' => 'nullable|string|size:64',
         ]);
-
-        $ids = $request->input('ids');
-        if (\App\Models\BalancerMember::whereIn('source_node_id', $ids)->exists()) throw ValidationException::withMessages(['ids' => '选中的节点被前置池引用，请先移除对应成员']);
-        if (Server::whereIn('id', $ids)->where('balancer_role', \App\Services\DirectPoolService::ROLE)->exists()) throw ValidationException::withMessages(['ids' => '直出订阅线路请在负载池中删除']);
-        if (empty($ids)) {
-            return $this->fail([400, '请选择要删除的节点']);
-        }
-
         try {
-            DB::transaction(function () use ($ids) {
-                $servers = Server::whereIn('id', $ids)->orderBy('id')->lockForUpdate()->get();
-                ServerNameHistory::remember($servers);
-                \App\Services\ServerTopologyGuard::deletion($servers->modelKeys());
-                foreach ($servers as $server) if ($server->delete() === false) throw new \RuntimeException('批量删除失败');
-            }, 3);
-            \App\Services\NodeRuntimeMetadata::invalidate(Server::class);
+            app(ServerDeletionService::class)->delete(array_values(array_unique(array_map('intval', $data['ids']))), $data['confirmation'] ?? null);
             return $this->success(true);
+        } catch (ValidationException $e) {
+            throw $e;
         } catch (\Exception $e) {
-            Log::error($e);
-            return $this->fail([500, '批量删除失败']);
+            \App\Services\FailureLog::record('批量删除节点失败', $e);
+            return $this->fail([500, '批量删除未完成，请刷新列表核对后重试']);
         }
     }
 
@@ -468,30 +447,33 @@ class ManageController extends Controller
      */
     public function copy(Request $request)
     {
-        if (Server::whereKey($request->input('id'))->where('balancer_role', \App\Services\DirectPoolService::ROLE)->exists()) {
-            throw ValidationException::withMessages(['id' => '直出订阅线路请在负载池中管理']);
-        }
-        $server = Server::find($request->input('id'));
-        if (!$server) {
-            return $this->fail([400202, '服务器不存在']);
-        }
+        return DB::transaction(function () use ($request) {
+            if (Server::whereKey($request->input('id'))->where('balancer_role', \App\Services\DirectPoolService::ROLE)->exists()) {
+                throw ValidationException::withMessages(['id' => '直出订阅线路请在负载池中管理']);
+            }
+            $server = Server::whereKey($request->input('id'))->lockForUpdate()->first();
+            if (!$server) {
+                return $this->fail([400202, '服务器不存在']);
+            }
 
-        $copiedServer = $server->replicate();
-        // 副本沿用源节点的绑定服务器和内部端口，默认关闭并隐藏，避免立即向 Node 下发重复监听；
-        // 管理员可自行修改配置或开启，端口重叠由管理列表提醒。显式空开关的独立部署保持空值。
-        if ($server->enabled === null) {
-            $copiedServer->show = false;
-        } else {
-            $copiedServer->setRunning(false);
-        }
-        $copiedServer->code = null;
-        $copiedServer->u = 0;
-        $copiedServer->d = 0;
-        $copiedServer->usage_u = 0;
-        $copiedServer->usage_d = 0;
-        $copiedServer->save();
+            $copiedServer = $server->replicate();
+            // 副本沿用源节点的绑定服务器和内部端口，默认关闭并隐藏，避免立即向 Node 下发重复监听；
+            // 管理员可自行修改配置或开启，端口重叠由管理列表提醒。显式空开关的独立部署保持空值。
+            if ($server->enabled === null) {
+                $copiedServer->show = false;
+            } else {
+                $copiedServer->setRunning(false);
+            }
+            $copiedServer->code = null;
+            $copiedServer->u = 0;
+            $copiedServer->d = 0;
+            $copiedServer->usage_u = 0;
+            $copiedServer->usage_d = 0;
+            \App\Services\ServerTopologyGuard::parent($copiedServer);
+            $copiedServer->save();
 
-        return $this->success(true);
+            return $this->success(true);
+        }, 3);
     }
 
     /**

@@ -1,0 +1,100 @@
+{
+  "server": "Solid-US LA",
+  "version": "2.29.0",
+  "admin_version": "0.111.0",
+  "source_commit": "9af18473e67d095b3b31fb8d5e140b579a3a8fba",
+  "previous_version": "2.26.0",
+  "previous_source_commit": "214b3d1a2b40c5f81c51150365175b97e8117aed",
+  "switch_seconds": 7.54,
+  "runtime_files_verified": 1247,
+  "changed_files": 36,
+  "migration_count_before": 152,
+  "migration_count_after": 153,
+  "database_version": "12.3.3-MariaDB-deb13",
+  "services": {
+    "yzboard-web": "active",
+    "yzboard-horizon": "active",
+    "yzboard-websocket": "active",
+    "nginx": "active",
+    "mariadb": "active",
+    "redis-server": "active"
+  },
+  "service_restarts": 0,
+  "http": {
+    "home": 200,
+    "admin": 200,
+    "public_config": 200,
+    "websocket_unauthenticated": 401,
+    "main_script": 200,
+    "main_script_gzip": 200,
+    "css": 200,
+    "entry_script": 200
+  },
+  "main_script_sha256": "b4d286344c6cc9fbeeff4f615779c887bcbcf97fc60c9346cd7059686c12b833",
+  "persistent_unchanged": true,
+  "failed_jobs_before": 714,
+  "failed_jobs_after": 714,
+  "error_log_matches": 0,
+  "agents": {
+    "target_version": "v2.50.0",
+    "total": 49,
+    "succeeded": 45,
+    "front_succeeded": 19,
+    "pending": 0,
+    "not_upgraded": [
+      {
+        "id": 26,
+        "name": "Panstar-日本",
+        "version": "v2.44.0",
+        "reason": "offline"
+      },
+      {
+        "id": 52,
+        "name": "Aliyun-香港¹",
+        "version": "v2.41.0",
+        "reason": "offline"
+      },
+      {
+        "id": 102,
+        "name": "AWS-日本",
+        "version": "v2.38.0",
+        "reason": "offline"
+      },
+      {
+        "id": 129,
+        "name": "LazyCat-美国",
+        "version": "v2.41.0",
+        "reason": "unsupported"
+      }
+    ]
+  },
+  "health": {
+    "active_machines": 49,
+    "recent_machine_heartbeats": 46,
+    "fresh_runtime_nodes": 102,
+    "failed_runtime_nodes": 0,
+    "ok": 98,
+    "failed": 3,
+    "unchecked": 1
+  },
+  "firewall_recovery": {
+    "servers": 4,
+    "rules": 14,
+    "node_ids": [
+      199,
+      428,
+      417,
+      424,
+      538
+    ],
+    "sources_limited": true,
+    "tag_prefix": "yz229-recovery-node",
+    "new_route_failures_after_recovery": []
+  },
+  "ddns_errors": 0,
+  "pool_dns_errors": 0,
+  "landing_ddns_enabled": 0,
+  "temporary_admin_tokens_remaining": 0,
+  "rollback_directory": "/root/yzboard-deployments/2.26.0",
+  "deployment_directory": "/root/yzboard-deployments/2.29.0"
+}

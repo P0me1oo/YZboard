@@ -21,11 +21,11 @@ class MachineBindingDeletionTest extends TestCase
         return ServerMachine::create(['name' => 'binding-test', 'token' => Str::random(32), 'is_active' => true]);
     }
 
-    private function bindingStatus(ServerMachine $machine, ?string $token = null, ?string $nonce = null)
+    private function heartbeat(ServerMachine $machine, ?string $token = null, ?string $nonce = null, string $route = 'control')
     {
-        return $this->postJson('/api/v2/server/machine/binding-status', [
+        return $this->postJson('/api/v2/server/machine/' . $route, [
             'machine_id' => $machine->id, 'token' => $token ?? $machine->token,
-            'nonce' => $nonce ?? bin2hex(random_bytes(32)),
+            'nonce' => $nonce ?? bin2hex(random_bytes(32)), 'version' => 'test', 'boot_id' => 'test-boot', 'manageable' => false,
         ]);
     }
 
@@ -41,34 +41,35 @@ class MachineBindingDeletionTest extends TestCase
         $this->assertSame(hash('sha256', $machine->token), $record->token_hash);
         $this->assertStringNotContainsString($machine->token, json_encode($record));
 
-        foreach ([bin2hex(random_bytes(32)), bin2hex(random_bytes(32))] as $nonce) {
-            $response = $this->bindingStatus($machine, nonce: $nonce)->assertOk()
+        foreach (['control', 'control', 'nodes'] as $route) {
+            $nonce = bin2hex(random_bytes(32));
+            $response = $this->heartbeat($machine, nonce: $nonce, route: $route)->assertOk()
                 ->assertHeader('Cache-Control', 'no-store, private')
-                ->assertJsonPath('data.state', 'deleted')->assertJsonPath('data.version', 1)
-                ->assertJsonPath('data.machine_id', $machine->id)->assertJsonPath('data.nonce', $nonce);
+                ->assertJsonPath('binding_deletion.state', 'deleted')->assertJsonPath('binding_deletion.version', 1)
+                ->assertJsonPath('binding_deletion.machine_id', $machine->id)->assertJsonPath('binding_deletion.nonce', $nonce);
             $expected = hash_hmac('sha256', "yz-agent-machine-deleted-v1\n{$machine->id}\n{$nonce}", hash('sha256', $machine->token, true));
-            $this->assertSame($expected, $response->json('data.proof'));
+            $this->assertSame($expected, $response->json('binding_deletion.proof'));
         }
-        $this->bindingStatus($machine, Str::random(32))->assertForbidden();
+        $this->heartbeat($machine, Str::random(32))->assertForbidden();
     }
 
     public function test_disabled_reset_token_and_unknown_id_never_return_deletion_proof(): void
     {
         $machine = $this->machine();
-        $this->bindingStatus($machine)->assertOk()->assertJsonPath('data.state', 'active')->assertJsonMissingPath('data.proof');
-        $this->assertNull($machine->fresh()->last_seen_at);
+        $this->heartbeat($machine)->assertOk()->assertJsonMissingPath('binding_deletion')->assertJsonMissingPath('binding_deletion.proof');
+        $this->assertNotNull($machine->fresh()->last_seen_at);
         $machine->update(['is_active' => false]);
-        $this->bindingStatus($machine)->assertOk()->assertJsonPath('data.state', 'disabled')->assertJsonMissingPath('data.proof');
+        $this->heartbeat($machine)->assertForbidden()->assertJsonMissingPath('binding_deletion.proof');
         $oldToken = $machine->token;
         $machine->update(['token' => Str::random(32)]);
-        $this->bindingStatus($machine, $oldToken)->assertForbidden();
+        $this->heartbeat($machine, $oldToken)->assertForbidden();
         MachineBindingService::delete($machine->id);
-        $this->bindingStatus($machine, $oldToken)->assertForbidden();
-        $this->bindingStatus($machine)->assertOk()->assertJsonPath('data.state', 'deleted');
+        $this->heartbeat($machine, $oldToken)->assertForbidden();
+        $this->heartbeat($machine)->assertOk()->assertJsonPath('binding_deletion.state', 'deleted');
 
         $oldDeletion = $this->machine();
         $oldDeletion->delete(); // Pre-upgrade deletion without a retained proof.
-        $this->bindingStatus($oldDeletion)->assertForbidden();
+        $this->heartbeat($oldDeletion)->assertForbidden();
     }
 
     public function test_deletion_and_proof_roll_back_together_on_failure(): void
@@ -82,9 +83,9 @@ class MachineBindingDeletionTest extends TestCase
             $this->assertNotNull($machine->fresh());
             $this->assertDatabaseMissing('v2_machine_binding_deletion', ['machine_id' => $machine->id]);
         }
-        $this->bindingStatus($machine)->assertOk()->assertJsonPath('data.state', 'active');
+        $this->heartbeat($machine)->assertOk()->assertJsonMissingPath('binding_deletion');
         MachineBindingService::delete($machine->id);
-        $this->bindingStatus($machine)->assertOk()->assertJsonPath('data.state', 'deleted');
+        $this->heartbeat($machine)->assertOk()->assertJsonPath('binding_deletion.state', 'deleted');
     }
 
     public function test_proof_storage_failure_leaves_the_machine_intact(): void
@@ -104,17 +105,30 @@ class MachineBindingDeletionTest extends TestCase
         $machine = $this->machine();
         $other = $this->machine();
         MachineBindingService::delete($machine->id);
-        $this->bindingStatus($other, $machine->token)->assertForbidden();
+        $this->heartbeat($other, $machine->token)->assertForbidden();
         $replacementToken = Str::random(32);
         DB::table('v2_server_machine')->insert(['id' => $machine->id, 'name' => 'restored-id', 'token' => $replacementToken, 'is_active' => true]);
-        $this->bindingStatus($machine)->assertForbidden();
-        $this->bindingStatus($machine, $replacementToken)->assertOk()->assertJsonPath('data.state', 'active');
+        $this->heartbeat($machine)->assertForbidden();
+        $this->heartbeat($machine, $replacementToken)->assertOk()->assertJsonMissingPath('binding_deletion');
+    }
+
+    public function test_old_agent_heartbeat_keeps_its_normal_response_and_never_receives_a_proof(): void
+    {
+        $machine = $this->machine();
+        $body = ['machine_id' => $machine->id, 'token' => $machine->token,
+            'version' => 'old', 'boot_id' => 'old-boot', 'manageable' => false];
+        $route = '/api/v2/server/machine/control';
+        $this->postJson($route, $body)->assertOk()->assertJsonMissingPath('binding_deletion');
+        MachineBindingService::delete($machine->id);
+        $this->postJson($route, $body)->assertForbidden()->assertJsonMissingPath('binding_deletion');
+        $this->postJson($route, $body + ['node_id' => 2, 'nonce' => bin2hex(random_bytes(32))])->assertForbidden();
+        $this->postJson('/api/v2/server/machine/privacy', $body + ['nonce' => bin2hex(random_bytes(32))])->assertForbidden();
     }
 
     public function test_nonce_and_identity_validation_reject_invalid_requests(): void
     {
         $machine = $this->machine();
-        $this->bindingStatus($machine, nonce: 'old')->assertUnprocessable();
-        $this->postJson('/api/v2/server/machine/binding-status', ['machine_id' => $machine->id])->assertUnprocessable();
+        $this->heartbeat($machine, nonce: 'old')->assertUnprocessable();
+        $this->postJson('/api/v2/server/machine/binding-status', ['machine_id' => $machine->id])->assertNotFound();
     }
 }

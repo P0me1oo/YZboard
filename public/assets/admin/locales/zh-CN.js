@@ -57,6 +57,7 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     "cleanupConfirm": "清理后，使用这些旧域名的客户端将无法连接。确定清理？"
   },
   "balancer": {
+    "missingPrimary": "主线路已删除，请重新配置",
     "otherPool": "成员已用于其他负载池",
     "landing": "直出成员不能绑定落地",
     "createDirectPool": "新建直出负载池",
@@ -2688,6 +2689,25 @@ window.XBOARD_TRANSLATIONS['zh-CN'] = {
     }
   },
   "server": {
+    "deletion": {
+      "title": "删除节点",
+      "description": "将删除 {{count}} 个节点，此操作无法撤销。",
+      "loading": "正在检查关联关系…",
+      "dependents": "以下关联线路将解除引用并停用、隐藏，重新配置后才能启用：",
+      "pools": "以下落地池将同步调整：",
+      "shared": "共享父节点",
+      "relay": "前置入口",
+      "sharedRelay": "共享父节点和前置入口",
+      "primaryDeleted": "清空主线路并停用，保留池记录供重新配置",
+      "poolDisabled": "移除已删成员并停用，重新配置后才能启用",
+      "memberRemoved": "移除已删成员，重新选择可用落地",
+      "cancel": "取消",
+      "confirm": "确认删除",
+      "reload": "刷新删除影响",
+      "changed": "节点或关联关系已变化，请刷新列表或删除影响后重试",
+      "failed": "删除未完成，请刷新删除影响后重试",
+      "refreshFailed": "节点已删除，但列表刷新失败，请刷新页面"
+    },
     "realityScan": {
       "certChain": "证书链",
       "location": "IP 位置",

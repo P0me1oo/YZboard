@@ -57,6 +57,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     "cleanupConfirm": "Clients using these old domains will lose access after cleanup. Continue?"
   },
   "balancer": {
+    "missingPrimary": "Primary route deleted; reconfigure this pool",
     "otherPool": "Member belongs to another pool",
     "landing": "Direct members cannot use a relay landing",
     "createDirectPool": "Create direct pool",
@@ -2683,6 +2684,25 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
     }
   },
   "server": {
+    "deletion": {
+      "title": "Delete nodes",
+      "description": "Delete {{count}} nodes? This cannot be undone.",
+      "loading": "Checking references…",
+      "dependents": "These dependent routes will be unlinked, disabled and hidden until reconfigured:",
+      "pools": "These landing pools will be updated:",
+      "shared": "Shared parent",
+      "relay": "Relay entry",
+      "sharedRelay": "Shared parent and relay entry",
+      "primaryDeleted": "Clear the primary route and disable the pool; keep it for reconfiguration",
+      "poolDisabled": "Remove deleted members and disable the pool until reconfigured",
+      "memberRemoved": "Remove deleted members and select an available landing",
+      "cancel": "Cancel",
+      "confirm": "Delete",
+      "reload": "Refresh deletion impact",
+      "changed": "Nodes or references have changed. Refresh the list or deletion impact and retry.",
+      "failed": "Deletion did not complete. Refresh the deletion impact and retry.",
+      "refreshFailed": "Nodes were deleted, but the list could not be refreshed. Reload the page."
+    },
     "realityScan": {
       "certChain": "Certificate chain",
       "location": "IP location",

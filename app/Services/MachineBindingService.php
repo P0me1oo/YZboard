@@ -19,25 +19,22 @@ class MachineBindingService
             ]);
             Server::where('machine_id', $id)->update(['machine_id' => null]);
             $machine->delete();
-            DB::afterCommit(function () use ($id) {
-                NodeRuntimeMetadata::invalidate(Server::class);
-                NodeSyncService::notifyMachineNodesChanged($id);
-            });
+            NodeRuntimeMetadata::invalidate(Server::class);
         }, 3);
     }
 
-    public static function status(int $id, string $token, string $nonce): array
+    public static function matchesDeletion(int $id, string $hash): bool
+    {
+        $stored = DB::table('v2_machine_binding_deletion')->where('machine_id', $id)
+            ->whereNotExists(fn ($query) => $query->selectRaw('1')->from('v2_server_machine')->where('id', $id))
+            ->value('token_hash');
+        return is_string($stored) && hash_equals($stored, $hash);
+    }
+
+    public static function deletionProof(int $id, string $token, string $nonce): array
     {
         $hash = hash('sha256', $token);
-        $machine = ServerMachine::find($id);
-        if ($machine) {
-            abort_unless(hash_equals(hash('sha256', $machine->token), $hash), 403);
-            return ['version' => 1, 'machine_id' => $id, 'state' => $machine->is_active ? 'active' : 'disabled'];
-        }
-
-        $deleted = DB::table('v2_machine_binding_deletion')->where('machine_id', $id)->first();
-        // 不存在的编号、重置前的旧令牌、升级前已删除的记录均不能作为自动解绑依据。
-        abort_unless($deleted && hash_equals($deleted->token_hash, $hash), 403);
+        abort_unless(self::matchesDeletion($id, $hash), 403);
         return [
             'version' => 1,
             'machine_id' => $id,

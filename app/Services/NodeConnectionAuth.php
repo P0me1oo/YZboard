@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Support\Setting;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Workerman\Connection\TcpConnection;
 
 /** 每次读写复核握手身份；数据库与缓存故障时关闭连接，不沿用旧授权。 */
@@ -21,7 +22,17 @@ class NodeConnectionAuth
             if (!is_string($hash)) return self::reject($conn);
             $metadata = app(NodeRuntimeMetadata::class);
             if (!empty($conn->machineId)) {
-                $machine = $metadata->machineOrFail((int) $conn->machineId);
+                $id = (int) $conn->machineId;
+                try {
+                    $machine = $metadata->machineOrFail($id);
+                } catch (ModelNotFoundException) {
+                    if (!MachineBindingService::matchesDeletion($id, $hash)) return self::reject($conn);
+                    if (empty($conn->deletionNotified)) {
+                        $conn->deletionNotified = true;
+                        $conn->close(json_encode(['event' => 'machine.deleted', 'data' => ['machine_id' => $id]]));
+                    }
+                    return false;
+                }
                 if (!$machine->is_active || !hash_equals($hash, hash('sha256', $machine->token))) return self::reject($conn);
                 if ($nodeId !== null) {
                     $node = $metadata->node($nodeId);

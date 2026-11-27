@@ -37,12 +37,14 @@ class LandingPoolService
     public function save(array $data): LandingPool
     {
         return DB::transaction(function () use ($data) {
+            LandingPool::orderBy('id')->lockForUpdate()->get(['id']);
             $pool = !empty($data['id']) ? LandingPool::query()->lockForUpdate()->findOrFail($data['id']) : new LandingPool();
-            if ($pool->exists && $pool->node_id !== (int) $data['node_id']) $this->invalid('node_id', '更换订阅线路请新建落地池');
-            $primary = Server::with('machine')->findOrFail($data['node_id']);
+            if ($pool->exists && $pool->node_id !== null && $pool->node_id !== (int) $data['node_id']) $this->invalid('node_id', '更换订阅线路请新建落地池');
             $ids = array_values(array_map('intval', $data['members']));
+            $nodes = Server::with('machine')->whereIn('id', $ids)->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+            $primary = $nodes->get((int) $data['node_id']);
+            if (!$primary) $this->invalid('node_id', '主线路不存在，请重新选择');
             if (($ids[0] ?? null) !== (int) $primary->id || count(array_unique($ids)) !== count($ids)) $this->invalid('members', '第一成员必须是订阅线路原落地，成员不能重复');
-            $nodes = Server::with('machine')->whereIn('id', $ids)->get()->keyBy('id');
             foreach ($ids as $id) if (!$nodes->has($id) || !self::compatible($primary, $nodes[$id])) $this->invalid('members', '落地成员必须绑定相同前置，且协议与前置内核兼容');
             if ($nodes->pluck('machine_id')->filter()->unique()->count() !== count($nodes)) $this->invalid('members', '每台服务器只能选择一个落地成员');
             if ($nodes->contains(fn ($node) => LandingPool::where('node_id', $node->id)->when($pool->exists, fn ($q) => $q->where('id', '!=', $pool->id))->exists())) $this->invalid('members', '成员不能是另一落地池的订阅线路');
@@ -63,7 +65,7 @@ class LandingPoolService
                 $this->sync($pool);
             });
             return $pool->fresh();
-        });
+        }, 3);
     }
 
     public static function targetFor(Server $child, Server $entry, LandingPool|false|null $pool = null): ?Server
@@ -91,38 +93,42 @@ class LandingPoolService
     public function sync(LandingPool $pool): void
     {
         Cache::lock('scheduling:landing:' . $pool->id, 30)->get(function () use ($pool) {
-            $pool = $pool->fresh(['node.machine']);
-            if (!$pool) return;
-            if (!$pool->node) {
-                SchedulingEvents::record('landing', $pool->id, $pool->name, 'landing_changed', $pool->state['active'] ?? [], []);
-                $pool->update(['state' => ['active' => [], 'members' => [], 'checked_at' => now()->timestamp]]);
-                return;
-            }
-            $members = Server::with('machine')->whereIn('id', $pool->members)->get()->keyBy('id');
-            $state = ['started_at' => $pool->state['started_at'] ?? now()->timestamp, 'active' => [], 'members' => [], 'checked_at' => now()->timestamp];
-            $entries = self::entries($pool->node);
-            foreach ($entries as $entry) {
-                foreach ($pool->members as $id) {
-                    $node = $members->get($id);
-                    $reason = !$pool->enabled || $pool->node->enabled === false ? 'disabled' : (!$node || !self::compatible($pool->node, $node, $entry) ? 'incompatible'
-                        : (!self::available($node) ? 'offline' : (!self::compatibleAgent($entry) ? 'agent_required' : 'healthy')));
-                    $probe = $node && SchedulingProbeService::target($node) ? SchedulingProbeService::result($entry, $node) : null;
-                    if ($reason === 'healthy') {
-                        if (!SchedulingProbeService::target($node)) $reason = 'heartbeat_only';
-                        elseif (!$probe) $reason = 'probe_pending';
-                        elseif (!$probe['healthy']) $reason = 'port_failed';
-                    }
-                    $state['members'][(string) $entry->id][] = ['node_id' => $id, 'name' => $node?->name ?? '', 'reason' => $reason,
-                        'latency_ms' => $probe && $probe['healthy'] ? $probe['rtt_ms'] : null];
-                    $eligible = in_array($reason, ['healthy', 'heartbeat_only'], true)
-                        || ($reason === 'probe_pending' && now()->timestamp - $state['started_at'] <= 90);
-                    if ($pool->enabled && $eligible && !isset($state['active'][(string) $entry->id])) $state['active'][(string) $entry->id] = $id;
+            DB::transaction(function () use ($pool) {
+                $pool = LandingPool::with('node.machine')->whereKey($pool->id)->lockForUpdate()->first();
+                if (!$pool) return;
+                if (!$pool->node) {
+                    SchedulingEvents::record('landing', $pool->id, $pool->name, 'landing_changed', $pool->state['active'] ?? [], []);
+                    $pool->update(['state' => ['active' => [], 'members' => [], 'checked_at' => now()->timestamp]]);
+                    return;
                 }
-            }
-            $before = $pool->state['active'] ?? []; $after = $state['active'];
-            $pool->update(['state' => $state]);
-            SchedulingEvents::record('landing', $pool->id, $pool->name, 'landing_changed', $before, $after);
-            if ($before !== $after) foreach ($entries as $entry) NodeSyncService::notifyConfigUpdated($entry->id);
+                $members = Server::with('machine')->whereIn('id', $pool->members)->get()->keyBy('id');
+                $state = ['started_at' => $pool->state['started_at'] ?? now()->timestamp, 'active' => [], 'members' => [], 'checked_at' => now()->timestamp];
+                $entries = self::entries($pool->node);
+                foreach ($entries as $entry) {
+                    foreach ($pool->members as $id) {
+                        $node = $members->get($id);
+                        $reason = !$pool->enabled || $pool->node->enabled === false ? 'disabled' : (!$node || !self::compatible($pool->node, $node, $entry) ? 'incompatible'
+                            : (!self::available($node) ? 'offline' : (!self::compatibleAgent($entry) ? 'agent_required' : 'healthy')));
+                        $probe = $node && SchedulingProbeService::target($node) ? SchedulingProbeService::result($entry, $node) : null;
+                        if ($reason === 'healthy') {
+                            if (!SchedulingProbeService::target($node)) $reason = 'heartbeat_only';
+                            elseif (!$probe) $reason = 'probe_pending';
+                            elseif (!$probe['healthy']) $reason = 'port_failed';
+                        }
+                        $state['members'][(string) $entry->id][] = ['node_id' => $id, 'name' => $node?->name ?? '', 'reason' => $reason,
+                            'latency_ms' => $probe && $probe['healthy'] ? $probe['rtt_ms'] : null];
+                        $eligible = in_array($reason, ['healthy', 'heartbeat_only'], true)
+                            || ($reason === 'probe_pending' && now()->timestamp - $state['started_at'] <= 90);
+                        if ($pool->enabled && $eligible && !isset($state['active'][(string) $entry->id])) $state['active'][(string) $entry->id] = $id;
+                    }
+                }
+                $before = $pool->state['active'] ?? []; $after = $state['active'];
+                $pool->update(['state' => $state]);
+                SchedulingEvents::record('landing', $pool->id, $pool->name, 'landing_changed', $before, $after);
+                if ($before !== $after) DB::afterCommit(function () use ($entries) {
+                    foreach ($entries as $entry) NodeSyncService::notifyConfigUpdated($entry->id);
+                });
+            }, 3);
         });
     }
 

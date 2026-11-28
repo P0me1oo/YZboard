@@ -108,6 +108,30 @@ class DeviceHandoverTest extends TestCase
         }
     }
 
+    public function test_correlated_sync_lock_retry_only_logs_debug_and_same_snapshot_can_succeed(): void
+    {
+        $this->withHeaders(['X-YZ-Request-ID' => '0123456789abcdef']);
+        $this->deviceRequest('begin')->assertOk();
+        $data = ['sequence' => 1, 'lock_retry' => 1, 'pending' => [], 'sources' => []];
+        $lock = Cache::lock('device_handover:node:' . $this->node->id . ':lock', 15);
+        $this->assertTrue($lock->get());
+        (new \ReflectionProperty(\App\Services\FailureLog::class, 'last'))->setValue(null, []);
+        Log::spy();
+
+        try {
+            $this->deviceRequest('sync', $data)->assertStatus(503)
+                ->assertHeader('Retry-After', '1')->assertHeader('X-YZ-Process-Ms');
+        } finally {
+            $lock->release();
+        }
+
+        Log::shouldHaveReceived('log')->withArgs(fn ($level, $message, $context) =>
+            $level === 'debug' && $message === '设备协调锁繁忙，等待重试'
+            && $context['node_id'] === $this->node->id && $context['event'] === 'device.sync')->once();
+        Log::shouldNotHaveReceived('log', ['warning', \Mockery::any(), \Mockery::any()]);
+        $this->deviceRequest('sync', $data)->assertOk()->assertJsonPath('data.sequence', 1);
+    }
+
     public function test_websocket_busy_reply_keeps_correlation_and_allows_same_snapshot_retry(): void
     {
         $this->deviceRequest('begin')->assertOk();

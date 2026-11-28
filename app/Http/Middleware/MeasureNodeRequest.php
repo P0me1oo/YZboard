@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Exceptions\DeviceCoordinationBusy;
 use App\Models\Server;
 use App\Models\ServerMachine;
 use App\Services\AgentLogPolicy;
@@ -20,33 +21,38 @@ final class MeasureNodeRequest
         }
         $started = hrtime(true);
         $status = 500;
+        $lockBusy = false;
         try {
             $response = $next($request);
             $status = $response->getStatusCode();
+            // Laravel 管道可能已将异常转换成响应，仍需识别原始锁竞争。
+            $lockBusy = ($response->exception ?? null) instanceof DeviceCoordinationBusy;
         } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $error) {
             $status = $error->getStatusCode();
+            $lockBusy = $error instanceof DeviceCoordinationBusy;
             throw $error;
         } catch (\App\Exceptions\ApiException $error) {
             $status = (int) substr((string) $error->getCode(), 0, 3);
             throw $error;
         } finally {
             $elapsed = round((hrtime(true) - $started) / 1e6, 3);
-            $this->record($request, $id, $elapsed, $status);
+            $this->record($request, $id, $elapsed, $status, $lockBusy);
         }
         $response->headers->set('X-YZ-Process-Ms', (string) $elapsed);
         return $response;
     }
 
-    private function record(Request $request, string $id, float $elapsed, int $status): void
+    private function record(Request $request, string $id, float $elapsed, int $status, bool $lockBusy): void
     {
         $machine = $request->attributes->get('machine_info');
         $node = $request->attributes->get('node_info');
-        if ((!($machine instanceof ServerMachine) && !($node instanceof Server)) || ($elapsed < 1000 && $status < 500)) return;
+        $failed = $status >= 500 && !$lockBusy;
+        if ((!($machine instanceof ServerMachine) && !($node instanceof Server)) || ($elapsed < 1000 && !$failed)) return;
         try {
             if (AgentLogPolicy::disabled($machine instanceof ServerMachine ? $machine : null, $node instanceof Server ? $node : null)) return;
             $action = $request->route()?->getActionName() ?? '';
             if (!preg_match('/\AApp\\\\Http\\\\Controllers\\\\[A-Za-z0-9_\\\\]+@[A-Za-z0-9_]+\z/', $action)) $action = 'unknown';
-            FailureLog::record('节点 HTTP 请求耗时异常', new \RuntimeException(
+            FailureLog::record($failed ? '节点 HTTP 请求处理失败' : '节点 HTTP 请求耗时异常', new \RuntimeException(
                 "request_id={$id} handler={$action} elapsed_ms={$elapsed} status={$status}"
             ), array_filter(['node_id' => $node instanceof Server ? (int) $node->id : null,
                 'machine_id' => $machine instanceof ServerMachine ? (int) $machine->id : null]), 'warning');

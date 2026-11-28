@@ -1,0 +1,37 @@
+{
+  "version": "2.32.1",
+  "source": "ec698d55a468a9505be2d6bc96d9ec50ed24e85c",
+  "release": "https://github.com/P0me1oo/YZboard/releases/tag/v2.32.1",
+  "published_at": "2026-11-28T11:24:11Z",
+  "draft": false,
+  "prerelease": false,
+  "latest": true,
+  "source_members_verified": 1781,
+  "composer_lock_sha256": "1050e1c00643b3a77b216635283974df6a98d2ef1fc3b96bba648c2bfc7dde7e",
+  "verification_host": "development",
+  "production_deployed": false,
+  "docker_published": false,
+  "assets": [
+    {
+      "name": "release.json",
+      "size": 439,
+      "sha256": "a3070ca36f1ce9bdf789777ea5698480a9ce8357730494443275d45f8359d28a",
+      "url": "https://github.com/P0me1oo/YZboard/releases/download/v2.32.1/release.json",
+      "anonymous_download_verified": true
+    },
+    {
+      "name": "SHA256SUMS",
+      "size": 167,
+      "sha256": "9bc4620839dd53fc67f4a7662926fcd3fc82616c682222817f7439a2c07b00ee",
+      "url": "https://github.com/P0me1oo/YZboard/releases/download/v2.32.1/SHA256SUMS",
+      "anonymous_download_verified": true
+    },
+    {
+      "name": "yzboard-2.32.1.tar.gz",
+      "size": 171824514,
+      "sha256": "64d0f2bf46dd389b4a6bc5465a9d03bb0ba070c386dadb54ce9e25902aa48479",
+      "url": "https://github.com/P0me1oo/YZboard/releases/download/v2.32.1/yzboard-2.32.1.tar.gz",
+      "anonymous_download_verified": true
+    }
+  ]
+}
